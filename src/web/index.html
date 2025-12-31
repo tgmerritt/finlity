@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/antd/5.12.8/reset.min.css">
     <!-- Plotly for charts -->
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- Custom styles -->
     <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -109,6 +111,13 @@
 
         <!-- Main Content -->
         <main class="main-content">
+            <!-- Demo Mode Banner (hidden by default) -->
+            <div id="demo-mode-banner" class="demo-mode-banner" style="display: none;">
+                <span class="demo-icon">🎭</span>
+                <span>DEMO MODE - Using fake portfolio data</span>
+                <button onclick="window.location.href='#settings'" class="demo-settings-link">Settings</button>
+            </div>
+
             <!-- Header -->
             <header class="page-header">
                 <div class="header-left">
@@ -123,7 +132,7 @@
                         </svg>
                         Reload
                     </button>
-                    <button id="update-prices-btn" onclick="refreshPrices()" class="btn btn-default" title="Fetch latest prices from APIs (only if stale)">
+                    <button id="update-prices-btn" onclick="refreshPrices(true)" class="btn btn-default" title="Force refresh ALL prices from APIs">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="10"></circle>
                             <line x1="12" y1="8" x2="12" y2="12"></line>
@@ -1040,6 +1049,26 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Demo Mode -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Demo Mode</h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="settings-description">Enable demo mode to use fake portfolio data for demonstrations. Your real data is never modified.</p>
+                            <div class="demo-mode-toggle">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="demo-mode-toggle" onchange="toggleDemoMode(this.checked)">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <span class="toggle-label">Demo Mode <span id="demo-mode-status" class="status-badge"></span></span>
+                            </div>
+                            <p class="settings-hint" style="margin-top: 12px; font-size: 0.85em; opacity: 0.7;">
+                                Note: Changing demo mode requires a page reload. Generate demo data first using: <code>python scripts/generate_demo.py</code>
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
@@ -1129,9 +1158,15 @@
                             <label for="cash-name">Description</label>
                             <input type="text" id="cash-name" placeholder="e.g., High-Yield Savings" value="Cash">
                         </div>
-                        <div class="form-group">
-                            <label for="cash-amount">Amount ($)</label>
-                            <input type="number" id="cash-amount" step="0.01" placeholder="Cash balance">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="cash-amount">Amount ($)</label>
+                                <input type="number" id="cash-amount" step="0.01" placeholder="Cash balance">
+                            </div>
+                            <div class="form-group">
+                                <label for="cash-apy">APY (%) <span class="text-muted">(optional)</span></label>
+                                <input type="number" id="cash-apy" step="0.01" placeholder="e.g., 4.5">
+                            </div>
                         </div>
                     </div>
 
@@ -1177,6 +1212,7 @@
             <div class="modal-body">
                 <form id="edit-position-form" onsubmit="updatePosition(event)">
                     <input type="hidden" id="edit-position-id">
+                    <input type="hidden" id="edit-position-type">
                     <div class="form-group">
                         <label>Ticker</label>
                         <input type="text" id="edit-position-ticker" readonly class="readonly-field">
@@ -1192,6 +1228,23 @@
                     <div class="form-group">
                         <label for="edit-position-cost-basis">Cost Basis ($)</label>
                         <input type="number" id="edit-position-cost-basis" step="0.01">
+                    </div>
+                    <!-- Interest/APY fields for cash, CD, bond positions -->
+                    <div id="edit-interest-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="edit-position-apy">APY (%) <span class="text-muted">(for cash/CD/bond)</span></label>
+                            <input type="number" id="edit-position-apy" step="0.01" placeholder="e.g., 4.5">
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="edit-position-purchase-date">Purchase Date</label>
+                                <input type="date" id="edit-position-purchase-date">
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-position-maturity-date">Maturity Date <span class="text-muted">(CDs/bonds)</span></label>
+                                <input type="date" id="edit-position-maturity-date">
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-actions">
                         <button type="button" onclick="hideEditPositionModal()" class="btn btn-default">Cancel</button>
@@ -1306,6 +1359,60 @@
 
     <!-- Toast Container -->
     <div id="toast-container"></div>
+
+    <!-- Global Chat Modal (accessible from any page) -->
+    <div id="global-chat-modal" class="modal chat-modal" style="display: none;">
+        <div class="modal-backdrop" onclick="hideGlobalChat()"></div>
+        <div class="modal-content modal-lg chat-modal-content">
+            <div class="modal-header">
+                <h3>
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    AI Portfolio Advisor
+                </h3>
+                <div class="chat-modal-actions">
+                    <button class="btn btn-ghost btn-sm" onclick="clearGlobalChat()" title="Clear chat history">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                    <button class="modal-close" onclick="hideGlobalChat()">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body chat-modal-body">
+                <div id="global-chat-messages" class="chat-messages">
+                    <div class="chat-placeholder">
+                        <p>Ask a question about your portfolio...</p>
+                        <p class="text-muted">Examples:</p>
+                        <ul class="text-muted">
+                            <li>"Should I be concerned about my technology exposure?"</li>
+                            <li>"What's the difference between VTI and VOO?"</li>
+                            <li>"Is my portfolio too aggressive for someone my age?"</li>
+                            <li>"How can I improve my diversification?"</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="chat-input-container">
+                    <input type="text" id="global-chat-input" placeholder="Type your question..." onkeypress="handleGlobalChatKeypress(event)">
+                    <button type="button" class="btn btn-primary" onclick="sendGlobalChatMessage()" id="global-chat-send-btn">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Chat Button -->
+    <button id="global-chat-fab" class="chat-fab" onclick="showGlobalChat()" title="Chat with AI Advisor">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+    </button>
 
     <script src="/static/app.js"></script>
 </body>

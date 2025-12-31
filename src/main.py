@@ -5,10 +5,12 @@ Provides a REST API and serves a web dashboard for managing and analyzing
 your investment portfolio.
 """
 
+import os
 import webbrowser
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import yaml
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,11 +28,47 @@ from src.database import Database
 from src.importers import FolderScanner
 
 
+def load_config():
+    """Load configuration from config.yaml."""
+    config_path = Path("config.yaml")
+    if config_path.exists():
+        with open(config_path) as f:
+            return yaml.safe_load(f)
+    return {}
+
+
+def is_demo_mode():
+    """Check if demo mode is enabled via env var or config."""
+    # Environment variable takes precedence (set by CLI)
+    env_demo = os.environ.get("PORTFOLIO_DEMO_MODE")
+    if env_demo is not None:
+        return env_demo.lower() == "true"
+    # Fall back to config
+    config = load_config()
+    return config.get("demo", {}).get("enabled", False)
+
+
+def get_db_path():
+    """Get the database path based on demo mode."""
+    if is_demo_mode():
+        config = load_config()
+        demo_db = config.get("demo", {}).get("database", "data/demo/demo.db")
+        return demo_db
+    return "data/portfolio.db"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    # Initialize database
-    db = Database()
+    # Store demo mode status in app state
+    app.state.demo_mode = is_demo_mode()
+    app.state.db_path = get_db_path()
+
+    # Initialize database with the appropriate path
+    db = Database(app.state.db_path)
+
+    if app.state.demo_mode:
+        print("*** DEMO MODE ENABLED ***")
 
     # Scan for new imports on startup
     scanner = FolderScanner(db)
@@ -41,6 +79,13 @@ async def lifespan(app: FastAPI):
         for r in results:
             status = "OK" if r.success else "FAILED"
             print(f"  [{status}] {r.file_path.name}: {r.positions_imported} positions")
+
+    # Refresh stale prices (>24 hours old) on startup
+    stale_tickers = db.get_stale_tickers()
+    if stale_tickers:
+        print(f"Refreshing {len(stale_tickers)} stale prices...")
+        scanner._fetch_and_update_prices(stale_tickers)
+        print(f"  Updated prices for: {', '.join(stale_tickers)}")
 
     # Take a snapshot
     snapshot = db.take_snapshot()
@@ -97,13 +142,14 @@ async def serve_dashboard():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    db = Database()
+    db = Database(get_db_path())
     summary = db.get_portfolio_summary()
     return {
         "status": "healthy",
         "portfolio_value": summary["total_value"],
         "accounts": summary["account_count"],
         "positions": summary["position_count"],
+        "demo_mode": is_demo_mode(),
     }
 
 
@@ -115,7 +161,7 @@ async def get_dashboard_data(view_id: str = None):
         view_id: Optional portfolio view ID to filter by. If not provided,
                  returns data for all accounts.
     """
-    db = Database()
+    db = Database(get_db_path())
 
     # Get all accounts for reference
     all_accounts = {a.id: a for a in db.get_all_accounts()}
@@ -140,7 +186,13 @@ async def get_dashboard_data(view_id: str = None):
             continue
 
         account = all_accounts.get(pos.account_id)
-        market_value = (pos.shares * pos.current_price) if pos.current_price else 0
+
+        # Calculate value including accrued interest for CDs/bonds/cash with APY
+        accrued_value = db.calculate_accrued_value(pos)
+        if pos.interest_rate and pos.interest_rate > 0:
+            market_value = accrued_value
+        else:
+            market_value = (pos.shares * pos.current_price) if pos.current_price else 0
 
         positions.append({
             "id": pos.id,
@@ -149,10 +201,15 @@ async def get_dashboard_data(view_id: str = None):
             "shares": pos.shares,
             "price": pos.current_price,
             "value": market_value,
+            "accrued_value": accrued_value if pos.interest_rate else None,
             "cost_basis": pos.cost_basis,
             "account": account.name if account else "Unknown",
             "account_type": account.account_type if account else "unknown",
             "is_fund": pos.is_fund,
+            "position_type": pos.position_type or "equity",
+            "interest_rate": pos.interest_rate,
+            "purchase_date": pos.purchase_date.isoformat() if pos.purchase_date else None,
+            "maturity_date": pos.maturity_date.isoformat() if pos.maturity_date else None,
         })
 
         # Accumulate totals
@@ -226,6 +283,7 @@ async def get_dashboard_data(view_id: str = None):
         "history": history,
         "imports": import_history,
         "view_id": view_id,
+        "demo_mode": is_demo_mode(),
     }
 
 
@@ -347,6 +405,8 @@ Examples:
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind to")
     parser.add_argument("--no-browser", action="store_true", help="Don't open browser")
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload")
+    parser.add_argument("--demo", action="store_true",
+                        help="Run in demo mode with fake portfolio data")
 
     # Management commands
     parser.add_argument("--reset-database", action="store_true",
@@ -383,13 +443,26 @@ Examples:
         create_folders_command()
         return
 
+    # Set demo mode environment variable if CLI flag is set
+    if args.demo:
+        os.environ["PORTFOLIO_DEMO_MODE"] = "true"
+
+    # Check actual demo mode status
+    demo_mode = is_demo_mode()
+
     # Default: run server
     url = f"http://{args.host}:{args.port}"
     print(f"\n{'='*50}")
-    print(f"Investment Portfolio Dashboard")
+    if demo_mode:
+        print(f"Investment Portfolio Dashboard [DEMO MODE]")
+    else:
+        print(f"Investment Portfolio Dashboard")
     print(f"{'='*50}")
     print(f"\nStarting server at: {url}")
     print(f"API documentation: {url}/docs")
+    if demo_mode:
+        print(f"\n*** DEMO MODE: Using fake portfolio data ***")
+        print(f"    Database: {get_db_path()}")
     print(f"\nPress Ctrl+C to stop")
     print(f"{'='*50}\n")
 

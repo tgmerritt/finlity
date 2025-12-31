@@ -9,9 +9,11 @@ A Python-based investment portfolio tracking and analysis system with FastAPI ba
 ### Portfolio Management
 - **Automated File Import** - Drop CSV/Excel files into folders, auto-detected and imported
 - **Multi-Account Support** - Track Roth IRA, Traditional 401(k), 529, HYSA, Treasury Direct, and custom account types
-- **Cash Position Tracking** - Track uninvested cash in each account
-- **CD Support** - Track Certificates of Deposit with maturity dates (auto-converts to cash when matured)
+- **Cash Position Tracking** - Track uninvested cash with optional APY for interest-bearing accounts
+- **CD Support** - Track Certificates of Deposit with APY, maturity dates, and automatic interest accrual
+- **Interest Accrual** - Automatic simple interest calculation for CDs and cash with APY
 - **Manual Position Entry** - Add positions directly via dashboard or API
+- **Demo Mode** - Use fake portfolio data for demonstrations without exposing real finances
 
 ### Account Types
 - **Retirement**: Traditional 401(k), Roth 401(k), Traditional IRA, Roth IRA, HSA, Pension
@@ -36,6 +38,48 @@ A Python-based investment portfolio tracking and analysis system with FastAPI ba
 - **Secure API Key Storage** - Encrypted storage in database or via environment variables
 
 ## Installation
+
+### Option 1: Docker (Recommended)
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd investment-portfolio-analyzer
+
+# Build the Docker image
+docker build -t portfolio-analyzer .
+
+# Run the container with persistent data
+docker run -d \
+  --name portfolio \
+  -p 8000:8000 \
+  -v $(pwd)/data:/app/data \
+  -e ANTHROPIC_API_KEY=your-key-here \
+  portfolio-analyzer
+
+# View logs
+docker logs -f portfolio
+
+# Stop the container
+docker stop portfolio
+```
+
+**Using Docker Compose:**
+
+```bash
+# Start with docker-compose
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
+```
+
+The dashboard will be available at http://localhost:8000
+
+### Option 2: Local Python
 
 ```bash
 # Clone the repository
@@ -125,7 +169,30 @@ curl -X POST http://localhost:8000/api/portfolio/positions/cash \
 curl -X POST http://localhost:8000/api/portfolio/positions/cd \
   -H "Content-Type: application/json" \
   -d '{"account_id": "<account-id>", "amount": 10000, "name": "12-month CD", "interest_rate": 0.05, "maturity_date": "2025-12-01"}'
+
+# Add cash with APY (e.g., high-yield savings)
+curl -X POST http://localhost:8000/api/portfolio/positions/cash \
+  -H "Content-Type: application/json" \
+  -d '{"account_id": "<account-id>", "amount": 5000, "name": "HYSA Cash", "interest_rate": 0.0485}'
 ```
+
+### Demo Mode
+
+Demo mode allows you to demonstrate the application with fake portfolio data.
+
+```bash
+# Generate demo portfolio data (run once)
+python scripts/generate_demo.py
+
+# Start server in demo mode
+python -m src.main --demo
+```
+
+You can also enable demo mode persistently:
+- Via Settings page in the dashboard (toggle switch)
+- Or set `demo.enabled: true` in `config.yaml`
+
+Demo mode creates ~50 realistic positions across 6 account types with real current prices.
 
 ### Database Management
 
@@ -316,15 +383,20 @@ investment-portfolio-analyzer/
 │   │   └── engine.py         # Monte Carlo & withdrawals
 │   └── web/                  # Dashboard UI
 │       └── index.html        # Single-page dashboard
+├── scripts/
+│   └── generate_demo.py      # Demo data generator
 ├── data/
 │   ├── imports/              # Import folders by account type
 │   │   ├── roth_ira/
 │   │   ├── traditional_401k/
 │   │   ├── taxable/
 │   │   └── ...
+│   ├── demo/                 # Demo mode database
+│   │   └── demo.db
 │   └── portfolio.db          # SQLite database
 ├── config.yaml               # Target allocations
 ├── funds.yaml                # Fund metadata cache
+├── SKILL.md                  # Claude Code skills documentation
 └── requirements.txt
 ```
 

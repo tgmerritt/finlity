@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  portfolio:
+    build: .
+    container_name: portfolio-analyzer
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist data directory
+      - ./data:/app/data
+      # Optional: mount custom config
+      # - ./config.yaml:/app/config.yaml:ro
+    environment:
+      # API keys (optional - can also use .env file)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

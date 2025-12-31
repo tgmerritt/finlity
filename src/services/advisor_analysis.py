@@ -247,32 +247,23 @@ Return ONLY valid JSON, no markdown or explanation."""
             logger.warning(f"Claude API error for {ticker}: {e}")
             return None
 
-    def chat(
+    def _build_chat_context(
         self,
-        user_message: str,
         ticker: str = None,
         include_portfolio: bool = True,
-    ) -> str:
-        """Have a conversation with the AI advisor about investments.
-
-        Args:
-            user_message: User's question or message
-            ticker: Optional ticker for context
-            include_portfolio: Whether to include portfolio context
+    ) -> tuple[str, list[dict]]:
+        """Build the system prompt and messages for chat.
 
         Returns:
-            AI advisor's response
+            Tuple of (system_prompt, messages)
         """
-        client = self._get_client()
-        if not client:
-            return "Claude API is not available. Please configure your API key in Settings."
-
         # Build system context
         system_parts = [
             "You are a knowledgeable and helpful financial advisor assistant.",
             "Provide thoughtful, balanced advice based on general financial principles.",
             "Always remind users that this is educational information and they should consult a qualified financial advisor for personalized advice.",
             "Be conversational but professional.",
+            "Format your responses using markdown for better readability - use **bold** for emphasis, bullet points for lists, and headers (##) for sections when appropriate.",
         ]
 
         if include_portfolio:
@@ -297,7 +288,29 @@ Return ONLY valid JSON, no markdown or explanation."""
         for msg in self._chat_history[-10:]:  # Last 10 messages for context
             messages.append({"role": msg.role, "content": msg.content})
 
-        # Add current message
+        return system_prompt, messages
+
+    def chat(
+        self,
+        user_message: str,
+        ticker: str = None,
+        include_portfolio: bool = True,
+    ) -> str:
+        """Have a conversation with the AI advisor about investments.
+
+        Args:
+            user_message: User's question or message
+            ticker: Optional ticker for context
+            include_portfolio: Whether to include portfolio context
+
+        Returns:
+            AI advisor's response
+        """
+        client = self._get_client()
+        if not client:
+            return "Claude API is not available. Please configure your API key in Settings."
+
+        system_prompt, messages = self._build_chat_context(ticker, include_portfolio)
         messages.append({"role": "user", "content": user_message})
 
         try:
@@ -321,6 +334,59 @@ Return ONLY valid JSON, no markdown or explanation."""
         except Exception as e:
             logger.error(f"Chat error: {e}")
             return f"I encountered an error: {str(e)}. Please try again."
+
+    def chat_stream(
+        self,
+        user_message: str,
+        ticker: str = None,
+        include_portfolio: bool = True,
+    ):
+        """Stream a conversation with the AI advisor.
+
+        Args:
+            user_message: User's question or message
+            ticker: Optional ticker for context
+            include_portfolio: Whether to include portfolio context
+
+        Yields:
+            Text chunks as they arrive from the API
+        """
+        client = self._get_client()
+        if not client:
+            yield "Claude API is not available. Please configure your API key in Settings."
+            return
+
+        system_prompt, messages = self._build_chat_context(ticker, include_portfolio)
+        messages.append({"role": "user", "content": user_message})
+
+        # Store user message immediately
+        self._chat_history.append(ChatMessage(role="user", content=user_message))
+
+        full_response = ""
+
+        try:
+            with client.messages.stream(
+                model="claude-sonnet-4-20250514",
+                max_tokens=1024,
+                system=system_prompt,
+                messages=messages,
+            ) as stream:
+                for text in stream.text_stream:
+                    full_response += text
+                    yield text
+
+            # Store complete assistant message in history
+            self._chat_history.append(
+                ChatMessage(role="assistant", content=full_response)
+            )
+
+        except Exception as e:
+            logger.error(f"Chat stream error: {e}")
+            error_msg = f"I encountered an error: {str(e)}. Please try again."
+            yield error_msg
+            self._chat_history.append(
+                ChatMessage(role="assistant", content=error_msg)
+            )
 
     def clear_chat_history(self):
         """Clear the chat history."""

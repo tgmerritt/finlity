@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Docker Deployment
+
+The application can be run in Docker for easy deployment:
+
+```bash
+# Build and run with docker-compose (recommended)
+docker-compose up -d
+
+# Or build and run manually
+docker build -t portfolio-analyzer .
+docker run -d -p 8000:8000 -v $(pwd)/data:/app/data portfolio-analyzer
+
+# Generate demo data in container
+docker exec -it portfolio python scripts/generate_demo.py
+
+# Run in demo mode
+docker run -d -p 8000:8000 -e PORTFOLIO_DEMO_MODE=true portfolio-analyzer
+```
+
 ## Security Considerations
 
 **IMPORTANT**: This project handles sensitive financial data. When making changes:

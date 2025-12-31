@@ -1,0 +1,57 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.venv
+venv
+.eggs
+*.egg-info
+dist
+build
+
+# Data (user should mount their own volume)
+data/
+*.db
+*.sqlite*
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Documentation
+*.md
+!README.md
+
+# Tests
+.pytest_cache
+.coverage
+htmlcov
+
+# Logs
+*.log
+logs/
+
+# Cache
+.cache
+.mypy_cache
+.ruff_cache
+
+# Claude Code
+.claude/

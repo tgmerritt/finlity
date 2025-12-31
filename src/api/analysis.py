@@ -1,6 +1,7 @@
 """Analysis API endpoints."""
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -967,6 +968,62 @@ def chat_with_advisor(request: ChatRequest, db: Database = Depends(get_db)):
     return ChatResponse(
         response=response,
         history=advisor.get_chat_history(),
+    )
+
+
+@router.post("/advisor/chat/stream")
+def chat_with_advisor_stream(request: ChatRequest, db: Database = Depends(get_db)):
+    """Stream a conversation with the AI advisor about investments.
+
+    Returns a Server-Sent Events stream with text chunks as they arrive.
+    """
+    from src.services.secrets import SecretsManager
+    from src.services.advisor_analysis import AdvisorAnalysisService
+
+    # Get Claude API key
+    secrets = SecretsManager(db)
+    claude_key = secrets.get_api_key(secrets.ANTHROPIC_API_KEY)
+
+    if not claude_key:
+        def error_stream():
+            yield "data: Claude API key not configured. Please add your API key in Settings to use the advisor chat.\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
+
+    # Get or create chat service
+    session_key = "default"
+    if session_key not in _chat_services or _chat_api_keys.get(session_key) != claude_key:
+        _chat_services[session_key] = AdvisorAnalysisService(
+            claude_api_key=claude_key, db=db
+        )
+        _chat_api_keys[session_key] = claude_key
+
+    advisor = _chat_services[session_key]
+
+    def generate():
+        """Generate SSE stream from advisor response."""
+        try:
+            for chunk in advisor.chat_stream(
+                user_message=request.message,
+                ticker=request.ticker,
+                include_portfolio=request.include_portfolio,
+            ):
+                # Escape newlines for SSE format
+                escaped = chunk.replace("\n", "\\n")
+                yield f"data: {escaped}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            yield f"data: Error: {str(e)}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
     )
 
 

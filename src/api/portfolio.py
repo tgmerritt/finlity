@@ -44,13 +44,15 @@ class PositionResponse(BaseModel):
     current_price: Optional[float]
     cost_basis: Optional[float]
     market_value: float
+    accrued_value: Optional[float] = None  # For CDs/bonds: principal + accrued interest
     gain_loss: Optional[float]
     gain_loss_pct: Optional[float]
     is_fund: bool
     asset_class: str
     position_type: str
     maturity_date: Optional[str] = None
-    interest_rate: Optional[float] = None
+    purchase_date: Optional[str] = None
+    interest_rate: Optional[float] = None  # APY as decimal (0.05 = 5%)
 
 
 class PortfolioSummary(BaseModel):
@@ -93,6 +95,7 @@ class CreateCashPositionRequest(BaseModel):
     account_id: str
     amount: float
     name: str = "Cash"
+    interest_rate: Optional[float] = None  # Optional APY for high-yield savings (as decimal)
 
 
 class CreateCDPositionRequest(BaseModel):
@@ -199,7 +202,17 @@ def get_all_positions(db: Database = Depends(get_db)) -> list[PositionResponse]:
 
     for pos in positions:
         account = accounts.get(pos.account_id)
-        market_value = (pos.shares * pos.current_price) if pos.current_price else 0
+
+        # Calculate accrued value for positions with interest rates (CDs, bonds, cash with APY)
+        accrued_value = db.calculate_accrued_value(pos)
+
+        # For positions with interest, use accrued value as market value
+        # For regular positions, use shares * price
+        if pos.interest_rate and pos.interest_rate > 0:
+            market_value = accrued_value
+        else:
+            market_value = (pos.shares * pos.current_price) if pos.current_price else 0
+
         gain_loss = None
         gain_loss_pct = None
 
@@ -218,12 +231,14 @@ def get_all_positions(db: Database = Depends(get_db)) -> list[PositionResponse]:
             current_price=pos.current_price,
             cost_basis=pos.cost_basis,
             market_value=market_value,
+            accrued_value=accrued_value if pos.interest_rate else None,
             gain_loss=gain_loss,
             gain_loss_pct=gain_loss_pct,
             is_fund=pos.is_fund,
             asset_class=pos.asset_class or "equity",
             position_type=pos.position_type or "equity",
             maturity_date=pos.maturity_date.isoformat() if pos.maturity_date else None,
+            purchase_date=pos.purchase_date.isoformat() if pos.purchase_date else None,
             interest_rate=pos.interest_rate,
         ))
 
@@ -335,7 +350,7 @@ def create_cash_position(request: CreateCashPositionRequest, db: Database = Depe
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
 
-    # Add cash position
+    # Add cash position (with optional APY for high-yield savings)
     position = db.add_position(
         account_id=request.account_id,
         ticker="CASH",
@@ -346,12 +361,19 @@ def create_cash_position(request: CreateCashPositionRequest, db: Database = Depe
         is_fund=False,
         position_type="cash",
         asset_class="cash",
+        interest_rate=request.interest_rate,  # Optional APY
+        purchase_date=datetime.utcnow() if request.interest_rate else None,  # Track start if APY set
     )
+
+    msg = f"Cash position added: ${request.amount:,.2f}"
+    if request.interest_rate:
+        msg += f" at {request.interest_rate * 100:.2f}% APY"
 
     return {
         "id": position.id,
         "amount": request.amount,
-        "message": f"Cash position added: ${request.amount:,.2f}",
+        "interest_rate": request.interest_rate,
+        "message": msg,
     }
 
 
@@ -434,6 +456,9 @@ class UpdatePositionRequest(BaseModel):
     current_price: Optional[float] = None
     cost_basis: Optional[float] = None
     name: Optional[str] = None
+    interest_rate: Optional[float] = None  # APY as decimal
+    purchase_date: Optional[str] = None  # ISO format date
+    maturity_date: Optional[str] = None  # ISO format date
 
 
 @router.put("/positions/{position_id}")
@@ -452,6 +477,12 @@ def update_position(position_id: str, request: UpdatePositionRequest, db: Databa
         updates["cost_basis"] = request.cost_basis
     if request.name is not None:
         updates["name"] = request.name
+    if request.interest_rate is not None:
+        updates["interest_rate"] = request.interest_rate
+    if request.purchase_date is not None:
+        updates["purchase_date"] = datetime.fromisoformat(request.purchase_date)
+    if request.maturity_date is not None:
+        updates["maturity_date"] = datetime.fromisoformat(request.maturity_date)
 
     if updates:
         db.update_position(position_id, **updates)
@@ -459,7 +490,7 @@ def update_position(position_id: str, request: UpdatePositionRequest, db: Databa
     return {
         "message": "Position updated",
         "position_id": position_id,
-        "updates": updates,
+        "updates": {k: str(v) if isinstance(v, datetime) else v for k, v in updates.items()},
     }
 
 

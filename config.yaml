@@ -76,6 +76,12 @@ scrapers:
     login_url: "https://logon.vanguard.com/logon"
     positions_url: "https://personal.vanguard.com/us/MyHome"
 
+# Demo mode - Uses fake data for demonstrations
+# Toggle via Settings UI or --demo CLI flag
+demo:
+  enabled: false
+  database: "data/demo/demo.db"
+
 # API keys - Configure via dashboard Settings or store in database
 # Keys can also be set via environment variables:
 #   ALPHA_VANTAGE_API_KEY, FINNHUB_API_KEY, ANTHROPIC_API_KEY

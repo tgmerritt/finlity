@@ -283,6 +283,43 @@ class Database:
         with self.get_session() as session:
             return session.query(Position).all()
 
+    def calculate_accrued_value(self, position: Position) -> float:
+        """Calculate the current value of a position including accrued interest.
+
+        For CDs, bonds, and cash with APY, calculates simple interest:
+        accrued_value = principal * (1 + apy * years_held)
+
+        For regular positions, returns shares * current_price.
+
+        Args:
+            position: The position to calculate value for
+
+        Returns:
+            The current value including any accrued interest
+        """
+        if not position.current_price:
+            return 0.0
+
+        # For CDs, bonds, treasuries, and cash with interest rates
+        if position.interest_rate and position.interest_rate > 0:
+            principal = position.current_price  # For CDs/cash, price IS the principal
+            apy = position.interest_rate
+
+            # Calculate time held
+            if position.purchase_date:
+                days_held = (datetime.utcnow() - position.purchase_date).days
+                years_held = days_held / 365.0
+
+                # Simple interest formula: Principal * (1 + APY * Time)
+                accrued_value = principal * (1 + apy * years_held)
+                return accrued_value
+
+            # No purchase date, just return principal
+            return principal
+
+        # Regular positions: shares * price
+        return position.shares * position.current_price
+
     def get_positions_by_account(self, account_id: str) -> list[Position]:
         """Get all positions for an account."""
         with self.get_session() as session:

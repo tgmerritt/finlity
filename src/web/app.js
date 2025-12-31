@@ -13,9 +13,29 @@ function formatCurrency(value) {
     return new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
     }).format(value);
+}
+
+function formatPrice(value, ticker = null) {
+    // SGOV and certain securities use 3 decimal places for pricing
+    if (value === null || value === undefined) return '-';
+    const decimals = (ticker && ticker.toUpperCase() === 'SGOV') ? 3 : 2;
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    }).format(value);
+}
+
+function formatShares(value) {
+    // Shares/quantity should display up to 4 decimal places
+    if (value === null || value === undefined) return '-';
+    // Remove trailing zeros but keep up to 4 decimal places
+    const formatted = value.toFixed(4);
+    return parseFloat(formatted).toString();
 }
 
 function formatPercent(value) {
@@ -140,6 +160,77 @@ function updateChartTheme(theme) {
     });
 }
 
+// Demo Mode Management
+let currentDemoMode = false;
+
+async function checkDemoModeStatus() {
+    try {
+        const response = await fetch(`${API_BASE}/api/settings/demo-mode`);
+        if (response.ok) {
+            const data = await response.json();
+            updateDemoModeUI(data.enabled);
+            return data.enabled;
+        }
+    } catch (error) {
+        console.error('Error checking demo mode:', error);
+    }
+    return false;
+}
+
+function updateDemoModeUI(isEnabled) {
+    currentDemoMode = isEnabled;
+
+    // Update toggle checkbox
+    const toggle = document.getElementById('demo-mode-toggle');
+    if (toggle) {
+        toggle.checked = isEnabled;
+    }
+
+    // Update status badge
+    const statusBadge = document.getElementById('demo-mode-status');
+    if (statusBadge) {
+        statusBadge.textContent = isEnabled ? 'Active' : 'Off';
+        statusBadge.className = `status-badge ${isEnabled ? 'active' : 'inactive'}`;
+    }
+
+    // Show/hide demo mode banner
+    const banner = document.getElementById('demo-mode-banner');
+    if (banner) {
+        banner.style.display = isEnabled ? 'flex' : 'none';
+    }
+}
+
+async function toggleDemoMode(enabled) {
+    try {
+        const response = await fetch(`${API_BASE}/api/settings/demo-mode`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            showToast(data.message || 'Demo mode updated', 'success');
+
+            // Confirm reload with user
+            if (confirm('Demo mode has been ' + (enabled ? 'enabled' : 'disabled') + '. Reload page to apply changes?')) {
+                window.location.reload();
+            } else {
+                // Revert toggle if user cancels
+                const toggle = document.getElementById('demo-mode-toggle');
+                if (toggle) {
+                    toggle.checked = !enabled;
+                }
+            }
+        } else {
+            showToast('Failed to update demo mode', 'error');
+        }
+    } catch (error) {
+        console.error('Error toggling demo mode:', error);
+        showToast('Failed to update demo mode', 'error');
+    }
+}
+
 // Tab navigation
 function showTab(tabName) {
     // Hide all tabs
@@ -254,6 +345,11 @@ async function refreshData() {
 
         // Update account totals table with filtered accounts from dashboard data
         updateAccountTotalsTable(data.summary.accounts || []);
+
+        // Update demo mode UI from response
+        if (data.demo_mode !== undefined) {
+            updateDemoModeUI(data.demo_mode);
+        }
 
         // Check for duplicate positions
         await checkForDuplicates();
@@ -556,15 +652,22 @@ function updateHoldings(positions) {
         const gainLoss = pos.cost_basis ? (pos.value - pos.cost_basis) : null;
         const gainLossPct = pos.cost_basis ? ((pos.value - pos.cost_basis) / pos.cost_basis * 100) : null;
 
+        // Format value with APY indicator for interest-bearing positions
+        let valueDisplay = formatCurrency(pos.value);
+        if (pos.interest_rate && pos.interest_rate > 0) {
+            const apyPct = (pos.interest_rate * 100).toFixed(2);
+            valueDisplay = `<span title="Includes accrued interest at ${apyPct}% APY">${formatCurrency(pos.value)} 📈</span>`;
+        }
+
         const row = document.createElement('tr');
         row.dataset.account = pos.account;
         row.innerHTML = `
             <td><strong>${pos.ticker}</strong></td>
             <td>${pos.name || '-'}</td>
             <td>${pos.account}</td>
-            <td class="text-right">${formatNumber(pos.shares)}</td>
-            <td class="text-right">${pos.price ? formatCurrency(pos.price) : '<span class="text-warning">$0</span>'}</td>
-            <td class="text-right">${formatCurrency(pos.value)}</td>
+            <td class="text-right">${formatShares(pos.shares)}</td>
+            <td class="text-right">${pos.price ? formatPrice(pos.price, pos.ticker) : '<span class="text-warning">$0.00</span>'}</td>
+            <td class="text-right">${valueDisplay}</td>
             <td class="text-right ${gainLoss >= 0 ? 'text-success' : 'text-error'}">
                 ${gainLoss !== null ? `${formatCurrency(gainLoss)} (${formatPercent(gainLossPct)})` : '-'}
             </td>
@@ -574,7 +677,7 @@ function updateHoldings(positions) {
                         Actions <span>▼</span>
                     </button>
                     <div class="actions-menu">
-                        <button onclick="showEditPositionModal('${pos.id}', '${pos.ticker}', ${pos.shares}, ${pos.price || 0}, ${pos.cost_basis || 0})">
+                        <button onclick="showEditPositionModal('${pos.id}', '${pos.ticker}', ${pos.shares}, ${pos.price || 0}, ${pos.cost_basis || 0}, '${pos.position_type || 'equity'}', ${pos.interest_rate || 'null'}, '${pos.purchase_date || ''}', '${pos.maturity_date || ''}')">
                             ✏️ Edit
                         </button>
                         <button class="danger" onclick="deletePosition('${pos.id}')">
@@ -706,12 +809,26 @@ async function deletePosition(positionId) {
 }
 
 // Edit Position Modal
-function showEditPositionModal(id, ticker, shares, price, costBasis) {
+function showEditPositionModal(id, ticker, shares, price, costBasis, positionType, interestRate, purchaseDate, maturityDate) {
     document.getElementById('edit-position-id').value = id;
+    document.getElementById('edit-position-type').value = positionType || 'equity';
     document.getElementById('edit-position-ticker').value = ticker;
     document.getElementById('edit-position-shares').value = shares;
     document.getElementById('edit-position-price').value = price || '';
     document.getElementById('edit-position-cost-basis').value = costBasis || '';
+
+    // Handle interest/APY fields for cash, CD, bond positions
+    const interestFields = document.getElementById('edit-interest-fields');
+    const showInterestFields = ['cash', 'cd', 'bond', 'treasury'].includes(positionType);
+    interestFields.style.display = showInterestFields ? 'block' : 'none';
+
+    if (showInterestFields) {
+        // Convert decimal APY to percentage for display
+        document.getElementById('edit-position-apy').value = interestRate ? (interestRate * 100).toFixed(2) : '';
+        document.getElementById('edit-position-purchase-date').value = purchaseDate || '';
+        document.getElementById('edit-position-maturity-date').value = maturityDate || '';
+    }
+
     document.getElementById('edit-position-modal').style.display = 'flex';
 }
 
@@ -723,6 +840,7 @@ async function updatePosition(event) {
     event.preventDefault();
 
     const positionId = document.getElementById('edit-position-id').value;
+    const positionType = document.getElementById('edit-position-type').value;
     const shares = parseFloat(document.getElementById('edit-position-shares').value);
     const price = document.getElementById('edit-position-price').value;
     const costBasis = document.getElementById('edit-position-cost-basis').value;
@@ -730,6 +848,17 @@ async function updatePosition(event) {
     const data = { shares };
     if (price) data.current_price = parseFloat(price);
     if (costBasis) data.cost_basis = parseFloat(costBasis);
+
+    // Include interest fields for cash/CD/bond positions
+    if (['cash', 'cd', 'bond', 'treasury'].includes(positionType)) {
+        const apyValue = document.getElementById('edit-position-apy').value;
+        const purchaseDate = document.getElementById('edit-position-purchase-date').value;
+        const maturityDate = document.getElementById('edit-position-maturity-date').value;
+
+        if (apyValue) data.interest_rate = parseFloat(apyValue) / 100;
+        if (purchaseDate) data.purchase_date = purchaseDate;
+        if (maturityDate) data.maturity_date = maturityDate;
+    }
 
     try {
         await fetch(`${API_BASE}/api/portfolio/positions/${positionId}`, {
@@ -1347,50 +1476,100 @@ function formatAdvisorText(text) {
 // Advisor Chat
 let currentAnalysisTicker = null;
 
-async function sendChatMessage() {
-    const input = document.getElementById('chat-input');
+// Configure marked.js for safe rendering
+if (typeof marked !== 'undefined') {
+    marked.setOptions({
+        breaks: true,
+        gfm: true,
+    });
+}
+
+// Render markdown content safely
+function renderMarkdown(content) {
+    if (typeof marked !== 'undefined') {
+        return marked.parse(content);
+    }
+    // Fallback: basic text with line breaks
+    return content.replace(/\n/g, '<br>');
+}
+
+// Generic streaming chat function that works with any container
+async function sendStreamingChatMessage(containerId, inputId, ticker = null) {
+    const input = document.getElementById(inputId);
+    const container = document.getElementById(containerId);
     const message = input.value.trim();
 
     if (!message) return;
 
-    // Clear input
+    // Clear input and disable while streaming
     input.value = '';
+    input.disabled = true;
 
     // Add user message to chat
-    addChatMessage('user', message);
+    addChatMessageToContainer(container, 'user', message);
 
-    // Show typing indicator
-    const typingIndicator = addChatMessage('assistant', '<span class="typing-indicator">Thinking...</span>', true);
+    // Create assistant message div for streaming
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'chat-message assistant';
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'chat-message-content streaming-cursor';
+    messageDiv.appendChild(contentDiv);
+    container.appendChild(messageDiv);
+    container.scrollTop = container.scrollHeight;
+
+    let fullContent = '';
 
     try {
-        const resp = await fetch(`${API_BASE}/api/analysis/advisor/chat`, {
+        const response = await fetch(`${API_BASE}/api/analysis/advisor/chat/stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: message,
-                ticker: currentAnalysisTicker,
+                ticker: ticker,
                 include_portfolio: true
             })
         });
 
-        const result = await resp.json();
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
 
-        // Remove typing indicator
-        typingIndicator.remove();
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-        // Add assistant response
-        addChatMessage('assistant', result.response);
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
 
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.substring(6);
+                    if (data === '[DONE]') {
+                        // Streaming complete - render final markdown
+                        contentDiv.classList.remove('streaming-cursor');
+                        contentDiv.innerHTML = renderMarkdown(fullContent);
+                    } else {
+                        // Unescape newlines and append
+                        const text = data.replace(/\\n/g, '\n');
+                        fullContent += text;
+                        // Update with plain text while streaming (faster)
+                        contentDiv.textContent = fullContent;
+                        container.scrollTop = container.scrollHeight;
+                    }
+                }
+            }
+        }
     } catch (error) {
-        typingIndicator.remove();
-        addChatMessage('assistant', 'Sorry, I encountered an error. Please try again.');
-        console.error('Chat error:', error);
+        console.error('Chat stream error:', error);
+        contentDiv.classList.remove('streaming-cursor');
+        contentDiv.textContent = 'Sorry, I encountered an error. Please try again.';
+    } finally {
+        input.disabled = false;
+        input.focus();
     }
 }
 
-function addChatMessage(role, content, isHtml = false) {
-    const container = document.getElementById('chat-messages');
-
+// Add a message to a specific chat container
+function addChatMessageToContainer(container, role, content, useMarkdown = false) {
     // Remove placeholder if present
     const placeholder = container.querySelector('.chat-placeholder');
     if (placeholder) {
@@ -1402,19 +1581,45 @@ function addChatMessage(role, content, isHtml = false) {
 
     const contentDiv = document.createElement('div');
     contentDiv.className = 'chat-message-content';
-    if (isHtml) {
-        contentDiv.innerHTML = content;
+
+    if (useMarkdown && role === 'assistant') {
+        contentDiv.innerHTML = renderMarkdown(content);
     } else {
         contentDiv.textContent = content;
     }
 
     messageDiv.appendChild(contentDiv);
     container.appendChild(messageDiv);
-
-    // Scroll to bottom
     container.scrollTop = container.scrollHeight;
 
     return messageDiv;
+}
+
+// Analysis page chat (embedded in Analysis tab)
+async function sendChatMessage() {
+    await sendStreamingChatMessage('chat-messages', 'chat-input', currentAnalysisTicker);
+}
+
+function addChatMessage(role, content, isHtml = false) {
+    const container = document.getElementById('chat-messages');
+
+    if (isHtml) {
+        // Remove placeholder if present
+        const placeholder = container.querySelector('.chat-placeholder');
+        if (placeholder) placeholder.remove();
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${role}`;
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'chat-message-content';
+        contentDiv.innerHTML = content;
+        messageDiv.appendChild(contentDiv);
+        container.appendChild(messageDiv);
+        container.scrollTop = container.scrollHeight;
+        return messageDiv;
+    }
+
+    return addChatMessageToContainer(container, role, content, role === 'assistant');
 }
 
 function handleChatKeypress(event) {
@@ -1446,6 +1651,71 @@ async function clearAdvisorChat() {
         showToast('Failed to clear chat', 'error');
     }
 }
+
+// ==========================================
+// Global Chat Modal Functions
+// ==========================================
+
+function showGlobalChat() {
+    document.getElementById('global-chat-modal').style.display = 'flex';
+    document.getElementById('global-chat-input').focus();
+}
+
+function hideGlobalChat() {
+    document.getElementById('global-chat-modal').style.display = 'none';
+}
+
+async function sendGlobalChatMessage() {
+    await sendStreamingChatMessage('global-chat-messages', 'global-chat-input', null);
+}
+
+function handleGlobalChatKeypress(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendGlobalChatMessage();
+    }
+}
+
+async function clearGlobalChat() {
+    try {
+        await fetch(`${API_BASE}/api/analysis/advisor/chat/clear`, { method: 'POST' });
+
+        const container = document.getElementById('global-chat-messages');
+        container.innerHTML = `
+            <div class="chat-placeholder">
+                <p>Ask a question about your portfolio...</p>
+                <p class="text-muted">Examples:</p>
+                <ul class="text-muted">
+                    <li>"Should I be concerned about my technology exposure?"</li>
+                    <li>"What's the difference between VTI and VOO?"</li>
+                    <li>"Is my portfolio too aggressive for someone my age?"</li>
+                    <li>"How can I improve my diversification?"</li>
+                </ul>
+            </div>
+        `;
+
+        showToast('Chat history cleared', 'success');
+    } catch (error) {
+        showToast('Failed to clear chat', 'error');
+    }
+}
+
+// Keyboard shortcut to open chat (Ctrl+K or Cmd+K)
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        const modal = document.getElementById('global-chat-modal');
+        if (modal.style.display === 'none' || !modal.style.display) {
+            showGlobalChat();
+        } else {
+            hideGlobalChat();
+        }
+    }
+    // Escape to close
+    if (e.key === 'Escape') {
+        hideGlobalChat();
+    }
+});
 
 // Settings Management
 async function loadSettings() {
@@ -2437,20 +2707,27 @@ async function addManualPosition(event) {
             // Add cash position
             const amount = parseFloat(document.getElementById('cash-amount').value);
             const name = document.getElementById('cash-name').value || 'Cash';
+            const apyInput = document.getElementById('cash-apy').value;
+            const apy = apyInput ? parseFloat(apyInput) / 100 : null;
 
             if (!amount) {
                 showToast('Please enter a cash amount', 'error');
                 return;
             }
 
+            const cashData = {
+                account_id: accountId,
+                amount: amount,
+                name: name
+            };
+            if (apy !== null) {
+                cashData.interest_rate = apy;
+            }
+
             response = await fetch(`${API_BASE}/api/portfolio/positions/cash`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    account_id: accountId,
-                    amount: amount,
-                    name: name
-                })
+                body: JSON.stringify(cashData)
             });
         } else if (posType === 'cd') {
             // Add CD position
@@ -2528,5 +2805,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
     await loadViews();  // Load views first to set up view selector
     await updatePriceStatus();  // Show price freshness status
+    await checkDemoModeStatus();  // Check demo mode status
     refreshData();
 });

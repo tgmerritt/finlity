@@ -435,3 +435,39 @@ def get_all_api_keys_status() -> dict:
         }
 
     return {"api_keys": statuses}
+
+
+# ==================== Demo Mode ====================
+
+class DemoModeSettings(BaseModel):
+    """Demo mode settings."""
+    enabled: bool = Field(..., description="Whether demo mode is enabled")
+
+
+@router.get("/demo-mode")
+def get_demo_mode() -> dict:
+    """Get current demo mode status."""
+    config = load_config()
+    demo_config = config.get("demo", {})
+    return {
+        "enabled": demo_config.get("enabled", False),
+        "database": demo_config.get("database", "data/demo/demo.db"),
+    }
+
+
+@router.put("/demo-mode")
+def set_demo_mode(settings: DemoModeSettings) -> dict:
+    """Toggle demo mode on/off. Requires server restart to take effect."""
+    import os
+
+    config = load_config()
+    if "demo" not in config:
+        config["demo"] = {}
+    config["demo"]["enabled"] = settings.enabled
+    save_config(config)
+
+    return {
+        "status": "updated",
+        "enabled": settings.enabled,
+        "message": "Restart server for changes to take effect",
+    }
