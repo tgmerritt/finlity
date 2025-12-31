@@ -11,6 +11,12 @@ from .models import (
     AllocationTrigger,
 )
 from .operations import Database
+from .profile_manager import (
+    Profile,
+    ProfileManager,
+    get_profile_manager,
+    get_database,
+)
 
 __all__ = [
     "Base",
@@ -22,4 +28,8 @@ __all__ = [
     "AppSettings",
     "AllocationTrigger",
     "Database",
+    "Profile",
+    "ProfileManager",
+    "get_profile_manager",
+    "get_database",
 ]

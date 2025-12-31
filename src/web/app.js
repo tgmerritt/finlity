@@ -268,6 +268,7 @@ function showTab(tabName) {
         loadAnalysisData();
     } else if (tabName === 'settings') {
         loadSettings();
+        loadProfilesForSettings();
     }
 }
 
@@ -319,6 +320,439 @@ function changeView(viewId) {
 
     // Refresh data with new view
     refreshData();
+}
+
+// Profile management (multi-database support)
+let availableProfiles = [];
+let currentProfileId = null;
+
+async function loadProfiles() {
+    try {
+        const response = await fetch(API_BASE + '/api/profiles');
+        const profiles = await response.json();
+        availableProfiles = profiles;
+
+        // Find active profile
+        const activeProfile = profiles.find(p => p.is_active);
+        if (activeProfile) {
+            currentProfileId = activeProfile.id;
+            updateProfileDisplay(activeProfile);
+        }
+
+        // Update dropdown list
+        renderProfileDropdown(profiles);
+
+    } catch (error) {
+        console.error('Error loading profiles:', error);
+    }
+}
+
+function updateProfileDisplay(profile) {
+    const nameEl = document.getElementById('current-profile-name');
+    const dotEl = document.getElementById('profile-color-dot');
+
+    if (nameEl) nameEl.textContent = profile.name;
+    if (dotEl) dotEl.style.backgroundColor = profile.color;
+}
+
+function renderProfileDropdown(profiles) {
+    const listEl = document.getElementById('profile-list');
+    if (!listEl) return;
+
+    listEl.textContent = ''; // Clear existing content
+
+    profiles.forEach(profile => {
+        const item = document.createElement('div');
+        item.className = 'profile-item' + (profile.is_active ? ' active' : '');
+        item.onclick = function() { switchProfile(profile.id); };
+
+        const dot = document.createElement('span');
+        dot.className = 'profile-color-dot';
+        dot.style.backgroundColor = profile.color;
+
+        const name = document.createElement('span');
+        name.className = 'profile-item-name';
+        name.textContent = profile.name;
+
+        const check = document.createElement('span');
+        check.className = 'profile-item-check';
+        check.textContent = '\u2713'; // Checkmark
+
+        item.appendChild(dot);
+        item.appendChild(name);
+        item.appendChild(check);
+        listEl.appendChild(item);
+    });
+}
+
+function toggleProfileDropdown() {
+    const dropdown = document.getElementById('profile-dropdown');
+    if (dropdown) {
+        const isVisible = dropdown.style.display !== 'none';
+        dropdown.style.display = isVisible ? 'none' : 'block';
+
+        // Close dropdown when clicking outside
+        if (!isVisible) {
+            setTimeout(function() {
+                document.addEventListener('click', closeProfileDropdownOnClickOutside);
+            }, 0);
+        }
+    }
+}
+
+function closeProfileDropdownOnClickOutside(event) {
+    const dropdown = document.getElementById('profile-dropdown');
+    const btn = document.getElementById('profile-selector-btn');
+
+    if (dropdown && btn && !dropdown.contains(event.target) && !btn.contains(event.target)) {
+        dropdown.style.display = 'none';
+        document.removeEventListener('click', closeProfileDropdownOnClickOutside);
+    }
+}
+
+async function switchProfile(profileId) {
+    if (profileId === currentProfileId) {
+        toggleProfileDropdown();
+        return;
+    }
+
+    showLoading('Switching profile...');
+
+    try {
+        const response = await fetch(API_BASE + '/api/profiles/' + profileId + '/activate', {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            const profile = await response.json();
+            currentProfileId = profile.id;
+            updateProfileDisplay(profile);
+
+            // Update dropdown to reflect new active profile
+            await loadProfiles();
+
+            // Close dropdown
+            const dropdown = document.getElementById('profile-dropdown');
+            if (dropdown) dropdown.style.display = 'none';
+
+            showToast('Switched to profile: ' + profile.name, 'success');
+
+            // Reload all data for new profile
+            await refreshData();
+            await loadViews();
+
+        } else {
+            const error = await response.json();
+            showToast('Error: ' + error.detail, 'error');
+        }
+
+    } catch (error) {
+        console.error('Error switching profile:', error);
+        showToast('Failed to switch profile', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function showManageProfilesModal() {
+    // Close dropdown first
+    const dropdown = document.getElementById('profile-dropdown');
+    if (dropdown) dropdown.style.display = 'none';
+
+    // Navigate to settings tab and scroll to profiles section
+    showTab('settings');
+    setTimeout(function() {
+        const profilesSection = document.getElementById('profiles-management-list');
+        if (profilesSection) {
+            profilesSection.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, 100);
+}
+
+// Profile Management for Settings page
+async function loadProfilesForSettings() {
+    try {
+        const response = await fetch(API_BASE + '/api/profiles');
+        const profiles = await response.json();
+        renderProfilesManagementList(profiles);
+    } catch (error) {
+        console.error('Error loading profiles for settings:', error);
+    }
+}
+
+function renderProfilesManagementList(profiles) {
+    const container = document.getElementById('profiles-management-list');
+    if (!container) return;
+
+    if (profiles.length === 0) {
+        container.innerHTML = '<p class="text-muted">No profiles found. Create one to get started.</p>';
+        return;
+    }
+
+    const iconSvgs = {
+        user: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>',
+        users: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>',
+        briefcase: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>',
+        building: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="9" y1="6" x2="9" y2="6.01"></line><line x1="15" y1="6" x2="15" y2="6.01"></line><line x1="9" y1="10" x2="9" y2="10.01"></line><line x1="15" y1="10" x2="15" y2="10.01"></line><line x1="9" y1="14" x2="9" y2="14.01"></line><line x1="15" y1="14" x2="15" y2="14.01"></line><line x1="9" y1="18" x2="15" y2="18"></line></svg>',
+        star: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>',
+        shield: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>'
+    };
+
+    container.innerHTML = profiles.map(function(profile) {
+        const iconSvg = iconSvgs[profile.icon] || iconSvgs.user;
+        const isActive = profile.is_active;
+        const activeBadge = isActive ? '<span class="badge badge-success">Active</span>' : '';
+        const lastAccessed = profile.last_accessed ? new Date(profile.last_accessed).toLocaleDateString() : 'Never';
+
+        return '<div class="profile-management-card' + (isActive ? ' active' : '') + '">' +
+            '<div class="profile-card-icon" style="background-color: ' + escapeHtml(profile.color) + '">' +
+                iconSvg +
+            '</div>' +
+            '<div class="profile-card-info">' +
+                '<div class="profile-card-name">' + escapeHtml(profile.name) + ' ' + activeBadge + '</div>' +
+                '<div class="profile-card-description">' + escapeHtml(profile.description || 'No description') + '</div>' +
+                '<div class="profile-card-stats">Last accessed: ' + lastAccessed + '</div>' +
+            '</div>' +
+            '<div class="profile-card-actions">' +
+                (!isActive ? '<button class="btn btn-sm btn-primary" onclick="activateProfile(\'' + profile.id + '\')" title="Activate">Activate</button>' : '') +
+                '<button class="btn btn-sm btn-default" onclick="editProfile(\'' + profile.id + '\')" title="Edit">Edit</button>' +
+                '<button class="btn btn-sm btn-default" onclick="exportProfile(\'' + profile.id + '\')" title="Export">Export</button>' +
+                '<button class="btn btn-sm btn-default" onclick="duplicateProfile(\'' + profile.id + '\')" title="Duplicate">Duplicate</button>' +
+                (!isActive && profiles.length > 1 ? '<button class="btn btn-sm btn-danger" onclick="deleteProfile(\'' + profile.id + '\')" title="Delete">Delete</button>' : '') +
+            '</div>' +
+        '</div>';
+    }).join('');
+}
+
+function showCreateProfileModal() {
+    document.getElementById('profile-modal-title').textContent = 'Create Profile';
+    document.getElementById('profile-id').value = '';
+    document.getElementById('profile-name').value = '';
+    document.getElementById('profile-description').value = '';
+
+    // Reset color and icon to defaults
+    const colorRadios = document.querySelectorAll('input[name="profile-color"]');
+    colorRadios.forEach(function(r, i) { r.checked = i === 0; });
+
+    const iconRadios = document.querySelectorAll('input[name="profile-icon"]');
+    iconRadios.forEach(function(r, i) { r.checked = i === 0; });
+
+    document.getElementById('profile-modal').style.display = 'flex';
+}
+
+function hideProfileModal() {
+    document.getElementById('profile-modal').style.display = 'none';
+}
+
+async function editProfile(profileId) {
+    try {
+        const response = await fetch(API_BASE + '/api/profiles/' + profileId);
+        if (!response.ok) throw new Error('Profile not found');
+        const profile = await response.json();
+
+        document.getElementById('profile-modal-title').textContent = 'Edit Profile';
+        document.getElementById('profile-id').value = profile.id;
+        document.getElementById('profile-name').value = profile.name;
+        document.getElementById('profile-description').value = profile.description || '';
+
+        // Set color
+        const colorRadios = document.querySelectorAll('input[name="profile-color"]');
+        colorRadios.forEach(function(r) { r.checked = r.value === profile.color; });
+
+        // Set icon
+        const iconRadios = document.querySelectorAll('input[name="profile-icon"]');
+        iconRadios.forEach(function(r) { r.checked = r.value === profile.icon; });
+
+        document.getElementById('profile-modal').style.display = 'flex';
+    } catch (error) {
+        console.error('Error loading profile:', error);
+        showToast('Failed to load profile', 'error');
+    }
+}
+
+async function saveProfile(event) {
+    event.preventDefault();
+
+    const profileId = document.getElementById('profile-id').value;
+    const name = document.getElementById('profile-name').value.trim();
+    const description = document.getElementById('profile-description').value.trim();
+    const color = document.querySelector('input[name="profile-color"]:checked').value;
+    const icon = document.querySelector('input[name="profile-icon"]:checked').value;
+
+    if (!name) {
+        showToast('Profile name is required', 'error');
+        return;
+    }
+
+    try {
+        let response;
+        if (profileId) {
+            // Update existing profile
+            response = await fetch(API_BASE + '/api/profiles/' + profileId, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name, description: description, color: color, icon: icon })
+            });
+        } else {
+            // Create new profile
+            response = await fetch(API_BASE + '/api/profiles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name, description: description, color: color, icon: icon })
+            });
+        }
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to save profile');
+        }
+
+        hideProfileModal();
+        showToast(profileId ? 'Profile updated' : 'Profile created', 'success');
+        await loadProfiles();
+        await loadProfilesForSettings();
+    } catch (error) {
+        console.error('Error saving profile:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+async function activateProfile(profileId) {
+    try {
+        const response = await fetch(API_BASE + '/api/profiles/' + profileId + '/activate', {
+            method: 'POST'
+        });
+
+        if (!response.ok) throw new Error('Failed to activate profile');
+
+        showToast('Profile activated. Reloading...', 'success');
+
+        // Reload everything to use new database
+        await loadProfiles();
+        await loadProfilesForSettings();
+        await refreshData();
+    } catch (error) {
+        console.error('Error activating profile:', error);
+        showToast('Failed to activate profile', 'error');
+    }
+}
+
+async function deleteProfile(profileId) {
+    if (!confirm('Are you sure you want to delete this profile? This will permanently delete all data in this profile and cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(API_BASE + '/api/profiles/' + profileId, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to delete profile');
+        }
+
+        showToast('Profile deleted', 'success');
+        await loadProfiles();
+        await loadProfilesForSettings();
+    } catch (error) {
+        console.error('Error deleting profile:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+async function duplicateProfile(profileId) {
+    const newName = prompt('Enter name for the duplicate profile:');
+    if (!newName) return;
+
+    try {
+        const response = await fetch(API_BASE + '/api/profiles/' + profileId + '/duplicate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_name: newName })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to duplicate profile');
+        }
+
+        showToast('Profile duplicated', 'success');
+        await loadProfiles();
+        await loadProfilesForSettings();
+    } catch (error) {
+        console.error('Error duplicating profile:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+async function exportProfile(profileId) {
+    try {
+        showToast('Preparing export...', 'info');
+        const response = await fetch(API_BASE + '/api/profiles/' + profileId + '/export');
+
+        if (!response.ok) throw new Error('Failed to export profile');
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+
+        // Get filename from Content-Disposition header or use default
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'profile-export.zip';
+        if (contentDisposition) {
+            const match = contentDisposition.match(/filename="?([^"]+)"?/);
+            if (match) filename = match[1];
+        }
+
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        showToast('Profile exported successfully', 'success');
+    } catch (error) {
+        console.error('Error exporting profile:', error);
+        showToast('Failed to export profile', 'error');
+    }
+}
+
+function importProfileFromFile() {
+    document.getElementById('profile-import-input').click();
+}
+
+async function handleProfileImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        showToast('Importing profile...', 'info');
+        const response = await fetch(API_BASE + '/api/profiles/import', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to import profile');
+        }
+
+        const result = await response.json();
+        showToast('Profile "' + result.name + '" imported successfully', 'success');
+        await loadProfiles();
+        await loadProfilesForSettings();
+    } catch (error) {
+        console.error('Error importing profile:', error);
+        showToast(error.message, 'error');
+    }
+
+    // Reset the input
+    event.target.value = '';
 }
 
 // Data loading
@@ -3011,6 +3445,7 @@ async function addManualPosition(event) {
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
+    await loadProfiles();  // Load profiles for multi-database support
     await loadViews();  // Load views first to set up view selector
     await updatePriceStatus();  // Show price freshness status
     await checkDemoModeStatus();  // Check demo mode status

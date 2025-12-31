@@ -23,8 +23,9 @@ from src.api import (
     analysis_router,
     projections_router,
     settings_router,
+    profiles_router,
 )
-from src.database import Database
+from src.database import Database, get_profile_manager, get_database
 from src.importers import FolderScanner
 
 
@@ -49,11 +50,21 @@ def is_demo_mode():
 
 
 def get_db_path():
-    """Get the database path based on demo mode."""
+    """Get the database path based on demo mode or active profile."""
     if is_demo_mode():
         config = load_config()
         demo_db = config.get("demo", {}).get("database", "data/demo/demo.db")
         return demo_db
+
+    # Check for active profile
+    try:
+        profile_manager = get_profile_manager()
+        active_profile = profile_manager.get_active_profile()
+        if active_profile:
+            return str(profile_manager.get_profile_db_path(active_profile.id))
+    except Exception:
+        pass  # Fall back to default if profile system fails
+
     return "data/portfolio.db"
 
 
@@ -119,6 +130,7 @@ app.include_router(imports_router)
 app.include_router(analysis_router)
 app.include_router(projections_router)
 app.include_router(settings_router)
+app.include_router(profiles_router)
 
 # Serve static files (web dashboard)
 web_dir = Path(__file__).parent / "web"

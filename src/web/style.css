@@ -238,6 +238,280 @@ body {
     box-shadow: 0 0 0 2px var(--color-primary-bg);
 }
 
+/* Profile Selector */
+.profile-selector {
+    padding: 12px 16px 0;
+    margin-bottom: 8px;
+}
+
+.profile-dropdown-wrapper {
+    position: relative;
+}
+
+.profile-selector-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--color-bg-container);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    color: var(--color-text-primary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.profile-selector-btn:hover {
+    border-color: var(--color-primary);
+}
+
+.profile-selector-btn svg {
+    margin-left: auto;
+    opacity: 0.5;
+}
+
+.profile-color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.profile-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.profile-list {
+    padding: 4px 0;
+}
+
+.profile-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+}
+
+.profile-item:hover {
+    background-color: var(--color-bg-hover);
+}
+
+.profile-item.active {
+    background-color: var(--color-primary-bg);
+}
+
+.profile-item-name {
+    flex: 1;
+    font-size: 14px;
+    color: var(--color-text-primary);
+}
+
+.profile-item-check {
+    color: var(--color-primary);
+    opacity: 0;
+}
+
+.profile-item.active .profile-item-check {
+    opacity: 1;
+}
+
+.profile-dropdown-footer {
+    padding: 8px;
+    border-top: 1px solid var(--color-border-secondary);
+}
+
+.profile-dropdown-footer .btn {
+    width: 100%;
+    justify-content: center;
+}
+
+.btn-text {
+    background: transparent;
+    color: var(--color-text-secondary);
+    border: none;
+}
+
+.btn-text:hover {
+    color: var(--color-primary);
+    background-color: var(--color-bg-hover);
+}
+
+/* Profile Management Grid */
+.profiles-management-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.profile-management-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    transition: all var(--transition-fast);
+}
+
+.profile-management-card:hover {
+    border-color: var(--color-primary);
+}
+
+.profile-management-card.active {
+    border-color: var(--color-success);
+    background: rgba(92, 184, 92, 0.1);
+}
+
+.profile-card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.profile-card-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke: white;
+}
+
+.profile-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.profile-card-name {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.profile-card-name .badge {
+    font-size: 10px;
+    padding: 2px 6px;
+}
+
+.profile-card-description {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.profile-card-stats {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+}
+
+.profile-card-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.profile-card-actions .btn {
+    padding: 6px 8px;
+}
+
+/* Color Picker */
+.color-picker-grid {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.color-option {
+    cursor: pointer;
+}
+
+.color-option input {
+    display: none;
+}
+
+.color-swatch {
+    display: block;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    transition: all var(--transition-fast);
+}
+
+.color-option input:checked + .color-swatch {
+    border-color: var(--color-text-primary);
+    box-shadow: 0 0 0 2px var(--color-bg-secondary), 0 0 0 4px var(--color-primary);
+}
+
+.color-option:hover .color-swatch {
+    transform: scale(1.1);
+}
+
+/* Icon Picker */
+.icon-picker-grid {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.icon-option {
+    cursor: pointer;
+}
+
+.icon-option input {
+    display: none;
+}
+
+.icon-preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--border-radius-sm);
+    border: 2px solid var(--color-border);
+    background: var(--color-bg-tertiary);
+    transition: all var(--transition-fast);
+}
+
+.icon-preview svg {
+    stroke: var(--color-text-secondary);
+}
+
+.icon-option input:checked + .icon-preview {
+    border-color: var(--color-primary);
+    background: rgba(74, 144, 217, 0.1);
+}
+
+.icon-option input:checked + .icon-preview svg {
+    stroke: var(--color-primary);
+}
+
+.icon-option:hover .icon-preview {
+    border-color: var(--color-primary);
+}
+
 .sidebar-footer {
     padding: 16px;
     border-top: 1px solid var(--color-border-secondary);

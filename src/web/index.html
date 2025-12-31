@@ -32,6 +32,40 @@
                 <span>Portfolio</span>
             </div>
 
+            <!-- Profile Selector (multi-database support) -->
+            <div class="profile-selector">
+                <label class="view-selector-label">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    Profile
+                </label>
+                <div class="profile-dropdown-wrapper">
+                    <button id="profile-selector-btn" class="profile-selector-btn" onclick="toggleProfileDropdown()">
+                        <span id="profile-color-dot" class="profile-color-dot" style="background-color: #4A90D9;"></span>
+                        <span id="current-profile-name">My Portfolio</span>
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div id="profile-dropdown" class="profile-dropdown" style="display: none;">
+                        <div id="profile-list" class="profile-list">
+                            <!-- Populated by JS -->
+                        </div>
+                        <div class="profile-dropdown-footer">
+                            <button onclick="showManageProfilesModal()" class="btn btn-sm btn-text">
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                </svg>
+                                Manage Profiles
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Portfolio View Selector -->
             <div class="view-selector">
                 <label class="view-selector-label">
@@ -1080,6 +1114,37 @@
                         </div>
                     </div>
 
+                    <!-- Profile Management -->
+                    <div class="card full-width">
+                        <div class="card-header">
+                            <h3>Profile Management</h3>
+                            <button class="btn btn-sm btn-primary" onclick="showCreateProfileModal()">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                New Profile
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <p class="settings-description">Manage separate portfolios for different users, clients, or scenarios. Each profile has its own database with complete data isolation.</p>
+                            <div id="profiles-management-list" class="profiles-management-grid">
+                                <!-- Profiles will be populated here -->
+                            </div>
+                            <div class="profile-actions" style="margin-top: 16px; display: flex; gap: 12px;">
+                                <button type="button" class="btn btn-default" onclick="importProfileFromFile()">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                    Import Profile
+                                </button>
+                                <input type="file" id="profile-import-input" accept=".zip" style="display: none;" onchange="handleProfileImport(event)">
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Demo Mode -->
                     <div class="card">
                         <div class="card-header">
@@ -1383,6 +1448,58 @@
             </div>
             <div class="modal-body" id="generic-modal-body">
                 <!-- Content populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Profile Modal -->
+    <div id="profile-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop" onclick="hideProfileModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="profile-modal-title">Create Profile</h2>
+                <button class="modal-close" onclick="hideProfileModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="profile-form" onsubmit="saveProfile(event)">
+                    <input type="hidden" id="profile-id" value="">
+                    <div class="form-group">
+                        <label for="profile-name">Profile Name</label>
+                        <input type="text" id="profile-name" required placeholder="e.g., John's Portfolio">
+                    </div>
+                    <div class="form-group">
+                        <label for="profile-description">Description (optional)</label>
+                        <input type="text" id="profile-description" placeholder="e.g., Family retirement accounts">
+                    </div>
+                    <div class="form-group">
+                        <label>Profile Color</label>
+                        <div class="color-picker-grid">
+                            <label class="color-option"><input type="radio" name="profile-color" value="#4A90D9" checked><span class="color-swatch" style="background:#4A90D9"></span></label>
+                            <label class="color-option"><input type="radio" name="profile-color" value="#5CB85C"><span class="color-swatch" style="background:#5CB85C"></span></label>
+                            <label class="color-option"><input type="radio" name="profile-color" value="#F0AD4E"><span class="color-swatch" style="background:#F0AD4E"></span></label>
+                            <label class="color-option"><input type="radio" name="profile-color" value="#D9534F"><span class="color-swatch" style="background:#D9534F"></span></label>
+                            <label class="color-option"><input type="radio" name="profile-color" value="#9B59B6"><span class="color-swatch" style="background:#9B59B6"></span></label>
+                            <label class="color-option"><input type="radio" name="profile-color" value="#1ABC9C"><span class="color-swatch" style="background:#1ABC9C"></span></label>
+                            <label class="color-option"><input type="radio" name="profile-color" value="#E91E63"><span class="color-swatch" style="background:#E91E63"></span></label>
+                            <label class="color-option"><input type="radio" name="profile-color" value="#607D8B"><span class="color-swatch" style="background:#607D8B"></span></label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Profile Icon</label>
+                        <div class="icon-picker-grid">
+                            <label class="icon-option"><input type="radio" name="profile-icon" value="user" checked><span class="icon-preview"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span></label>
+                            <label class="icon-option"><input type="radio" name="profile-icon" value="users"><span class="icon-preview"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span></label>
+                            <label class="icon-option"><input type="radio" name="profile-icon" value="briefcase"><span class="icon-preview"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg></span></label>
+                            <label class="icon-option"><input type="radio" name="profile-icon" value="building"><span class="icon-preview"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="9" y1="6" x2="9" y2="6.01"></line><line x1="15" y1="6" x2="15" y2="6.01"></line><line x1="9" y1="10" x2="9" y2="10.01"></line><line x1="15" y1="10" x2="15" y2="10.01"></line><line x1="9" y1="14" x2="9" y2="14.01"></line><line x1="15" y1="14" x2="15" y2="14.01"></line><line x1="9" y1="18" x2="15" y2="18"></line></svg></span></label>
+                            <label class="icon-option"><input type="radio" name="profile-icon" value="star"><span class="icon-preview"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></span></label>
+                            <label class="icon-option"><input type="radio" name="profile-icon" value="shield"><span class="icon-preview"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span></label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-default" onclick="hideProfileModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Profile</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
