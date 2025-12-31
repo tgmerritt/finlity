@@ -24,6 +24,7 @@ from src.api import (
     projections_router,
     settings_router,
     profiles_router,
+    plugins_router,
 )
 from src.database import Database, get_profile_manager, get_database
 from src.importers import FolderScanner
@@ -131,6 +132,7 @@ app.include_router(analysis_router)
 app.include_router(projections_router)
 app.include_router(settings_router)
 app.include_router(profiles_router)
+app.include_router(plugins_router)
 
 # Serve static files (web dashboard)
 web_dir = Path(__file__).parent / "web"

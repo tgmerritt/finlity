@@ -269,6 +269,7 @@ function showTab(tabName) {
     } else if (tabName === 'settings') {
         loadSettings();
         loadProfilesForSettings();
+        loadPlugins();
     }
 }
 
@@ -753,6 +754,209 @@ async function handleProfileImport(event) {
 
     // Reset the input
     event.target.value = '';
+}
+
+// Plugin Management
+let availablePlugins = [];
+
+async function loadPlugins() {
+    try {
+        const response = await fetch(API_BASE + '/api/plugins');
+        const plugins = await response.json();
+        availablePlugins = plugins;
+        renderPluginsList(plugins);
+    } catch (error) {
+        console.error('Error loading plugins:', error);
+        const container = document.getElementById('plugins-list');
+        if (container) {
+            container.innerHTML = '<p class="text-muted">Failed to load plugins.</p>';
+        }
+    }
+}
+
+async function discoverPlugins() {
+    try {
+        showToast('Scanning for plugins...', 'info');
+        const response = await fetch(API_BASE + '/api/plugins/discover', { method: 'POST' });
+        const result = await response.json();
+        showToast('Found ' + result.discovered + ' plugins', 'success');
+        await loadPlugins();
+    } catch (error) {
+        console.error('Error discovering plugins:', error);
+        showToast('Failed to discover plugins', 'error');
+    }
+}
+
+function renderPluginsList(plugins) {
+    const container = document.getElementById('plugins-list');
+    if (!container) return;
+
+    if (plugins.length === 0) {
+        container.innerHTML = '<div class="plugins-empty">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>' +
+                '<line x1="9" y1="9" x2="15" y2="15"></line>' +
+                '<line x1="15" y1="9" x2="9" y2="15"></line>' +
+            '</svg>' +
+            '<p>No plugins installed</p>' +
+            '<p class="text-muted" style="font-size: 12px;">Add plugins to the <code>src/plugins/installed/</code> directory</p>' +
+        '</div>';
+        return;
+    }
+
+    const typeIcons = {
+        importer: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>',
+        analysis: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>',
+        widget: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>',
+        provider: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>',
+        export: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>'
+    };
+
+    container.innerHTML = plugins.map(function(plugin) {
+        var cardClasses = 'plugin-card';
+        if (plugin.enabled) cardClasses += ' enabled';
+        if (plugin.load_error) cardClasses += ' has-error';
+
+        var icon = typeIcons[plugin.plugin_type] || typeIcons.widget;
+
+        return '<div class="' + cardClasses + '">' +
+            '<div class="plugin-icon ' + plugin.plugin_type + '">' + icon + '</div>' +
+            '<div class="plugin-info">' +
+                '<div class="plugin-header">' +
+                    '<span class="plugin-name">' + escapeHtml(plugin.name) + '</span>' +
+                    '<span class="plugin-version">v' + escapeHtml(plugin.version) + '</span>' +
+                    '<span class="plugin-type-badge">' + plugin.plugin_type + '</span>' +
+                    (plugin.is_builtin ? '<span class="badge badge-default">Built-in</span>' : '') +
+                '</div>' +
+                '<div class="plugin-description">' + escapeHtml(plugin.description || 'No description') + '</div>' +
+                '<div class="plugin-meta">By ' + escapeHtml(plugin.author) + ' | ' + escapeHtml(plugin.license) + '</div>' +
+                (plugin.load_error ? '<div class="plugin-error">Error: ' + escapeHtml(plugin.load_error) + '</div>' : '') +
+            '</div>' +
+            '<div class="plugin-actions">' +
+                (plugin.enabled ?
+                    '<button class="btn btn-sm btn-default" onclick="togglePlugin(\'' + plugin.plugin_id + '\', false)">Disable</button>' :
+                    '<button class="btn btn-sm btn-primary" onclick="togglePlugin(\'' + plugin.plugin_id + '\', true)"' + (plugin.load_error ? ' disabled' : '') + '>Enable</button>'
+                ) +
+                (plugin.settings_schema && plugin.settings_schema.length > 0 ?
+                    '<button class="btn btn-sm btn-default" onclick="showPluginSettings(\'' + plugin.plugin_id + '\')">Settings</button>' : ''
+                ) +
+            '</div>' +
+        '</div>';
+    }).join('');
+}
+
+async function togglePlugin(pluginId, enable) {
+    try {
+        const response = await fetch(API_BASE + '/api/plugins/' + pluginId + '/enable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enable: enable })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to toggle plugin');
+        }
+
+        showToast(enable ? 'Plugin enabled' : 'Plugin disabled', 'success');
+        await loadPlugins();
+    } catch (error) {
+        console.error('Error toggling plugin:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+async function showPluginSettings(pluginId) {
+    try {
+        const response = await fetch(API_BASE + '/api/plugins/' + pluginId + '/settings');
+        if (!response.ok) throw new Error('Failed to load settings');
+        const data = await response.json();
+
+        var content = '<form id="plugin-settings-form" onsubmit="savePluginSettings(event, \'' + pluginId + '\')">';
+
+        data.schema.forEach(function(setting) {
+            content += '<div class="form-group">';
+            content += '<label for="plugin-' + setting.key + '">' + escapeHtml(setting.label) + '</label>';
+
+            var value = data.settings[setting.key];
+            if (value === undefined) value = setting.default;
+
+            if (setting.type === 'select') {
+                content += '<select id="plugin-' + setting.key + '" name="' + setting.key + '">';
+                setting.options.forEach(function(opt) {
+                    content += '<option value="' + escapeHtml(opt) + '"' + (value === opt ? ' selected' : '') + '>' + escapeHtml(opt) + '</option>';
+                });
+                content += '</select>';
+            } else if (setting.type === 'boolean') {
+                content += '<label class="toggle-switch">';
+                content += '<input type="checkbox" id="plugin-' + setting.key + '" name="' + setting.key + '"' + (value ? ' checked' : '') + '>';
+                content += '<span class="toggle-slider"></span>';
+                content += '</label>';
+            } else if (setting.type === 'number') {
+                content += '<input type="number" id="plugin-' + setting.key + '" name="' + setting.key + '" value="' + (value || '') + '">';
+            } else {
+                content += '<input type="text" id="plugin-' + setting.key + '" name="' + setting.key + '" value="' + escapeHtml(value || '') + '">';
+            }
+
+            if (setting.description) {
+                content += '<small class="form-help">' + escapeHtml(setting.description) + '</small>';
+            }
+            content += '</div>';
+        });
+
+        content += '<div class="modal-footer">';
+        content += '<button type="button" class="btn btn-default" onclick="closeModal()">Cancel</button>';
+        content += '<button type="submit" class="btn btn-primary">Save Settings</button>';
+        content += '</div></form>';
+
+        document.getElementById('generic-modal-title').textContent = 'Plugin Settings';
+        document.getElementById('generic-modal-body').innerHTML = content;
+        document.getElementById('generic-modal').style.display = 'flex';
+    } catch (error) {
+        console.error('Error loading plugin settings:', error);
+        showToast('Failed to load plugin settings', 'error');
+    }
+}
+
+async function savePluginSettings(event, pluginId) {
+    event.preventDefault();
+    var form = event.target;
+    var settings = {};
+
+    var plugin = availablePlugins.find(function(p) { return p.plugin_id === pluginId; });
+    if (plugin && plugin.settings_schema) {
+        plugin.settings_schema.forEach(function(setting) {
+            var input = form.querySelector('[name="' + setting.key + '"]');
+            if (input) {
+                if (setting.type === 'boolean') {
+                    settings[setting.key] = input.checked;
+                } else if (setting.type === 'number') {
+                    settings[setting.key] = parseFloat(input.value) || 0;
+                } else {
+                    settings[setting.key] = input.value;
+                }
+            }
+        });
+    }
+
+    try {
+        const response = await fetch(API_BASE + '/api/plugins/' + pluginId + '/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings: settings })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to save settings');
+        }
+
+        closeModal();
+        showToast('Settings saved', 'success');
+    } catch (error) {
+        console.error('Error saving plugin settings:', error);
+        showToast(error.message, 'error');
+    }
 }
 
 // Data loading
