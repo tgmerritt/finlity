@@ -1033,3 +1033,146 @@ def clear_chat_history():
     global _chat_services
     _chat_services = {}
     return {"message": "Chat history cleared"}
+
+
+# ====================
+# Plugin Analysis API
+# ====================
+
+@router.get("/plugins")
+def run_plugin_analysis(db: Database = Depends(get_db)):
+    """
+    Run all enabled analysis plugins on the current portfolio.
+
+    This endpoint fetches portfolio data from the database and runs all
+    enabled analysis plugins (Tax-Loss Harvester, Dividend Tracker, etc.)
+    """
+    from src.plugins import get_plugin_registry, get_analysis_pipeline
+
+    # Ensure plugins are loaded
+    registry = get_plugin_registry()
+    registry.discover_plugins(auto_enable_builtin=True)
+    registry.load_enabled_plugins()
+
+    pipeline = get_analysis_pipeline()
+
+    # Get portfolio data from database
+    positions = []
+    accounts = []
+
+    for db_account in db.get_all_accounts():
+        # Add account info
+        accounts.append({
+            "id": db_account.id,
+            "name": db_account.name,
+            "account_type": db_account.account_type,
+            "brokerage": db_account.brokerage,
+            "is_retirement": db_account.account_type in [
+                "traditional_401k", "roth_401k", "traditional_ira", "roth_ira",
+                "hsa", "pension", "sep_ira", "simple_ira",
+            ],
+        })
+
+        # Add positions for this account
+        for db_pos in db.get_positions_by_account(db_account.id):
+            positions.append({
+                "ticker": db_pos.ticker,
+                "name": db_pos.name,
+                "shares": db_pos.shares,
+                "current_price": db_pos.current_price,
+                "cost_basis": db_pos.cost_basis,
+                "is_fund": db_pos.is_fund,
+                "sector": db_pos.sector,
+                "account_id": db_account.id,
+                "account_name": db_account.name,
+                "account_type": db_account.account_type,
+            })
+
+    # Run analysis plugins
+    result = pipeline.run_all(positions, accounts)
+
+    return {
+        "success": result.success,
+        "metrics": result.all_metrics,
+        "insights": result.all_insights,
+        "errors": result.errors,
+        "plugins": [
+            {
+                "plugin_id": pr.plugin_id,
+                "plugin_name": pr.plugin_name,
+                "success": pr.result.success,
+                "metrics": pr.result.metrics,
+                "insights": pr.result.insights,
+            }
+            for pr in result.plugin_results
+        ],
+        "position_count": len(positions),
+        "account_count": len(accounts),
+    }
+
+
+@router.get("/plugins/{plugin_id}")
+def run_single_plugin_analysis(plugin_id: str, db: Database = Depends(get_db)):
+    """
+    Run a specific analysis plugin on the current portfolio.
+
+    Args:
+        plugin_id: ID of the analysis plugin to run (e.g., "tax-loss-harvester")
+    """
+    from src.plugins import get_plugin_registry, get_analysis_pipeline
+    from fastapi import HTTPException
+
+    # Ensure plugins are loaded
+    registry = get_plugin_registry()
+    registry.discover_plugins(auto_enable_builtin=True)
+    registry.load_enabled_plugins()
+
+    pipeline = get_analysis_pipeline()
+
+    # Get portfolio data from database
+    positions = []
+    accounts = []
+
+    for db_account in db.get_all_accounts():
+        accounts.append({
+            "id": db_account.id,
+            "name": db_account.name,
+            "account_type": db_account.account_type,
+            "brokerage": db_account.brokerage,
+            "is_retirement": db_account.account_type in [
+                "traditional_401k", "roth_401k", "traditional_ira", "roth_ira",
+                "hsa", "pension", "sep_ira", "simple_ira",
+            ],
+        })
+
+        for db_pos in db.get_positions_by_account(db_account.id):
+            positions.append({
+                "ticker": db_pos.ticker,
+                "name": db_pos.name,
+                "shares": db_pos.shares,
+                "current_price": db_pos.current_price,
+                "cost_basis": db_pos.cost_basis,
+                "is_fund": db_pos.is_fund,
+                "sector": db_pos.sector,
+                "account_id": db_account.id,
+                "account_name": db_account.name,
+                "account_type": db_account.account_type,
+            })
+
+    # Run specific plugin
+    result = pipeline.run_plugin(plugin_id, positions, accounts)
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Analysis plugin not found: {plugin_id}"
+        )
+
+    return {
+        "plugin_id": plugin_id,
+        "success": result.success,
+        "metrics": result.metrics,
+        "insights": result.insights,
+        "warnings": result.warnings,
+        "errors": result.errors,
+    }

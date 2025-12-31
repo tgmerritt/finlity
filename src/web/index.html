@@ -534,6 +534,22 @@
                     </div>
                 </div>
 
+                <!-- Plugin Insights (Tax-Loss Harvesting, Dividends, etc.) -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Portfolio Insights</h3>
+                        <button class="btn btn-sm btn-default" onclick="loadPluginAnalysis()">Refresh</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="plugin-insights-loading" style="display: none;">
+                            <p class="text-muted">Analyzing portfolio...</p>
+                        </div>
+                        <div id="plugin-insights-container">
+                            <p class="text-muted">Click Refresh to run analysis plugins (Tax-Loss Harvesting, Dividend Tracking).</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Fund Analysis (Claude Integration) -->
                 <div class="card">
                     <div class="card-header">

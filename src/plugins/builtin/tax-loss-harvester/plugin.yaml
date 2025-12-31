@@ -1,0 +1,62 @@
+name: Tax-Loss Harvester
+version: 1.0.0
+description: Identify tax-loss harvesting opportunities and estimate potential savings
+author: Portfolio Analyzer
+license: MIT
+plugin_type: analysis
+
+main: analyzer.py
+class: TaxLossHarvester
+
+requires:
+  portfolio_analyzer: ">=1.0.0"
+  python: ">=3.10"
+
+dependencies: []
+
+permissions:
+  file_read: false
+  file_write: false
+  network: false
+  database: read_only
+
+settings:
+  - key: tax_rate
+    type: number
+    label: Tax Rate (%)
+    description: Your estimated marginal tax rate for capital gains
+    default: 25
+    min: 0
+    max: 50
+    required: false
+  - key: min_loss_threshold
+    type: number
+    label: Minimum Loss ($)
+    description: Minimum unrealized loss to consider for harvesting
+    default: 100
+    min: 0
+    required: false
+  - key: include_wash_sale_warning
+    type: boolean
+    label: Warn About Wash Sales
+    description: Show warnings for potential wash sale violations
+    default: true
+    required: false
+
+metrics:
+  - id: total_unrealized_losses
+    name: Total Unrealized Losses
+    description: Sum of all positions with unrealized losses
+    type: currency
+  - id: estimated_tax_savings
+    name: Estimated Tax Savings
+    description: Potential tax savings if all losses were harvested
+    type: currency
+  - id: harvesting_opportunities
+    name: Harvesting Opportunities
+    description: Number of positions eligible for tax-loss harvesting
+    type: number
+  - id: largest_loss_position
+    name: Largest Loss Position
+    description: Ticker with the largest unrealized loss
+    type: text

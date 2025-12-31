@@ -959,6 +959,93 @@ async function savePluginSettings(event, pluginId) {
     }
 }
 
+// Plugin Analysis
+async function loadPluginAnalysis() {
+    var container = document.getElementById('plugin-insights-container');
+    var loading = document.getElementById('plugin-insights-loading');
+
+    if (loading) loading.style.display = 'block';
+    if (container) container.innerHTML = '';
+
+    try {
+        const response = await fetch(API_BASE + '/api/analysis/plugins');
+        if (!response.ok) throw new Error('Failed to load analysis');
+        const data = await response.json();
+
+        if (loading) loading.style.display = 'none';
+
+        if (!data.plugins || data.plugins.length === 0) {
+            container.innerHTML = '<p class="text-muted">No analysis plugins available.</p>';
+            return;
+        }
+
+        var html = '';
+
+        // Show each plugin's results
+        data.plugins.forEach(function(plugin) {
+            html += '<div class="plugin-result">';
+            html += '<h4>' + escapeHtml(plugin.plugin_name) + '</h4>';
+
+            // Show key metrics
+            if (plugin.metrics) {
+                html += '<div class="plugin-metrics">';
+
+                // Tax-Loss Harvester metrics
+                if (plugin.metrics.total_unrealized_losses !== undefined) {
+                    html += '<div class="metric-item">';
+                    html += '<span class="metric-value negative">$' + formatNumber(plugin.metrics.total_unrealized_losses) + '</span>';
+                    html += '<span class="metric-label">Unrealized Losses</span>';
+                    html += '</div>';
+                    html += '<div class="metric-item">';
+                    html += '<span class="metric-value positive">$' + formatNumber(plugin.metrics.estimated_tax_savings) + '</span>';
+                    html += '<span class="metric-label">Est. Tax Savings</span>';
+                    html += '</div>';
+                    html += '<div class="metric-item">';
+                    html += '<span class="metric-value">' + plugin.metrics.harvesting_opportunities + '</span>';
+                    html += '<span class="metric-label">Opportunities</span>';
+                    html += '</div>';
+                }
+
+                // Dividend Tracker metrics
+                if (plugin.metrics.estimated_annual_income !== undefined) {
+                    html += '<div class="metric-item">';
+                    html += '<span class="metric-value positive">$' + formatNumber(plugin.metrics.estimated_annual_income) + '</span>';
+                    html += '<span class="metric-label">Est. Annual Dividends</span>';
+                    html += '</div>';
+                    html += '<div class="metric-item">';
+                    html += '<span class="metric-value">' + plugin.metrics.portfolio_yield.toFixed(2) + '%</span>';
+                    html += '<span class="metric-label">Portfolio Yield</span>';
+                    html += '</div>';
+                    html += '<div class="metric-item">';
+                    html += '<span class="metric-value">$' + formatNumber(plugin.metrics.monthly_income_estimate || 0) + '</span>';
+                    html += '<span class="metric-label">Monthly Income</span>';
+                    html += '</div>';
+                }
+
+                html += '</div>';
+            }
+
+            // Show insights
+            if (plugin.insights && plugin.insights.length > 0) {
+                html += '<div class="plugin-insights-list">';
+                plugin.insights.forEach(function(insight) {
+                    html += '<p class="insight-item">' + escapeHtml(insight) + '</p>';
+                });
+                html += '</div>';
+            }
+
+            html += '</div>';
+        });
+
+        container.innerHTML = html;
+
+    } catch (error) {
+        console.error('Error loading plugin analysis:', error);
+        if (loading) loading.style.display = 'none';
+        container.innerHTML = '<p class="text-muted">Failed to load analysis. ' + escapeHtml(error.message) + '</p>';
+    }
+}
+
 // Data loading
 async function refreshData() {
     showLoading('Loading data...');

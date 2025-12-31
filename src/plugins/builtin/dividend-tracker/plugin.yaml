@@ -1,0 +1,53 @@
+name: Dividend Tracker
+version: 1.0.0
+description: Track dividend income and yield across your portfolio
+author: Portfolio Analyzer
+license: MIT
+plugin_type: analysis
+
+main: analyzer.py
+class: DividendTracker
+
+requires:
+  portfolio_analyzer: ">=1.0.0"
+  python: ">=3.10"
+
+dependencies: []
+
+permissions:
+  file_read: false
+  file_write: false
+  network: false
+  database: read_only
+
+settings:
+  - key: include_etf_dividends
+    type: boolean
+    label: Include ETF Dividends
+    description: Include ETF distributions in dividend calculations
+    default: true
+    required: false
+  - key: annualize_yield
+    type: boolean
+    label: Annualize Yield
+    description: Show yields as annualized percentages
+    default: true
+    required: false
+
+metrics:
+  - id: estimated_annual_income
+    name: Est. Annual Dividend Income
+    description: Estimated annual dividend income from all positions
+    type: currency
+  - id: portfolio_yield
+    name: Portfolio Dividend Yield
+    description: Weighted average dividend yield of the portfolio
+    type: percentage
+  - id: dividend_positions
+    name: Dividend-Paying Positions
+    description: Number of positions that pay dividends
+    type: number
+  - id: highest_yield_position
+    name: Highest Yield Position
+    description: Position with the highest dividend yield
+    type: text

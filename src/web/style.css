@@ -645,6 +645,88 @@ body {
     margin-bottom: 12px;
 }
 
+/* Plugin Analysis Results */
+.plugin-result {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--color-border-secondary);
+}
+
+.plugin-result:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.plugin-result h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.plugin-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.plugin-metrics .metric-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.plugin-metrics .metric-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.plugin-metrics .metric-value.positive {
+    color: var(--color-success);
+}
+
+.plugin-metrics .metric-value.negative {
+    color: var(--color-danger);
+}
+
+.plugin-metrics .metric-label {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+}
+
+.plugin-insights-list {
+    background: var(--color-bg-container);
+    border-radius: var(--border-radius);
+    padding: 12px;
+}
+
+.insight-item {
+    margin: 0 0 8px 0;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+}
+
+.insight-item:last-child {
+    margin-bottom: 0;
+}
+
+.insight-item::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: var(--color-primary);
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
 .sidebar-footer {
     padding: 16px;
     border-top: 1px solid var(--color-border-secondary);

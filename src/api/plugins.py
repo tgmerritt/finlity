@@ -9,7 +9,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from src.plugins import get_plugin_registry, PluginType
+from src.plugins import get_plugin_registry, get_analysis_pipeline, PluginType
 
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
@@ -358,4 +358,145 @@ def get_plugin_types():
             }
             for t in PluginType
         ]
+    }
+
+
+# ============================================================================
+# Analysis Plugin Endpoints
+# ============================================================================
+
+
+@router.get("/analysis/metrics")
+def get_analysis_metrics():
+    """
+    Get all available analysis metrics from enabled plugins.
+
+    Returns metric definitions with plugin information.
+    """
+    # Ensure plugins are loaded
+    registry = get_plugin_registry()
+    registry.discover_plugins(auto_enable_builtin=True)
+    registry.load_enabled_plugins()
+
+    pipeline = get_analysis_pipeline()
+    metrics = pipeline.get_available_metrics()
+
+    return {
+        "metrics": metrics,
+        "count": len(metrics),
+    }
+
+
+@router.post("/analysis/run")
+def run_analysis_plugins(
+    positions: list[dict],
+    accounts: list[dict],
+):
+    """
+    Run all analysis plugins on portfolio data.
+
+    Args:
+        positions: List of position dictionaries
+        accounts: List of account dictionaries
+
+    Returns aggregated results from all analysis plugins.
+    """
+    # Ensure plugins are loaded
+    registry = get_plugin_registry()
+    registry.discover_plugins(auto_enable_builtin=True)
+    registry.load_enabled_plugins()
+
+    pipeline = get_analysis_pipeline()
+    result = pipeline.run_all(positions, accounts)
+
+    return {
+        "success": result.success,
+        "metrics": result.all_metrics,
+        "insights": result.all_insights,
+        "errors": result.errors,
+        "plugin_results": [
+            {
+                "plugin_id": pr.plugin_id,
+                "plugin_name": pr.plugin_name,
+                "success": pr.result.success,
+                "metrics": pr.result.metrics,
+                "insights": pr.result.insights,
+                "warnings": pr.result.warnings,
+                "errors": pr.result.errors,
+            }
+            for pr in result.plugin_results
+        ],
+    }
+
+
+@router.post("/analysis/run/{plugin_id}")
+def run_analysis_plugin(
+    plugin_id: str,
+    positions: list[dict],
+    accounts: list[dict],
+):
+    """
+    Run a specific analysis plugin.
+
+    Args:
+        plugin_id: ID of the analysis plugin to run
+        positions: List of position dictionaries
+        accounts: List of account dictionaries
+    """
+    # Ensure plugins are loaded
+    registry = get_plugin_registry()
+    registry.discover_plugins(auto_enable_builtin=True)
+    registry.load_enabled_plugins()
+
+    pipeline = get_analysis_pipeline()
+    result = pipeline.run_plugin(plugin_id, positions, accounts)
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Analysis plugin not found: {plugin_id}"
+        )
+
+    return {
+        "plugin_id": plugin_id,
+        "success": result.success,
+        "metrics": result.metrics,
+        "insights": result.insights,
+        "warnings": result.warnings,
+        "errors": result.errors,
+    }
+
+
+@router.get("/analysis/plugins")
+def list_analysis_plugins():
+    """List all enabled analysis plugins."""
+    # Ensure plugins are loaded
+    registry = get_plugin_registry()
+    registry.discover_plugins(auto_enable_builtin=True)
+    registry.load_enabled_plugins()
+
+    pipeline = get_analysis_pipeline()
+    analyzers = pipeline.get_analyzers()
+
+    return {
+        "plugins": [
+            {
+                "plugin_id": a.manifest.plugin_id,
+                "name": a.name,
+                "version": a.version,
+                "description": a.manifest.description,
+                "metrics": [
+                    {
+                        "id": m.id,
+                        "name": m.name,
+                        "description": m.description,
+                        "type": m.type,
+                    }
+                    for m in a.get_metrics()
+                ],
+                "settings": registry.get_plugin_settings(a.manifest.plugin_id),
+            }
+            for a in analyzers
+        ],
+        "count": len(analyzers),
     }
