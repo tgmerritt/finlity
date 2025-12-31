@@ -1,0 +1,409 @@
+"""
+FastAPI server for the investment portfolio system.
+
+Provides a REST API and serves a web dashboard for managing and analyzing
+your investment portfolio.
+"""
+
+import webbrowser
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+from src.api import (
+    portfolio_router,
+    imports_router,
+    analysis_router,
+    projections_router,
+    settings_router,
+)
+from src.database import Database
+from src.importers import FolderScanner
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown events."""
+    # Initialize database
+    db = Database()
+
+    # Scan for new imports on startup
+    scanner = FolderScanner(db)
+    pending = scanner.scan_for_new_files()
+    if pending:
+        print(f"Found {len(pending)} new files to import")
+        results = scanner.process_all_pending(fetch_prices=True)
+        for r in results:
+            status = "OK" if r.success else "FAILED"
+            print(f"  [{status}] {r.file_path.name}: {r.positions_imported} positions")
+
+    # Take a snapshot
+    snapshot = db.take_snapshot()
+    if snapshot.total_value > 0:
+        print(f"Portfolio snapshot: ${snapshot.total_value:,.0f}")
+
+    yield
+
+    # Cleanup (nothing needed currently)
+
+
+app = FastAPI(
+    title="Investment Portfolio API",
+    description="API for managing and analyzing investment portfolios",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include API routers
+app.include_router(portfolio_router)
+app.include_router(imports_router)
+app.include_router(analysis_router)
+app.include_router(projections_router)
+app.include_router(settings_router)
+
+# Serve static files (web dashboard)
+web_dir = Path(__file__).parent / "web"
+if web_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(web_dir)), name="static")
+
+
+@app.get("/")
+async def serve_dashboard():
+    """Serve the main dashboard."""
+    index_path = web_dir / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return {
+        "message": "Investment Portfolio API",
+        "docs": "/docs",
+        "dashboard": "Dashboard not found. Create src/web/index.html",
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    db = Database()
+    summary = db.get_portfolio_summary()
+    return {
+        "status": "healthy",
+        "portfolio_value": summary["total_value"],
+        "accounts": summary["account_count"],
+        "positions": summary["position_count"],
+    }
+
+
+@app.get("/api/dashboard/data")
+async def get_dashboard_data(view_id: str = None):
+    """Get all data needed for the dashboard in a single request.
+
+    Args:
+        view_id: Optional portfolio view ID to filter by. If not provided,
+                 returns data for all accounts.
+    """
+    db = Database()
+
+    # Get all accounts for reference
+    all_accounts = {a.id: a for a in db.get_all_accounts()}
+
+    # Determine which account IDs to include based on view
+    filter_account_ids = None
+    if view_id:
+        view = db.get_view_by_id(view_id)
+        if view:
+            filter_account_ids = set(view.get_account_ids())
+
+    # Get positions (filtered by view if specified)
+    positions = []
+    total_value = 0
+    total_cost_basis = 0
+    retirement_value = 0
+    taxable_value = 0
+
+    for pos in db.get_all_positions():
+        # Filter by view if specified
+        if filter_account_ids and pos.account_id not in filter_account_ids:
+            continue
+
+        account = all_accounts.get(pos.account_id)
+        market_value = (pos.shares * pos.current_price) if pos.current_price else 0
+
+        positions.append({
+            "id": pos.id,
+            "ticker": pos.ticker,
+            "name": pos.name,
+            "shares": pos.shares,
+            "price": pos.current_price,
+            "value": market_value,
+            "cost_basis": pos.cost_basis,
+            "account": account.name if account else "Unknown",
+            "account_type": account.account_type if account else "unknown",
+            "is_fund": pos.is_fund,
+        })
+
+        # Accumulate totals
+        total_value += market_value
+        if pos.cost_basis:
+            total_cost_basis += pos.cost_basis
+        if account:
+            if account.is_retirement:
+                retirement_value += market_value
+            else:
+                taxable_value += market_value
+
+    # Build filtered summary
+    filtered_accounts = []
+    for acc_id, account in all_accounts.items():
+        if filter_account_ids and acc_id not in filter_account_ids:
+            continue
+        acc_positions = [p for p in positions if p["account"] == account.name]
+        acc_value = sum(p["value"] for p in acc_positions)
+        acc_cost = sum(p["cost_basis"] for p in acc_positions if p["cost_basis"])
+        filtered_accounts.append({
+            "id": acc_id,
+            "name": account.name,
+            "account_type": account.account_type,
+            "display_type": account.display_type,
+            "brokerage": account.brokerage,
+            "value": acc_value,
+            "cost_basis": acc_cost,
+            "position_count": len(acc_positions),
+            "is_retirement": account.is_retirement,
+        })
+
+    summary = {
+        "total_value": total_value,
+        "total_cost_basis": total_cost_basis if total_cost_basis else None,
+        "total_gain_loss": (total_value - total_cost_basis) if total_cost_basis else None,
+        "retirement_value": retirement_value,
+        "taxable_value": taxable_value,
+        "account_count": len(filtered_accounts),
+        "position_count": len(positions),
+        "accounts": filtered_accounts,
+    }
+
+    # Get recent snapshots for charts (these are not filtered by view)
+    snapshots = db.get_snapshots(limit=90)
+    history = [
+        {
+            "date": s.snapshot_date.isoformat() if s.snapshot_date else "",
+            "total": s.total_value,
+            "retirement": s.retirement_value,
+            "taxable": s.taxable_value,
+        }
+        for s in reversed(snapshots)
+    ]
+
+    # Import history
+    imports = db.get_import_history(limit=10)
+    import_history = [
+        {
+            "file": h.file_name,
+            "date": h.import_date.isoformat() if h.import_date else "",
+            "account_type": h.account_type,
+            "status": h.status,
+        }
+        for h in imports
+    ]
+
+    return {
+        "summary": summary,
+        "positions": positions,
+        "history": history,
+        "imports": import_history,
+        "view_id": view_id,
+    }
+
+
+def reset_database_command():
+    """Reset the database (delete all data)."""
+    print("\n" + "=" * 50)
+    print("DATABASE RESET")
+    print("=" * 50)
+    print("\nWARNING: This will DELETE ALL DATA in the database!")
+    print("This includes:")
+    print("  - All accounts")
+    print("  - All positions")
+    print("  - All import history")
+    print("  - All snapshots")
+    print("  - All triggers")
+    print("  - All settings")
+    print("\nThis action CANNOT be undone.")
+    print()
+
+    confirm = input("Type 'DELETE ALL DATA' to confirm: ")
+    if confirm != "DELETE ALL DATA":
+        print("\nAborted. Database was NOT reset.")
+        return
+
+    print("\nResetting database...")
+    db = Database()
+    db.reset_database()
+    print("Database has been reset. All data has been deleted.")
+    print("The database schema has been recreated.\n")
+
+
+def export_database_command(path: str):
+    """Export database to JSON file."""
+    print(f"\nExporting database to: {path}")
+    db = Database()
+    data = db.export_database(path)
+    print(f"Exported {len(data.get('accounts', []))} accounts")
+    print(f"Exported {len(data.get('positions', []))} positions")
+    print(f"Exported {len(data.get('triggers', []))} triggers")
+    print(f"\nExport complete: {path}\n")
+
+
+def import_database_command(path: str):
+    """Import database from JSON file."""
+    print(f"\nImporting database from: {path}")
+    print("\nWARNING: This will REPLACE all existing data!")
+
+    confirm = input("Type 'IMPORT' to confirm: ")
+    if confirm != "IMPORT":
+        print("\nAborted. Database was NOT modified.")
+        return
+
+    db = Database()
+    result = db.import_database(path)
+    print(f"Imported {result.get('accounts', 0)} accounts")
+    print(f"Imported {result.get('positions', 0)} positions")
+    print("\nImport complete.\n")
+
+
+def check_cd_maturities_command():
+    """Check for matured CDs and convert them to cash."""
+    print("\nChecking for matured CDs...")
+    db = Database()
+
+    # Check and convert matured CDs
+    matured = db.check_cd_maturities()
+    if matured:
+        print(f"\nConverted {len(matured)} matured CD(s) to cash:")
+        for cd in matured:
+            print(f"  - {cd.name}: ${cd.current_price:,.2f}")
+    else:
+        print("No CDs have matured.")
+
+    # Show upcoming maturities
+    upcoming = db.get_upcoming_cd_maturities(days=90)
+    if upcoming:
+        print(f"\nUpcoming maturities in the next 90 days:")
+        for cd in upcoming:
+            days_left = (cd.maturity_date.date() - db.get_session().query(cd).first().maturity_date.date()).days if cd.maturity_date else "?"
+            print(f"  - {cd.name}: ${cd.current_price:,.2f} (matures {cd.maturity_date.date() if cd.maturity_date else 'Unknown'})")
+    print()
+
+
+def create_folders_command():
+    """Create import folders for all account types."""
+    print("\nCreating import folders for all account types...")
+    created = FolderScanner.ensure_all_default_folders()
+    if created:
+        print(f"Created {len(created)} new folders:")
+        for folder in created:
+            print(f"  - {folder}")
+    else:
+        print("All folders already exist.")
+    print()
+
+
+def main():
+    """Run the server or execute management commands."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Investment Portfolio Server",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Management Commands:
+  --reset-database    Delete all data and recreate database
+  --export-db PATH    Export database to JSON file
+  --import-db PATH    Import database from JSON file
+  --check-cds         Check for matured CDs
+  --create-folders    Create import folders for all account types
+
+Examples:
+  python -m src.main                      # Start the server
+  python -m src.main --reset-database     # Reset the database
+  python -m src.main --export-db backup.json  # Export database
+        """
+    )
+    parser.add_argument("--port", type=int, default=8000, help="Port to run on")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind to")
+    parser.add_argument("--no-browser", action="store_true", help="Don't open browser")
+    parser.add_argument("--reload", action="store_true", help="Enable auto-reload")
+
+    # Management commands
+    parser.add_argument("--reset-database", action="store_true",
+                        help="Delete all data and recreate database schema")
+    parser.add_argument("--export-db", type=str, metavar="PATH",
+                        help="Export database to JSON file")
+    parser.add_argument("--import-db", type=str, metavar="PATH",
+                        help="Import database from JSON file")
+    parser.add_argument("--check-cds", action="store_true",
+                        help="Check for matured CDs and convert to cash")
+    parser.add_argument("--create-folders", action="store_true",
+                        help="Create import folders for all account types")
+
+    args = parser.parse_args()
+
+    # Handle management commands
+    if args.reset_database:
+        reset_database_command()
+        return
+
+    if args.export_db:
+        export_database_command(args.export_db)
+        return
+
+    if args.import_db:
+        import_database_command(args.import_db)
+        return
+
+    if args.check_cds:
+        check_cd_maturities_command()
+        return
+
+    if args.create_folders:
+        create_folders_command()
+        return
+
+    # Default: run server
+    url = f"http://{args.host}:{args.port}"
+    print(f"\n{'='*50}")
+    print(f"Investment Portfolio Dashboard")
+    print(f"{'='*50}")
+    print(f"\nStarting server at: {url}")
+    print(f"API documentation: {url}/docs")
+    print(f"\nPress Ctrl+C to stop")
+    print(f"{'='*50}\n")
+
+    # Open browser
+    if not args.no_browser:
+        webbrowser.open(url)
+
+    uvicorn.run(
+        "src.main:app",
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+    )
+
+
+if __name__ == "__main__":
+    main()

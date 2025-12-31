@@ -1,0 +1,112 @@
+# ===========================================
+# SECURITY: Files excluded to prevent PII leakage
+# ===========================================
+
+# ----- Python -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# ----- Sensitive Data (contains financial info & PII) -----
+# Database files (contain account names, positions, API keys)
+data/
+*.db
+*.sqlite
+*.sqlite3
+portfolio.db
+
+# Exported data (contain account names with PII)
+exports/
+output/
+
+# CSV/Excel files (may contain brokerage exports with personal info)
+*.csv
+*.xlsm
+*.xlsx
+*.xls
+
+# JSON data files (may contain portfolio data)
+# Note: package.json and similar config files are safe
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+
+# ----- Secrets & API Keys -----
+.env
+.env.*
+*.env
+.envrc
+credentials*
+secrets*
+*.pem
+*.key
+*_key.txt
+api_keys.txt
+
+# Backup files (may contain sensitive data)
+*.bak
+*.backup
+*backup*.json
+*export*.json
+
+# ----- Claude Code Local Settings -----
+.claude/
+
+# ----- Log Files (may contain URLs, account activity) -----
+*.log
+logs/
+
+# ----- IDE & Editor -----
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# ----- OS -----
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ----- Cache -----
+.cache/
+*.cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ----- Test/Coverage -----
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ----- Jupyter Notebooks (may contain output with PII) -----
+.ipynb_checkpoints/
+*.ipynb
+
+# ----- Screenshots (may contain sensitive data) -----
+screenshots/
+*.png
+*.jpg
+*.jpeg
+!src/web/assets/*.png
+!src/web/assets/*.jpg

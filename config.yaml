@@ -1,0 +1,87 @@
+# Investment Portfolio Configuration
+# No sensitive data here - only allocation targets and preferences
+
+personal:
+  dob: "1990-01-01"  # CHANGE THIS to your actual DOB
+  retirement_age: 65
+
+# Target allocations (these adjust with age)
+# Formula: if age <= 60, use base_target, else shift toward bonds
+targets:
+  # Asset class targets
+  asset_class:
+    equities: 0.90
+    bonds: 0.025
+    alternatives: 0.05
+    cash: 0.025
+
+  # Sector targets (as % of equities)
+  sector:
+    technology: 0.41
+    healthcare: 0.15
+    consumer: 0.11
+    industrials: 0.10
+    financials: 0.09
+    energy_materials: 0.05
+    real_estate: 0.05
+    utilities: 0.04
+
+  # Geography/Cap targets (as % of equities)
+  geography:
+    us_large_cap: 0.42
+    us_mid_small_cap: 0.15
+    foreign_large: 0.23
+    foreign_mid_small: 0.10
+    emerging_markets: 0.10
+
+  # Style targets (as % of each geography bucket)
+  style:
+    growth: 0.65
+    value: 0.35
+
+# Market assumptions for projections
+market:
+  stock_mean_return: 0.09
+  stock_std_dev: 0.15
+  bond_mean_return: 0.04
+  bond_std_dev: 0.06
+  stock_bond_correlation: -0.2
+  inflation_rate: 0.03
+  risk_free_rate: 0.04
+
+# Monte Carlo settings
+monte_carlo:
+  num_simulations: 10000
+  black_swan_probability: 0.02
+  black_swan_impact: -0.40
+  golden_swan_probability: 0.02
+  golden_swan_impact: 0.27
+  t_distribution_df: 5
+
+# Withdrawal settings
+withdrawal:
+  default_rate: 0.04
+  floor_multiplier: 0.85
+  ceiling_multiplier: 1.15
+
+# Brokerage scraper settings
+scrapers:
+  schwab:
+    login_url: "https://www.schwab.com/client-home"
+    positions_url: "https://client.schwab.com/app/accounts/positions/#/"
+  fidelity:
+    login_url: "https://digital.fidelity.com/prgw/digital/login/full-page"
+    positions_url: "https://digital.fidelity.com/ftgw/digital/portfolio/positions"
+  vanguard:
+    login_url: "https://logon.vanguard.com/logon"
+    positions_url: "https://personal.vanguard.com/us/MyHome"
+
+# API keys - Configure via dashboard Settings or store in database
+# Keys can also be set via environment variables:
+#   ALPHA_VANTAGE_API_KEY, FINNHUB_API_KEY, ANTHROPIC_API_KEY
+# Or add a .env file with these values
+api_keys:
+  alpha_vantage: ""  # Get free key at https://www.alphavantage.co/support/#api-key
+  massive: ""  # Optional - for additional data
+  finnhub: ""  # Get free key at https://finnhub.io/
+  anthropic_api_key: ""  # For Claude AI analysis - https://console.anthropic.com/

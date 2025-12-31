@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investment Portfolio Dashboard</title>
+    <!-- Ant Design CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/antd/5.12.8/reset.min.css">
+    <!-- Plotly for charts -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Global Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div class="loading-text">Loading...</div>
+        </div>
+    </div>
+
+    <div class="app-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                </svg>
+                <span>Portfolio</span>
+            </div>
+
+            <!-- Portfolio View Selector -->
+            <div class="view-selector">
+                <label class="view-selector-label">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    View
+                </label>
+                <select id="view-selector" onchange="changeView(this.value)">
+                    <option value="">All Accounts</option>
+                </select>
+            </div>
+
+            <nav class="sidebar-nav">
+                <button class="nav-item active" onclick="showTab('dashboard')" data-tab="dashboard">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="9"></rect>
+                        <rect x="14" y="3" width="7" height="5"></rect>
+                        <rect x="14" y="12" width="7" height="9"></rect>
+                        <rect x="3" y="16" width="7" height="5"></rect>
+                    </svg>
+                    Dashboard
+                </button>
+                <button class="nav-item" onclick="showTab('holdings')" data-tab="holdings">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    </svg>
+                    Holdings
+                </button>
+                <button class="nav-item" onclick="showTab('analysis')" data-tab="analysis">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                    </svg>
+                    Analysis
+                </button>
+                <button class="nav-item" onclick="showTab('projections')" data-tab="projections">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"></polyline>
+                    </svg>
+                    Projections
+                </button>
+                <button class="nav-item" onclick="showTab('settings')" data-tab="settings">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    Settings
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                    <svg class="sun-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                    <svg class="moon-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="page-header">
+                <div class="header-left">
+                    <h1 id="page-title">Dashboard</h1>
+                </div>
+                <div class="header-actions">
+                    <span id="price-status" class="price-status" title="Price data freshness"></span>
+                    <button onclick="refreshData()" class="btn btn-default" title="Reload data from database">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                        </svg>
+                        Reload
+                    </button>
+                    <button id="update-prices-btn" onclick="refreshPrices()" class="btn btn-default" title="Fetch latest prices from APIs (only if stale)">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        Update Prices
+                    </button>
+                    <button onclick="showAddPositionModal()" class="btn btn-primary">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Add Position
+                    </button>
+                </div>
+            </header>
+
+            <!-- Dashboard Tab -->
+            <div id="tab-dashboard" class="tab-content active">
+                <!-- Duplicate Warning Banner -->
+                <div id="duplicate-warning" class="alert alert-warning" style="display: none;">
+                    <div class="alert-icon">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </div>
+                    <div class="alert-content">
+                        <strong>Potential Duplicates Detected</strong>
+                        <p id="duplicate-message">Some positions may be entered twice.</p>
+                        <button class="btn btn-sm btn-default" onclick="showDuplicateDetails()">View Details</button>
+                    </div>
+                </div>
+
+                <!-- Summary Cards -->
+                <section class="stats-row">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="1" x2="12" y2="23"></line>
+                                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Total Value</span>
+                            <span class="stat-value" id="total-value">$0</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                                <polyline points="17 6 23 6 23 12"></polyline>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Total Gain/Loss</span>
+                            <span class="stat-value" id="gain-loss">$0</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon purple">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Retirement</span>
+                            <span class="stat-value" id="retirement-value">$0</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                                <line x1="1" y1="10" x2="23" y2="10"></line>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Taxable</span>
+                            <span class="stat-value" id="taxable-value">$0</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Account Totals Table -->
+                <section class="card account-totals-card">
+                    <div class="card-header">
+                        <h3>Account Balances</h3>
+                    </div>
+                    <div class="card-body">
+                        <table class="data-table account-totals-table" id="account-totals-table">
+                            <thead>
+                                <tr>
+                                    <th>Account</th>
+                                    <th>Type</th>
+                                    <th class="text-right">Value</th>
+                                    <th class="text-right">% of Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="account-totals-body">
+                                <!-- Populated by JavaScript -->
+                            </tbody>
+                            <tfoot>
+                                <tr class="totals-row">
+                                    <td colspan="2"><strong>Total</strong></td>
+                                    <td class="text-right" id="account-totals-sum">$0</td>
+                                    <td class="text-right">100%</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Charts -->
+                <section class="charts-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Asset Allocation</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="chart-allocation"></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>By Account Type</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="chart-account-type"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <div class="card-header">
+                        <h3>Portfolio Value History</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="chart-history"></div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Holdings Tab -->
+            <div id="tab-holdings" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Holdings</h3>
+                        <div class="card-actions">
+                            <div class="filter-group">
+                                <label>Accounts:</label>
+                                <div class="multi-select-dropdown" id="account-filter-dropdown">
+                                    <button type="button" class="multi-select-trigger" onclick="toggleMultiSelect('account-filter-dropdown')">
+                                        <span class="multi-select-label" id="account-filter-label">All Accounts</span>
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="6 9 12 15 18 9"></polyline>
+                                        </svg>
+                                    </button>
+                                    <div class="multi-select-menu" id="account-filter-menu">
+                                        <div class="multi-select-actions">
+                                            <button type="button" class="btn-link" onclick="selectAllAccounts(true)">Select All</button>
+                                            <button type="button" class="btn-link" onclick="selectAllAccounts(false)">Clear</button>
+                                        </div>
+                                        <div class="multi-select-options" id="account-filter-options">
+                                            <!-- Options populated by JS -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <input type="text" id="holdings-search" placeholder="Search holdings..." class="search-input" oninput="filterHoldings()">
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-container">
+                            <table id="holdings-table">
+                                <thead>
+                                    <tr>
+                                        <th class="sortable" data-sort="ticker" onclick="sortHoldings('ticker')">Ticker <span class="sort-icon"></span></th>
+                                        <th class="sortable" data-sort="name" onclick="sortHoldings('name')">Name <span class="sort-icon"></span></th>
+                                        <th class="sortable" data-sort="account" onclick="sortHoldings('account')">Account <span class="sort-icon"></span></th>
+                                        <th class="sortable text-right" data-sort="shares" onclick="sortHoldings('shares')">Shares <span class="sort-icon"></span></th>
+                                        <th class="sortable text-right" data-sort="price" onclick="sortHoldings('price')">Price <span class="sort-icon"></span></th>
+                                        <th class="sortable text-right" data-sort="value" onclick="sortHoldings('value')">Value <span class="sort-icon"></span></th>
+                                        <th class="sortable text-right" data-sort="gain_loss" onclick="sortHoldings('gain_loss')">Gain/Loss <span class="sort-icon"></span></th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analysis Tab -->
+            <div id="tab-analysis" class="tab-content">
+                <!-- Performance & Risk Metrics Row -->
+                <section class="analysis-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Performance Metrics</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="metrics-list">
+                                <div class="metric-row">
+                                    <span class="metric-label">YTD Return</span>
+                                    <span class="metric-value" id="ytd-return">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">1-Year Return</span>
+                                    <span class="metric-value" id="one-year-return">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Alpha vs S&P 500 (YTD)</span>
+                                    <span class="metric-value" id="alpha-ytd">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Benchmark YTD (SPY)</span>
+                                    <span class="metric-value" id="benchmark-ytd">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Risk Metrics</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="metrics-list">
+                                <div class="metric-row">
+                                    <span class="metric-label">Volatility (Annual)</span>
+                                    <span class="metric-value" id="volatility">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Sharpe Ratio</span>
+                                    <span class="metric-value" id="sharpe-ratio">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Max Drawdown</span>
+                                    <span class="metric-value" id="max-drawdown">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Beta</span>
+                                    <span class="metric-value" id="beta">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Value at Risk (95%)</span>
+                                    <span class="metric-value" id="var-95">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Concentration & Top Holdings -->
+                <section class="analysis-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Concentration</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="metrics-list">
+                                <div class="metric-row">
+                                    <span class="metric-label">Top 5 Holdings</span>
+                                    <span class="metric-value" id="concentration-top5">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Top 10 Holdings</span>
+                                    <span class="metric-value" id="concentration-top10">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Cash Allocation</span>
+                                    <span class="metric-value" id="cash-allocation">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Invested Allocation</span>
+                                    <span class="metric-value" id="invested-allocation">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Top Holdings</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="top-holdings-list" class="holdings-compact-list">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Detailed Allocation Breakdown -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Allocation Breakdown</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="allocation-tabs">
+                            <button class="alloc-tab active" onclick="showAllocationTab('asset-class')">Asset Class</button>
+                            <button class="alloc-tab" onclick="showAllocationTab('sector')">Sector</button>
+                            <button class="alloc-tab" onclick="showAllocationTab('geography')">Geography</button>
+                            <button class="alloc-tab" onclick="showAllocationTab('cap')">Market Cap</button>
+                            <button class="alloc-tab" onclick="showAllocationTab('style')">Style</button>
+                            <button class="alloc-tab" onclick="showAllocationTab('position-type')">Position Type</button>
+                        </div>
+                        <div id="allocation-content">
+                            <table class="allocation-table" id="allocation-table">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th class="text-right">Value</th>
+                                        <th class="text-right">% of Portfolio</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alerts/Triggers -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Alerts</h3>
+                        <button class="btn btn-sm btn-primary" onclick="showAddTriggerModal()">+ Add Alert</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="alerts-list">
+                            <p class="text-muted">No alerts configured. Add alerts to monitor your portfolio conditions.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fund Analysis (Claude Integration) -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>AI Fund Analysis</h3>
+                        <span id="claude-status-badge" class="status-badge">Checking...</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="settings-description">
+                            Use Claude AI to analyze funds like a financial advisor would - considering your portfolio context,
+                            overlaps, tax efficiency, and providing actionable recommendations.
+                            <span id="claude-feature-status"></span>
+                        </p>
+                        <div class="fund-analysis-form">
+                            <div class="form-row-inline">
+                                <div class="form-group">
+                                    <label for="analyze-ticker">Fund Ticker</label>
+                                    <input type="text" id="analyze-ticker" placeholder="e.g., VFIAX, VOO, SPY">
+                                </div>
+                                <div class="form-group form-group-button">
+                                    <button type="button" class="btn btn-primary" onclick="getAdvisorAnalysis()">Get Advisor Analysis</button>
+                                </div>
+                                <div class="form-group form-group-button">
+                                    <button type="button" class="btn btn-default" onclick="analyzeFund()">Quick Analysis</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Basic Analysis Result -->
+                        <div id="fund-analysis-result" style="display: none;">
+                            <h4>Quick Analysis</h4>
+                            <div class="fund-analysis-details">
+                                <div class="metric-row">
+                                    <span class="metric-label">Ticker</span>
+                                    <span class="metric-value" id="fa-ticker">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Name</span>
+                                    <span class="metric-value" id="fa-name">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Category</span>
+                                    <span class="metric-value" id="fa-category">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Style</span>
+                                    <span class="metric-value" id="fa-style">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Market Cap</span>
+                                    <span class="metric-value" id="fa-cap">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Region</span>
+                                    <span class="metric-value" id="fa-region">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Data Source</span>
+                                    <span class="metric-value" id="fa-source">-</span>
+                                </div>
+                            </div>
+                            <div id="fa-sectors" style="display: none;">
+                                <h5>Sector Breakdown</h5>
+                                <div id="fa-sectors-list" class="holdings-compact-list"></div>
+                            </div>
+                        </div>
+
+                        <!-- Advisor Analysis Result -->
+                        <div id="advisor-analysis-result" style="display: none;">
+                            <h4>Advisor Analysis</h4>
+                            <div class="advisor-analysis-content">
+                                <div class="advisor-section">
+                                    <h5>Summary</h5>
+                                    <p id="advisor-summary" class="advisor-text"></p>
+                                </div>
+                                <div class="advisor-section">
+                                    <h5>Advisor Commentary</h5>
+                                    <div id="advisor-commentary" class="advisor-text"></div>
+                                </div>
+                                <div class="advisor-section">
+                                    <h5>Portfolio Fit</h5>
+                                    <p id="advisor-portfolio-fit" class="advisor-text"></p>
+                                </div>
+                                <div class="advisor-section" id="advisor-overlaps-section" style="display: none;">
+                                    <h5>Potential Overlaps</h5>
+                                    <div id="advisor-overlaps" class="overlaps-list"></div>
+                                </div>
+                                <div class="advisor-section">
+                                    <h5>Tax Considerations</h5>
+                                    <p id="advisor-tax" class="advisor-text"></p>
+                                </div>
+                                <div class="advisor-section">
+                                    <h5>Risk Notes</h5>
+                                    <p id="advisor-risk" class="advisor-text"></p>
+                                </div>
+                                <div class="advisor-section" id="advisor-recommendations-section" style="display: none;">
+                                    <h5>Recommendations</h5>
+                                    <ul id="advisor-recommendations" class="recommendations-list"></ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advisor Chat -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Ask the Advisor</h3>
+                        <button class="btn btn-sm btn-default" onclick="clearAdvisorChat()">Clear Chat</button>
+                    </div>
+                    <div class="card-body">
+                        <p class="settings-description">
+                            Ask follow-up questions about funds, your portfolio allocation, or investment strategy.
+                            The advisor has context about your portfolio.
+                        </p>
+                        <div id="chat-messages" class="chat-messages">
+                            <div class="chat-placeholder">
+                                <p>Ask a question to start the conversation...</p>
+                                <p class="text-muted">Examples:</p>
+                                <ul class="text-muted">
+                                    <li>"Should I be concerned about my technology exposure?"</li>
+                                    <li>"What's the difference between VTI and VOO?"</li>
+                                    <li>"Is my portfolio too aggressive for someone my age?"</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="chat-input-container">
+                            <input type="text" id="chat-input" placeholder="Type your question..." onkeypress="handleChatKeypress(event)">
+                            <button type="button" class="btn btn-primary" onclick="sendChatMessage()">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                                </svg>
+                                Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Projections Tab -->
+            <div id="tab-projections" class="tab-content">
+                <!-- Monte Carlo Form - Full Width at Top -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Monte Carlo Retirement Projection</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="projection-form" onsubmit="runProjection(event)">
+                            <div class="form-row-inline">
+                                <div class="form-group">
+                                    <label for="current-age">Current Age</label>
+                                    <input type="number" id="current-age" value="35" min="18" max="100">
+                                </div>
+                                <div class="form-group">
+                                    <label for="retirement-age">Retirement Age</label>
+                                    <input type="number" id="retirement-age" value="65" min="30" max="100">
+                                </div>
+                                <div class="form-group">
+                                    <label for="monthly-contribution">Monthly Contribution ($)</label>
+                                    <input type="number" id="monthly-contribution" value="2000" min="0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="monthly-withdrawal">Monthly Withdrawal ($)</label>
+                                    <input type="number" id="monthly-withdrawal" value="8000" min="0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="stock-allocation">Stock Allocation (%)</label>
+                                    <input type="number" id="stock-allocation" value="70" min="0" max="100">
+                                </div>
+                                <div class="form-group">
+                                    <label for="bond-allocation">Bond Allocation (%)</label>
+                                    <input type="number" id="bond-allocation" value="25" min="0" max="100">
+                                </div>
+                                <div class="form-group form-group-button">
+                                    <button type="submit" class="btn btn-primary">Run Simulation</button>
+                                </div>
+                            </div>
+
+                            <!-- Tax-Aware Withdrawals Section -->
+                            <div class="tax-aware-section">
+                                <div class="tax-aware-toggle">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="use-tax-aware" onchange="toggleTaxAwareSettings()">
+                                        <span>Enable Tax-Aware Withdrawal Strategy</span>
+                                    </label>
+                                    <span class="help-text">Simulates withdrawing from taxable accounts first, then traditional, then Roth. Includes RMDs after age 73.</span>
+                                </div>
+
+                                <div id="tax-aware-settings" class="tax-settings-panel" style="display: none;">
+                                    <h4>Account Balances by Tax Type</h4>
+                                    <p class="settings-description">
+                                        Current balances from your portfolio. Withdrawal order: Taxable → Traditional → Roth
+                                        <button type="button" class="btn btn-sm btn-default" onclick="loadAccountBalancesByType()">Load from Portfolio</button>
+                                    </p>
+                                    <div class="form-row-inline">
+                                        <div class="form-group">
+                                            <label for="balance-taxable">Taxable Accounts ($)</label>
+                                            <input type="number" id="balance-taxable" value="0" min="0" step="1">
+                                            <span class="help-text">Capital gains tax on gains</span>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="balance-traditional">Traditional IRA/401k ($)</label>
+                                            <input type="number" id="balance-traditional" value="0" min="0" step="1">
+                                            <span class="help-text">Ordinary income tax on withdrawal</span>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="balance-roth">Roth IRA/401k ($)</label>
+                                            <input type="number" id="balance-roth" value="0" min="0" step="1">
+                                            <span class="help-text">Tax-free withdrawals</span>
+                                        </div>
+                                    </div>
+
+                                    <h4>Tax Rates</h4>
+                                    <div class="form-row-inline">
+                                        <div class="form-group">
+                                            <label for="tax-rate-ordinary">Federal Marginal Rate (%)</label>
+                                            <input type="number" id="tax-rate-ordinary" value="22" min="0" max="50" step="1">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tax-rate-state">State Income Tax (%)</label>
+                                            <input type="number" id="tax-rate-state" value="5" min="0" max="15" step="0.5">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tax-rate-cap-gains">Capital Gains Rate (%)</label>
+                                            <input type="number" id="tax-rate-cap-gains" value="15" min="0" max="30" step="1">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="cost-basis-ratio">Cost Basis Ratio (%)</label>
+                                            <input type="number" id="cost-basis-ratio" value="60" min="0" max="100" step="5">
+                                            <span class="help-text">% of taxable account that is cost basis (not taxed)</span>
+                                        </div>
+                                    </div>
+
+                                    <h4>Contribution Allocation</h4>
+                                    <p class="settings-description">How monthly contributions are split between account types.</p>
+                                    <div class="form-row-inline">
+                                        <div class="form-group">
+                                            <label for="contrib-traditional">To Traditional (%)</label>
+                                            <input type="number" id="contrib-traditional" value="60" min="0" max="100" step="5">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="contrib-roth">To Roth (%)</label>
+                                            <input type="number" id="contrib-roth" value="25" min="0" max="100" step="5">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="contrib-taxable">To Taxable (%)</label>
+                                            <input type="number" id="contrib-taxable" value="15" min="0" max="100" step="5">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Projection Results - Full Width Below -->
+                <div class="card" id="projection-results" style="display: none;">
+                    <div class="card-header">
+                        <h3>Projection Results</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="chart-projection"></div>
+                        <div class="projection-stats-row">
+                            <div class="projection-stat">
+                                <span class="stat-label">Success Rate</span>
+                                <span class="stat-value" id="success-rate">-</span>
+                            </div>
+                            <div class="projection-stat">
+                                <span class="stat-label">Median Final Value</span>
+                                <span class="stat-value" id="median-final">-</span>
+                            </div>
+                            <div class="projection-stat">
+                                <span class="stat-label">Worst Case (5th %)</span>
+                                <span class="stat-value" id="worst-case">-</span>
+                            </div>
+                            <div class="projection-stat">
+                                <span class="stat-label">Best Case (95th %)</span>
+                                <span class="stat-value" id="best-case">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FIRE Calculator -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>FIRE Calculator</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="fire-form" onsubmit="calculateFire(event)">
+                            <div class="form-row-inline">
+                                <div class="form-group">
+                                    <label for="annual-spending">Annual Spending ($)</label>
+                                    <input type="number" id="annual-spending" value="100000" min="0">
+                                </div>
+                                <div class="form-group">
+                                    <label for="fire-contribution">Monthly Contribution ($)</label>
+                                    <input type="number" id="fire-contribution" value="3000" min="0">
+                                </div>
+                                <div class="form-group form-group-button">
+                                    <button type="submit" class="btn btn-default">Calculate FIRE</button>
+                                </div>
+                            </div>
+                        </form>
+                        <div id="fire-results" class="projection-stats-row" style="display: none;">
+                            <div class="projection-stat">
+                                <span class="stat-label">FIRE Number</span>
+                                <span class="stat-value" id="fire-number">-</span>
+                            </div>
+                            <div class="projection-stat">
+                                <span class="stat-label">Years to FIRE</span>
+                                <span class="stat-value" id="years-to-fire">-</span>
+                            </div>
+                            <div class="projection-stat">
+                                <span class="stat-label">Progress</span>
+                                <span class="stat-value" id="fire-progress">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="tab-settings" class="tab-content">
+                <div class="settings-grid">
+                    <!-- Personal Settings -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Personal Settings</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="personal-form" onsubmit="savePersonalSettings(event)">
+                                <div class="form-group">
+                                    <label for="settings-dob">Date of Birth</label>
+                                    <input type="date" id="settings-dob" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="settings-retirement-age">Retirement Age</label>
+                                    <input type="number" id="settings-retirement-age" min="30" max="100" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save Personal Settings</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Asset Class Targets -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Asset Class Targets</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="asset-class-form" onsubmit="saveAssetClassTargets(event)">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="target-equities">Equities (%)</label>
+                                        <input type="number" id="target-equities" step="0.1" min="0" max="100">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="target-bonds">Bonds (%)</label>
+                                        <input type="number" id="target-bonds" step="0.1" min="0" max="100">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="target-alternatives">Alternatives (%)</label>
+                                        <input type="number" id="target-alternatives" step="0.1" min="0" max="100">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="target-cash">Cash (%)</label>
+                                        <input type="number" id="target-cash" step="0.1" min="0" max="100">
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save Asset Targets</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Market Assumptions -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Market Assumptions</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="market-form" onsubmit="saveMarketAssumptions(event)">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="market-stock-return">Stock Mean Return (%)</label>
+                                        <input type="number" id="market-stock-return" step="0.1" min="0" max="30">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="market-stock-std">Stock Std Dev (%)</label>
+                                        <input type="number" id="market-stock-std" step="0.1" min="0" max="50">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="market-bond-return">Bond Mean Return (%)</label>
+                                        <input type="number" id="market-bond-return" step="0.1" min="0" max="20">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="market-bond-std">Bond Std Dev (%)</label>
+                                        <input type="number" id="market-bond-std" step="0.1" min="0" max="30">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="market-inflation">Inflation Rate (%)</label>
+                                        <input type="number" id="market-inflation" step="0.1" min="0" max="20">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="market-risk-free">Risk-Free Rate (%)</label>
+                                        <input type="number" id="market-risk-free" step="0.1" min="0" max="20">
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save Market Assumptions</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Monte Carlo Settings -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Monte Carlo Settings</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="monte-carlo-form" onsubmit="saveMonteCarloSettings(event)">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="mc-simulations">Number of Simulations</label>
+                                        <input type="number" id="mc-simulations" min="100" max="100000">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="mc-black-swan-prob">Black Swan Probability (%)</label>
+                                        <input type="number" id="mc-black-swan-prob" step="0.1" min="0" max="20">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="mc-black-swan-impact">Black Swan Impact (%)</label>
+                                        <input type="number" id="mc-black-swan-impact" step="1" min="-100" max="0">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="mc-golden-swan-prob">Golden Swan Probability (%)</label>
+                                        <input type="number" id="mc-golden-swan-prob" step="0.1" min="0" max="20">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="mc-golden-swan-impact">Golden Swan Impact (%)</label>
+                                        <input type="number" id="mc-golden-swan-impact" step="1" min="0" max="100">
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save Monte Carlo Settings</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Portfolio Views -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Portfolio Views</h3>
+                            <button class="btn btn-sm btn-primary" onclick="showCreateViewModal()">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                New View
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <p class="settings-description">Create views to filter which accounts are included in dashboard, analysis, and projections.</p>
+                            <div id="views-list" class="views-list">
+                                <!-- Views will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- API Keys Status -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Data Sources</h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="settings-description">API keys for price data and AI analysis. Click "Edit" to add or update a key.</p>
+                            <div id="api-keys-status" class="api-keys-grid">
+                                <!-- Status will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Account Management -->
+                    <div class="card full-width">
+                        <div class="card-header">
+                            <h3>Account Management</h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="section-description">Manage your investment accounts. Deleting an account will also delete all positions in that account.</p>
+                            <div class="table-scroll-container">
+                                <table class="data-table compact-table" id="accounts-management-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Account</th>
+                                            <th>Value</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="accounts-management-body">
+                                        <!-- Populated by JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="section-actions" style="margin-top: 16px;">
+                                <button type="button" class="btn btn-default" onclick="showAddPositionModal()">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                    Add Account/Position
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Data Export -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Data Export</h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="section-description">Export your portfolio data for backup or analysis purposes.</p>
+                            <div class="export-buttons" style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-default" onclick="exportToCSV('accounts')">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                    Export Accounts (CSV)
+                                </button>
+                                <button type="button" class="btn btn-default" onclick="exportToCSV('positions')">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                    Export Positions (CSV)
+                                </button>
+                                <button type="button" class="btn btn-default" onclick="exportToCSV('snapshots')">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                    Export Snapshots (CSV)
+                                </button>
+                                <button type="button" class="btn btn-primary" onclick="exportAllToCSV()">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7 10 12 15 17 10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                    Export All Data
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Theme Settings -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Appearance</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="theme-options">
+                                <label class="theme-option">
+                                    <input type="radio" name="theme" value="dark" onchange="setTheme('dark')">
+                                    <span class="theme-preview dark">
+                                        <span class="theme-name">Dark</span>
+                                    </span>
+                                </label>
+                                <label class="theme-option">
+                                    <input type="radio" name="theme" value="light" onchange="setTheme('light')">
+                                    <span class="theme-preview light">
+                                        <span class="theme-name">Light</span>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add Position Modal -->
+    <div id="add-position-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop" onclick="hideAddPositionModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Position</h2>
+                <button class="modal-close" onclick="hideAddPositionModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-description">Add positions manually for accounts without export support.</p>
+
+                <form id="add-position-form" onsubmit="addManualPosition(event)">
+                    <div class="form-group">
+                        <label for="position-account">Account</label>
+                        <select id="position-account">
+                            <!-- Populated dynamically -->
+                        </select>
+                        <button type="button" onclick="showNewAccountForm()" class="btn-link">+ Create New Account</button>
+                    </div>
+
+                    <div id="new-account-form" class="nested-form" style="display: none;">
+                        <h4>Create New Account</h4>
+                        <div class="form-group">
+                            <label for="new-account-name">Account Name</label>
+                            <input type="text" id="new-account-name" placeholder="e.g., Human Interest 401(k)">
+                        </div>
+                        <div class="form-group">
+                            <label for="new-account-type">Account Type</label>
+                            <select id="new-account-type">
+                                <!-- Populated dynamically -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="new-account-brokerage">Brokerage</label>
+                            <input type="text" id="new-account-brokerage" placeholder="e.g., Human Interest">
+                        </div>
+                        <button type="button" onclick="createNewAccount()" class="btn btn-default">Create Account</button>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="position-type">Position Type</label>
+                        <select id="position-type" onchange="togglePositionTypeFields()">
+                            <option value="equity">Stock/Equity</option>
+                            <option value="fund">Fund/ETF</option>
+                            <option value="cash">Cash</option>
+                            <option value="cd">Certificate of Deposit (CD)</option>
+                        </select>
+                    </div>
+
+                    <!-- Stock/Fund fields -->
+                    <div id="stock-fields">
+                        <div class="form-group">
+                            <label for="position-ticker">Ticker Symbol</label>
+                            <input type="text" id="position-ticker" placeholder="e.g., VFIAX">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="position-name">Name (optional)</label>
+                            <input type="text" id="position-name" placeholder="e.g., Vanguard 500 Index Admiral">
+                        </div>
+
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="position-shares">Shares</label>
+                                <input type="number" id="position-shares" step="0.0001">
+                            </div>
+                            <div class="form-group">
+                                <label for="position-price">Current Price ($)</label>
+                                <input type="number" id="position-price" step="0.01" placeholder="Leave blank to fetch">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="position-cost-basis">Total Cost Basis ($, optional)</label>
+                            <input type="number" id="position-cost-basis" step="0.01" placeholder="Your total cost">
+                        </div>
+                    </div>
+
+                    <!-- Cash fields -->
+                    <div id="cash-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="cash-name">Description</label>
+                            <input type="text" id="cash-name" placeholder="e.g., High-Yield Savings" value="Cash">
+                        </div>
+                        <div class="form-group">
+                            <label for="cash-amount">Amount ($)</label>
+                            <input type="number" id="cash-amount" step="0.01" placeholder="Cash balance">
+                        </div>
+                    </div>
+
+                    <!-- CD fields -->
+                    <div id="cd-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="cd-name">CD Name</label>
+                            <input type="text" id="cd-name" placeholder="e.g., Marcus 12-month CD">
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="cd-amount">Principal Amount ($)</label>
+                                <input type="number" id="cd-amount" step="0.01" placeholder="Amount invested">
+                            </div>
+                            <div class="form-group">
+                                <label for="cd-rate">APY (%)</label>
+                                <input type="number" id="cd-rate" step="0.01" placeholder="e.g., 4.5">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="cd-maturity">Maturity Date</label>
+                            <input type="date" id="cd-maturity">
+                        </div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button type="button" onclick="hideAddPositionModal()" class="btn btn-default">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Position</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Position Modal -->
+    <div id="edit-position-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop" onclick="hideEditPositionModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Position</h2>
+                <button class="modal-close" onclick="hideEditPositionModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-position-form" onsubmit="updatePosition(event)">
+                    <input type="hidden" id="edit-position-id">
+                    <div class="form-group">
+                        <label>Ticker</label>
+                        <input type="text" id="edit-position-ticker" readonly class="readonly-field">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-position-shares">Shares/Quantity</label>
+                        <input type="number" id="edit-position-shares" step="0.0001" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-position-price">Current Price ($)</label>
+                        <input type="number" id="edit-position-price" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-position-cost-basis">Cost Basis ($)</label>
+                        <input type="number" id="edit-position-cost-basis" step="0.01">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" onclick="hideEditPositionModal()" class="btn btn-default">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Update Position</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Trigger/Alert Modal -->
+    <div id="add-trigger-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop" onclick="hideAddTriggerModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Alert</h2>
+                <button class="modal-close" onclick="hideAddTriggerModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-description">Create an alert to monitor portfolio conditions. Alerts trigger when conditions are met.</p>
+
+                <form id="add-trigger-form" onsubmit="createTrigger(event)">
+                    <div class="form-group">
+                        <label for="trigger-name">Alert Name</label>
+                        <input type="text" id="trigger-name" placeholder="e.g., Cash position too high" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="trigger-condition-type">Condition Type</label>
+                        <select id="trigger-condition-type" required>
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="trigger-ticker">Ticker (optional)</label>
+                        <input type="text" id="trigger-ticker" placeholder="e.g., AAPL (leave blank for portfolio-wide)">
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="trigger-operator">Operator</label>
+                            <select id="trigger-operator" required>
+                                <!-- Populated dynamically -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="trigger-threshold">Threshold</label>
+                            <input type="number" id="trigger-threshold" step="0.01" placeholder="e.g., 10000 or 5.0" required>
+                        </div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button type="button" onclick="hideAddTriggerModal()" class="btn btn-default">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Create Alert</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit View Modal -->
+    <div id="view-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop" onclick="hideViewModal()"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="view-modal-title">Create Portfolio View</h3>
+                <button class="modal-close" onclick="hideViewModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-description">Select which accounts to include in this view. This view will filter all dashboard and analysis pages.</p>
+                <form id="view-form" onsubmit="saveView(event)">
+                    <input type="hidden" id="view-edit-id">
+                    <div class="form-group">
+                        <label for="view-name">View Name</label>
+                        <input type="text" id="view-name" placeholder="e.g., Personal Retirement" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Accounts to Include</label>
+                        <div id="view-accounts-list" class="checkbox-list">
+                            <!-- Account checkboxes will be populated here -->
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="view-is-default">
+                            <span>Set as default view</span>
+                        </label>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" onclick="hideViewModal()" class="btn btn-default">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save View</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generic Modal -->
+    <div id="generic-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop" onclick="closeModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="generic-modal-title">Modal Title</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="generic-modal-body">
+                <!-- Content populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,224 @@
+"""SQLAlchemy models for the portfolio database."""
+
+import uuid
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import Column, DateTime, Float, ForeignKey, String, Text, Boolean, create_engine
+from sqlalchemy.orm import declarative_base, relationship
+
+Base = declarative_base()
+
+
+def generate_uuid() -> str:
+    """Generate a new UUID string."""
+    return str(uuid.uuid4())
+
+
+class FileImport(Base):
+    """Track imported files with hash-based deduplication."""
+
+    __tablename__ = "file_imports"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    file_name = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    content_hash = Column(String, nullable=False, unique=True)  # SHA256
+    account_type = Column(String, nullable=False)  # From subfolder name
+    import_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    row_count = Column(Float)
+    status = Column(String, default="pending")  # pending, completed, error
+    error_message = Column(Text)
+
+    # Relationship to positions updated by this import
+    positions = relationship("Position", back_populates="last_import")
+
+
+class Account(Base):
+    """Investment account (e.g., Roth IRA, 401k, Taxable)."""
+
+    __tablename__ = "accounts"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False)
+    account_type = Column(String, nullable=False)  # roth_ira, traditional_401k, custom:*, etc.
+    brokerage = Column(String, default="other")  # schwab, fidelity, vanguard, other
+    beneficiary = Column(String, nullable=True)  # For 529 accounts
+    custom_type_name = Column(String, nullable=True)  # Display name for custom types
+    is_retirement_account = Column(Boolean, default=False)  # User can override
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship to positions in this account
+    positions = relationship("Position", back_populates="account", cascade="all, delete-orphan")
+
+    @property
+    def total_value(self) -> float:
+        """Calculate total value of all positions."""
+        return sum(p.market_value for p in self.positions if p.current_price)
+
+    @property
+    def is_retirement(self) -> bool:
+        """Check if this is a retirement account."""
+        # Use explicit flag if set, otherwise infer from type
+        if self.is_retirement_account:
+            return True
+        return self.account_type in {
+            "traditional_401k", "roth_401k",
+            "traditional_ira", "roth_ira",
+            "hsa", "pension"
+        }
+
+    @property
+    def display_type(self) -> str:
+        """Return human-readable account type."""
+        from src.models.account_types import PREDEFINED_ACCOUNT_TYPES
+        if self.account_type.startswith("custom:"):
+            return self.custom_type_name or self.account_type[7:]
+        return PREDEFINED_ACCOUNT_TYPES.get(self.account_type, {}).get("label", self.account_type)
+
+
+class Position(Base):
+    """A holding within an account."""
+
+    __tablename__ = "positions"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    account_id = Column(String, ForeignKey("accounts.id"), nullable=False)
+    ticker = Column(String, nullable=False)  # Can be "CASH" for cash positions
+    name = Column(String)
+    shares = Column(Float, nullable=False)  # For cash/CDs, this is 1.0
+    cost_basis = Column(Float)
+    current_price = Column(Float)  # Cached from price lookup; for cash = dollar amount
+    sector = Column(String)
+    is_fund = Column(Boolean, default=False)
+    asset_class = Column(String, default="equity")  # equity, fixed_income, alternative, cash
+    position_type = Column(String, default="equity")  # equity, fund, cash, cd, bond, treasury
+    maturity_date = Column(DateTime, nullable=True)  # For CDs/bonds
+    interest_rate = Column(Float, nullable=True)  # Annual rate for CDs/bonds
+    purchase_date = Column(DateTime, nullable=True)  # When CD/bond was purchased
+    last_import_id = Column(String, ForeignKey("file_imports.id"))
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    account = relationship("Account", back_populates="positions")
+    last_import = relationship("FileImport", back_populates="positions")
+
+    @property
+    def market_value(self) -> float:
+        """Calculate market value."""
+        if self.current_price and self.shares:
+            return self.shares * self.current_price
+        return 0.0
+
+    @property
+    def gain_loss(self) -> Optional[float]:
+        """Calculate unrealized gain/loss."""
+        if self.cost_basis and self.market_value:
+            return self.market_value - self.cost_basis
+        return None
+
+    @property
+    def gain_loss_pct(self) -> Optional[float]:
+        """Calculate gain/loss percentage."""
+        if self.cost_basis and self.cost_basis > 0 and self.gain_loss is not None:
+            return (self.gain_loss / self.cost_basis) * 100
+        return None
+
+
+class PortfolioSnapshot(Base):
+    """Historical snapshot of portfolio for trending."""
+
+    __tablename__ = "portfolio_snapshots"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    snapshot_date = Column(DateTime, nullable=False, unique=True)
+    total_value = Column(Float)
+    retirement_value = Column(Float)
+    taxable_value = Column(Float)
+    positions_json = Column(Text)  # JSON serialized positions for reconstruction
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PriceCache(Base):
+    """Cache for stock/fund prices."""
+
+    __tablename__ = "price_cache"
+
+    ticker = Column(String, primary_key=True)
+    current_price = Column(Float)
+    previous_close = Column(Float)
+    year_high = Column(Float)
+    year_low = Column(Float)
+    last_updated = Column(DateTime, default=datetime.utcnow)
+
+    def is_stale(self, max_age_hours: int = 24) -> bool:
+        """Check if cache entry is stale (default 24 hours)."""
+        if not self.last_updated:
+            return True
+        age = datetime.utcnow() - self.last_updated
+        return age.total_seconds() > (max_age_hours * 3600)
+
+    def age_hours(self) -> float:
+        """Return age of cache entry in hours."""
+        if not self.last_updated:
+            return float('inf')
+        age = datetime.utcnow() - self.last_updated
+        return age.total_seconds() / 3600
+
+
+class AppSettings(Base):
+    """Application settings including encrypted API keys."""
+
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(Text)
+    encrypted = Column(Boolean, default=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AllocationTrigger(Base):
+    """User-configurable allocation alert triggers."""
+
+    __tablename__ = "allocation_triggers"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False)  # User-friendly name
+    condition_type = Column(String, nullable=False)  # ticker_value, ticker_percent, sector_percent, etc.
+    ticker = Column(String, nullable=True)  # For ticker-based conditions
+    account_type = Column(String, nullable=True)  # Filter by account type (optional)
+    sector = Column(String, nullable=True)  # For sector-based conditions
+    operator = Column(String, nullable=False)  # ">", "<", ">=", "<=", "=="
+    threshold = Column(Float, nullable=False)  # The comparison value
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PortfolioView(Base):
+    """User-defined portfolio views for filtering accounts."""
+
+    __tablename__ = "portfolio_views"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False, unique=True)  # e.g., "My Investments", "Retirement Only"
+    account_ids = Column(Text, nullable=False)  # JSON array of account IDs
+    is_default = Column(Boolean, default=False)  # Only one view should be default
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def get_account_ids(self) -> list[str]:
+        """Parse account IDs from JSON."""
+        import json
+        if not self.account_ids:
+            return []
+        try:
+            return json.loads(self.account_ids)
+        except json.JSONDecodeError:
+            return []
+
+    def set_account_ids(self, ids: list[str]):
+        """Set account IDs as JSON."""
+        import json
+        self.account_ids = json.dumps(ids)

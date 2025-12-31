@@ -1,0 +1,245 @@
+funds:
+  VTI:
+    name: Vanguard Total Stock Market ETF
+    us_stock_pct: 99.5
+    foreign_stock_pct: 0.5
+    giant_pct: 46.0
+    large_pct: 26.0
+    medium_pct: 17.0
+    small_pct: 8.5
+    micro_pct: 2.5
+    technology_pct: 31.0
+    healthcare_pct: 12.0
+    financial_pct: 13.0
+    consumer_cyclical_pct: 10.0
+    consumer_defensive_pct: 5.0
+    industrials_pct: 10.0
+    energy_pct: 4.0
+    materials_pct: 2.0
+    real_estate_pct: 3.0
+    utilities_pct: 3.0
+    communication_pct: 8.0
+    us_pct: 99.5
+    developed_ex_us_pct: 0.5
+    emerging_markets_pct: 0.0
+  VOO:
+    name: Vanguard S&P 500 ETF
+    us_stock_pct: 100.0
+    giant_pct: 54.0
+    large_pct: 35.0
+    medium_pct: 11.0
+    technology_pct: 32.0
+    healthcare_pct: 12.0
+    financial_pct: 13.0
+    consumer_cyclical_pct: 10.0
+    consumer_defensive_pct: 6.0
+    industrials_pct: 9.0
+    energy_pct: 4.0
+    materials_pct: 2.0
+    real_estate_pct: 2.0
+    utilities_pct: 2.0
+    communication_pct: 8.0
+    us_pct: 100.0
+  VXUS:
+    name: Vanguard Total International Stock ETF
+    foreign_stock_pct: 100.0
+    giant_pct: 44.0
+    large_pct: 30.0
+    medium_pct: 18.0
+    small_pct: 7.0
+    micro_pct: 1.0
+    technology_pct: 15.0
+    healthcare_pct: 10.0
+    financial_pct: 20.0
+    consumer_cyclical_pct: 12.0
+    consumer_defensive_pct: 8.0
+    industrials_pct: 14.0
+    energy_pct: 5.0
+    materials_pct: 7.0
+    real_estate_pct: 2.0
+    utilities_pct: 3.0
+    communication_pct: 5.0
+    developed_ex_us_pct: 77.0
+    emerging_markets_pct: 23.0
+  VWO:
+    name: Vanguard Emerging Markets ETF
+    foreign_stock_pct: 100.0
+    giant_pct: 30.0
+    large_pct: 35.0
+    medium_pct: 25.0
+    small_pct: 8.0
+    micro_pct: 2.0
+    technology_pct: 25.0
+    healthcare_pct: 4.0
+    financial_pct: 22.0
+    consumer_cyclical_pct: 14.0
+    consumer_defensive_pct: 6.0
+    industrials_pct: 6.0
+    energy_pct: 6.0
+    materials_pct: 7.0
+    real_estate_pct: 2.0
+    utilities_pct: 3.0
+    communication_pct: 5.0
+    emerging_markets_pct: 100.0
+  BND:
+    name: Vanguard Total Bond Market ETF
+    bonds_pct: 100.0
+  VNQ:
+    name: Vanguard Real Estate ETF
+    us_stock_pct: 100.0
+    real_estate_pct: 100.0
+    us_pct: 100.0
+  FXAIX:
+    name: Fidelity 500 Index Fund
+    us_stock_pct: 100.0
+    giant_pct: 54.0
+    large_pct: 35.0
+    medium_pct: 11.0
+    technology_pct: 32.0
+    healthcare_pct: 12.0
+    financial_pct: 13.0
+    consumer_cyclical_pct: 10.0
+    consumer_defensive_pct: 6.0
+    industrials_pct: 9.0
+    energy_pct: 4.0
+    materials_pct: 2.0
+    real_estate_pct: 2.0
+    utilities_pct: 2.0
+    communication_pct: 8.0
+    us_pct: 100.0
+  FSKAX:
+    name: Fidelity Total Market Index Fund
+    us_stock_pct: 99.5
+    foreign_stock_pct: 0.5
+    giant_pct: 46.0
+    large_pct: 26.0
+    medium_pct: 17.0
+    small_pct: 8.5
+    micro_pct: 2.5
+    technology_pct: 31.0
+    healthcare_pct: 12.0
+    financial_pct: 13.0
+    consumer_cyclical_pct: 10.0
+    consumer_defensive_pct: 5.0
+    industrials_pct: 10.0
+    energy_pct: 4.0
+    materials_pct: 2.0
+    real_estate_pct: 3.0
+    utilities_pct: 3.0
+    communication_pct: 8.0
+    us_pct: 99.5
+    developed_ex_us_pct: 0.5
+  FTIHX:
+    name: Fidelity Total International Index Fund
+    foreign_stock_pct: 100.0
+    giant_pct: 44.0
+    large_pct: 30.0
+    medium_pct: 18.0
+    small_pct: 7.0
+    micro_pct: 1.0
+    technology_pct: 15.0
+    healthcare_pct: 10.0
+    financial_pct: 20.0
+    consumer_cyclical_pct: 12.0
+    consumer_defensive_pct: 8.0
+    industrials_pct: 14.0
+    energy_pct: 5.0
+    materials_pct: 7.0
+    real_estate_pct: 2.0
+    utilities_pct: 3.0
+    communication_pct: 5.0
+    developed_ex_us_pct: 77.0
+    emerging_markets_pct: 23.0
+  SWPPX:
+    name: Schwab S&P 500 Index Fund
+    us_stock_pct: 100.0
+    giant_pct: 54.0
+    large_pct: 35.0
+    medium_pct: 11.0
+    technology_pct: 32.0
+    healthcare_pct: 12.0
+    financial_pct: 13.0
+    consumer_cyclical_pct: 10.0
+    consumer_defensive_pct: 6.0
+    industrials_pct: 9.0
+    energy_pct: 4.0
+    materials_pct: 2.0
+    real_estate_pct: 2.0
+    utilities_pct: 2.0
+    communication_pct: 8.0
+    us_pct: 100.0
+  SWTSX:
+    name: Schwab Total Stock Market Index Fund
+    us_stock_pct: 99.5
+    foreign_stock_pct: 0.5
+    giant_pct: 46.0
+    large_pct: 26.0
+    medium_pct: 17.0
+    small_pct: 8.5
+    micro_pct: 2.5
+    technology_pct: 31.0
+    healthcare_pct: 12.0
+    financial_pct: 13.0
+    consumer_cyclical_pct: 10.0
+    consumer_defensive_pct: 5.0
+    industrials_pct: 10.0
+    energy_pct: 4.0
+    materials_pct: 2.0
+    real_estate_pct: 3.0
+    utilities_pct: 3.0
+    communication_pct: 8.0
+    us_pct: 99.5
+    developed_ex_us_pct: 0.5
+  QQQ:
+    name: Invesco QQQ Trust
+    us_stock_pct: 100.0
+    giant_pct: 60.0
+    large_pct: 30.0
+    medium_pct: 10.0
+    technology_pct: 58.0
+    healthcare_pct: 6.0
+    financial_pct: 1.0
+    consumer_cyclical_pct: 14.0
+    consumer_defensive_pct: 5.0
+    industrials_pct: 5.0
+    energy_pct: 1.0
+    utilities_pct: 1.0
+    communication_pct: 9.0
+    us_pct: 100.0
+  SPY:
+    name: SPDR S&P 500 ETF Trust
+    us_stock_pct: 100.0
+    giant_pct: 54.0
+    large_pct: 35.0
+    medium_pct: 11.0
+    technology_pct: 32.0
+    healthcare_pct: 12.0
+    financial_pct: 13.0
+    consumer_cyclical_pct: 10.0
+    consumer_defensive_pct: 6.0
+    industrials_pct: 9.0
+    energy_pct: 4.0
+    materials_pct: 2.0
+    real_estate_pct: 2.0
+    utilities_pct: 2.0
+    communication_pct: 8.0
+    us_pct: 100.0
+  SCHG:
+    name: ''
+    morningstar_category: Large Growth
+    style: growth
+    market_cap: large
+    region: us
+    expense_ratio: null
+    sector_breakdown:
+      Technology: 45.8
+      Consumer Cyclical: 13.2
+      Communication Services: 9.1
+      Healthcare: 8.9
+      Industrials: 7.8
+      Consumer Defensive: 5.2
+      Financial Services: 4.1
+      Real Estate: 2.8
+      Materials: 1.9
+      Energy: 0.8
+      Utilities: 0.4
