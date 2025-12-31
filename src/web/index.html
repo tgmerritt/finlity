@@ -1069,6 +1069,56 @@
                         </div>
                     </div>
 
+                    <!-- Plugin Marketplace -->
+                    <div class="card full-width">
+                        <div class="card-header">
+                            <h3>Plugin Marketplace</h3>
+                            <div class="header-actions">
+                                <button class="btn btn-sm btn-default" onclick="checkPluginUpdates()">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="23 4 23 10 17 10"></polyline>
+                                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                    </svg>
+                                    Check Updates
+                                </button>
+                                <button class="btn btn-sm btn-primary" onclick="showInstallPluginModal()">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                    Install Plugin
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <p class="settings-description">
+                                Install third-party plugins to extend portfolio analysis capabilities.
+                                Plugins can be installed from GitHub, GitLab, or uploaded as ZIP files.
+                            </p>
+
+                            <!-- Updates Available Banner -->
+                            <div id="updates-available-banner" class="alert alert-info" style="display: none;">
+                                <div class="alert-icon">
+                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <polyline points="16 12 12 8 8 12"></polyline>
+                                        <line x1="12" y1="16" x2="12" y2="8"></line>
+                                    </svg>
+                                </div>
+                                <div class="alert-content">
+                                    <strong id="updates-count">Updates Available</strong>
+                                    <p id="updates-message">Some plugins have updates available.</p>
+                                </div>
+                            </div>
+
+                            <!-- Installed Plugins List -->
+                            <h4>Installed Plugins</h4>
+                            <div id="installed-plugins-container">
+                                <p class="text-muted">Loading installed plugins...</p>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Account Management -->
                     <div class="card full-width">
                         <div class="card-header">
@@ -1575,6 +1625,99 @@
                         <button type="submit" class="btn btn-primary">Save Profile</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Install Plugin Modal -->
+    <div id="install-plugin-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop" onclick="hideInstallPluginModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Install Plugin</h2>
+                <button class="modal-close" onclick="hideInstallPluginModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Tab Navigation -->
+                <div class="install-tabs">
+                    <button class="install-tab active" onclick="switchInstallTab('git')" data-tab="git">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="2" y1="12" x2="22" y2="12"></line>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                        </svg>
+                        From Git
+                    </button>
+                    <button class="install-tab" onclick="switchInstallTab('upload')" data-tab="upload">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        Upload ZIP
+                    </button>
+                </div>
+
+                <!-- Git Install Form -->
+                <div id="install-tab-git" class="install-tab-content active">
+                    <form id="git-install-form" onsubmit="installFromGit(event)">
+                        <div class="form-group">
+                            <label for="git-source">Repository</label>
+                            <input type="text" id="git-source" placeholder="github:user/repo or gitlab:user/repo" required>
+                            <p class="form-help">
+                                Examples:
+                                <br>• <code>github:user/plugin-name</code>
+                                <br>• <code>gitlab:user/plugin-name</code>
+                                <br>• <code>user/plugin-name</code> (assumes GitHub)
+                                <br>• <code>https://github.com/user/plugin.git</code>
+                            </p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-default" onclick="hideInstallPluginModal()">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="git-install-btn">
+                                <span class="btn-text">Install</span>
+                                <span class="btn-loading" style="display: none;">
+                                    <svg class="spinner-icon" viewBox="0 0 24 24" width="16" height="16">
+                                        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="32" stroke-linecap="round"></circle>
+                                    </svg>
+                                    Installing...
+                                </span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Upload Install Form -->
+                <div id="install-tab-upload" class="install-tab-content" style="display: none;">
+                    <form id="upload-install-form" onsubmit="installFromUpload(event)">
+                        <div class="form-group">
+                            <label for="plugin-file">Plugin ZIP File</label>
+                            <div class="file-upload-area" id="plugin-upload-area">
+                                <input type="file" id="plugin-file" accept=".zip" onchange="handlePluginFileSelect(event)" required>
+                                <div class="file-upload-content">
+                                    <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                    <p id="upload-file-name">Drag and drop or click to select a ZIP file</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-default" onclick="hideInstallPluginModal()">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="upload-install-btn">
+                                <span class="btn-text">Install</span>
+                                <span class="btn-loading" style="display: none;">
+                                    <svg class="spinner-icon" viewBox="0 0 24 24" width="16" height="16">
+                                        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="32" stroke-linecap="round"></circle>
+                                    </svg>
+                                    Installing...
+                                </span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     </div>

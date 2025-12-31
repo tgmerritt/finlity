@@ -270,6 +270,7 @@ function showTab(tabName) {
         loadSettings();
         loadProfilesForSettings();
         loadPlugins();
+        loadInstalledPlugins();
     }
 }
 
@@ -1240,6 +1241,314 @@ async function revokePluginPermissions(pluginId) {
 
     } catch (error) {
         showToast('Error: ' + error.message, 'error');
+    }
+}
+
+// Plugin Marketplace Functions
+async function loadInstalledPlugins() {
+    const container = document.getElementById('installed-plugins-container');
+    if (!container) return;
+
+    try {
+        const response = await fetch(API_BASE + '/api/plugins/installed');
+        if (!response.ok) throw new Error('Failed to load installed plugins');
+
+        const data = await response.json();
+
+        if (data.count === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <p class="text-muted">No third-party plugins installed.</p>
+                    <p class="text-muted">Click "Install Plugin" to add plugins from Git or upload a ZIP file.</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="installed-plugins-list">
+                ${data.plugins.map(plugin => `
+                    <div class="installed-plugin-card" data-plugin-id="${escapeHtml(plugin.plugin_id)}">
+                        <div class="plugin-info">
+                            <div class="plugin-header">
+                                <span class="plugin-name">${escapeHtml(plugin.name)}</span>
+                                <span class="plugin-version">v${escapeHtml(plugin.version)}</span>
+                                <span class="plugin-type badge badge-${getPluginTypeBadgeClass(plugin.plugin_type)}">${escapeHtml(plugin.plugin_type)}</span>
+                            </div>
+                            <p class="plugin-description">${escapeHtml(plugin.description || 'No description')}</p>
+                            <div class="plugin-meta">
+                                <span class="plugin-author">By ${escapeHtml(plugin.author || 'Unknown')}</span>
+                                ${plugin.source ? `
+                                    <span class="plugin-source">
+                                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                                            ${plugin.source.type === 'git' ? '<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>' : '<rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M12 12l-4-4-4 4"></path>'}
+                                        </svg>
+                                        ${escapeHtml(plugin.source.url || plugin.source.type)}
+                                    </span>
+                                ` : ''}
+                            </div>
+                        </div>
+                        <div class="plugin-actions">
+                            ${plugin.source && plugin.source.type === 'git' ? `
+                                <button class="btn btn-sm btn-default" onclick="checkPluginUpdate('${escapeHtml(plugin.plugin_id)}')" title="Check for updates">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="23 4 23 10 17 10"></polyline>
+                                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                    </svg>
+                                </button>
+                            ` : ''}
+                            <button class="btn btn-sm btn-danger" onclick="uninstallPlugin('${escapeHtml(plugin.plugin_id)}')" title="Uninstall plugin">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+    } catch (error) {
+        console.error('Error loading installed plugins:', error);
+        container.innerHTML = '<p class="text-muted">Failed to load installed plugins. ' + escapeHtml(error.message) + '</p>';
+    }
+}
+
+function getPluginTypeBadgeClass(pluginType) {
+    const classes = {
+        'importer': 'info',
+        'analysis': 'success',
+        'widget': 'warning',
+        'provider': 'primary',
+        'export': 'secondary'
+    };
+    return classes[pluginType] || 'default';
+}
+
+function showInstallPluginModal() {
+    document.getElementById('install-plugin-modal').style.display = 'flex';
+    document.getElementById('git-source').value = '';
+    document.getElementById('plugin-file').value = '';
+    document.getElementById('upload-file-name').textContent = 'Drag and drop or click to select a ZIP file';
+    switchInstallTab('git');
+}
+
+function hideInstallPluginModal() {
+    document.getElementById('install-plugin-modal').style.display = 'none';
+}
+
+function switchInstallTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.install-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+
+    // Update tab content
+    document.querySelectorAll('.install-tab-content').forEach(content => {
+        content.style.display = content.id === `install-tab-${tabName}` ? 'block' : 'none';
+    });
+}
+
+async function installFromGit(event) {
+    event.preventDefault();
+
+    const source = document.getElementById('git-source').value.trim();
+    if (!source) {
+        showToast('Please enter a repository source', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('git-install-btn');
+    const btnText = btn.querySelector('.btn-text');
+    const btnLoading = btn.querySelector('.btn-loading');
+
+    // Show loading state
+    btn.disabled = true;
+    btnText.style.display = 'none';
+    btnLoading.style.display = 'inline-flex';
+
+    try {
+        const response = await fetch(API_BASE + '/api/plugins/install/git', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source: source })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || data.errors?.join(', ') || 'Installation failed');
+        }
+
+        showToast(`Successfully installed ${data.plugin_name} v${data.version}`, 'success');
+        hideInstallPluginModal();
+        loadInstalledPlugins();
+        loadPluginSecurity();
+
+    } catch (error) {
+        showToast('Installation failed: ' + error.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btnText.style.display = 'inline';
+        btnLoading.style.display = 'none';
+    }
+}
+
+function handlePluginFileSelect(event) {
+    const file = event.target.files[0];
+    const nameDisplay = document.getElementById('upload-file-name');
+
+    if (file) {
+        nameDisplay.textContent = file.name;
+    } else {
+        nameDisplay.textContent = 'Drag and drop or click to select a ZIP file';
+    }
+}
+
+async function installFromUpload(event) {
+    event.preventDefault();
+
+    const fileInput = document.getElementById('plugin-file');
+    const file = fileInput.files[0];
+
+    if (!file) {
+        showToast('Please select a ZIP file', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('upload-install-btn');
+    const btnText = btn.querySelector('.btn-text');
+    const btnLoading = btn.querySelector('.btn-loading');
+
+    // Show loading state
+    btn.disabled = true;
+    btnText.style.display = 'none';
+    btnLoading.style.display = 'inline-flex';
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(API_BASE + '/api/plugins/install/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || data.errors?.join(', ') || 'Installation failed');
+        }
+
+        showToast(`Successfully installed ${data.plugin_name} v${data.version}`, 'success');
+        hideInstallPluginModal();
+        loadInstalledPlugins();
+        loadPluginSecurity();
+
+    } catch (error) {
+        showToast('Installation failed: ' + error.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btnText.style.display = 'inline';
+        btnLoading.style.display = 'none';
+    }
+}
+
+async function uninstallPlugin(pluginId) {
+    if (!confirm(`Are you sure you want to uninstall this plugin? This cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(API_BASE + '/api/plugins/installed/' + pluginId, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Uninstall failed');
+        }
+
+        showToast('Plugin uninstalled successfully', 'success');
+        loadInstalledPlugins();
+        loadPluginSecurity();
+
+    } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+    }
+}
+
+async function checkPluginUpdate(pluginId) {
+    try {
+        const response = await fetch(API_BASE + '/api/plugins/installed/' + pluginId + '/updates');
+        if (!response.ok) throw new Error('Failed to check for updates');
+
+        const data = await response.json();
+
+        if (data.has_update) {
+            if (confirm(`Update available: ${data.current_commit} → ${data.latest_commit}\n\nWould you like to update now?`)) {
+                await updatePlugin(pluginId);
+            }
+        } else {
+            showToast('Plugin is up to date', 'info');
+        }
+
+    } catch (error) {
+        showToast('Error checking for updates: ' + error.message, 'error');
+    }
+}
+
+async function updatePlugin(pluginId) {
+    try {
+        const response = await fetch(API_BASE + '/api/plugins/installed/' + pluginId + '/update', {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Update failed');
+        }
+
+        showToast(`Successfully updated ${data.plugin_name} to v${data.version}`, 'success');
+        loadInstalledPlugins();
+        loadPluginSecurity();
+
+    } catch (error) {
+        showToast('Error updating plugin: ' + error.message, 'error');
+    }
+}
+
+async function checkPluginUpdates() {
+    const banner = document.getElementById('updates-available-banner');
+    const countEl = document.getElementById('updates-count');
+    const messageEl = document.getElementById('updates-message');
+
+    try {
+        showToast('Checking for updates...', 'info');
+
+        const response = await fetch(API_BASE + '/api/plugins/installed/check-updates', {
+            method: 'POST'
+        });
+
+        if (!response.ok) throw new Error('Failed to check for updates');
+
+        const data = await response.json();
+
+        if (data.count > 0) {
+            banner.style.display = 'flex';
+            countEl.textContent = `${data.count} Update${data.count > 1 ? 's' : ''} Available`;
+            messageEl.textContent = data.updates_available.map(u => u.plugin_id).join(', ');
+            showToast(`${data.count} plugin update(s) available`, 'info');
+        } else {
+            banner.style.display = 'none';
+            showToast('All plugins are up to date', 'success');
+        }
+
+    } catch (error) {
+        showToast('Error checking for updates: ' + error.message, 'error');
     }
 }
 

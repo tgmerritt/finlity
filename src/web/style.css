@@ -1047,6 +1047,209 @@ body {
     font-size: 11px;
 }
 
+/* Plugin Marketplace Styles */
+.installed-plugins-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.installed-plugin-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 16px;
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border-secondary);
+    border-radius: var(--border-radius);
+    transition: border-color var(--transition-fast);
+}
+
+.installed-plugin-card:hover {
+    border-color: var(--color-border);
+}
+
+.plugin-info {
+    flex: 1;
+}
+
+.plugin-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.plugin-name {
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.plugin-version {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.plugin-type {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.plugin-description {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    margin: 0 0 8px 0;
+}
+
+.plugin-meta {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.plugin-meta svg {
+    vertical-align: middle;
+    margin-right: 4px;
+}
+
+.plugin-source {
+    display: flex;
+    align-items: center;
+}
+
+.plugin-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Install Plugin Modal Tabs */
+.install-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--color-border-secondary);
+    padding-bottom: 12px;
+}
+
+.install-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border: 1px solid transparent;
+    background: transparent;
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    transition: all var(--transition-fast);
+}
+
+.install-tab:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-secondary);
+}
+
+.install-tab.active {
+    color: var(--color-primary);
+    border-color: var(--color-border-secondary);
+    border-bottom-color: var(--color-bg-container);
+    background: var(--color-bg-container);
+}
+
+.install-tab-content {
+    padding-top: 8px;
+}
+
+/* File Upload Area */
+.file-upload-area {
+    position: relative;
+    border: 2px dashed var(--color-border);
+    border-radius: var(--border-radius);
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.file-upload-area:hover {
+    border-color: var(--color-primary);
+    background: var(--color-bg-secondary);
+}
+
+.file-upload-area input[type="file"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.file-upload-content {
+    color: var(--color-text-secondary);
+}
+
+.file-upload-content svg {
+    margin-bottom: 12px;
+    color: var(--color-text-muted);
+}
+
+.file-upload-content p {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* Form help text */
+.form-help {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.form-help code {
+    background: var(--color-bg-secondary);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+}
+
+/* Button loading state */
+.btn-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.spinner-icon {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Badge additional variants */
+.badge-info {
+    background: rgba(52, 152, 219, 0.15);
+    color: #3498DB;
+}
+
+.badge-primary {
+    background: var(--color-primary-bg);
+    color: var(--color-primary);
+}
+
+.badge-secondary {
+    background: var(--color-bg-secondary);
+    color: var(--color-text-muted);
+}
+
 /* Text utility classes */
 .text-warning {
     color: #E67E22;

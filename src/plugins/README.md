@@ -733,3 +733,191 @@ permissions:
   network: true
   database: read_write
 ```
+
+---
+
+## Distribution & Marketplace
+
+The plugin system supports installing third-party plugins from various sources.
+
+### Installing Plugins
+
+Plugins can be installed from the Settings → Plugin Marketplace section:
+
+#### From Git Repository
+
+Install plugins directly from GitHub, GitLab, or any Git repository:
+
+- **GitHub shorthand**: `github:username/repo`
+- **GitLab shorthand**: `gitlab:username/repo`
+- **Assumed GitHub**: `username/repo`
+- **Full URL**: `https://github.com/username/repo.git`
+
+#### From ZIP File
+
+Upload a ZIP file containing the plugin:
+
+1. Click "Install Plugin" → "Upload ZIP"
+2. Select or drag-drop the ZIP file
+3. Click "Install"
+
+The ZIP must contain a `plugin.yaml` manifest at the root or in a single subdirectory.
+
+### Managing Installed Plugins
+
+In Settings → Plugin Marketplace, you can:
+
+- **View installed plugins** - See all third-party plugins
+- **Check for updates** - For Git-installed plugins
+- **Update plugins** - Re-install from source
+- **Uninstall plugins** - Remove installed plugins
+
+### Installation API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/plugins/installed` | GET | List installed plugins |
+| `/api/plugins/install/git` | POST | Install from Git repository |
+| `/api/plugins/install/upload` | POST | Install from uploaded ZIP |
+| `/api/plugins/installed/{id}` | DELETE | Uninstall a plugin |
+| `/api/plugins/installed/{id}/updates` | GET | Check for updates |
+| `/api/plugins/installed/{id}/update` | POST | Update a plugin |
+| `/api/plugins/installed/check-updates` | POST | Check all for updates |
+
+### Publishing a Plugin
+
+To share your plugin with others:
+
+#### 1. Create a Repository
+
+Create a Git repository (GitHub, GitLab, etc.) with this structure:
+
+```
+your-plugin/
+├── plugin.yaml      # Required: Plugin manifest
+├── __init__.py      # Can be empty
+├── your_module.py   # Your plugin implementation
+├── README.md        # Recommended: Usage documentation
+└── LICENSE          # Recommended: License file
+```
+
+#### 2. Write the Manifest
+
+Your `plugin.yaml` must include:
+
+```yaml
+name: Your Plugin Name
+version: 1.0.0
+description: What your plugin does
+author: Your Name <email@example.com>
+license: MIT
+plugin_type: importer  # or analysis, widget, provider, export
+
+main: your_module.py
+class: YourPluginClass
+
+requires:
+  portfolio_analyzer: ">=1.0.0"
+  python: ">=3.10"
+
+dependencies: []
+
+permissions:
+  file_read: true
+  file_write: false
+  network: false
+  database: read_only
+```
+
+#### 3. Tag Releases
+
+Use semantic versioning for releases:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+#### 4. Share the Repository URL
+
+Users can install your plugin with:
+
+- `github:your-username/your-plugin`
+- `https://github.com/your-username/your-plugin.git`
+
+#### Best Practices for Publishing
+
+1. **Include documentation** - README with setup instructions, examples, screenshots
+2. **Use semantic versioning** - `major.minor.patch` format
+3. **Minimize dependencies** - List all Python packages in `dependencies`
+4. **Request minimal permissions** - Only what your plugin needs
+5. **Include a license** - MIT, Apache 2.0, etc.
+6. **Test thoroughly** - Ensure plugin works with latest Portfolio Analyzer
+7. **Provide examples** - Sample data or usage examples in README
+8. **Respond to issues** - Monitor and respond to GitHub issues
+
+#### Plugin Repository Example
+
+```markdown
+# My Custom Analyzer Plugin
+
+Adds XYZ analysis capabilities to Portfolio Analyzer.
+
+## Installation
+
+In Portfolio Analyzer, go to Settings → Plugin Marketplace → Install Plugin:
+
+- Enter: `github:your-username/my-analyzer`
+- Click Install
+
+## Features
+
+- Feature 1
+- Feature 2
+
+## Configuration
+
+After installation, configure in Settings → Plugins:
+
+- `setting1`: Description
+- `setting2`: Description
+
+## License
+
+MIT
+```
+
+### Version Compatibility
+
+Plugins can specify version requirements:
+
+```yaml
+requires:
+  portfolio_analyzer: ">=1.0.0,<2.0.0"  # Compatible versions
+  python: ">=3.10"
+```
+
+The installer will warn if requirements aren't met but will allow installation.
+
+### Plugin Updates
+
+For Git-installed plugins:
+
+1. Check for updates: Settings → Plugin Marketplace → Check Updates
+2. Updates show commit hash changes
+3. Click Update to pull latest version
+
+For ZIP-installed plugins:
+
+1. Download the new version
+2. Upload via Install Plugin → Upload ZIP
+3. The new version replaces the old
+
+### Uninstalling Plugins
+
+1. Go to Settings → Plugin Marketplace
+2. Find the plugin to remove
+3. Click the trash icon
+4. Confirm uninstallation
+
+Uninstalling removes the plugin files and revokes its permissions.

@@ -31,6 +31,12 @@ from .security import (
     PermissionManager,
     SecurityEvent,
 )
+from .installer import (
+    PluginInstaller,
+    get_plugin_installer,
+    InstallResult,
+    PluginSource,
+)
 
 __all__ = [
     # Base classes
@@ -67,4 +73,9 @@ __all__ = [
     "AuditLogger",
     "PermissionManager",
     "SecurityEvent",
+    # Installer
+    "PluginInstaller",
+    "get_plugin_installer",
+    "InstallResult",
+    "PluginSource",
 ]

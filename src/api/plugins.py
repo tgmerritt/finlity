@@ -9,11 +9,15 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from fastapi import UploadFile, File
+from fastapi.responses import JSONResponse
+
 from src.plugins import (
     get_plugin_registry,
     get_analysis_pipeline,
     get_widget_pipeline,
     get_security_manager,
+    get_plugin_installer,
     PluginType,
 )
 
@@ -849,4 +853,240 @@ def validate_plugin_security(plugin_id: str):
         "issues": issues,
         "can_load": can_load,
         "load_reason": reason,
+    }
+
+
+# ============================================================================
+# Plugin Installation Endpoints
+# ============================================================================
+
+
+class GitInstallRequest(BaseModel):
+    """Request model for installing from Git."""
+    source: str  # github:user/repo, gitlab:user/repo, or full URL
+
+
+@router.get("/installed")
+def list_installed_plugins():
+    """
+    List all installed (non-builtin) plugins.
+
+    Returns plugins installed via git, zip, or local directory.
+    """
+    installer = get_plugin_installer()
+    plugins = installer.get_installed_plugins()
+
+    return {
+        "plugins": plugins,
+        "count": len(plugins),
+    }
+
+
+@router.post("/install/git")
+def install_from_git(request: GitInstallRequest):
+    """
+    Install a plugin from a Git repository.
+
+    Supports:
+    - github:user/repo - GitHub shorthand
+    - gitlab:user/repo - GitLab shorthand
+    - user/repo - Assumes GitHub
+    - https://github.com/user/repo.git - Full URL
+
+    After installation, the plugin needs permission approval before use.
+    """
+    installer = get_plugin_installer()
+    result = installer.install_from_git(request.source)
+
+    if not result.success:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "message": result.message,
+                "errors": result.errors,
+            }
+        )
+
+    # Trigger plugin discovery to pick up the new plugin
+    registry = get_plugin_registry()
+    registry.discover_plugins()
+
+    return {
+        "success": True,
+        "plugin_id": result.plugin_id,
+        "plugin_name": result.plugin_name,
+        "version": result.version,
+        "message": result.message,
+        "warnings": result.warnings,
+    }
+
+
+@router.post("/install/upload")
+async def install_from_upload(file: UploadFile = File(...)):
+    """
+    Install a plugin from an uploaded ZIP file.
+
+    The ZIP must contain a plugin.yaml manifest at the root or in a
+    single subdirectory.
+    """
+    if not file.filename or not file.filename.endswith(".zip"):
+        raise HTTPException(
+            status_code=400,
+            detail="File must be a ZIP archive"
+        )
+
+    # Read the uploaded file
+    contents = await file.read()
+
+    installer = get_plugin_installer()
+    result = installer.install_from_zip_bytes(contents, file.filename)
+
+    if not result.success:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "message": result.message,
+                "errors": result.errors,
+            }
+        )
+
+    # Trigger plugin discovery
+    registry = get_plugin_registry()
+    registry.discover_plugins()
+
+    return {
+        "success": True,
+        "plugin_id": result.plugin_id,
+        "plugin_name": result.plugin_name,
+        "version": result.version,
+        "message": result.message,
+        "warnings": result.warnings,
+    }
+
+
+@router.delete("/installed/{plugin_id}")
+def uninstall_plugin(plugin_id: str):
+    """
+    Uninstall an installed plugin.
+
+    Only works for plugins installed via git/zip/local, not built-in plugins.
+    """
+    # Check if it's a built-in plugin
+    registry = get_plugin_registry()
+    manifest = registry.get_manifest(plugin_id)
+
+    if manifest and manifest.is_builtin:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot uninstall built-in plugins"
+        )
+
+    installer = get_plugin_installer()
+    result = installer.uninstall(plugin_id)
+
+    if not result.success:
+        return JSONResponse(
+            status_code=400 if "not found" in result.message.lower() else 500,
+            content={
+                "success": False,
+                "message": result.message,
+                "errors": result.errors,
+            }
+        )
+
+    # Refresh plugin registry
+    registry.discover_plugins()
+
+    return {
+        "success": True,
+        "plugin_id": plugin_id,
+        "message": result.message,
+    }
+
+
+@router.get("/installed/{plugin_id}/updates")
+def check_plugin_updates(plugin_id: str):
+    """
+    Check if a plugin has updates available.
+
+    Only works for plugins installed from Git repositories.
+    """
+    installer = get_plugin_installer()
+    update_info = installer.check_for_updates(plugin_id)
+
+    if update_info is None:
+        return {
+            "plugin_id": plugin_id,
+            "has_update": False,
+            "message": "No updates available or update checking not supported",
+        }
+
+    return update_info
+
+
+@router.post("/installed/{plugin_id}/update")
+def update_plugin(plugin_id: str):
+    """
+    Update a plugin to the latest version.
+
+    Re-installs the plugin from its original source.
+    """
+    # Check if it's a built-in plugin
+    registry = get_plugin_registry()
+    manifest = registry.get_manifest(plugin_id)
+
+    if manifest and manifest.is_builtin:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot update built-in plugins"
+        )
+
+    installer = get_plugin_installer()
+    result = installer.update_plugin(plugin_id)
+
+    if not result.success:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "message": result.message,
+                "errors": result.errors,
+            }
+        )
+
+    # Trigger plugin discovery
+    registry.discover_plugins()
+
+    return {
+        "success": True,
+        "plugin_id": result.plugin_id,
+        "plugin_name": result.plugin_name,
+        "version": result.version,
+        "message": result.message,
+        "warnings": result.warnings,
+    }
+
+
+@router.post("/installed/check-updates")
+def check_all_updates():
+    """
+    Check for updates on all installed plugins.
+
+    Returns a list of plugins that have updates available.
+    """
+    installer = get_plugin_installer()
+    plugins = installer.get_installed_plugins()
+
+    updates_available = []
+    for plugin in plugins:
+        update_info = installer.check_for_updates(plugin["plugin_id"])
+        if update_info and update_info.get("has_update"):
+            updates_available.append(update_info)
+
+    return {
+        "updates_available": updates_available,
+        "count": len(updates_available),
+        "total_installed": len(plugins),
     }
