@@ -9,7 +9,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from src.plugins import get_plugin_registry, get_analysis_pipeline, PluginType
+from src.plugins import get_plugin_registry, get_analysis_pipeline, get_widget_pipeline, PluginType
 
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
@@ -499,4 +499,99 @@ def list_analysis_plugins():
             for a in analyzers
         ],
         "count": len(analyzers),
+    }
+
+
+# ============================================================================
+# Widget Plugin Endpoints
+# ============================================================================
+
+
+@router.get("/widgets")
+def list_widget_plugins():
+    """List all enabled widget plugins."""
+    # Ensure plugins are loaded
+    registry = get_plugin_registry()
+    registry.discover_plugins(auto_enable_builtin=True)
+    registry.load_enabled_plugins()
+
+    pipeline = get_widget_pipeline()
+    widgets_info = pipeline.get_widget_info()
+
+    return {
+        "widgets": widgets_info,
+        "count": len(widgets_info),
+    }
+
+
+@router.post("/widgets/render")
+def render_all_widgets(
+    positions: list[dict],
+    accounts: list[dict],
+):
+    """
+    Render all enabled widget plugins.
+
+    Args:
+        positions: List of position dictionaries
+        accounts: List of account dictionaries
+
+    Returns rendered content from all widget plugins.
+    """
+    # Ensure plugins are loaded
+    registry = get_plugin_registry()
+    registry.discover_plugins(auto_enable_builtin=True)
+    registry.load_enabled_plugins()
+
+    pipeline = get_widget_pipeline()
+    result = pipeline.render_all(positions, accounts)
+
+    return result.to_dict()
+
+
+@router.post("/widgets/render/{plugin_id}")
+def render_widget(
+    plugin_id: str,
+    positions: list[dict],
+    accounts: list[dict],
+):
+    """
+    Render a specific widget plugin.
+
+    Args:
+        plugin_id: ID of the widget plugin to render
+        positions: List of position dictionaries
+        accounts: List of account dictionaries
+    """
+    # Ensure plugins are loaded
+    registry = get_plugin_registry()
+    registry.discover_plugins(auto_enable_builtin=True)
+    registry.load_enabled_plugins()
+
+    pipeline = get_widget_pipeline()
+    result = pipeline.render_widget(plugin_id, positions, accounts)
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Widget plugin not found: {plugin_id}"
+        )
+
+    return {
+        "plugin_id": result.plugin_id,
+        "plugin_name": result.plugin_name,
+        "config": {
+            "title": result.config.title,
+            "default_width": result.config.default_width,
+            "default_height": result.config.default_height,
+            "refresh_interval": result.config.refresh_interval,
+        } if result.config else None,
+        "content": {
+            "html": result.content.html,
+            "data": result.content.data,
+            "scripts": result.content.scripts,
+            "styles": result.content.styles,
+        } if result.content else None,
+        "success": result.success,
+        "error": result.error,
     }

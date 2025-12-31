@@ -427,3 +427,218 @@ for pr in result.plugin_results:
 result = pipeline.run_plugin("tax-loss-harvester", positions, accounts)
 print(f"Tax savings: ${result.metrics.get('estimated_tax_savings', 0):,.2f}")
 ```
+
+---
+
+## Creating a Widget Plugin
+
+Widget plugins create visual dashboard components that display portfolio data.
+
+### 1. Create Plugin Directory
+
+```
+src/plugins/builtin/my-widget/
+├── plugin.yaml      # Plugin manifest
+├── __init__.py      # Can be empty
+└── widget.py        # Plugin implementation
+```
+
+### 2. Define the Manifest (plugin.yaml)
+
+```yaml
+name: My Widget
+version: 1.0.0
+description: Custom dashboard widget
+author: Your Name
+license: MIT
+plugin_type: widget
+
+main: widget.py
+class: MyWidget
+
+requires:
+  portfolio_analyzer: ">=1.0.0"
+  python: ">=3.10"
+
+dependencies: []
+
+permissions:
+  file_read: false
+  file_write: false
+  network: false
+  database: read_only
+
+settings:
+  - key: show_details
+    type: boolean
+    label: Show Details
+    description: Show detailed information
+    default: true
+    required: false
+
+widget:
+  title: My Widget Title
+  default_width: 2   # Grid columns (1-3)
+  default_height: 2  # Height class (1-3)
+  refresh_interval: 3600  # Auto-refresh interval in seconds (0 = no refresh)
+```
+
+### 3. Implement the Widget
+
+```python
+from typing import Any
+from src.plugins.base import WidgetPlugin, WidgetContent, PluginManifest
+
+class MyWidget(WidgetPlugin):
+    """Custom dashboard widget."""
+
+    def render(self, positions: list[dict], accounts: list[dict]) -> WidgetContent:
+        """
+        Render widget content.
+
+        Args:
+            positions: List of position dictionaries with keys:
+                - ticker: str
+                - shares: float
+                - current_price: float (may be None)
+                - cost_basis: float (may be None)
+                - sector: str
+                - is_fund: bool
+                - account_id: int
+                - account_name: str
+                - account_type: str
+            accounts: List of account dictionaries with keys:
+                - id: int
+                - name: str
+                - account_type: str
+                - brokerage: str
+                - is_retirement: bool
+
+        Returns:
+            WidgetContent with HTML for display
+        """
+        show_details = self.get_setting("show_details", True)
+
+        # Calculate metrics
+        total_value = sum(
+            (pos.get("current_price") or 0) * (pos.get("shares") or 0)
+            for pos in positions
+        )
+
+        # Generate HTML
+        html = f'''
+        <div class="my-widget">
+            <div class="widget-stat">
+                <span class="label">Total Value</span>
+                <span class="value">${total_value:,.2f}</span>
+            </div>
+            <div class="widget-stat">
+                <span class="label">Positions</span>
+                <span class="value">{len(positions)}</span>
+            </div>
+        </div>
+        '''
+
+        return WidgetContent(
+            html=html,
+            data={
+                "total_value": total_value,
+                "position_count": len(positions),
+            },
+        )
+
+    def get_info(self) -> dict:
+        config = self.get_config()
+        return {
+            "name": self.name,
+            "version": self.version,
+            "type": "widget",
+            "title": config.title if config else self.name,
+        }
+```
+
+### 4. Built-in Widget Plugins
+
+The following widget plugins are included:
+
+**Correlation Heatmap** (`correlation-heatmap`)
+- Shows correlation matrix between portfolio holdings
+- Uses asset class and sector correlations
+- Displays diversification quality rating
+- Settings: `min_positions`, `show_values`
+
+**Sector Treemap** (`sector-treemap`)
+- Interactive visualization of sector allocation
+- Shows top positions per sector
+- Color-coded by sector
+- Settings: `min_percent`, `show_tickers`
+
+### 5. Testing Widget Plugins
+
+```python
+from src.plugins import get_plugin_registry, get_widget_pipeline
+
+# Initialize
+registry = get_plugin_registry()
+registry.discover_plugins(auto_enable_builtin=True)
+registry.load_enabled_plugins()
+
+pipeline = get_widget_pipeline()
+
+# Test with sample data
+positions = [
+    {"ticker": "AAPL", "shares": 100, "current_price": 190, "sector": "Technology"},
+    {"ticker": "VTI", "shares": 50, "current_price": 250, "sector": "Diversified", "is_fund": True},
+    {"ticker": "BND", "shares": 100, "current_price": 75, "sector": "Bonds", "is_fund": True},
+]
+accounts = [
+    {"id": 1, "name": "Taxable", "account_type": "taxable", "is_retirement": False},
+]
+
+# Render all widgets
+result = pipeline.render_all(positions, accounts)
+print(f"Rendered {len(result.widgets)} widgets")
+for w in result.widgets:
+    print(f"  {w.plugin_name}: {'OK' if w.success else w.error}")
+
+# Render specific widget
+result = pipeline.render_widget("correlation-heatmap", positions, accounts)
+if result and result.success:
+    print(f"Correlation data: {result.content.data}")
+```
+
+### 6. Widget API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/analysis/widgets` | GET | Render all widgets with DB data |
+| `/api/analysis/widgets/{id}` | GET | Render specific widget with DB data |
+| `/api/plugins/widgets` | GET | List available widget plugins |
+| `/api/plugins/widgets/render` | POST | Render all widgets with custom data |
+| `/api/plugins/widgets/render/{id}` | POST | Render specific widget with custom data |
+
+### 7. Widget Styling
+
+Widgets should use the app's CSS variables for consistent theming:
+
+```css
+.my-widget {
+    /* Use app colors */
+    color: var(--color-text-primary);
+    background: var(--color-bg-container);
+    border: 1px solid var(--color-border-secondary);
+    border-radius: var(--border-radius);
+}
+
+.my-widget .label {
+    color: var(--color-text-muted);
+}
+
+.my-widget .value {
+    color: var(--color-text-primary);
+}
+
+/* Success/danger colors */
+.my-widget .positive { color: var(--color-success); }
+.my-widget .negative { color: var(--color-danger); }
+```

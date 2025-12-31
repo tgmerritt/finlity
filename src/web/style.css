@@ -727,6 +727,233 @@ body {
     vertical-align: middle;
 }
 
+/* Widget Grid System */
+.widget-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.widget-item {
+    background: var(--color-bg-container);
+    border: 1px solid var(--color-border-secondary);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+.widget-item.widget-error {
+    border-color: var(--color-danger);
+}
+
+/* Widget size classes */
+.widget-w1 { grid-column: span 1; }
+.widget-w2 { grid-column: span 2; }
+.widget-w3 { grid-column: span 3; }
+.widget-h1 { min-height: 200px; }
+.widget-h2 { min-height: 350px; }
+.widget-h3 { min-height: 500px; }
+
+.widget-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-border-secondary);
+    background: var(--color-bg-secondary);
+}
+
+.widget-header h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.widget-body {
+    padding: 16px;
+}
+
+.widget-empty {
+    text-align: center;
+    padding: 20px;
+    color: var(--color-text-muted);
+}
+
+/* Correlation Heatmap Widget Styles */
+.correlation-widget {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.correlation-summary {
+    display: flex;
+    gap: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-border-secondary);
+}
+
+.correlation-summary .summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.correlation-summary .label {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+}
+
+.correlation-summary .value {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.correlation-summary .value.excellent { color: #2ECC71; }
+.correlation-summary .value.good { color: #27AE60; }
+.correlation-summary .value.moderate { color: #F39C12; }
+.correlation-summary .value.poor { color: #E74C3C; }
+
+.heatmap-container {
+    overflow-x: auto;
+}
+
+.correlation-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.correlation-matrix th,
+.correlation-matrix td {
+    padding: 6px 8px;
+    text-align: center;
+    border: 1px solid var(--color-border-secondary);
+}
+
+.correlation-matrix th {
+    background: var(--color-bg-secondary);
+    font-weight: 600;
+    font-size: 11px;
+}
+
+.correlation-matrix .row-header {
+    text-align: left;
+    font-weight: 600;
+}
+
+.correlation-legend {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding-top: 8px;
+    font-size: 11px;
+    color: var(--color-text-muted);
+}
+
+.legend-gradient {
+    width: 100px;
+    height: 10px;
+    background: linear-gradient(to right, rgba(100, 200, 100, 0.7), rgba(255, 200, 100, 0.7), rgba(255, 100, 100, 0.7));
+    border-radius: 2px;
+}
+
+/* Sector Treemap Widget Styles */
+.treemap-widget {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.treemap-summary {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-border-secondary);
+}
+
+.treemap-summary .summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.treemap-summary .label {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+}
+
+.treemap-summary .value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.treemap-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 150px;
+}
+
+.treemap-block {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 12px;
+    border-radius: var(--border-radius);
+    color: #fff;
+    text-align: center;
+    min-height: 80px;
+    flex-grow: 1;
+    transition: transform 0.2s ease;
+}
+
+.treemap-block:hover {
+    transform: scale(1.02);
+}
+
+.treemap-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.treemap-value {
+    font-size: 18px;
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.treemap-amount {
+    font-size: 11px;
+    opacity: 0.9;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.treemap-positions {
+    margin-top: 6px;
+    font-size: 10px;
+    opacity: 0.85;
+}
+
+.treemap-position {
+    margin-top: 2px;
+}
+
+/* Responsive widget grid */
+@media (max-width: 768px) {
+    .widget-grid {
+        grid-template-columns: 1fr;
+    }
+    .widget-w2, .widget-w3 {
+        grid-column: span 1;
+    }
+}
+
 .sidebar-footer {
     padding: 16px;
     border-top: 1px solid var(--color-border-secondary);

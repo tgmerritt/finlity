@@ -1,0 +1,41 @@
+name: Sector Treemap
+version: 1.0.0
+description: Interactive treemap visualization of portfolio allocation by sector
+author: Portfolio Analyzer
+license: MIT
+plugin_type: widget
+
+main: widget.py
+class: SectorTreemapWidget
+
+requires:
+  portfolio_analyzer: ">=1.0.0"
+  python: ">=3.10"
+
+dependencies: []
+
+permissions:
+  file_read: false
+  file_write: false
+  network: false
+  database: read_only
+
+settings:
+  - key: min_percent
+    type: number
+    label: Minimum Percent
+    description: Minimum percentage to show in treemap (smaller grouped as Other)
+    default: 1
+    required: false
+  - key: show_tickers
+    type: boolean
+    label: Show Tickers
+    description: Show individual tickers in sectors
+    default: true
+    required: false
+
+widget:
+  title: Sector Allocation
+  default_width: 2
+  default_height: 2
+  refresh_interval: 3600

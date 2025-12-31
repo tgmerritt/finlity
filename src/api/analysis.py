@@ -1176,3 +1176,139 @@ def run_single_plugin_analysis(plugin_id: str, db: Database = Depends(get_db)):
         "warnings": result.warnings,
         "errors": result.errors,
     }
+
+
+@router.get("/widgets")
+def render_widgets(db: Database = Depends(get_db)):
+    """
+    Render all enabled widget plugins with current portfolio data.
+
+    This endpoint fetches portfolio data from the database and renders all
+    enabled widget plugins (Correlation Heatmap, Sector Treemap, etc.)
+    """
+    from src.plugins import get_plugin_registry, get_widget_pipeline
+
+    # Ensure plugins are loaded
+    registry = get_plugin_registry()
+    registry.discover_plugins(auto_enable_builtin=True)
+    registry.load_enabled_plugins()
+
+    pipeline = get_widget_pipeline()
+
+    # Get portfolio data from database
+    positions = []
+    accounts = []
+
+    for db_account in db.get_all_accounts():
+        # Add account info
+        accounts.append({
+            "id": db_account.id,
+            "name": db_account.name,
+            "account_type": db_account.account_type,
+            "brokerage": db_account.brokerage,
+            "is_retirement": db_account.account_type in [
+                "traditional_401k", "roth_401k", "traditional_ira", "roth_ira",
+                "hsa", "pension", "sep_ira", "simple_ira",
+            ],
+        })
+
+        # Add positions
+        for db_pos in db.get_positions_by_account(db_account.id):
+            positions.append({
+                "ticker": db_pos.ticker,
+                "name": db_pos.name or db_pos.ticker,
+                "shares": db_pos.shares,
+                "current_price": db_pos.current_price,
+                "cost_basis": db_pos.cost_basis,
+                "sector": db_pos.sector or "Other",
+                "asset_class": db_pos.asset_class,
+                "is_fund": db_pos.is_fund,
+                "position_type": db_pos.position_type,
+                "account_id": db_account.id,
+                "account_name": db_account.name,
+                "account_type": db_account.account_type,
+            })
+
+    # Run all widgets
+    result = pipeline.render_all(positions, accounts)
+
+    return result.to_dict()
+
+
+@router.get("/widgets/{plugin_id}")
+def render_single_widget(plugin_id: str, db: Database = Depends(get_db)):
+    """
+    Render a specific widget plugin with current portfolio data.
+
+    Args:
+        plugin_id: ID of the widget plugin to render (e.g., "correlation-heatmap")
+    """
+    from src.plugins import get_plugin_registry, get_widget_pipeline
+    from fastapi import HTTPException
+
+    # Ensure plugins are loaded
+    registry = get_plugin_registry()
+    registry.discover_plugins(auto_enable_builtin=True)
+    registry.load_enabled_plugins()
+
+    pipeline = get_widget_pipeline()
+
+    # Get portfolio data from database
+    positions = []
+    accounts = []
+
+    for db_account in db.get_all_accounts():
+        accounts.append({
+            "id": db_account.id,
+            "name": db_account.name,
+            "account_type": db_account.account_type,
+            "brokerage": db_account.brokerage,
+            "is_retirement": db_account.account_type in [
+                "traditional_401k", "roth_401k", "traditional_ira", "roth_ira",
+                "hsa", "pension", "sep_ira", "simple_ira",
+            ],
+        })
+
+        for db_pos in db.get_positions_by_account(db_account.id):
+            positions.append({
+                "ticker": db_pos.ticker,
+                "name": db_pos.name or db_pos.ticker,
+                "shares": db_pos.shares,
+                "current_price": db_pos.current_price,
+                "cost_basis": db_pos.cost_basis,
+                "sector": db_pos.sector or "Other",
+                "asset_class": db_pos.asset_class,
+                "is_fund": db_pos.is_fund,
+                "position_type": db_pos.position_type,
+                "account_id": db_account.id,
+                "account_name": db_account.name,
+                "account_type": db_account.account_type,
+            })
+
+    # Render specific widget
+    result = pipeline.render_widget(plugin_id, positions, accounts)
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Widget plugin not found: {plugin_id}"
+        )
+
+    return {
+        "plugin_id": result.plugin_id,
+        "plugin_name": result.plugin_name,
+        "config": {
+            "title": result.config.title,
+            "default_width": result.config.default_width,
+            "default_height": result.config.default_height,
+            "refresh_interval": result.config.refresh_interval,
+        } if result.config else None,
+        "content": {
+            "html": result.content.html,
+            "data": result.content.data,
+            "scripts": result.content.scripts,
+            "styles": result.content.styles,
+        } if result.content else None,
+        "success": result.success,
+        "error": result.error,
+    }

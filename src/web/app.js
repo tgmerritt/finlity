@@ -1046,6 +1046,73 @@ async function loadPluginAnalysis() {
     }
 }
 
+// Widget Dashboard
+async function loadWidgets() {
+    var container = document.getElementById('widget-grid');
+    var loading = document.getElementById('widget-loading');
+
+    if (loading) loading.style.display = 'block';
+    if (container) container.innerHTML = '';
+
+    try {
+        const response = await fetch(API_BASE + '/api/analysis/widgets');
+        if (!response.ok) throw new Error('Failed to load widgets');
+        const data = await response.json();
+
+        if (loading) loading.style.display = 'none';
+
+        if (!data.widgets || data.widgets.length === 0) {
+            container.innerHTML = '<p class="text-muted">No widget plugins available.</p>';
+            return;
+        }
+
+        var html = '';
+
+        // Render each widget
+        data.widgets.forEach(function(widget) {
+            if (!widget.success) {
+                html += '<div class="widget-item widget-error">';
+                html += '<div class="widget-header">';
+                html += '<h4>' + escapeHtml(widget.plugin_name) + '</h4>';
+                html += '</div>';
+                html += '<div class="widget-body">';
+                html += '<p class="text-muted">Error: ' + escapeHtml(widget.error || 'Unknown error') + '</p>';
+                html += '</div>';
+                html += '</div>';
+                return;
+            }
+
+            var config = widget.config || {};
+            var content = widget.content || {};
+            var widthClass = 'widget-w' + (config.default_width || 1);
+            var heightClass = 'widget-h' + (config.default_height || 1);
+
+            html += '<div class="widget-item ' + widthClass + ' ' + heightClass + '">';
+            html += '<div class="widget-header">';
+            html += '<h4>' + escapeHtml(config.title || widget.plugin_name) + '</h4>';
+            html += '</div>';
+            html += '<div class="widget-body">';
+
+            // Render widget content HTML
+            if (content.html) {
+                html += content.html;
+            } else {
+                html += '<p class="text-muted">No content to display.</p>';
+            }
+
+            html += '</div>';
+            html += '</div>';
+        });
+
+        container.innerHTML = html;
+
+    } catch (error) {
+        console.error('Error loading widgets:', error);
+        if (loading) loading.style.display = 'none';
+        container.innerHTML = '<p class="text-muted">Failed to load widgets. ' + escapeHtml(error.message) + '</p>';
+    }
+}
+
 // Data loading
 async function refreshData() {
     showLoading('Loading data...');

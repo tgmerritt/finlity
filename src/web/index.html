@@ -550,6 +550,22 @@
                     </div>
                 </div>
 
+                <!-- Widget Dashboard -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Dashboard Widgets</h3>
+                        <button class="btn btn-sm btn-default" onclick="loadWidgets()">Refresh Widgets</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="widget-loading" style="display: none;">
+                            <p class="text-muted">Loading widgets...</p>
+                        </div>
+                        <div id="widget-grid" class="widget-grid">
+                            <p class="text-muted">Click "Refresh Widgets" to load dashboard widgets (Correlation Heatmap, Sector Treemap).</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Fund Analysis (Claude Integration) -->
                 <div class="card">
                     <div class="card-header">

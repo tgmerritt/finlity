@@ -1,0 +1,41 @@
+name: Correlation Heatmap
+version: 1.0.0
+description: Interactive correlation matrix showing relationships between portfolio holdings
+author: Portfolio Analyzer
+license: MIT
+plugin_type: widget
+
+main: widget.py
+class: CorrelationHeatmapWidget
+
+requires:
+  portfolio_analyzer: ">=1.0.0"
+  python: ">=3.10"
+
+dependencies: []
+
+permissions:
+  file_read: false
+  file_write: false
+  network: false
+  database: read_only
+
+settings:
+  - key: min_positions
+    type: number
+    label: Minimum Positions
+    description: Minimum number of positions to show correlation
+    default: 2
+    required: false
+  - key: show_values
+    type: boolean
+    label: Show Values
+    description: Display correlation values in cells
+    default: true
+    required: false
+
+widget:
+  title: Position Correlation
+  default_width: 2
+  default_height: 2
+  refresh_interval: 3600
