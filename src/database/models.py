@@ -222,3 +222,32 @@ class PortfolioView(Base):
         """Set account IDs as JSON."""
         import json
         self.account_ids = json.dumps(ids)
+
+
+class MonteCarloResult(Base):
+    """Cached Monte Carlo simulation results for dashboard metrics."""
+
+    __tablename__ = "monte_carlo_results"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    run_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    # Input parameters
+    current_age = Column(Float, nullable=False)
+    retirement_age = Column(Float, nullable=False)
+    portfolio_balance = Column(Float, nullable=False)
+    monthly_contribution = Column(Float, default=0)
+    monthly_withdrawal = Column(Float, default=0)
+
+    # Key results
+    success_rate = Column(Float, nullable=False)  # Probability of not running out by end_age
+    median_final_value = Column(Float)
+    worst_case_final = Column(Float)
+    best_case_final = Column(Float)
+
+    # Dashboard metrics
+    earliest_retirement_age = Column(Float)  # Age where 80%+ success rate achieved
+    projected_value_at_retirement = Column(Float)  # Median portfolio value at retirement age
+    conservative_value_at_retirement = Column(Float)  # 25th percentile (1 std below median)
+
+    created_at = Column(DateTime, default=datetime.utcnow)

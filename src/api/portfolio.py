@@ -108,6 +108,15 @@ class CreateCDPositionRequest(BaseModel):
     purchase_date: Optional[str] = None  # ISO format date
 
 
+class CreateRealEstateRequest(BaseModel):
+    """Request model for adding a real estate position."""
+    account_id: str
+    name: str  # e.g., "Primary Residence", "123 Main St"
+    current_value: float  # Current estimated market value
+    cost_basis: float  # Purchase price + improvements
+    purchase_date: Optional[str] = None  # ISO format date
+
+
 class AccountTypeResponse(BaseModel):
     """Account type option for dropdowns."""
     value: str
@@ -450,6 +459,52 @@ def check_cd_maturities(db: Database = Depends(get_db)):
     }
 
 
+@router.post("/positions/real-estate")
+def create_real_estate_position(request: CreateRealEstateRequest, db: Database = Depends(get_db)):
+    """Add a real estate position to an account.
+
+    Real estate positions track property equity:
+    - cost_basis = Purchase price + improvements
+    - current_price = Current estimated market value
+    - Equity = current_price - cost_basis (for gain/loss tracking)
+
+    Note: This tracks the property value, not net equity after mortgage.
+    For net equity, subtract your mortgage balance from the current_value.
+    """
+    # Verify account exists
+    account = db.get_account_by_id(request.account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    # Parse purchase date if provided
+    purchase = None
+    if request.purchase_date:
+        purchase = datetime.fromisoformat(request.purchase_date)
+
+    # Add real estate position
+    position = db.add_position(
+        account_id=request.account_id,
+        ticker="RE",  # Real Estate ticker
+        shares=1.0,  # Always 1 for property
+        name=request.name,
+        current_price=request.current_value,
+        cost_basis=request.cost_basis,
+        is_fund=False,
+        position_type="real_estate",
+        asset_class="alternative",
+        purchase_date=purchase,
+    )
+
+    return {
+        "id": position.id,
+        "name": position.name,
+        "current_value": position.current_price,
+        "cost_basis": position.cost_basis,
+        "unrealized_gain": position.current_price - position.cost_basis,
+        "position_type": "real_estate",
+    }
+
+
 class UpdatePositionRequest(BaseModel):
     """Request model for updating a position."""
     shares: Optional[float] = None
@@ -619,4 +674,118 @@ def export_to_csv(data_type: str, db: Database = Depends(get_db)):
         iter([output.getvalue()]),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+# ==================== Dashboard Retirement Metrics ====================
+
+class DashboardMetricsResponse(BaseModel):
+    """Retirement metrics for dashboard display."""
+    monthly_retirement_income: Optional[float]  # Based on projected value at retirement, None if no sim
+    withdrawal_rate: int
+    success_probability: Optional[float]  # From latest Monte Carlo
+    earliest_retirement_age: Optional[int]  # Age to reach target income with 80%+ success
+    fire_number: Optional[float]  # Amount needed for target monthly income
+    current_age: Optional[int]
+    target_retirement_age: Optional[int]
+    target_monthly_income: Optional[float]
+    last_simulation_date: Optional[str]
+    total_portfolio_value: float
+    projected_value_at_retirement: Optional[float]  # From Monte Carlo simulation
+    conservative_value_at_retirement: Optional[float]  # 25th percentile estimate
+    simulation_required: bool  # True if user needs to run simulation
+
+
+@router.get("/dashboard-metrics", response_model=DashboardMetricsResponse)
+def get_dashboard_metrics(db: Database = Depends(get_db)):
+    """Get retirement planning metrics for dashboard display.
+
+    Returns:
+    - Monthly retirement income based on PROJECTED portfolio value at retirement (from Monte Carlo)
+    - Success probability from latest Monte Carlo simulation
+    - Earliest retirement age where target income is sustainable
+    - FIRE number (portfolio needed for target income)
+
+    Note: Monthly income requires a Monte Carlo simulation to be run first.
+    """
+    from src.api.settings import load_config
+    from datetime import date
+
+    # Get portfolio value
+    summary = db.get_portfolio_summary()
+    total_value = summary["total_value"]
+
+    # Get personal settings
+    config = load_config()
+    personal = config.get("personal", {})
+
+    withdrawal_rate = personal.get("withdrawal_rate", 4)  # Default 4%
+    target_monthly_income = personal.get("target_monthly_income", 0)
+    retirement_age = personal.get("retirement_age", 65)
+
+    # Calculate current age from DOB
+    current_age = None
+    dob_str = personal.get("dob")
+    if dob_str:
+        try:
+            dob = datetime.strptime(dob_str, "%Y-%m-%d").date()
+            today = date.today()
+            current_age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+        except ValueError:
+            pass
+
+    # Get latest Monte Carlo result
+    latest_mc = db.get_latest_monte_carlo_result()
+
+    # Initialize values that require simulation
+    monthly_retirement_income = None
+    success_probability = None
+    earliest_retirement_age = None
+    last_simulation_date = None
+    projected_value_at_retirement = None
+    conservative_value_at_retirement = None
+    fire_number = None
+    simulation_required = True
+
+    if latest_mc:
+        simulation_required = False
+        success_probability = latest_mc.success_rate
+        earliest_retirement_age = int(latest_mc.earliest_retirement_age) if latest_mc.earliest_retirement_age else None
+        last_simulation_date = latest_mc.run_date.isoformat() if latest_mc.run_date else None
+
+        # Get projected value at retirement from simulation
+        projected_value_at_retirement = latest_mc.projected_value_at_retirement
+        conservative_value_at_retirement = latest_mc.conservative_value_at_retirement
+
+        # Calculate monthly retirement income from PROJECTED value at retirement
+        # Use conservative estimate (25th percentile) for safer planning
+        if conservative_value_at_retirement:
+            annual_income = conservative_value_at_retirement * (withdrawal_rate / 100)
+            monthly_retirement_income = annual_income / 12
+
+        # Calculate FIRE number
+        if target_monthly_income > 0:
+            # FIRE number = annual target income / withdrawal rate
+            target_annual = target_monthly_income * 12
+            fire_number = target_annual / (withdrawal_rate / 100)
+        elif monthly_retirement_income:
+            # No specific target - calculate what they'd need for their projected income
+            fire_number = conservative_value_at_retirement
+        else:
+            fire_number = None
+
+    return DashboardMetricsResponse(
+        monthly_retirement_income=round(monthly_retirement_income, 2) if monthly_retirement_income else None,
+        withdrawal_rate=withdrawal_rate,
+        success_probability=round(success_probability * 100, 1) if success_probability is not None else None,
+        earliest_retirement_age=earliest_retirement_age,
+        fire_number=round(fire_number, 2) if fire_number else None,
+        current_age=current_age,
+        target_retirement_age=retirement_age,
+        target_monthly_income=target_monthly_income if target_monthly_income > 0 else None,
+        last_simulation_date=last_simulation_date,
+        total_portfolio_value=round(total_value, 2),
+        projected_value_at_retirement=round(projected_value_at_retirement, 2) if projected_value_at_retirement else None,
+        conservative_value_at_retirement=round(conservative_value_at_retirement, 2) if conservative_value_at_retirement else None,
+        simulation_required=simulation_required,
     )

@@ -17,11 +17,14 @@ docker compose --profile dev up portfolio-dev
 docker build -t portfolio-analyzer .
 docker run -d -p 8000:8000 -v $(pwd)/data:/app/data portfolio-analyzer
 
-# Generate demo data in container
+# Generate demo data (via UI button in Settings, or CLI)
 docker exec -it portfolio-analyzer python scripts/generate_demo.py
 
 # Run in demo mode
 docker run -d -p 8000:8000 -e PORTFOLIO_DEMO_MODE=true portfolio-analyzer
+
+# Demo data can also be generated via API:
+# POST http://localhost:8000/api/settings/demo/generate
 
 # Rebuild after code changes (production mode)
 docker compose down && docker compose build && docker compose up -d
@@ -154,12 +157,13 @@ Custom types: `custom:{user_name}` (e.g., "custom:Kids College Fund")
 
 ```python
 class PositionType(str, Enum):
-    EQUITY = "equity"      # Individual stocks
-    FUND = "fund"          # ETFs, mutual funds
-    CASH = "cash"          # Uninvested cash
-    CD = "cd"              # Certificate of Deposit
-    BOND = "bond"          # Individual bonds
-    TREASURY = "treasury"  # T-bills, I-bonds
+    EQUITY = "equity"           # Individual stocks
+    FUND = "fund"               # ETFs, mutual funds
+    CASH = "cash"               # Uninvested cash
+    CD = "cd"                   # Certificate of Deposit
+    BOND = "bond"               # Individual bonds
+    TREASURY = "treasury"       # T-bills, I-bonds
+    REAL_ESTATE = "real_estate" # Property (home, rental, land)
 ```
 
 ### Trigger Condition Types
@@ -188,6 +192,7 @@ CONDITION_TYPES = {
 - `POST /api/portfolio/positions/cd` - Add CD
 - `GET /api/portfolio/positions/cd/upcoming` - Upcoming maturities
 - `POST /api/portfolio/positions/cd/check-maturities` - Convert matured CDs
+- `POST /api/portfolio/positions/real-estate` - Add real estate property
 
 ### Analysis
 - `GET /api/analysis/performance` - Returns, alpha
@@ -204,6 +209,12 @@ CONDITION_TYPES = {
 - `POST /api/projections/fire` - FIRE calculation
 - `POST /api/projections/withdrawal-table` - Year-by-year table
 - `GET /api/projections/withdrawal-comparison` - Compare rates
+
+### Settings & Demo
+- `GET /api/settings/config` - Get full configuration
+- `PUT /api/settings/demo-mode` - Enable/disable demo mode
+- `POST /api/settings/demo/generate` - Generate demo portfolio data
+- `GET /api/settings/api-keys/status` - Check API key configuration status
 
 ## Security
 

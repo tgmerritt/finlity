@@ -231,6 +231,50 @@ async function toggleDemoMode(enabled) {
     }
 }
 
+async function generateDemoData() {
+    const btn = document.getElementById('generate-demo-btn');
+    const textSpan = document.getElementById('generate-demo-text');
+    const spinner = document.getElementById('generate-demo-spinner');
+    const resultSpan = document.getElementById('generate-demo-result');
+
+    // Disable button and show spinner
+    btn.disabled = true;
+    textSpan.textContent = 'Generating...';
+    spinner.style.display = 'inline-block';
+    resultSpan.textContent = '';
+    resultSpan.className = '';
+
+    try {
+        const response = await fetch(`${API_BASE}/api/settings/demo/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            resultSpan.textContent = `✓ Created ${data.positions_created} positions worth $${data.total_value.toLocaleString()}`;
+            resultSpan.style.color = 'var(--color-success)';
+            showToast('Demo data generated successfully!', 'success');
+        } else {
+            resultSpan.textContent = `✗ ${data.error || 'Generation failed'}`;
+            resultSpan.style.color = 'var(--color-danger)';
+            showToast(`Failed to generate demo data: ${data.error}`, 'error');
+            console.error('Demo generation error:', data);
+        }
+    } catch (error) {
+        console.error('Error generating demo data:', error);
+        resultSpan.textContent = '✗ Network error';
+        resultSpan.style.color = 'var(--color-danger)';
+        showToast('Failed to generate demo data', 'error');
+    } finally {
+        // Re-enable button
+        btn.disabled = false;
+        textSpan.textContent = 'Generate Demo Data';
+        spinner.style.display = 'none';
+    }
+}
+
 // Tab navigation
 function showTab(tabName) {
     // Hide all tabs
@@ -263,9 +307,15 @@ function showTab(tabName) {
     };
     document.getElementById('page-title').textContent = titles[tabName] || tabName;
 
-    // Load tab-specific data
-    if (tabName === 'analysis') {
+    // Load tab-specific data - always refresh to ensure current data
+    if (tabName === 'dashboard') {
+        refreshData();
+    } else if (tabName === 'holdings') {
+        refreshData();
+    } else if (tabName === 'analysis') {
         loadAnalysisData();
+    } else if (tabName === 'projections') {
+        loadProjectionsSettings();
     } else if (tabName === 'settings') {
         loadSettings();
         loadProfilesForSettings();
@@ -1585,11 +1635,139 @@ async function refreshData() {
         // Check for duplicate positions
         await checkForDuplicates();
 
+        // Load retirement metrics for dashboard row 2
+        await loadRetirementMetrics();
+
     } catch (error) {
         console.error('Error loading data:', error);
         showToast('Failed to load portfolio data', 'error');
     } finally {
         hideLoading();
+    }
+}
+
+async function loadRetirementMetrics() {
+    try {
+        const response = await fetch(`${API_BASE}/api/portfolio/dashboard-metrics`);
+        if (!response.ok) return;
+
+        const metrics = await response.json();
+        const needsSimulation = metrics.simulation_required;
+
+        // Update Monthly Retirement Income (based on projected value at retirement)
+        const monthlyIncomeEl = document.getElementById('monthly-retirement-income');
+        const withdrawalLabel = document.getElementById('withdrawal-rate-label');
+        if (monthlyIncomeEl) {
+            if (metrics.monthly_retirement_income !== null) {
+                monthlyIncomeEl.textContent = formatCurrency(metrics.monthly_retirement_income);
+                if (withdrawalLabel) {
+                    withdrawalLabel.textContent = `at ${metrics.withdrawal_rate}% of projected portfolio`;
+                }
+            } else {
+                monthlyIncomeEl.textContent = '--';
+                if (withdrawalLabel) {
+                    withdrawalLabel.textContent = 'Run Monte Carlo simulation';
+                }
+            }
+        }
+
+        // Update Success Probability
+        const successProbEl = document.getElementById('success-probability');
+        const successSublabel = document.getElementById('success-sublabel');
+        if (successProbEl) {
+            if (metrics.success_probability !== null) {
+                successProbEl.textContent = `${metrics.success_probability}%`;
+                successProbEl.classList.remove('positive', 'negative');
+                successProbEl.classList.add(metrics.success_probability >= 80 ? 'positive' : (metrics.success_probability < 50 ? 'negative' : ''));
+                if (successSublabel) {
+                    successSublabel.textContent = `of not running out by age 90`;
+                }
+            } else {
+                successProbEl.textContent = '--';
+                successProbEl.classList.remove('positive', 'negative');
+                if (successSublabel) {
+                    successSublabel.textContent = 'Run Monte Carlo simulation';
+                }
+            }
+        }
+
+        // Update Earliest Retirement Age
+        const retireAgeEl = document.getElementById('earliest-retirement-age');
+        const retireSublabel = document.getElementById('retire-sublabel');
+        if (retireAgeEl) {
+            if (metrics.earliest_retirement_age !== null) {
+                retireAgeEl.textContent = `Age ${metrics.earliest_retirement_age}`;
+                if (retireSublabel) {
+                    retireSublabel.textContent = 'with 80%+ success rate';
+                }
+            } else {
+                retireAgeEl.textContent = '--';
+                if (retireSublabel) {
+                    retireSublabel.textContent = 'Run Monte Carlo simulation';
+                }
+            }
+        }
+
+        // Update FIRE Number
+        const fireNumberEl = document.getElementById('fire-number');
+        const fireSublabel = document.getElementById('fire-sublabel');
+        if (fireNumberEl) {
+            if (metrics.fire_number !== null) {
+                fireNumberEl.textContent = formatCurrency(metrics.fire_number);
+                if (fireSublabel) {
+                    if (metrics.target_monthly_income) {
+                        fireSublabel.textContent = `for $${formatNumber(metrics.target_monthly_income)}/mo target`;
+                    } else {
+                        fireSublabel.textContent = `projected at age ${metrics.target_retirement_age}`;
+                    }
+                }
+            } else {
+                fireNumberEl.textContent = '--';
+                if (fireSublabel) {
+                    fireSublabel.textContent = 'Run Monte Carlo simulation';
+                }
+            }
+        }
+
+    } catch (error) {
+        console.error('Error loading retirement metrics:', error);
+    }
+}
+
+async function loadProjectionsSettings() {
+    try {
+        // Fetch personal settings to populate the projections form
+        const response = await fetch(`${API_BASE}/api/settings/config`);
+        const config = await response.json();
+
+        if (config.personal) {
+            // Calculate current age from DOB
+            const dobStr = config.personal.dob;
+            if (dobStr) {
+                const dob = new Date(dobStr);
+                const today = new Date();
+                let age = today.getFullYear() - dob.getFullYear();
+                const monthDiff = today.getMonth() - dob.getMonth();
+                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+                    age--;
+                }
+                const currentAgeEl = document.getElementById('current-age');
+                if (currentAgeEl) {
+                    currentAgeEl.value = age;
+                }
+            }
+
+            // Set retirement age from personal settings
+            const retirementAge = config.personal.retirement_age;
+            if (retirementAge) {
+                const retireAgeEl = document.getElementById('retirement-age');
+                if (retireAgeEl) {
+                    retireAgeEl.value = retirementAge;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading projections settings:', error);
     }
 }
 
@@ -3167,6 +3345,8 @@ async function loadSettings() {
         if (config.personal) {
             document.getElementById('settings-dob').value = config.personal.dob || '';
             document.getElementById('settings-retirement-age').value = config.personal.retirement_age || 65;
+            document.getElementById('settings-withdrawal-rate').value = config.personal.withdrawal_rate || 4;
+            document.getElementById('settings-target-income').value = config.personal.target_monthly_income || 0;
         }
 
         // Asset class targets
@@ -3696,9 +3876,18 @@ async function checkApiKeyStatus() {
 async function savePersonalSettings(event) {
     event.preventDefault();
 
+    // Validate withdrawal rate (1-100)
+    const withdrawalRate = parseInt(document.getElementById('settings-withdrawal-rate').value);
+    if (isNaN(withdrawalRate) || withdrawalRate < 1 || withdrawalRate > 100) {
+        showToast('Withdrawal rate must be between 1 and 100', 'error');
+        return;
+    }
+
     const data = {
         dob: document.getElementById('settings-dob').value,
-        retirement_age: parseInt(document.getElementById('settings-retirement-age').value)
+        retirement_age: parseInt(document.getElementById('settings-retirement-age').value),
+        withdrawal_rate: withdrawalRate,
+        target_monthly_income: parseFloat(document.getElementById('settings-target-income').value) || 0
     };
 
     try {
@@ -3708,6 +3897,8 @@ async function savePersonalSettings(event) {
             body: JSON.stringify(data)
         });
         showToast('Personal settings saved', 'success');
+        // Refresh dashboard metrics to reflect new withdrawal rate
+        await loadRetirementMetrics();
     } catch (error) {
         showToast('Failed to save settings', 'error');
     }
@@ -4042,6 +4233,8 @@ function togglePositionTypeFields() {
         posType === 'cash' ? 'block' : 'none';
     document.getElementById('cd-fields').style.display =
         posType === 'cd' ? 'block' : 'none';
+    document.getElementById('real-estate-fields').style.display =
+        posType === 'real_estate' ? 'block' : 'none';
 }
 
 async function loadAccountsForSelect() {
@@ -4191,6 +4384,33 @@ async function addManualPosition(event) {
                     interest_rate: rate,
                     maturity_date: maturity
                 })
+            });
+        } else if (posType === 'real_estate') {
+            // Add real estate position
+            const name = document.getElementById('re-name').value.trim();
+            const currentValue = parseFloat(document.getElementById('re-value').value);
+            const costBasis = parseFloat(document.getElementById('re-cost').value);
+            const purchaseDate = document.getElementById('re-purchase-date').value || null;
+
+            if (!name || !currentValue || !costBasis) {
+                showToast('Please fill in property name, current value, and cost basis', 'error');
+                return;
+            }
+
+            const reData = {
+                account_id: accountId,
+                name: name,
+                current_value: currentValue,
+                cost_basis: costBasis
+            };
+            if (purchaseDate) {
+                reData.purchase_date = purchaseDate;
+            }
+
+            response = await fetch(`${API_BASE}/api/portfolio/positions/real-estate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(reData)
             });
         } else {
             // Add stock/fund position

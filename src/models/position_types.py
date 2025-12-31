@@ -6,12 +6,13 @@ from enum import Enum
 class PositionType(str, Enum):
     """Types of positions that can be held in an account."""
 
-    EQUITY = "equity"      # Individual stocks
-    FUND = "fund"          # ETFs, mutual funds
-    CASH = "cash"          # Uninvested cash
-    CD = "cd"              # Certificate of Deposit
-    BOND = "bond"          # Individual bonds
-    TREASURY = "treasury"  # T-bills, I-bonds, etc.
+    EQUITY = "equity"           # Individual stocks
+    FUND = "fund"               # ETFs, mutual funds
+    CASH = "cash"               # Uninvested cash
+    CD = "cd"                   # Certificate of Deposit
+    BOND = "bond"               # Individual bonds
+    TREASURY = "treasury"       # T-bills, I-bonds, etc.
+    REAL_ESTATE = "real_estate" # Property (home, rental, land)
 
 
 class AssetClass(str, Enum):
@@ -31,6 +32,7 @@ POSITION_TYPE_TO_ASSET_CLASS = {
     PositionType.CD: AssetClass.FIXED_INCOME,
     PositionType.BOND: AssetClass.FIXED_INCOME,
     PositionType.TREASURY: AssetClass.FIXED_INCOME,
+    PositionType.REAL_ESTATE: AssetClass.ALTERNATIVE,
 }
 
 
@@ -55,3 +57,8 @@ def is_fixed_income(position_type: str) -> bool:
         PositionType.BOND.value,
         PositionType.TREASURY.value,
     }
+
+
+def is_real_estate(position_type: str) -> bool:
+    """Check if a position type is real estate."""
+    return position_type == PositionType.REAL_ESTATE.value

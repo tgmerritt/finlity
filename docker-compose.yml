@@ -7,8 +7,8 @@ services:
     volumes:
       # Persist data directory
       - ./data:/app/data
-      # Optional: mount custom config
-      # - ./config.yaml:/app/config.yaml:ro
+      # Persist config file (settings are saved here)
+      - ./config.yaml:/app/config.yaml
     env_file:
       # Load API keys from .env file (create from .env.example)
       - path: .env

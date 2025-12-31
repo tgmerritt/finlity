@@ -259,9 +259,10 @@ def get_correlation(
         )
 
     analyzer = CorrelationAnalyzer()
-    matrix = analyzer.get_correlation_matrix(tickers[:20])  # Limit to top 20
+    # Use calculate_correlation_matrix which takes portfolio object
+    corr_result = analyzer.calculate_correlation_matrix(portfolio, period="1y", min_weight=0.01)
 
-    if matrix is None or matrix.empty:
+    if corr_result is None:
         return CorrelationResponse(
             tickers=tickers[:20],
             matrix=[],
@@ -270,8 +271,8 @@ def get_correlation(
         )
 
     # Convert to response format
-    matrix_list = matrix.values.tolist()
-    tickers_in_matrix = matrix.columns.tolist()
+    matrix_list = corr_result.matrix
+    tickers_in_matrix = corr_result.tickers
 
     # Find high and low correlations
     high_corr = []
@@ -280,7 +281,7 @@ def get_correlation(
     for i, t1 in enumerate(tickers_in_matrix):
         for j, t2 in enumerate(tickers_in_matrix):
             if i < j:  # Only upper triangle
-                corr = matrix.iloc[i, j]
+                corr = matrix_list[i][j]
                 entry = CorrelationEntry(ticker1=t1, ticker2=t2, correlation=round(corr, 3))
                 if corr > 0.7:
                     high_corr.append(entry)

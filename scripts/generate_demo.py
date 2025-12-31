@@ -5,23 +5,26 @@ Generate demo portfolio data for demonstration purposes.
 This script creates a realistic fake portfolio with:
 - Multiple account types (401k, IRA, taxable, HSA, 529)
 - ~50 diversified positions across various asset classes
-- Real current prices fetched via yfinance
+- Real current prices fetched via multiple APIs with fallbacks
 - CDs and cash with APY
 
 Usage:
     python scripts/generate_demo.py
+
+Can also be triggered via API: POST /api/demo/generate
 """
 
+import os
 import random
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Optional
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import yaml
-import yfinance as yf
 
 from src.database import Database
 from src.database.models import Account, Position
@@ -149,51 +152,73 @@ DEMO_CASH = [
     ("HYSA Cash Reserve", 12000, 0.0485),
 ]
 
+# Fallback prices (approximate recent prices as of late 2024)
+# Used if all API sources fail
+FALLBACK_PRICES = {
+    "VTI": 290.00, "VOO": 540.00, "SWPPX": 85.00, "FXAIX": 200.00,
+    "QQQ": 520.00, "VGT": 600.00, "ARKK": 55.00,
+    "VXF": 175.00, "IJR": 115.00, "VB": 225.00,
+    "VXUS": 62.00, "VEA": 50.00, "EFA": 82.00,
+    "VWO": 45.00, "IEMG": 55.00,
+    "BND": 72.00, "VGIT": 60.00, "VTIP": 50.00, "AGG": 98.00,
+    "VNQ": 95.00, "SCHH": 22.00,
+    "VYM": 125.00, "SCHD": 82.00, "VTV": 165.00,
+    "AAPL": 250.00, "MSFT": 430.00, "GOOGL": 190.00, "NVDA": 140.00,
+    "META": 600.00, "AMZN": 225.00,
+    "JNJ": 145.00, "UNH": 590.00, "LLY": 790.00,
+    "JPM": 245.00, "V": 315.00, "BRK-B": 465.00,
+    "COST": 950.00, "HD": 410.00,
+    "CAT": 390.00, "XOM": 110.00,
+    "SGOV": 100.50, "BIL": 91.70, "SHV": 110.00,
+}
 
-def fetch_prices(tickers: list[str]) -> dict[str, float]:
-    """Fetch current prices for tickers using yfinance."""
+
+def fetch_prices_with_service(tickers: list[str]) -> dict[str, float]:
+    """Fetch current prices using PriceService with multiple fallbacks."""
+    from src.data.prices import PriceService
+
     print(f"Fetching prices for {len(tickers)} tickers...")
     prices = {}
+    failed = []
 
-    # Batch fetch for efficiency
-    try:
-        data = yf.download(tickers, period="1d", progress=False)
-        if "Close" in data.columns:
-            # Multiple tickers
-            for ticker in tickers:
-                if ticker in data["Close"].columns:
-                    price = data["Close"][ticker].iloc[-1]
-                    if not pd.isna(price):
-                        prices[ticker] = float(price)
-        else:
-            # Single ticker fallback
-            for ticker in tickers:
-                try:
-                    t = yf.Ticker(ticker)
-                    info = t.info
-                    price = info.get("regularMarketPrice") or info.get("previousClose")
-                    if price:
-                        prices[ticker] = float(price)
-                except Exception as e:
-                    print(f"  Warning: Could not fetch {ticker}: {e}")
-    except Exception as e:
-        print(f"Batch fetch failed: {e}, trying individual...")
-        for ticker in tickers:
-            try:
-                t = yf.Ticker(ticker)
-                info = t.info
-                price = info.get("regularMarketPrice") or info.get("previousClose")
-                if price:
-                    prices[ticker] = float(price)
-            except Exception as e:
-                print(f"  Warning: Could not fetch {ticker}: {e}")
+    # Initialize price service
+    price_service = PriceService()
 
-    print(f"  Got prices for {len(prices)} tickers")
+    for ticker in tickers:
+        try:
+            price_data = price_service.get_current_price(ticker)
+            if price_data and price_data.current_price > 0:
+                prices[ticker] = price_data.current_price
+                print(f"  {ticker}: ${price_data.current_price:.2f}")
+            else:
+                failed.append(ticker)
+        except Exception as e:
+            print(f"  Failed to get {ticker}: {e}")
+            failed.append(ticker)
+
+    # Use fallback prices for any failures
+    if failed:
+        print(f"\nUsing fallback prices for {len(failed)} tickers...")
+        for ticker in failed:
+            if ticker in FALLBACK_PRICES:
+                prices[ticker] = FALLBACK_PRICES[ticker]
+                print(f"  {ticker}: ${FALLBACK_PRICES[ticker]:.2f} (fallback)")
+            else:
+                print(f"  {ticker}: No fallback price available")
+
+    print(f"\nGot prices for {len(prices)}/{len(tickers)} tickers")
     return prices
 
 
-def generate_demo_data():
-    """Generate demo portfolio data."""
+def generate_demo_data(db_path: Optional[str] = None) -> dict:
+    """Generate demo portfolio data.
+
+    Args:
+        db_path: Optional path to demo database. If not provided, reads from config.
+
+    Returns:
+        dict with generation results
+    """
     print("\n" + "=" * 50)
     print("DEMO DATA GENERATOR")
     print("=" * 50)
@@ -202,25 +227,25 @@ def generate_demo_data():
     demo_dir = Path("data/demo")
     demo_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load config to get demo db path
-    config_path = Path("config.yaml")
-    if config_path.exists():
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
-    else:
-        config = {}
-
-    demo_db_path = config.get("demo", {}).get("database", "data/demo/demo.db")
+    # Load config to get demo db path if not provided
+    if not db_path:
+        config_path = Path("config.yaml")
+        if config_path.exists():
+            with open(config_path) as f:
+                config = yaml.safe_load(f)
+        else:
+            config = {}
+        db_path = config.get("demo", {}).get("database", "data/demo/demo.db")
 
     # Delete existing demo db if exists
-    db_file = Path(demo_db_path)
+    db_file = Path(db_path)
     if db_file.exists():
-        print(f"\nRemoving existing demo database: {demo_db_path}")
+        print(f"\nRemoving existing demo database: {db_path}")
         db_file.unlink()
 
     # Initialize demo database
-    print(f"Creating demo database: {demo_db_path}")
-    db = Database(demo_db_path)
+    print(f"Creating demo database: {db_path}")
+    db = Database(db_path)
 
     # Create accounts
     print("\nCreating demo accounts...")
@@ -238,15 +263,16 @@ def generate_demo_data():
             accounts[acc_data["name"]] = account.id
         print(f"  Created: {acc_data['name']} ({acc_data['account_type']})")
 
-    # Fetch real prices
+    # Fetch real prices using PriceService
     tickers = [pos[0] for pos in DEMO_POSITIONS]
-    prices = fetch_prices(tickers)
+    prices = fetch_prices_with_service(tickers)
 
     # Assign positions to accounts strategically
     account_names = list(accounts.keys())
     print("\nCreating positions...")
 
     total_value = 0
+    positions_created = 0
 
     for ticker, name, is_fund, pos_type, value_range in DEMO_POSITIONS:
         if ticker not in prices:
@@ -286,6 +312,7 @@ def generate_demo_data():
             session.commit()
 
         total_value += actual_value
+        positions_created += 1
         print(f"  {ticker}: {shares:.4f} shares @ ${price:.2f} = ${actual_value:,.0f}")
 
     # Add CDs to various accounts
@@ -351,18 +378,29 @@ def generate_demo_data():
     print("\nTaking portfolio snapshot...")
     snapshot = db.take_snapshot()
 
+    result = {
+        "success": True,
+        "database": str(db_path),
+        "accounts_created": len(accounts),
+        "positions_created": positions_created,
+        "total_value": total_value,
+        "message": f"Demo data generated successfully with {positions_created} positions worth ${total_value:,.0f}",
+    }
+
     print(f"\n{'=' * 50}")
     print(f"DEMO DATA GENERATION COMPLETE")
     print(f"{'=' * 50}")
-    print(f"\nDatabase: {demo_db_path}")
+    print(f"\nDatabase: {db_path}")
     print(f"Accounts: {len(accounts)}")
+    print(f"Positions: {positions_created}")
     print(f"Total Portfolio Value: ${total_value:,.0f}")
     print(f"\nTo use demo mode, either:")
     print(f"  1. Run: python -m src.main --demo")
     print(f"  2. Or set 'demo.enabled: true' in config.yaml")
     print()
 
+    return result
+
 
 if __name__ == "__main__":
-    import pandas as pd  # Import here to check availability
     generate_demo_data()

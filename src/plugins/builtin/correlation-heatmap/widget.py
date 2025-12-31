@@ -2,149 +2,65 @@
 Correlation Heatmap Widget Plugin.
 
 Displays an interactive correlation matrix showing relationships
-between portfolio holdings based on asset class and sector.
+between portfolio holdings based on actual price history correlations.
 """
 
-from typing import Any
+from typing import Any, Optional
 
 from src.plugins.base import WidgetPlugin, WidgetContent, PluginManifest
-
-
-# Known correlations between asset classes (approximate historical values)
-ASSET_CLASS_CORRELATIONS = {
-    ("stocks", "stocks"): 1.0,
-    ("stocks", "bonds"): 0.2,
-    ("stocks", "real_estate"): 0.65,
-    ("stocks", "commodities"): 0.4,
-    ("stocks", "cash"): 0.0,
-    ("stocks", "crypto"): 0.5,
-    ("bonds", "bonds"): 1.0,
-    ("bonds", "real_estate"): 0.3,
-    ("bonds", "commodities"): 0.1,
-    ("bonds", "cash"): 0.1,
-    ("bonds", "crypto"): 0.1,
-    ("real_estate", "real_estate"): 1.0,
-    ("real_estate", "commodities"): 0.35,
-    ("real_estate", "cash"): 0.0,
-    ("real_estate", "crypto"): 0.3,
-    ("commodities", "commodities"): 1.0,
-    ("commodities", "cash"): 0.0,
-    ("commodities", "crypto"): 0.4,
-    ("cash", "cash"): 1.0,
-    ("cash", "crypto"): 0.0,
-    ("crypto", "crypto"): 1.0,
-}
-
-# Known correlations between sectors (approximate)
-SECTOR_CORRELATIONS = {
-    ("technology", "technology"): 1.0,
-    ("technology", "healthcare"): 0.5,
-    ("technology", "financials"): 0.6,
-    ("technology", "consumer"): 0.65,
-    ("technology", "industrials"): 0.55,
-    ("technology", "energy"): 0.3,
-    ("technology", "utilities"): 0.2,
-    ("technology", "real_estate"): 0.4,
-    ("healthcare", "healthcare"): 1.0,
-    ("healthcare", "financials"): 0.5,
-    ("healthcare", "consumer"): 0.55,
-    ("healthcare", "industrials"): 0.5,
-    ("healthcare", "energy"): 0.3,
-    ("healthcare", "utilities"): 0.35,
-    ("healthcare", "real_estate"): 0.4,
-    ("financials", "financials"): 1.0,
-    ("financials", "consumer"): 0.6,
-    ("financials", "industrials"): 0.65,
-    ("financials", "energy"): 0.5,
-    ("financials", "utilities"): 0.4,
-    ("financials", "real_estate"): 0.55,
-    ("consumer", "consumer"): 1.0,
-    ("consumer", "industrials"): 0.6,
-    ("consumer", "energy"): 0.4,
-    ("consumer", "utilities"): 0.35,
-    ("consumer", "real_estate"): 0.5,
-    ("industrials", "industrials"): 1.0,
-    ("industrials", "energy"): 0.55,
-    ("industrials", "utilities"): 0.45,
-    ("industrials", "real_estate"): 0.5,
-    ("energy", "energy"): 1.0,
-    ("energy", "utilities"): 0.5,
-    ("energy", "real_estate"): 0.35,
-    ("utilities", "utilities"): 1.0,
-    ("utilities", "real_estate"): 0.4,
-    ("real_estate", "real_estate"): 1.0,
-}
-
-
-def get_correlation(asset1: str, asset2: str, correlation_map: dict) -> float:
-    """Get correlation between two assets from correlation map."""
-    key1 = (asset1.lower(), asset2.lower())
-    key2 = (asset2.lower(), asset1.lower())
-    return correlation_map.get(key1, correlation_map.get(key2, 0.5))
+from src.data import PriceService
 
 
 class CorrelationHeatmapWidget(WidgetPlugin):
     """Widget showing correlation heatmap of portfolio holdings."""
 
+    def __init__(self, manifest: Optional[PluginManifest] = None):
+        super().__init__(manifest)
+        self._price_service = None
+
+    @property
+    def price_service(self) -> PriceService:
+        """Lazy-load price service."""
+        if self._price_service is None:
+            self._price_service = PriceService()
+        return self._price_service
+
     def render(self, positions: list[dict], accounts: list[dict]) -> WidgetContent:
         """Render the correlation heatmap widget."""
         min_positions = self.get_setting("min_positions", 2)
         show_values = self.get_setting("show_values", True)
+        max_positions = self.get_setting("max_positions", 20)
 
-        # Filter to positions with values
-        valid_positions = [
-            p for p in positions
-            if p.get("current_price") and p.get("shares")
-        ]
+        # Filter to positions with values and aggregate by ticker
+        ticker_values = {}
+        for p in positions:
+            if p.get("current_price") and p.get("shares"):
+                ticker = p.get("ticker", "Unknown")
+                value = p.get("current_price", 0) * p.get("shares", 0)
+                ticker_values[ticker] = ticker_values.get(ticker, 0) + value
 
-        if len(valid_positions) < min_positions:
+        if len(ticker_values) < min_positions:
             return WidgetContent(
                 html=f"""
                 <div class="widget-empty">
                     <p>Need at least {min_positions} positions with prices to show correlation.</p>
                 </div>
                 """,
-                data={"positions_count": len(valid_positions)},
+                data={"positions_count": len(ticker_values)},
             )
 
-        # Build correlation data
-        tickers = []
-        sectors = {}
-        asset_classes = {}
+        # Sort by value and take top positions
+        sorted_tickers = sorted(ticker_values.items(), key=lambda x: x[1], reverse=True)
+        tickers = [t[0] for t in sorted_tickers[:max_positions]]
 
-        for pos in valid_positions:
-            ticker = pos.get("ticker", "Unknown")
-            if ticker not in tickers:
-                tickers.append(ticker)
-                sectors[ticker] = pos.get("sector", "other").lower()
-                asset_classes[ticker] = self._get_asset_class(pos)
+        # Calculate real correlation matrix from price history
+        matrix = self._calculate_price_correlations(tickers)
 
-        # Calculate correlation matrix
+        if matrix is None:
+            # Fallback to sector-based if price data unavailable
+            matrix = self._calculate_sector_correlations(tickers, positions)
+
         n = len(tickers)
-        matrix = []
-
-        for i, ticker1 in enumerate(tickers):
-            row = []
-            for j, ticker2 in enumerate(tickers):
-                if i == j:
-                    correlation = 1.0
-                else:
-                    # Use sector correlation if same asset class
-                    if asset_classes[ticker1] == asset_classes[ticker2]:
-                        sector1 = sectors[ticker1]
-                        sector2 = sectors[ticker2]
-                        correlation = get_correlation(
-                            sector1, sector2, SECTOR_CORRELATIONS
-                        )
-                    else:
-                        # Use asset class correlation
-                        correlation = get_correlation(
-                            asset_classes[ticker1],
-                            asset_classes[ticker2],
-                            ASSET_CLASS_CORRELATIONS,
-                        )
-                row.append(round(correlation, 2))
-            matrix.append(row)
 
         # Calculate portfolio-level metrics
         avg_correlation = 0
@@ -188,33 +104,140 @@ class CorrelationHeatmapWidget(WidgetPlugin):
             styles=[],
         )
 
-    def _get_asset_class(self, position: dict) -> str:
-        """Determine asset class for a position."""
-        asset_class = position.get("asset_class", "").lower()
-        if asset_class:
-            return asset_class
+    def _calculate_price_correlations(self, tickers: list[str]) -> Optional[list[list[float]]]:
+        """Calculate actual correlations from price history."""
+        import pandas as pd
+        import numpy as np
 
-        ticker = position.get("ticker", "").upper()
-        is_fund = position.get("is_fund", False)
+        # Fetch price history for each ticker
+        returns_data = {}
+        for ticker in tickers:
+            try:
+                history = self.price_service.get_price_history(ticker, "1y")
+                if history and len(history.returns) > 20:
+                    returns_data[ticker] = history.returns[1:]  # Skip first zero
+            except Exception:
+                pass
 
-        # Cash and CDs
-        if position.get("position_type") in ("cash", "cd"):
-            return "cash"
+        # Need at least 2 tickers with data
+        if len(returns_data) < 2:
+            return None
 
-        # Bonds
-        if "BOND" in ticker or ticker in ("BND", "AGG", "TLT", "IEF", "LQD", "HYG"):
-            return "bonds"
+        # Align data - use minimum common length
+        min_len = min(len(r) for r in returns_data.values())
+        if min_len < 20:
+            return None
 
-        # Real estate
-        if ticker in ("VNQ", "SCHH", "IYR", "XLRE") or "REIT" in ticker:
-            return "real_estate"
+        # Build DataFrame
+        df = pd.DataFrame({
+            ticker: returns[-min_len:]
+            for ticker, returns in returns_data.items()
+        })
 
-        # Commodities
-        if ticker in ("GLD", "IAU", "SLV", "USO", "DBC"):
-            return "commodities"
+        # Calculate correlation matrix
+        corr_df = df.corr()
 
-        # Default to stocks
-        return "stocks"
+        # Build matrix for all requested tickers
+        n = len(tickers)
+        matrix = []
+
+        for i, ticker1 in enumerate(tickers):
+            row = []
+            for j, ticker2 in enumerate(tickers):
+                if i == j:
+                    row.append(1.0)
+                elif ticker1 in corr_df.columns and ticker2 in corr_df.columns:
+                    corr = corr_df.loc[ticker1, ticker2]
+                    # Handle NaN
+                    if pd.isna(corr):
+                        row.append(0.5)  # Default for missing
+                    else:
+                        row.append(round(float(corr), 2))
+                else:
+                    row.append(0.5)  # No data available
+            matrix.append(row)
+
+        return matrix
+
+    def _calculate_sector_correlations(
+        self, tickers: list[str], positions: list[dict]
+    ) -> list[list[float]]:
+        """Fallback: estimate correlations based on sector."""
+        # Build sector lookup
+        sector_map = {}
+        for p in positions:
+            ticker = p.get("ticker")
+            sector = p.get("sector", "other").lower()
+            if ticker and ticker not in sector_map:
+                sector_map[ticker] = sector
+
+        # Sector correlation estimates
+        SECTOR_CORRELATIONS = {
+            ("technology", "technology"): 1.0,
+            ("technology", "healthcare"): 0.45,
+            ("technology", "financials"): 0.55,
+            ("technology", "consumer"): 0.60,
+            ("technology", "industrials"): 0.50,
+            ("technology", "energy"): 0.25,
+            ("technology", "utilities"): 0.15,
+            ("technology", "real_estate"): 0.35,
+            ("healthcare", "healthcare"): 1.0,
+            ("healthcare", "financials"): 0.45,
+            ("healthcare", "consumer"): 0.50,
+            ("healthcare", "industrials"): 0.45,
+            ("healthcare", "energy"): 0.25,
+            ("healthcare", "utilities"): 0.30,
+            ("healthcare", "real_estate"): 0.35,
+            ("financials", "financials"): 1.0,
+            ("financials", "consumer"): 0.55,
+            ("financials", "industrials"): 0.60,
+            ("financials", "energy"): 0.45,
+            ("financials", "utilities"): 0.35,
+            ("financials", "real_estate"): 0.50,
+            ("consumer", "consumer"): 1.0,
+            ("consumer", "industrials"): 0.55,
+            ("consumer", "energy"): 0.35,
+            ("consumer", "utilities"): 0.30,
+            ("consumer", "real_estate"): 0.45,
+            ("industrials", "industrials"): 1.0,
+            ("industrials", "energy"): 0.50,
+            ("industrials", "utilities"): 0.40,
+            ("industrials", "real_estate"): 0.45,
+            ("energy", "energy"): 1.0,
+            ("energy", "utilities"): 0.45,
+            ("energy", "real_estate"): 0.30,
+            ("utilities", "utilities"): 1.0,
+            ("utilities", "real_estate"): 0.35,
+            ("real_estate", "real_estate"): 1.0,
+            # Other sector defaults
+            ("other", "other"): 0.70,
+        }
+
+        def get_sector_corr(s1: str, s2: str) -> float:
+            if s1 == s2:
+                return 1.0 if s1 != "other" else 0.70
+            key1 = (s1, s2)
+            key2 = (s2, s1)
+            # For "other" sector, use moderate correlation
+            if s1 == "other" or s2 == "other":
+                return 0.55
+            return SECTOR_CORRELATIONS.get(key1, SECTOR_CORRELATIONS.get(key2, 0.55))
+
+        n = len(tickers)
+        matrix = []
+
+        for i, ticker1 in enumerate(tickers):
+            row = []
+            sector1 = sector_map.get(ticker1, "other")
+            for j, ticker2 in enumerate(tickers):
+                if i == j:
+                    row.append(1.0)
+                else:
+                    sector2 = sector_map.get(ticker2, "other")
+                    row.append(round(get_sector_corr(sector1, sector2), 2))
+            matrix.append(row)
+
+        return matrix
 
     def _generate_html(
         self,
@@ -265,9 +288,9 @@ class CorrelationHeatmapWidget(WidgetPlugin):
                 </table>
             </div>
             <div class="correlation-legend">
-                <span class="legend-label">Low</span>
+                <span class="legend-label">Low (-1)</span>
                 <div class="legend-gradient"></div>
-                <span class="legend-label">High</span>
+                <span class="legend-label">High (+1)</span>
             </div>
         </div>
         """
@@ -275,8 +298,17 @@ class CorrelationHeatmapWidget(WidgetPlugin):
 
     def _get_cell_color(self, correlation: float) -> str:
         """Get background color for correlation value."""
-        # Green (low) to Yellow (medium) to Red (high)
-        if correlation <= 0.5:
+        # Handle negative correlations: blue
+        # Low positive: green
+        # High positive: red
+        if correlation < 0:
+            # Blue for negative correlation
+            intensity = min(1.0, abs(correlation))
+            r = int(100 * (1 - intensity))
+            g = int(150 * (1 - intensity))
+            b = int(200 + 55 * intensity)
+            return f"rgba({r}, {g}, {b}, 0.7)"
+        elif correlation <= 0.5:
             # Green to Yellow
             r = int(255 * (correlation * 2))
             g = 200
@@ -297,5 +329,5 @@ class CorrelationHeatmapWidget(WidgetPlugin):
             "version": self.version,
             "type": "widget",
             "title": config.title if config else "Correlation Heatmap",
-            "description": "Shows correlation between portfolio holdings",
+            "description": "Shows correlation between portfolio holdings based on price history",
         }

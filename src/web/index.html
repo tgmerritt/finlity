@@ -253,6 +253,63 @@
                     </div>
                 </section>
 
+                <!-- Retirement Planning Metrics (Row 2) -->
+                <section class="stats-row retirement-metrics">
+                    <div class="stat-card">
+                        <div class="stat-icon teal">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M12 6v6l4 2"></path>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Monthly Retirement Income</span>
+                            <span class="stat-value" id="monthly-retirement-income">--</span>
+                            <span class="stat-sublabel" id="withdrawal-rate-label">at 4% withdrawal</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Success Probability</span>
+                            <span class="stat-value" id="success-probability">--</span>
+                            <span class="stat-sublabel" id="success-sublabel">Run simulation to calculate</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon purple">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Earliest Retirement Age</span>
+                            <span class="stat-value" id="earliest-retirement-age">--</span>
+                            <span class="stat-sublabel" id="retire-sublabel">with 80%+ success rate</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon yellow">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">FIRE Number</span>
+                            <span class="stat-value" id="fire-number">--</span>
+                            <span class="stat-sublabel" id="fire-sublabel">Target portfolio value</span>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Account Totals Table -->
                 <section class="card account-totals-card">
                     <div class="card-header">
@@ -669,45 +726,39 @@
                     </div>
                 </div>
 
-                <!-- Advisor Chat -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Ask the Advisor</h3>
-                        <button class="btn btn-sm btn-default" onclick="clearAdvisorChat()">Clear Chat</button>
-                    </div>
-                    <div class="card-body">
-                        <p class="settings-description">
-                            Ask follow-up questions about funds, your portfolio allocation, or investment strategy.
-                            The advisor has context about your portfolio.
-                        </p>
-                        <div id="chat-messages" class="chat-messages">
-                            <div class="chat-placeholder">
-                                <p>Ask a question to start the conversation...</p>
-                                <p class="text-muted">Examples:</p>
-                                <ul class="text-muted">
-                                    <li>"Should I be concerned about my technology exposure?"</li>
-                                    <li>"What's the difference between VTI and VOO?"</li>
-                                    <li>"Is my portfolio too aggressive for someone my age?"</li>
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="chat-input-container">
-                            <input type="text" id="chat-input" placeholder="Type your question..." onkeypress="handleChatKeypress(event)">
-                            <button type="button" class="btn btn-primary" onclick="sendChatMessage()">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                                </svg>
-                                Send
-                            </button>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- Projections Tab -->
             <div id="tab-projections" class="tab-content">
-                <!-- Monte Carlo Form - Full Width at Top -->
+                <!-- Projection Results - At Top -->
+                <div class="card" id="projection-results" style="display: none;">
+                    <div class="card-header">
+                        <h3>Projection Results</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="chart-projection"></div>
+                        <div class="projection-stats-row">
+                            <div class="projection-stat">
+                                <span class="stat-label">Success Rate</span>
+                                <span class="stat-value" id="success-rate">-</span>
+                            </div>
+                            <div class="projection-stat">
+                                <span class="stat-label">Median Final Value</span>
+                                <span class="stat-value" id="median-final">-</span>
+                            </div>
+                            <div class="projection-stat">
+                                <span class="stat-label">Worst Case (5th %)</span>
+                                <span class="stat-value" id="worst-case">-</span>
+                            </div>
+                            <div class="projection-stat">
+                                <span class="stat-label">Best Case (95th %)</span>
+                                <span class="stat-value" id="best-case">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monte Carlo Form -->
                 <div class="card">
                     <div class="card-header">
                         <h3>Monte Carlo Retirement Projection</h3>
@@ -821,34 +872,6 @@
                     </div>
                 </div>
 
-                <!-- Projection Results - Full Width Below -->
-                <div class="card" id="projection-results" style="display: none;">
-                    <div class="card-header">
-                        <h3>Projection Results</h3>
-                    </div>
-                    <div class="card-body">
-                        <div id="chart-projection"></div>
-                        <div class="projection-stats-row">
-                            <div class="projection-stat">
-                                <span class="stat-label">Success Rate</span>
-                                <span class="stat-value" id="success-rate">-</span>
-                            </div>
-                            <div class="projection-stat">
-                                <span class="stat-label">Median Final Value</span>
-                                <span class="stat-value" id="median-final">-</span>
-                            </div>
-                            <div class="projection-stat">
-                                <span class="stat-label">Worst Case (5th %)</span>
-                                <span class="stat-value" id="worst-case">-</span>
-                            </div>
-                            <div class="projection-stat">
-                                <span class="stat-label">Best Case (95th %)</span>
-                                <span class="stat-value" id="best-case">-</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- FIRE Calculator -->
                 <div class="card">
                     <div class="card-header">
@@ -903,8 +926,24 @@
                                     <input type="date" id="settings-dob" required>
                                 </div>
                                 <div class="form-group">
-                                    <label for="settings-retirement-age">Retirement Age</label>
+                                    <label for="settings-retirement-age">Target Retirement Age</label>
                                     <input type="number" id="settings-retirement-age" min="30" max="100" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="settings-withdrawal-rate">Withdrawal Rate in Retirement</label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="settings-withdrawal-rate" min="1" max="100" step="1" value="4" required>
+                                        <span class="input-suffix">%</span>
+                                    </div>
+                                    <small class="form-hint">The 4% rule is a common guideline. Enter 1-100.</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="settings-target-income">Target Monthly Income in Retirement (optional)</label>
+                                    <div class="input-with-prefix">
+                                        <span class="input-prefix">$</span>
+                                        <input type="number" id="settings-target-income" min="0" step="100" value="0" placeholder="0">
+                                    </div>
+                                    <small class="form-hint">Leave at 0 to calculate from withdrawal rate. Set a specific target to calculate your FIRE number.</small>
                                 </div>
                                 <button type="submit" class="btn btn-primary">Save Personal Settings</button>
                             </form>
@@ -1284,8 +1323,19 @@
                                 </label>
                                 <span class="toggle-label">Demo Mode <span id="demo-mode-status" class="status-badge"></span></span>
                             </div>
+
+                            <!-- Generate Demo Data Button -->
+                            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--color-border);">
+                                <p class="settings-description" style="margin-bottom: 12px;">Generate or regenerate demo portfolio data with ~50 positions, realistic prices, and multiple account types.</p>
+                                <button type="button" id="generate-demo-btn" class="btn btn-secondary" onclick="generateDemoData()">
+                                    <span id="generate-demo-spinner" class="spinner-sm" style="display: none;"></span>
+                                    <span id="generate-demo-text">Generate Demo Data</span>
+                                </button>
+                                <span id="generate-demo-result" style="margin-left: 12px; font-size: 0.9em;"></span>
+                            </div>
+
                             <p class="settings-hint" style="margin-top: 12px; font-size: 0.85em; opacity: 0.7;">
-                                Note: Changing demo mode requires a page reload. Generate demo data first using: <code>python scripts/generate_demo.py</code>
+                                Note: Changing demo mode requires a page reload to take effect.
                             </p>
                         </div>
                     </div>
@@ -1340,6 +1390,7 @@
                             <option value="fund">Fund/ETF</option>
                             <option value="cash">Cash</option>
                             <option value="cd">Certificate of Deposit (CD)</option>
+                            <option value="real_estate">Real Estate</option>
                         </select>
                     </div>
 
@@ -1410,6 +1461,32 @@
                             <label for="cd-maturity">Maturity Date</label>
                             <input type="date" id="cd-maturity">
                         </div>
+                    </div>
+
+                    <!-- Real Estate fields -->
+                    <div id="real-estate-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="re-name">Property Name/Address</label>
+                            <input type="text" id="re-name" placeholder="e.g., Primary Residence or 123 Main St">
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="re-value">Current Market Value ($)</label>
+                                <input type="number" id="re-value" step="1" placeholder="Estimated current value">
+                            </div>
+                            <div class="form-group">
+                                <label for="re-cost">Cost Basis ($)</label>
+                                <input type="number" id="re-cost" step="1" placeholder="Purchase price + improvements">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="re-purchase-date">Purchase Date <span class="text-muted">(optional)</span></label>
+                            <input type="date" id="re-purchase-date">
+                        </div>
+                        <p class="text-muted" style="font-size: 0.85em; margin-top: 8px;">
+                            Note: This tracks property value, not net equity. To track net equity after mortgage,
+                            subtract your remaining mortgage balance from the current value.
+                        </p>
                     </div>
 
                     <div class="modal-actions">

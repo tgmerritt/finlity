@@ -128,6 +128,7 @@ def run_monte_carlo(
     Run Monte Carlo simulation for retirement projection.
 
     Returns percentile bands showing the range of possible outcomes.
+    Also saves results to database for dashboard metrics.
 
     Supports two modes:
     - Simple mode (default): Single pool of money with no tax considerations
@@ -187,6 +188,48 @@ def run_monte_carlo(
     engine = MonteCarloEngine()
     result = engine.run_projection(params, end_age=request.end_age)
 
+    # Extract projected portfolio value at retirement age
+    # The arrays are indexed by (age - current_age)
+    retirement_index = request.retirement_age - request.current_age
+    projected_value_at_retirement = None
+    conservative_value_at_retirement = None
+
+    if 0 <= retirement_index < len(result.median_values):
+        projected_value_at_retirement = result.median_values[retirement_index]
+        # Use 25th percentile as conservative estimate (roughly 1 std below median)
+        conservative_value_at_retirement = result.percentile_25[retirement_index]
+
+    # Calculate earliest retirement age (where 80%+ success rate is achievable)
+    earliest_retirement_age = None
+    if request.monthly_withdrawal > 0:
+        earliest_retirement_age = _find_earliest_retirement_age(
+            engine=engine,
+            current_age=request.current_age,
+            current_balance=current_balance,
+            monthly_contribution=request.monthly_contribution,
+            monthly_withdrawal=request.monthly_withdrawal,
+            stock_allocation=stock_alloc,
+            bond_allocation=bond_alloc,
+            end_age=request.end_age,
+            target_success_rate=0.80,
+        )
+
+    # Save results to database for dashboard metrics
+    db.save_monte_carlo_result(
+        current_age=request.current_age,
+        retirement_age=request.retirement_age,
+        portfolio_balance=current_balance,
+        success_rate=result.success_rate,
+        monthly_contribution=request.monthly_contribution,
+        monthly_withdrawal=request.monthly_withdrawal,
+        median_final_value=result.median_final_value,
+        worst_case_final=result.worst_case_final,
+        best_case_final=result.best_case_final,
+        earliest_retirement_age=earliest_retirement_age,
+        projected_value_at_retirement=projected_value_at_retirement,
+        conservative_value_at_retirement=conservative_value_at_retirement,
+    )
+
     return ProjectionResponse(
         ages=result.ages,
         median_values=result.median_values,
@@ -199,6 +242,51 @@ def run_monte_carlo(
         worst_case_final=result.worst_case_final,
         best_case_final=result.best_case_final,
     )
+
+
+def _find_earliest_retirement_age(
+    engine: MonteCarloEngine,
+    current_age: int,
+    current_balance: float,
+    monthly_contribution: float,
+    monthly_withdrawal: float,
+    stock_allocation: float,
+    bond_allocation: float,
+    end_age: int,
+    target_success_rate: float = 0.80,
+) -> Optional[int]:
+    """Find the earliest age where retirement with target success rate is achievable.
+
+    Binary search to find the youngest retirement age where success rate >= target.
+    """
+    min_age = current_age + 1
+    max_age = end_age - 5  # Need at least 5 years of retirement
+
+    best_age = None
+
+    # Binary search for earliest viable retirement age
+    while min_age <= max_age:
+        test_age = (min_age + max_age) // 2
+
+        params = ProjectionParams(
+            current_age=current_age,
+            retirement_age=test_age,
+            current_balance=current_balance,
+            monthly_contribution=monthly_contribution,
+            monthly_withdrawal=monthly_withdrawal,
+            stock_allocation=stock_allocation,
+            bond_allocation=bond_allocation,
+        )
+
+        result = engine.run_projection(params, end_age=end_age)
+
+        if result.success_rate >= target_success_rate:
+            best_age = test_age
+            max_age = test_age - 1  # Try to find earlier age
+        else:
+            min_age = test_age + 1  # Need later retirement
+
+    return best_age
 
 
 @router.post("/fire", response_model=FireResponse)

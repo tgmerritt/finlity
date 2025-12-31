@@ -1477,6 +1477,16 @@ body {
     color: var(--color-orange);
 }
 
+.stat-icon.teal {
+    background: rgba(20, 184, 166, 0.15);
+    color: #14b8a6;
+}
+
+.stat-icon.yellow {
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
+}
+
 .stat-content {
     display: flex;
     flex-direction: column;
@@ -1500,6 +1510,12 @@ body {
 
 .stat-value.negative {
     color: var(--color-error);
+}
+
+.stat-sublabel {
+    font-size: 12px;
+    color: var(--color-text-tertiary);
+    margin-top: 2px;
 }
 
 /* Cards */
@@ -1867,6 +1883,56 @@ tr:hover td {
 
 .form-group input::placeholder {
     color: var(--color-text-disabled);
+}
+
+.form-hint {
+    font-size: 12px;
+    color: var(--color-text-tertiary);
+    margin-top: 4px;
+}
+
+.input-with-suffix,
+.input-with-prefix {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.input-with-suffix input,
+.input-with-prefix input {
+    flex: 1;
+}
+
+.input-with-suffix input {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.input-with-prefix input {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+.input-suffix,
+.input-prefix {
+    padding: 8px 12px;
+    background: var(--color-bg-container);
+    border: 1px solid var(--color-border);
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+}
+
+.input-suffix {
+    border-left: none;
+    border-top-right-radius: var(--border-radius-sm);
+    border-bottom-right-radius: var(--border-radius-sm);
+}
+
+.input-prefix {
+    border-right: none;
+    border-top-left-radius: var(--border-radius-sm);
+    border-bottom-left-radius: var(--border-radius-sm);
 }
 
 .form-help {

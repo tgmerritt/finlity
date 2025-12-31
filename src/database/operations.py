@@ -19,6 +19,7 @@ from .models import (
     AppSettings,
     AllocationTrigger,
     PortfolioView,
+    MonteCarloResult,
 )
 
 
@@ -69,6 +70,18 @@ class Database:
                 for col_name, col_type in position_migrations:
                     if col_name not in existing_cols:
                         conn.execute(text(f"ALTER TABLE positions ADD COLUMN {col_name} {col_type}"))
+                        conn.commit()
+
+            # Check and add missing columns to monte_carlo_results table
+            if "monte_carlo_results" in inspector.get_table_names():
+                existing_cols = {col["name"] for col in inspector.get_columns("monte_carlo_results")}
+                mc_migrations = [
+                    ("projected_value_at_retirement", "REAL"),
+                    ("conservative_value_at_retirement", "REAL"),
+                ]
+                for col_name, col_type in mc_migrations:
+                    if col_name not in existing_cols:
+                        conn.execute(text(f"ALTER TABLE monte_carlo_results ADD COLUMN {col_name} {col_type}"))
                         conn.commit()
 
     def get_session(self) -> Session:
@@ -1095,3 +1108,56 @@ class Database:
                         ).all()
             # Return all positions if no view or empty view
             return session.query(Position).all()
+
+    # ==================== Monte Carlo Results ====================
+
+    def save_monte_carlo_result(
+        self,
+        current_age: float,
+        retirement_age: float,
+        portfolio_balance: float,
+        success_rate: float,
+        monthly_contribution: float = 0,
+        monthly_withdrawal: float = 0,
+        median_final_value: float = None,
+        worst_case_final: float = None,
+        best_case_final: float = None,
+        earliest_retirement_age: float = None,
+        projected_value_at_retirement: float = None,
+        conservative_value_at_retirement: float = None,
+    ) -> MonteCarloResult:
+        """Save a Monte Carlo simulation result."""
+        with self.get_session() as session:
+            result = MonteCarloResult(
+                current_age=current_age,
+                retirement_age=retirement_age,
+                portfolio_balance=portfolio_balance,
+                monthly_contribution=monthly_contribution,
+                monthly_withdrawal=monthly_withdrawal,
+                success_rate=success_rate,
+                median_final_value=median_final_value,
+                worst_case_final=worst_case_final,
+                best_case_final=best_case_final,
+                earliest_retirement_age=earliest_retirement_age,
+                projected_value_at_retirement=projected_value_at_retirement,
+                conservative_value_at_retirement=conservative_value_at_retirement,
+                run_date=datetime.utcnow(),
+            )
+            session.add(result)
+            session.commit()
+            session.refresh(result)
+            return result
+
+    def get_latest_monte_carlo_result(self) -> Optional[MonteCarloResult]:
+        """Get the most recent Monte Carlo simulation result."""
+        with self.get_session() as session:
+            return session.query(MonteCarloResult).order_by(
+                MonteCarloResult.run_date.desc()
+            ).first()
+
+    def get_monte_carlo_history(self, limit: int = 10) -> list[MonteCarloResult]:
+        """Get recent Monte Carlo simulation results."""
+        with self.get_session() as session:
+            return session.query(MonteCarloResult).order_by(
+                MonteCarloResult.run_date.desc()
+            ).limit(limit).all()

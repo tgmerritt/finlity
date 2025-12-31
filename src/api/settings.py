@@ -30,6 +30,8 @@ class PersonalSettings(BaseModel):
     """Personal configuration settings."""
     dob: str = Field(..., description="Date of birth (YYYY-MM-DD)")
     retirement_age: int = Field(65, ge=30, le=100, description="Target retirement age")
+    withdrawal_rate: int = Field(4, ge=1, le=100, description="Withdrawal rate in retirement (%)")
+    target_monthly_income: float = Field(0, ge=0, description="Target monthly income in retirement ($)")
 
 
 class AssetClassTargets(BaseModel):
@@ -471,3 +473,38 @@ def set_demo_mode(settings: DemoModeSettings) -> dict:
         "enabled": settings.enabled,
         "message": "Restart server for changes to take effect",
     }
+
+
+@router.post("/demo/generate")
+def generate_demo_data() -> dict:
+    """Generate demo portfolio data with realistic positions and prices.
+
+    This creates a demo database with:
+    - 6 account types (401k, IRA, taxable, HSA, 529)
+    - ~50 diversified positions across various asset classes
+    - Current prices from multiple API sources
+    - CDs and cash positions with APY
+
+    Returns status and summary of generated data.
+    """
+    import sys
+    from pathlib import Path
+
+    # Add scripts directory to path for import
+    scripts_path = Path(__file__).parent.parent.parent / "scripts"
+    if str(scripts_path) not in sys.path:
+        sys.path.insert(0, str(scripts_path))
+
+    try:
+        from scripts.generate_demo import generate_demo_data as run_generator
+
+        result = run_generator()
+        return result
+    except Exception as e:
+        import traceback
+
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }
