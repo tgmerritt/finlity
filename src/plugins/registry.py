@@ -110,11 +110,14 @@ class PluginRegistry:
         except Exception as e:
             logger.error(f"Error saving plugin settings: {e}")
 
-    def discover_plugins(self) -> list[PluginManifest]:
+    def discover_plugins(self, auto_enable_builtin: bool = True) -> list[PluginManifest]:
         """
         Discover all available plugins.
 
         Scans both builtin and installed plugin directories.
+
+        Args:
+            auto_enable_builtin: Automatically enable built-in plugins on first discovery
 
         Returns:
             List of discovered plugin manifests
@@ -122,21 +125,33 @@ class PluginRegistry:
         manifests = []
 
         # Discover builtin plugins
-        for plugin_dir in self.builtin_dir.iterdir():
-            if plugin_dir.is_dir():
-                manifest = self._load_manifest(plugin_dir, is_builtin=True)
-                if manifest:
-                    manifests.append(manifest)
+        if self.builtin_dir.exists():
+            for plugin_dir in self.builtin_dir.iterdir():
+                if plugin_dir.is_dir():
+                    manifest = self._load_manifest(plugin_dir, is_builtin=True)
+                    if manifest:
+                        manifests.append(manifest)
+                        # Auto-enable built-in plugins that aren't in enabled state yet
+                        if auto_enable_builtin and not manifest.load_error:
+                            if manifest.plugin_id not in self._enabled:
+                                self._enabled.add(manifest.plugin_id)
+                                manifest.enabled = True
+                                logger.info(f"Auto-enabled built-in plugin: {manifest.plugin_id}")
 
         # Discover installed plugins
-        for plugin_dir in self.installed_dir.iterdir():
-            if plugin_dir.is_dir():
-                manifest = self._load_manifest(plugin_dir, is_builtin=False)
-                if manifest:
-                    manifests.append(manifest)
+        if self.installed_dir.exists():
+            for plugin_dir in self.installed_dir.iterdir():
+                if plugin_dir.is_dir():
+                    manifest = self._load_manifest(plugin_dir, is_builtin=False)
+                    if manifest:
+                        manifests.append(manifest)
 
         # Update internal state
         self._manifests = {m.plugin_id: m for m in manifests}
+
+        # Save enabled state if we auto-enabled any
+        if auto_enable_builtin:
+            self._save_enabled_state()
 
         logger.info(f"Discovered {len(manifests)} plugins")
         return manifests

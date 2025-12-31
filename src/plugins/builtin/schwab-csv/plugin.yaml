@@ -1,0 +1,29 @@
+name: Schwab CSV Importer
+version: 1.0.0
+description: Import positions from Charles Schwab CSV exports
+author: Portfolio Analyzer
+license: MIT
+plugin_type: importer
+
+main: importer.py
+class: SchwabCSVImporter
+
+requires:
+  portfolio_analyzer: ">=1.0.0"
+  python: ">=3.10"
+
+dependencies:
+  - pandas>=2.0.0
+
+permissions:
+  file_read: true
+  file_write: false
+  network: false
+  database: read_only
+
+settings: []
+
+supported_formats:
+  - extension: .csv
+    mime_type: text/csv
+    description: Schwab Positions CSV Export

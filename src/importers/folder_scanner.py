@@ -1,8 +1,12 @@
-"""Folder scanner for auto-detecting and importing position files."""
+"""Folder scanner for auto-detecting and importing position files.
+
+Supports both plugin-based importers and legacy column detection.
+Plugin importers (e.g., Schwab, Fidelity) take precedence when available.
+"""
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -90,8 +94,13 @@ class PendingFile:
     account_type: str
     content_hash: str
     row_count: int
-    detected_columns: dict[str, str]  # field -> column name
+    detected_columns: dict[str, str] = field(default_factory=dict)  # field -> column name
     brokerage: str = "other"
+    # Plugin information (if a plugin can handle this file)
+    plugin_id: Optional[str] = None
+    plugin_name: Optional[str] = None
+    plugin_confidence: float = 0.0
+    use_plugin: bool = False  # True if plugin should be used instead of legacy import
 
 
 @dataclass
@@ -104,16 +113,55 @@ class ImportResult:
 
 
 class FolderScanner:
-    """Scans import folders for new position files."""
+    """Scans import folders for new position files.
+
+    Integrates with the plugin system to use brokerage-specific importers
+    when available, falling back to legacy column detection otherwise.
+    """
 
     def __init__(
         self,
         db: Database,
         import_folder: str = "data/imports",
+        use_plugins: bool = True,
     ):
         self.db = db
         self.import_folder = Path(import_folder)
         self.supported_extensions = {".csv", ".xlsx", ".xls"}
+        self.use_plugins = use_plugins
+        self._plugins_initialized = False
+
+    def _ensure_plugins_initialized(self) -> bool:
+        """Ensure plugin system is initialized. Returns True if plugins available."""
+        if not self.use_plugins:
+            return False
+
+        if self._plugins_initialized:
+            return True
+
+        try:
+            from src.plugins import get_plugin_registry, get_import_pipeline
+
+            registry = get_plugin_registry()
+            registry.discover_plugins(auto_enable_builtin=True)
+            registry.load_enabled_plugins()
+
+            self._plugins_initialized = True
+            logger.info("Plugin system initialized for imports")
+            return True
+
+        except Exception as e:
+            logger.warning(f"Could not initialize plugin system: {e}")
+            self.use_plugins = False
+            return False
+
+    def _get_import_pipeline(self):
+        """Get the import pipeline (lazy initialization)."""
+        if not self._ensure_plugins_initialized():
+            return None
+
+        from src.plugins import get_import_pipeline
+        return get_import_pipeline()
 
     def scan_for_new_files(self) -> list[PendingFile]:
         """Scan import folder for files not yet imported."""
@@ -155,8 +203,46 @@ class FolderScanner:
                     logger.debug(f"Skipping already imported: {file_path.name}")
                     continue
 
-                # Load file and detect format/columns
+                # Try plugin-based detection first
                 try:
+                    pipeline = self._get_import_pipeline()
+                    plugin_match = None
+                    content_preview = None
+
+                    if pipeline:
+                        # Read preview for plugin detection
+                        try:
+                            with open(file_path, "rb") as f:
+                                content_preview = f.read(8192)
+                        except Exception:
+                            content_preview = b""
+
+                        plugin_match = pipeline.find_best_importer(file_path, content_preview)
+
+                    if plugin_match and plugin_match.confidence >= 0.5:
+                        # Plugin can handle this file - use plugin-based import
+                        # Get row count for display purposes
+                        row_count = self._count_rows(file_path)
+
+                        pending_files.append(PendingFile(
+                            path=file_path,
+                            account_type=account_type,
+                            content_hash=content_hash,
+                            row_count=row_count,
+                            detected_columns={},  # Plugins handle their own column mapping
+                            brokerage=self._extract_brokerage_from_plugin(plugin_match.plugin_id),
+                            plugin_id=plugin_match.plugin_id,
+                            plugin_name=plugin_match.plugin.name,
+                            plugin_confidence=plugin_match.confidence,
+                            use_plugin=True,
+                        ))
+                        logger.info(
+                            f"Plugin '{plugin_match.plugin.name}' matched {file_path.name} "
+                            f"(confidence: {plugin_match.confidence:.0%})"
+                        )
+                        continue
+
+                    # Fall back to legacy column detection
                     df, brokerage = self._load_file_smart(file_path)
                     if df is None or df.empty:
                         logger.warning(f"Empty or unreadable file: {file_path.name}")
@@ -178,6 +264,7 @@ class FolderScanner:
                         row_count=len(df),
                         detected_columns=detected_columns,
                         brokerage=brokerage,
+                        use_plugin=False,
                     ))
 
                 except Exception as e:
@@ -193,6 +280,37 @@ class FolderScanner:
                 return first_line.startswith('"Positions for account')
         except Exception:
             return False
+
+    def _count_rows(self, file_path: Path) -> int:
+        """Count rows in a file (for display purposes)."""
+        try:
+            if file_path.suffix.lower() in [".xlsx", ".xls"]:
+                df = pd.read_excel(file_path, nrows=1000)
+                return len(df)
+            else:
+                # For CSV, count lines (minus header)
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    return sum(1 for _ in f) - 1
+        except Exception:
+            return 0
+
+    def _extract_brokerage_from_plugin(self, plugin_id: str) -> str:
+        """Extract brokerage name from plugin ID."""
+        plugin_lower = plugin_id.lower()
+        if "schwab" in plugin_lower:
+            return "schwab"
+        elif "fidelity" in plugin_lower:
+            return "fidelity"
+        elif "vanguard" in plugin_lower:
+            return "vanguard"
+        elif "etrade" in plugin_lower:
+            return "etrade"
+        elif "robinhood" in plugin_lower:
+            return "robinhood"
+        elif "td-ameritrade" in plugin_lower:
+            return "td_ameritrade"
+        else:
+            return "other"
 
     def _load_file_smart(self, file_path: Path) -> tuple[Optional[pd.DataFrame], str]:
         """Load file with format auto-detection. Returns (DataFrame, brokerage)."""
@@ -236,11 +354,150 @@ class FolderScanner:
         brokerage: Optional[str] = None,
         fetch_prices: bool = True,
     ) -> ImportResult:
-        """Import a pending file into the database."""
+        """Import a pending file into the database.
+
+        Uses plugin-based import if the file was matched by a plugin,
+        otherwise falls back to legacy column-based import.
+        """
         # Use detected brokerage if not overridden
         if brokerage is None:
             brokerage = pending.brokerage
 
+        # Use plugin-based import if available
+        if pending.use_plugin and pending.plugin_id:
+            return self._import_with_plugin(pending, brokerage, fetch_prices)
+
+        # Legacy import
+        return self._import_legacy(pending, brokerage, fetch_prices)
+
+    def _import_with_plugin(
+        self,
+        pending: PendingFile,
+        brokerage: str,
+        fetch_prices: bool,
+    ) -> ImportResult:
+        """Import using a plugin importer."""
+        try:
+            pipeline = self._get_import_pipeline()
+            if not pipeline:
+                return ImportResult(
+                    file_path=pending.path,
+                    success=False,
+                    positions_imported=0,
+                    error_message="Plugin system not available",
+                )
+
+            # Execute plugin import
+            from src.plugins import ImportResult as PluginImportResult
+            plugin_result = pipeline.import_file(
+                pending.path,
+                pending.account_type,
+            )
+
+            if not plugin_result.success:
+                return ImportResult(
+                    file_path=pending.path,
+                    success=False,
+                    positions_imported=0,
+                    error_message=plugin_result.message,
+                )
+
+            # Get or create account
+            account_name = plugin_result.account_name or self._generate_account_name(
+                pending.account_type, brokerage
+            )
+            account = self.db.get_or_create_account(
+                name=account_name,
+                account_type=pending.account_type,
+                brokerage=brokerage,
+            )
+
+            # Record the import
+            file_import = self.db.record_import(
+                file_name=pending.path.name,
+                file_path=str(pending.path),
+                content_hash=pending.content_hash,
+                account_type=pending.account_type,
+                row_count=len(plugin_result.positions),
+                status="pending",
+            )
+
+            # Clear existing positions
+            cleared_count = self.db.clear_account_positions(account.id)
+            if cleared_count > 0:
+                logger.info(f"Cleared {cleared_count} existing positions for {account_name}")
+
+            # Add positions from plugin result
+            positions_imported = 0
+            tickers_needing_prices = []
+
+            for pos_data in plugin_result.positions:
+                try:
+                    ticker = pos_data.get("ticker", "")
+                    shares = pos_data.get("shares", 0)
+                    name = pos_data.get("name", ticker)
+                    price = pos_data.get("price")
+                    cost_basis = pos_data.get("cost_basis")
+                    is_fund = pos_data.get("is_fund", False)
+
+                    self.db.add_position(
+                        account_id=account.id,
+                        ticker=ticker,
+                        shares=shares,
+                        name=name,
+                        cost_basis=cost_basis,
+                        current_price=price if price and price > 0 else None,
+                        is_fund=is_fund,
+                        import_id=file_import.id,
+                    )
+                    positions_imported += 1
+
+                    if not price or price <= 0:
+                        tickers_needing_prices.append(ticker)
+
+                except Exception as e:
+                    logger.warning(f"Error adding position {pos_data}: {e}")
+
+            # Fetch missing prices
+            if fetch_prices and tickers_needing_prices:
+                self._fetch_and_update_prices(list(set(tickers_needing_prices)))
+
+            # Update import status
+            with self.db.get_session() as session:
+                from src.database.models import FileImport
+                import_record = session.query(FileImport).filter_by(id=file_import.id).first()
+                if import_record:
+                    import_record.status = "completed"
+                    session.commit()
+
+            logger.info(
+                f"Plugin import complete: {positions_imported} positions from "
+                f"{pending.path.name} using {pending.plugin_name}"
+            )
+
+            return ImportResult(
+                file_path=pending.path,
+                success=True,
+                positions_imported=positions_imported,
+                error_message=None,
+            )
+
+        except Exception as e:
+            logger.exception(f"Error in plugin import for {pending.path}: {e}")
+            return ImportResult(
+                file_path=pending.path,
+                success=False,
+                positions_imported=0,
+                error_message=str(e),
+            )
+
+    def _import_legacy(
+        self,
+        pending: PendingFile,
+        brokerage: str,
+        fetch_prices: bool,
+    ) -> ImportResult:
+        """Legacy import using column detection."""
         try:
             df, _ = self._load_file_smart(pending.path)
             if df is None:

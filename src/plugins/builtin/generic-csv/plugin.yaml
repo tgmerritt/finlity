@@ -1,0 +1,45 @@
+name: Generic CSV Importer
+version: 1.0.0
+description: Import positions from standard CSV files with auto-column detection
+author: Portfolio Analyzer
+license: MIT
+plugin_type: importer
+
+main: importer.py
+class: GenericCSVImporter
+
+requires:
+  portfolio_analyzer: ">=1.0.0"
+  python: ">=3.10"
+
+dependencies:
+  - pandas>=2.0.0
+
+permissions:
+  file_read: true
+  file_write: false
+  network: false
+  database: read_only
+
+settings:
+  - key: skip_rows
+    type: number
+    label: Header Rows to Skip
+    description: Number of rows to skip at the beginning of the file
+    default: 0
+  - key: date_format
+    type: select
+    label: Date Format
+    options: ["MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"]
+    default: "MM/DD/YYYY"
+
+supported_formats:
+  - extension: .csv
+    mime_type: text/csv
+    description: Standard CSV files
+  - extension: .xlsx
+    mime_type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+    description: Excel spreadsheets
+  - extension: .xls
+    mime_type: application/vnd.ms-excel
+    description: Legacy Excel files

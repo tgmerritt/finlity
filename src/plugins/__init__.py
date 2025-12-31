@@ -15,9 +15,11 @@ from .base import (
     WidgetPlugin,
     ProviderPlugin,
     ExportPlugin,
+    ImportResult,
 )
 from .registry import PluginRegistry, get_plugin_registry
 from .events import EventBus, get_event_bus
+from .import_pipeline import ImportPipeline, get_import_pipeline
 
 __all__ = [
     # Base classes
@@ -30,10 +32,14 @@ __all__ = [
     "WidgetPlugin",
     "ProviderPlugin",
     "ExportPlugin",
+    "ImportResult",
     # Registry
     "PluginRegistry",
     "get_plugin_registry",
     # Events
     "EventBus",
     "get_event_bus",
+    # Import Pipeline
+    "ImportPipeline",
+    "get_import_pipeline",
 ]
