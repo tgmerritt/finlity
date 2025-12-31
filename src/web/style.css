@@ -660,6 +660,132 @@ tr:hover td {
     font-size: 14px;
 }
 
+/* Metric descriptions and interactive styles */
+.metric-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.metric-desc {
+    font-size: 11px;
+    color: var(--color-text-tertiary);
+    font-weight: 400;
+}
+
+.metric-clickable {
+    cursor: pointer;
+    border-radius: var(--border-radius-sm);
+    margin: 0 -8px;
+    padding: 12px 8px !important;
+    transition: background-color var(--transition-fast);
+}
+
+.metric-clickable:hover {
+    background-color: var(--color-bg-hover);
+}
+
+.metric-clickable .metric-value {
+    color: var(--color-primary);
+}
+
+.metric-clickable:hover .metric-value {
+    text-decoration: underline;
+}
+
+/* Info icon for card headers */
+.info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: help;
+    margin-left: 8px;
+}
+
+.info-icon:hover {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+/* Detail modal table */
+.detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+}
+
+.detail-table th,
+.detail-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border-secondary);
+}
+
+.detail-table th {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.detail-table td {
+    font-size: 14px;
+}
+
+.detail-table td.text-right,
+.detail-table th.text-right {
+    text-align: right;
+}
+
+.detail-table tbody tr:hover {
+    background-color: var(--color-bg-hover);
+}
+
+.detail-summary {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px;
+    background-color: var(--color-bg-tertiary);
+    border-radius: var(--border-radius-sm);
+    margin-bottom: 16px;
+}
+
+.detail-summary-item {
+    text-align: center;
+}
+
+.detail-summary-label {
+    font-size: 12px;
+    color: var(--color-text-tertiary);
+}
+
+.detail-summary-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.metric-explanation {
+    padding: 12px;
+    background-color: var(--color-bg-tertiary);
+    border-radius: var(--border-radius-sm);
+    margin-bottom: 16px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+}
+
+.metric-explanation strong {
+    color: var(--color-text-primary);
+}
+
 /* Forms */
 .form-grid {
     display: grid;

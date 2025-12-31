@@ -1187,6 +1187,214 @@ function renderTriggeredAlerts(triggered) {
     `).join('');
 }
 
+// Metric Detail Modal Functions
+// Note: Data displayed is from user's local portfolio - this is a local-only application
+const metricExplanations = {
+    'ytd-return': {
+        title: 'Year-to-Date Return',
+        explanation: '<strong>YTD Return</strong> measures how much your portfolio has grown since January 1st of this year. ' +
+            'It is calculated as the weighted average of each position\'s YTD performance based on current portfolio weights. ' +
+            'A positive value means your portfolio has gained value this year, while negative means a decline.'
+    },
+    'one-year-return': {
+        title: '1-Year Return',
+        explanation: '<strong>1-Year Return</strong> (also called trailing twelve months or TTM) shows your portfolio\'s ' +
+            'performance over the past 12 months. This is a rolling period that updates daily, providing a longer-term view ' +
+            'of performance compared to YTD.'
+    },
+    'alpha': {
+        title: 'Alpha vs S&P 500',
+        explanation: '<strong>Alpha</strong> measures how much your portfolio has outperformed (positive) or underperformed ' +
+            '(negative) compared to the S&P 500 benchmark. An alpha of +2% means you beat the market by 2 percentage points. ' +
+            'This is a key measure of whether active management or stock picking is adding value.'
+    },
+    'volatility': {
+        title: 'Volatility (Annual)',
+        explanation: '<strong>Volatility</strong> measures the standard deviation of your portfolio\'s daily returns, ' +
+            'annualized to show what you might expect over a year. Higher volatility means more dramatic price swings. ' +
+            '<br><br>Typical ranges: Low-risk portfolio: 5-10%, Balanced: 10-15%, Aggressive: 15-25%+'
+    },
+    'sharpe': {
+        title: 'Sharpe Ratio',
+        explanation: '<strong>Sharpe Ratio</strong> measures risk-adjusted returns - how much return you\'re getting per unit ' +
+            'of risk taken. It is calculated as (Portfolio Return - Risk-Free Rate) / Volatility. ' +
+            '<br><br>Interpretation: &lt; 1.0 = Below average, 1.0-2.0 = Good, &gt; 2.0 = Excellent'
+    },
+    'max-drawdown': {
+        title: 'Maximum Drawdown',
+        explanation: '<strong>Max Drawdown</strong> shows the largest peak-to-trough decline in your portfolio\'s value ' +
+            'over the past year. This represents the worst-case scenario an investor would have experienced. ' +
+            '<br><br>For example, -20% means at some point the portfolio dropped 20% from its previous high.'
+    },
+    'beta': {
+        title: 'Portfolio Beta',
+        explanation: '<strong>Beta</strong> measures your portfolio\'s sensitivity to market movements. A beta of 1.0 ' +
+            'means your portfolio moves in line with the market. ' +
+            '<br><br>Beta &gt; 1.0: More volatile than market, amplifies gains/losses<br>' +
+            'Beta &lt; 1.0: Less volatile, dampens market swings<br>' +
+            'Beta = 0: No correlation to market'
+    },
+    'var': {
+        title: 'Value at Risk (95%)',
+        explanation: '<strong>VaR 95%</strong> estimates the maximum daily loss you could expect 95% of the time. ' +
+            'In other words, losses exceeding this amount should only occur about 1 in 20 trading days. ' +
+            '<br><br>For example, VaR of 2.5% on a $1M portfolio means daily losses should stay under $25,000 ' +
+            'about 95% of the time.'
+    }
+};
+
+function showMetricDetail(metricId) {
+    const metric = metricExplanations[metricId];
+    if (!metric) {
+        showToast('Details not available for this metric', 'info');
+        return;
+    }
+
+    const content = '<div class="metric-explanation">' + metric.explanation + '</div>' +
+        '<p style="font-size: 12px; color: var(--color-text-tertiary); margin-top: 16px;">' +
+        'Note: Metrics are calculated using historical price data from the past year. ' +
+        'Results may vary with different time periods.</p>';
+
+    showModal(metric.title, content);
+}
+
+function showTopHoldingsDetail(count) {
+    if (!currentPositions || currentPositions.length === 0) {
+        showToast('No holdings data available', 'info');
+        return;
+    }
+
+    // Aggregate by ticker
+    const tickerData = {};
+    currentPositions.forEach(pos => {
+        const ticker = pos.ticker;
+        if (!tickerData[ticker]) {
+            tickerData[ticker] = {
+                ticker: ticker,
+                name: pos.name || ticker,
+                shares: 0,
+                value: 0,
+                accounts: []
+            };
+        }
+        tickerData[ticker].shares += pos.shares || 0;
+        tickerData[ticker].value += pos.value || 0;
+        if (pos.account_name && !tickerData[ticker].accounts.includes(pos.account_name)) {
+            tickerData[ticker].accounts.push(pos.account_name);
+        }
+    });
+
+    const sorted = Object.values(tickerData)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, count);
+
+    const totalValue = Object.values(tickerData).reduce((sum, p) => sum + p.value, 0);
+    const topValue = sorted.reduce((sum, p) => sum + p.value, 0);
+    const topPct = totalValue > 0 ? (topValue / totalValue * 100) : 0;
+
+    // Build table rows - data is from user's local portfolio
+    const tableRows = sorted.map((pos, idx) => {
+        const pct = totalValue > 0 ? (pos.value / totalValue * 100) : 0;
+        return '<tr>' +
+            '<td>' + (idx + 1) + '</td>' +
+            '<td><strong>' + escapeHtml(pos.ticker) + '</strong></td>' +
+            '<td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">' + escapeHtml(pos.name) + '</td>' +
+            '<td class="text-right">' + formatShares(pos.shares) + '</td>' +
+            '<td class="text-right">' + formatCurrency(pos.value) + '</td>' +
+            '<td class="text-right">' + pct.toFixed(2) + '%</td>' +
+            '</tr>';
+    }).join('');
+
+    const content = '<div class="detail-summary">' +
+        '<div class="detail-summary-item">' +
+            '<div class="detail-summary-label">Top ' + count + ' Value</div>' +
+            '<div class="detail-summary-value">' + formatCurrency(topValue) + '</div>' +
+        '</div>' +
+        '<div class="detail-summary-item">' +
+            '<div class="detail-summary-label">% of Portfolio</div>' +
+            '<div class="detail-summary-value">' + topPct.toFixed(1) + '%</div>' +
+        '</div>' +
+        '<div class="detail-summary-item">' +
+            '<div class="detail-summary-label">Total Portfolio</div>' +
+            '<div class="detail-summary-value">' + formatCurrency(totalValue) + '</div>' +
+        '</div>' +
+        '</div>' +
+        '<table class="detail-table">' +
+        '<thead><tr>' +
+            '<th>#</th><th>Ticker</th><th>Name</th>' +
+            '<th class="text-right">Shares</th><th class="text-right">Value</th><th class="text-right">% of Portfolio</th>' +
+        '</tr></thead>' +
+        '<tbody>' + tableRows + '</tbody>' +
+        '</table>';
+
+    showModal('Top ' + count + ' Holdings', content);
+}
+
+function showCashDetail() {
+    if (!currentPositions || currentPositions.length === 0) {
+        showToast('No holdings data available', 'info');
+        return;
+    }
+
+    // Find all cash-like positions
+    const cashPositions = currentPositions.filter(pos => {
+        const ticker = (pos.ticker || '').toUpperCase();
+        const posType = (pos.position_type || '').toLowerCase();
+        return ticker === 'CASH' ||
+               ticker.includes('MONEY MARKET') ||
+               ticker.includes('MMKT') ||
+               posType === 'cash' ||
+               posType === 'cd';
+    });
+
+    const totalValue = currentPositions.reduce((sum, p) => sum + (p.value || 0), 0);
+    const cashValue = cashPositions.reduce((sum, p) => sum + (p.value || 0), 0);
+    const cashPct = totalValue > 0 ? (cashValue / totalValue * 100) : 0;
+
+    let content = '';
+
+    if (cashPositions.length === 0) {
+        content = '<div class="metric-explanation">' +
+            '<strong>No cash positions found.</strong><br><br>' +
+            'Cash positions include: Money market funds, bank sweep accounts, and CDs. ' +
+            'Your portfolio appears to be fully invested in securities.' +
+            '</div>';
+    } else {
+        const tableRows = cashPositions.map(pos =>
+            '<tr>' +
+            '<td>' + escapeHtml(pos.account_name || '-') + '</td>' +
+            '<td>' + escapeHtml(pos.name || pos.ticker || 'Cash') + '</td>' +
+            '<td class="text-right">' + formatCurrency(pos.value) + '</td>' +
+            '</tr>'
+        ).join('');
+
+        content = '<div class="detail-summary">' +
+            '<div class="detail-summary-item">' +
+                '<div class="detail-summary-label">Total Cash</div>' +
+                '<div class="detail-summary-value">' + formatCurrency(cashValue) + '</div>' +
+            '</div>' +
+            '<div class="detail-summary-item">' +
+                '<div class="detail-summary-label">% of Portfolio</div>' +
+                '<div class="detail-summary-value">' + cashPct.toFixed(1) + '%</div>' +
+            '</div>' +
+            '</div>' +
+            '<table class="detail-table">' +
+            '<thead><tr><th>Account</th><th>Type</th><th class="text-right">Value</th></tr></thead>' +
+            '<tbody>' + tableRows + '</tbody>' +
+            '</table>';
+    }
+
+    showModal('Cash Allocation Details', content);
+}
+
+// Helper function to escape HTML for safe display
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // Trigger Modal Functions
 async function showAddTriggerModal() {
     // Load trigger types

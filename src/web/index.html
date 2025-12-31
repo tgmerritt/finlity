@@ -336,23 +336,32 @@
                     <div class="card">
                         <div class="card-header">
                             <h3>Performance Metrics</h3>
+                            <span class="info-icon" title="Performance metrics measure how your portfolio has grown over time compared to benchmarks">?</span>
                         </div>
                         <div class="card-body">
                             <div class="metrics-list">
-                                <div class="metric-row">
-                                    <span class="metric-label">YTD Return</span>
+                                <div class="metric-row metric-clickable" onclick="showMetricDetail('ytd-return')" title="Click for details">
+                                    <span class="metric-label">YTD Return
+                                        <span class="metric-desc">Portfolio growth since Jan 1</span>
+                                    </span>
                                     <span class="metric-value" id="ytd-return">-</span>
                                 </div>
-                                <div class="metric-row">
-                                    <span class="metric-label">1-Year Return</span>
+                                <div class="metric-row metric-clickable" onclick="showMetricDetail('one-year-return')" title="Click for details">
+                                    <span class="metric-label">1-Year Return
+                                        <span class="metric-desc">Portfolio growth over past 12 months</span>
+                                    </span>
                                     <span class="metric-value" id="one-year-return">-</span>
                                 </div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Alpha vs S&P 500 (YTD)</span>
+                                <div class="metric-row metric-clickable" onclick="showMetricDetail('alpha')" title="Click for details">
+                                    <span class="metric-label">Alpha vs S&P 500 (YTD)
+                                        <span class="metric-desc">Excess return vs benchmark</span>
+                                    </span>
                                     <span class="metric-value" id="alpha-ytd">-</span>
                                 </div>
                                 <div class="metric-row">
-                                    <span class="metric-label">Benchmark YTD (SPY)</span>
+                                    <span class="metric-label">Benchmark YTD (SPY)
+                                        <span class="metric-desc">S&P 500 performance this year</span>
+                                    </span>
                                     <span class="metric-value" id="benchmark-ytd">-</span>
                                 </div>
                             </div>
@@ -361,27 +370,38 @@
                     <div class="card">
                         <div class="card-header">
                             <h3>Risk Metrics</h3>
+                            <span class="info-icon" title="Risk metrics help you understand the volatility and downside potential of your portfolio">?</span>
                         </div>
                         <div class="card-body">
                             <div class="metrics-list">
-                                <div class="metric-row">
-                                    <span class="metric-label">Volatility (Annual)</span>
+                                <div class="metric-row metric-clickable" onclick="showMetricDetail('volatility')" title="Click for details">
+                                    <span class="metric-label">Volatility (Annual)
+                                        <span class="metric-desc">Standard deviation of returns</span>
+                                    </span>
                                     <span class="metric-value" id="volatility">-</span>
                                 </div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Sharpe Ratio</span>
+                                <div class="metric-row metric-clickable" onclick="showMetricDetail('sharpe')" title="Click for details">
+                                    <span class="metric-label">Sharpe Ratio
+                                        <span class="metric-desc">Risk-adjusted return (higher is better)</span>
+                                    </span>
                                     <span class="metric-value" id="sharpe-ratio">-</span>
                                 </div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Max Drawdown</span>
+                                <div class="metric-row metric-clickable" onclick="showMetricDetail('max-drawdown')" title="Click for details">
+                                    <span class="metric-label">Max Drawdown
+                                        <span class="metric-desc">Largest peak-to-trough decline</span>
+                                    </span>
                                     <span class="metric-value" id="max-drawdown">-</span>
                                 </div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Beta</span>
+                                <div class="metric-row metric-clickable" onclick="showMetricDetail('beta')" title="Click for details">
+                                    <span class="metric-label">Beta
+                                        <span class="metric-desc">Sensitivity to market movements</span>
+                                    </span>
                                     <span class="metric-value" id="beta">-</span>
                                 </div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Value at Risk (95%)</span>
+                                <div class="metric-row metric-clickable" onclick="showMetricDetail('var')" title="Click for details">
+                                    <span class="metric-label">Value at Risk (95%)
+                                        <span class="metric-desc">Max daily loss 95% of the time</span>
+                                    </span>
                                     <span class="metric-value" id="var-95">-</span>
                                 </div>
                             </div>
@@ -394,23 +414,32 @@
                     <div class="card">
                         <div class="card-header">
                             <h3>Concentration</h3>
+                            <span class="info-icon" title="Concentration metrics show how diversified your portfolio is">?</span>
                         </div>
                         <div class="card-body">
                             <div class="metrics-list">
-                                <div class="metric-row">
-                                    <span class="metric-label">Top 5 Holdings</span>
+                                <div class="metric-row metric-clickable" onclick="showTopHoldingsDetail(5)" title="Click to see top 5 holdings">
+                                    <span class="metric-label">Top 5 Holdings
+                                        <span class="metric-desc">% in your 5 largest positions</span>
+                                    </span>
                                     <span class="metric-value" id="concentration-top5">-</span>
                                 </div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Top 10 Holdings</span>
+                                <div class="metric-row metric-clickable" onclick="showTopHoldingsDetail(10)" title="Click to see top 10 holdings">
+                                    <span class="metric-label">Top 10 Holdings
+                                        <span class="metric-desc">% in your 10 largest positions</span>
+                                    </span>
                                     <span class="metric-value" id="concentration-top10">-</span>
                                 </div>
-                                <div class="metric-row">
-                                    <span class="metric-label">Cash Allocation</span>
+                                <div class="metric-row metric-clickable" onclick="showCashDetail()" title="Click to see cash breakdown">
+                                    <span class="metric-label">Cash Allocation
+                                        <span class="metric-desc">% held in cash/money market</span>
+                                    </span>
                                     <span class="metric-value" id="cash-allocation">-</span>
                                 </div>
                                 <div class="metric-row">
-                                    <span class="metric-label">Invested Allocation</span>
+                                    <span class="metric-label">Invested Allocation
+                                        <span class="metric-desc">% invested in securities</span>
+                                    </span>
                                     <span class="metric-value" id="invested-allocation">-</span>
                                 </div>
                             </div>
@@ -419,6 +448,7 @@
                     <div class="card">
                         <div class="card-header">
                             <h3>Top Holdings</h3>
+                            <span class="info-icon" title="Your largest positions by market value">?</span>
                         </div>
                         <div class="card-body">
                             <div id="top-holdings-list" class="holdings-compact-list">

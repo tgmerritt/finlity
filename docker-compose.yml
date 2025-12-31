@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   portfolio:
     build: .
@@ -23,3 +21,27 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  # Development mode with hot reload - use: docker-compose --profile dev up portfolio-dev
+  portfolio-dev:
+    build: .
+    container_name: portfolio-analyzer-dev
+    profiles:
+      - dev
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source code for live editing
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts:ro
+      - ./config.yaml:/app/config.yaml:ro
+      - ./funds.yaml:/app/funds.yaml:ro
+      # Persist data directory
+      - ./data:/app/data
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
+    # Use --reload for auto-restart on code changes
+    command: ["python", "-m", "src.main", "--host", "0.0.0.0", "--no-browser", "--reload"]
+    restart: unless-stopped

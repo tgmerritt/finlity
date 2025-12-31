@@ -7,19 +7,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The application can be run in Docker for easy deployment:
 
 ```bash
-# Build and run with docker-compose (recommended)
-docker-compose up -d
+# Build and run with docker compose (recommended)
+docker compose up -d
+
+# Development mode with hot reload (source code mounted)
+docker compose --profile dev up portfolio-dev
 
 # Or build and run manually
 docker build -t portfolio-analyzer .
 docker run -d -p 8000:8000 -v $(pwd)/data:/app/data portfolio-analyzer
 
 # Generate demo data in container
-docker exec -it portfolio python scripts/generate_demo.py
+docker exec -it portfolio-analyzer python scripts/generate_demo.py
 
 # Run in demo mode
 docker run -d -p 8000:8000 -e PORTFOLIO_DEMO_MODE=true portfolio-analyzer
+
+# Rebuild after code changes (production mode)
+docker compose down && docker compose build && docker compose up -d
 ```
+
+**Development Mode:** Use `docker compose --profile dev up portfolio-dev` to mount the `src/` directory. Changes to Python files will auto-reload, and changes to HTML/CSS/JS files take effect on browser refresh.
 
 ## Security Considerations
 
