@@ -1113,6 +1113,136 @@ async function loadWidgets() {
     }
 }
 
+// Plugin Security
+async function loadPluginSecurity() {
+    var container = document.getElementById('plugin-security-container');
+    var auditContainer = document.getElementById('security-audit-container');
+
+    if (container) container.innerHTML = '<p class="text-muted">Loading...</p>';
+
+    try {
+        // Load permissions
+        const permResponse = await fetch(API_BASE + '/api/plugins/security/permissions');
+        if (!permResponse.ok) throw new Error('Failed to load permissions');
+        const permData = await permResponse.json();
+
+        // Load audit log
+        const auditResponse = await fetch(API_BASE + '/api/plugins/security/audit?limit=20');
+        const auditData = auditResponse.ok ? await auditResponse.json() : { entries: [] };
+
+        // Render permissions table
+        var html = '<table class="data-table compact-table">';
+        html += '<thead><tr><th>Plugin</th><th>Type</th><th>Permissions</th><th>Status</th><th>Actions</th></tr></thead>';
+        html += '<tbody>';
+
+        permData.plugins.forEach(function(plugin) {
+            var permList = [];
+            if (plugin.requested.file_read) permList.push('file_read');
+            if (plugin.requested.file_write) permList.push('<span class="text-warning">file_write</span>');
+            if (plugin.requested.network) permList.push('<span class="text-warning">network</span>');
+            if (plugin.requested.database !== 'none') permList.push('db:' + plugin.requested.database);
+
+            var status = '';
+            var actions = '';
+
+            if (plugin.is_builtin) {
+                status = '<span class="badge badge-success">Built-in</span>';
+                actions = '<span class="text-muted">-</span>';
+            } else if (plugin.approved) {
+                status = '<span class="badge badge-success">Approved</span>';
+                actions = '<button class="btn btn-xs btn-danger" onclick="revokePluginPermissions(\'' + plugin.plugin_id + '\')">Revoke</button>';
+            } else if (plugin.needs_approval) {
+                status = '<span class="badge badge-warning">Pending</span>';
+                actions = '<button class="btn btn-xs btn-primary" onclick="approvePluginPermissions(\'' + plugin.plugin_id + '\', true)">Approve</button> ';
+                actions += '<button class="btn btn-xs btn-danger" onclick="approvePluginPermissions(\'' + plugin.plugin_id + '\', false)">Deny</button>';
+            } else {
+                status = '<span class="badge badge-default">No sensitive perms</span>';
+                actions = '<span class="text-muted">-</span>';
+            }
+
+            html += '<tr>';
+            html += '<td>' + escapeHtml(plugin.name) + '</td>';
+            html += '<td>' + (plugin.is_builtin ? 'Built-in' : 'Installed') + '</td>';
+            html += '<td>' + (permList.length > 0 ? permList.join(', ') : 'None') + '</td>';
+            html += '<td>' + status + '</td>';
+            html += '<td>' + actions + '</td>';
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+
+        if (permData.pending_count > 0) {
+            html = '<div class="alert alert-warning" style="margin-bottom: 15px;">' +
+                   '<strong>' + permData.pending_count + ' plugin(s)</strong> require permission approval before they can be loaded.' +
+                   '</div>' + html;
+        }
+
+        container.innerHTML = html;
+
+        // Render audit log
+        if (auditData.entries && auditData.entries.length > 0) {
+            var auditHtml = '<div class="audit-log">';
+            auditData.entries.slice(0, 10).forEach(function(entry) {
+                var time = new Date(entry.timestamp).toLocaleString();
+                var icon = entry.success ? '✓' : '✗';
+                var cssClass = entry.success ? 'audit-success' : 'audit-failure';
+                auditHtml += '<div class="audit-entry ' + cssClass + '">';
+                auditHtml += '<span class="audit-icon">' + icon + '</span>';
+                auditHtml += '<span class="audit-time">' + time + '</span>';
+                auditHtml += '<span class="audit-event">' + escapeHtml(entry.event_type) + '</span>';
+                auditHtml += '<span class="audit-plugin">' + escapeHtml(entry.plugin_id) + '</span>';
+                auditHtml += '</div>';
+            });
+            auditHtml += '</div>';
+            auditContainer.innerHTML = auditHtml;
+        } else {
+            auditContainer.innerHTML = '<p class="text-muted">No security events recorded.</p>';
+        }
+
+    } catch (error) {
+        console.error('Error loading plugin security:', error);
+        container.innerHTML = '<p class="text-muted">Failed to load plugin security. ' + escapeHtml(error.message) + '</p>';
+    }
+}
+
+async function approvePluginPermissions(pluginId, approve) {
+    try {
+        const response = await fetch(API_BASE + '/api/plugins/security/permissions/' + pluginId + '/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ approve: approve })
+        });
+
+        if (!response.ok) throw new Error('Failed to update permissions');
+
+        showToast(approve ? 'Permissions approved' : 'Permissions denied', 'success');
+        loadPluginSecurity();
+
+    } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+    }
+}
+
+async function revokePluginPermissions(pluginId) {
+    if (!confirm('Revoke permissions for this plugin? It will be disabled and require re-approval.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(API_BASE + '/api/plugins/security/permissions/' + pluginId + '/revoke', {
+            method: 'POST'
+        });
+
+        if (!response.ok) throw new Error('Failed to revoke permissions');
+
+        showToast('Permissions revoked', 'success');
+        loadPluginSecurity();
+
+    } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+    }
+}
+
 // Data loading
 async function refreshData() {
     showLoading('Loading data...');

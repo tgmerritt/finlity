@@ -642,3 +642,94 @@ Widgets should use the app's CSS variables for consistent theming:
 .my-widget .positive { color: var(--color-success); }
 .my-widget .negative { color: var(--color-danger); }
 ```
+
+---
+
+## Security & Sandboxing
+
+The plugin system includes comprehensive security features to protect your data.
+
+### Permission System
+
+Plugins declare the permissions they need in their manifest:
+
+| Permission | Description | Sensitivity |
+|------------|-------------|-------------|
+| `file_read` | Read files from import directories | Low |
+| `file_write` | Write files to export directories | High |
+| `network` | Make HTTP requests | High |
+| `database` | Access the database (none/read_only/read_write) | Varies |
+| `api_keys` | Access to specific API keys | High |
+
+### Built-in vs Third-Party Plugins
+
+- **Built-in plugins** are automatically trusted and loaded
+- **Third-party plugins** with sensitive permissions require user approval
+- Sensitive permissions: `file_write`, `network`, `api_keys`, `database:read_write`
+
+### Permission Approval
+
+Third-party plugins with sensitive permissions must be approved before loading:
+
+1. Go to Settings → Plugin Security
+2. Review pending plugin permissions
+3. Click "Approve" to grant permissions or "Deny" to block
+4. Approved plugins are enabled and loaded
+
+You can revoke permissions at any time, which disables the plugin.
+
+### Sandboxed Execution
+
+Plugin code runs with security controls:
+
+1. **Execution Timeout** - Plugins are limited to 30 seconds per operation
+2. **Restricted Builtins** - Dangerous functions like `eval`, `exec`, `open` are blocked
+3. **Permission Checking** - Operations are validated against approved permissions
+
+### Audit Logging
+
+All security-relevant events are logged:
+
+- Plugin load/unload events
+- Permission requests, approvals, and denials
+- Execution timeouts and errors
+- Security violations
+
+View the audit log in Settings → Plugin Security.
+
+### Security API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/plugins/security/permissions` | GET | List all plugin permissions |
+| `/api/plugins/security/permissions/{id}` | GET | Get plugin permission details |
+| `/api/plugins/security/permissions/{id}/approve` | POST | Approve/deny permissions |
+| `/api/plugins/security/permissions/{id}/revoke` | POST | Revoke permissions |
+| `/api/plugins/security/pending` | GET | Get plugins needing approval |
+| `/api/plugins/security/audit` | GET | Get security audit log |
+| `/api/plugins/security/violations` | GET | Get security violations |
+| `/api/plugins/security/validate/{id}` | GET | Validate plugin security |
+
+### Best Practices for Plugin Authors
+
+1. **Request minimal permissions** - Only request what you need
+2. **Avoid sensitive permissions** when possible
+3. **Document permission usage** - Explain why each permission is needed
+4. **Handle errors gracefully** - Don't crash on permission denials
+5. **Respect timeout limits** - Keep operations fast
+
+```yaml
+# Good: Minimal permissions
+permissions:
+  file_read: true
+  file_write: false
+  network: false
+  database: read_only
+
+# Avoid: Over-requesting
+permissions:
+  file_read: true
+  file_write: true
+  network: true
+  database: read_write
+```

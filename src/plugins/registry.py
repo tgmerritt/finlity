@@ -35,6 +35,7 @@ from .base import (
     ExportPlugin,
 )
 from .events import EventBus, Event, EventType, get_event_bus
+from .security import get_security_manager, SecurityManager
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +71,19 @@ class PluginRegistry:
         self._enabled_file = self.data_dir / "enabled.json"
         self._settings_file = self.data_dir / "settings.json"
 
+        # Security manager
+        self._security: Optional[SecurityManager] = None
+
         # Load persisted state
         self._load_enabled_state()
         self._load_settings()
+
+    @property
+    def security(self) -> SecurityManager:
+        """Get the security manager (lazy initialization)."""
+        if self._security is None:
+            self._security = get_security_manager()
+        return self._security
 
     def _load_enabled_state(self) -> None:
         """Load enabled plugins from file."""
@@ -294,12 +305,13 @@ class PluginRegistry:
             is_builtin=is_builtin,
         )
 
-    def load_plugin(self, plugin_id: str) -> Optional[PluginBase]:
+    def load_plugin(self, plugin_id: str, skip_security_check: bool = False) -> Optional[PluginBase]:
         """
         Load and instantiate a plugin.
 
         Args:
             plugin_id: ID of the plugin to load
+            skip_security_check: Skip security validation (only for testing)
 
         Returns:
             Plugin instance or None if loading failed
@@ -316,6 +328,20 @@ class PluginRegistry:
         if plugin_id in self._plugins:
             logger.debug(f"Plugin already loaded: {plugin_id}")
             return self._plugins[plugin_id]
+
+        # Security validation
+        if not skip_security_check:
+            # Validate plugin
+            is_valid, issues = self.security.validate_plugin(manifest)
+            if not is_valid:
+                logger.warning(f"Plugin {plugin_id} has security issues: {issues}")
+
+            # Check if plugin can be loaded (permissions approved)
+            can_load, reason = self.security.can_load_plugin(manifest)
+            if not can_load:
+                logger.error(f"Cannot load plugin {plugin_id}: {reason}")
+                manifest.load_error = f"Security: {reason}"
+                return None
 
         try:
             # Get plugin settings
@@ -364,6 +390,9 @@ class PluginRegistry:
                     source="registry",
                 )
             )
+
+            # Security audit log
+            self.security.on_plugin_loaded(manifest)
 
             return plugin
 
@@ -428,6 +457,9 @@ class PluginRegistry:
                     source="registry",
                 )
             )
+
+            # Security audit log
+            self.security.on_plugin_unloaded(plugin_id)
 
             return True
 

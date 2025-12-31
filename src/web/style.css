@@ -954,6 +954,104 @@ body {
     }
 }
 
+/* Security Audit Log */
+.audit-log {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border-secondary);
+    border-radius: var(--border-radius);
+}
+
+.audit-entry {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-border-secondary);
+    font-size: 12px;
+}
+
+.audit-entry:last-child {
+    border-bottom: none;
+}
+
+.audit-entry.audit-success {
+    background: rgba(46, 204, 113, 0.05);
+}
+
+.audit-entry.audit-failure {
+    background: rgba(231, 76, 60, 0.05);
+}
+
+.audit-icon {
+    font-size: 14px;
+    width: 20px;
+    text-align: center;
+}
+
+.audit-success .audit-icon {
+    color: var(--color-success);
+}
+
+.audit-failure .audit-icon {
+    color: var(--color-danger);
+}
+
+.audit-time {
+    color: var(--color-text-muted);
+    min-width: 140px;
+}
+
+.audit-event {
+    color: var(--color-text-primary);
+    font-weight: 500;
+    min-width: 150px;
+}
+
+.audit-plugin {
+    color: var(--color-text-secondary);
+}
+
+/* Badge styles */
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 10px;
+}
+
+.badge-success {
+    background: rgba(46, 204, 113, 0.15);
+    color: #27AE60;
+}
+
+.badge-warning {
+    background: rgba(241, 196, 15, 0.15);
+    color: #D68910;
+}
+
+.badge-danger {
+    background: rgba(231, 76, 60, 0.15);
+    color: #E74C3C;
+}
+
+.badge-default {
+    background: var(--color-bg-secondary);
+    color: var(--color-text-muted);
+}
+
+/* Extra small buttons */
+.btn-xs {
+    padding: 2px 8px;
+    font-size: 11px;
+}
+
+/* Text utility classes */
+.text-warning {
+    color: #E67E22;
+}
+
 .sidebar-footer {
     padding: 16px;
     border-top: 1px solid var(--color-border-secondary);

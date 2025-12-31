@@ -1046,6 +1046,29 @@
                         </div>
                     </div>
 
+                    <!-- Plugin Security -->
+                    <div class="card full-width">
+                        <div class="card-header">
+                            <h3>Plugin Security</h3>
+                            <button class="btn btn-sm btn-default" onclick="loadPluginSecurity()">Refresh</button>
+                        </div>
+                        <div class="card-body">
+                            <p class="settings-description">
+                                Manage permissions for installed plugins. Built-in plugins are automatically trusted.
+                                Third-party plugins with sensitive permissions require approval before loading.
+                            </p>
+                            <div id="plugin-security-container">
+                                <p class="text-muted">Click Refresh to load plugin security status...</p>
+                            </div>
+
+                            <h4 style="margin-top: 20px;">Security Audit Log</h4>
+                            <p class="settings-description">Recent security events from the plugin system.</p>
+                            <div id="security-audit-container">
+                                <p class="text-muted">Click Refresh to load audit log...</p>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Account Management -->
                     <div class="card full-width">
                         <div class="card-header">

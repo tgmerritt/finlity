@@ -24,6 +24,13 @@ from .events import EventBus, get_event_bus
 from .import_pipeline import ImportPipeline, get_import_pipeline
 from .analysis_pipeline import AnalysisPipeline, get_analysis_pipeline
 from .widget_pipeline import WidgetPipeline, get_widget_pipeline
+from .security import (
+    SecurityManager,
+    get_security_manager,
+    AuditLogger,
+    PermissionManager,
+    SecurityEvent,
+)
 
 __all__ = [
     # Base classes
@@ -54,4 +61,10 @@ __all__ = [
     # Widget Pipeline
     "WidgetPipeline",
     "get_widget_pipeline",
+    # Security
+    "SecurityManager",
+    "get_security_manager",
+    "AuditLogger",
+    "PermissionManager",
+    "SecurityEvent",
 ]

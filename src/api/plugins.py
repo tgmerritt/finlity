@@ -9,7 +9,13 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from src.plugins import get_plugin_registry, get_analysis_pipeline, get_widget_pipeline, PluginType
+from src.plugins import (
+    get_plugin_registry,
+    get_analysis_pipeline,
+    get_widget_pipeline,
+    get_security_manager,
+    PluginType,
+)
 
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
@@ -594,4 +600,253 @@ def render_widget(
         } if result.content else None,
         "success": result.success,
         "error": result.error,
+    }
+
+
+# ============================================================================
+# Security Endpoints
+# ============================================================================
+
+
+class PermissionApprovalRequest(BaseModel):
+    """Request model for approving plugin permissions."""
+    approve: bool
+
+
+@router.get("/security/audit")
+def get_audit_log(
+    plugin_id: Optional[str] = Query(None, description="Filter by plugin ID"),
+    limit: int = Query(100, description="Maximum entries to return"),
+):
+    """
+    Get the security audit log.
+
+    Returns recent security events including plugin loads, permission checks,
+    and security violations.
+    """
+    security = get_security_manager()
+    entries = security.get_audit_log(plugin_id=plugin_id, limit=limit)
+
+    return {
+        "entries": entries,
+        "count": len(entries),
+    }
+
+
+@router.get("/security/violations")
+def get_security_violations(
+    limit: int = Query(50, description="Maximum entries to return"),
+):
+    """
+    Get recent security violations.
+
+    Returns permission denials, execution timeouts, and other security issues.
+    """
+    security = get_security_manager()
+    violations = security.get_security_violations(limit=limit)
+
+    return {
+        "violations": violations,
+        "count": len(violations),
+    }
+
+
+@router.get("/security/permissions")
+def get_all_permissions():
+    """
+    Get permissions for all plugins.
+
+    Returns requested and approved permissions for each plugin.
+    """
+    registry = get_plugin_registry()
+    security = get_security_manager()
+
+    # Ensure plugins are discovered
+    registry.discover_plugins()
+
+    plugins_permissions = []
+    for manifest in registry.get_all_manifests():
+        approved = security.permission_manager.get_approved_permissions(manifest.plugin_id)
+        has_sensitive = security.permission_manager.has_sensitive_permissions(manifest)
+
+        plugins_permissions.append({
+            "plugin_id": manifest.plugin_id,
+            "name": manifest.name,
+            "is_builtin": manifest.is_builtin,
+            "requested": manifest.permissions.to_dict(),
+            "approved": approved.to_dict() if approved else None,
+            "has_sensitive_permissions": has_sensitive,
+            "needs_approval": has_sensitive and not approved and not manifest.is_builtin,
+        })
+
+    return {
+        "plugins": plugins_permissions,
+        "pending_count": len([p for p in plugins_permissions if p["needs_approval"]]),
+    }
+
+
+@router.get("/security/permissions/{plugin_id}")
+def get_plugin_permissions(plugin_id: str):
+    """
+    Get permission details for a specific plugin.
+
+    Returns both requested permissions (from manifest) and approved permissions.
+    """
+    registry = get_plugin_registry()
+    security = get_security_manager()
+
+    manifest = registry.get_manifest(plugin_id)
+    if not manifest:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    approved = security.permission_manager.get_approved_permissions(plugin_id)
+    can_load, reason = security.can_load_plugin(manifest)
+
+    return {
+        "plugin_id": plugin_id,
+        "name": manifest.name,
+        "is_builtin": manifest.is_builtin,
+        "requested": manifest.permissions.to_dict(),
+        "approved": approved.to_dict() if approved else None,
+        "has_sensitive_permissions": security.permission_manager.has_sensitive_permissions(manifest),
+        "can_load": can_load,
+        "load_reason": reason,
+    }
+
+
+@router.post("/security/permissions/{plugin_id}/approve")
+def approve_plugin_permissions(plugin_id: str, request: PermissionApprovalRequest):
+    """
+    Approve or deny permissions for a plugin.
+
+    Approving grants the plugin all permissions it requested.
+    Denying prevents the plugin from being loaded.
+    """
+    registry = get_plugin_registry()
+    security = get_security_manager()
+
+    manifest = registry.get_manifest(plugin_id)
+    if not manifest:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    if manifest.is_builtin:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot modify permissions for built-in plugins"
+        )
+
+    if request.approve:
+        security.permission_manager.approve_permissions(
+            plugin_id,
+            manifest.permissions,
+            approved_by="user",
+        )
+        message = "Permissions approved"
+    else:
+        security.permission_manager.deny_permissions(plugin_id)
+        message = "Permissions denied"
+
+    return {
+        "plugin_id": plugin_id,
+        "approved": request.approve,
+        "message": message,
+    }
+
+
+@router.post("/security/permissions/{plugin_id}/revoke")
+def revoke_plugin_permissions(plugin_id: str):
+    """
+    Revoke all approved permissions for a plugin.
+
+    The plugin will need to be re-approved before it can be loaded again.
+    """
+    registry = get_plugin_registry()
+    security = get_security_manager()
+
+    manifest = registry.get_manifest(plugin_id)
+    if not manifest:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    if manifest.is_builtin:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot modify permissions for built-in plugins"
+        )
+
+    security.permission_manager.revoke_permissions(plugin_id)
+
+    # Disable the plugin if it's enabled
+    if manifest.enabled:
+        registry.disable_plugin(plugin_id)
+
+    return {
+        "plugin_id": plugin_id,
+        "message": "Permissions revoked",
+    }
+
+
+@router.get("/security/pending")
+def get_pending_approvals():
+    """
+    Get plugins that need permission approval.
+
+    Returns plugins with sensitive permissions that haven't been approved yet.
+    """
+    registry = get_plugin_registry()
+    security = get_security_manager()
+
+    # Ensure plugins are discovered
+    registry.discover_plugins()
+
+    pending = []
+    for manifest in registry.get_all_manifests():
+        if manifest.is_builtin:
+            continue
+
+        has_sensitive = security.permission_manager.has_sensitive_permissions(manifest)
+        approved = security.permission_manager.get_approved_permissions(manifest.plugin_id)
+
+        if has_sensitive and not approved:
+            pending.append({
+                "plugin_id": manifest.plugin_id,
+                "name": manifest.name,
+                "description": manifest.description,
+                "author": manifest.author,
+                "permissions": manifest.permissions.to_dict(),
+                "sensitive_permissions": [
+                    p for p in ["file_write", "network", "api_keys"]
+                    if getattr(manifest.permissions, p, None)
+                ] + (["database_write"] if manifest.permissions.database.value == "read_write" else []),
+            })
+
+    return {
+        "pending": pending,
+        "count": len(pending),
+    }
+
+
+@router.get("/security/validate/{plugin_id}")
+def validate_plugin_security(plugin_id: str):
+    """
+    Validate a plugin's security configuration.
+
+    Returns any security issues or warnings for the plugin.
+    """
+    registry = get_plugin_registry()
+    security = get_security_manager()
+
+    manifest = registry.get_manifest(plugin_id)
+    if not manifest:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    is_valid, issues = security.validate_plugin(manifest)
+    can_load, reason = security.can_load_plugin(manifest)
+
+    return {
+        "plugin_id": plugin_id,
+        "name": manifest.name,
+        "is_valid": is_valid,
+        "issues": issues,
+        "can_load": can_load,
+        "load_reason": reason,
     }
