@@ -45,6 +45,7 @@ output/
 # ----- Secrets & API Keys -----
 .env
 .env.*
+!.env.example
 *.env
 .envrc
 credentials*
@@ -61,7 +62,9 @@ api_keys.txt
 *export*.json
 
 # ----- Claude Code Local Settings -----
-.claude/
+# Ignore local settings but allow skills to be shared
+.claude/*
+!.claude/skills/
 
 # ----- Log Files (may contain URLs, account activity) -----
 *.log

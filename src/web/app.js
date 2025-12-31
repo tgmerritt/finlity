@@ -3965,15 +3965,16 @@ function displayProjectionResults(result, retirementAge) {
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
         font: { color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)' },
-        margin: { t: 20, b: 40, l: 80, r: 20 },
+        margin: { t: 20, b: 40, l: 100, r: 20 },
         xaxis: {
             title: 'Age',
             gridcolor: isDark ? '#303030' : '#f0f0f0'
         },
         yaxis: {
-            title: 'Portfolio Value',
+            title: { text: 'Portfolio Value', standoff: 15 },
             tickformat: '$,.0f',
-            gridcolor: isDark ? '#303030' : '#f0f0f0'
+            gridcolor: isDark ? '#303030' : '#f0f0f0',
+            automargin: true
         },
         legend: { orientation: 'h', y: 1.15 },
         shapes: retirementIdx >= 0 ? [{

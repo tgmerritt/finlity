@@ -9,8 +9,12 @@ services:
       - ./data:/app/data
       # Optional: mount custom config
       # - ./config.yaml:/app/config.yaml:ro
+    env_file:
+      # Load API keys from .env file (create from .env.example)
+      - path: .env
+        required: false
     environment:
-      # API keys (optional - can also use .env file)
+      # API keys can also be set directly here (override .env)
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
       - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
@@ -38,6 +42,10 @@ services:
       - ./funds.yaml:/app/funds.yaml:ro
       # Persist data directory
       - ./data:/app/data
+    env_file:
+      # Load API keys from .env file
+      - path: .env
+        required: false
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
