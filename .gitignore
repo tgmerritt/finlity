@@ -36,11 +36,12 @@ output/
 *.xls
 
 # JSON data files (may contain portfolio data)
-# Note: package.json and similar config files are safe
+# Note: config files are safe to commit
 *.json
 !package.json
 !package-lock.json
 !tsconfig.json
+!.claude/*.json
 
 # ----- Secrets & API Keys -----
 .env
@@ -61,10 +62,10 @@ api_keys.txt
 *backup*.json
 *export*.json
 
-# ----- Claude Code Local Settings -----
-# Ignore local settings but allow skills to be shared
-.claude/*
-!.claude/skills/
+# ----- Claude Code Settings -----
+# Track .claude folder for shared development configuration
+# (skills, agents, permission settings, etc.)
+# Note: Never store API keys or secrets in .claude/
 
 # ----- Log Files (may contain URLs, account activity) -----
 *.log
