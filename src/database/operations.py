@@ -428,6 +428,15 @@ class Database:
             session.commit()
             return True
 
+    def update_positions_sector(self, ticker: str, sector: str) -> int:
+        """Update sector for all positions with given ticker. Returns count updated."""
+        with self.get_session() as session:
+            updated = session.query(Position).filter(
+                Position.ticker.ilike(ticker)
+            ).update({"sector": sector}, synchronize_session=False)
+            session.commit()
+            return updated
+
     def clear_positions_by_import(self, import_id: str) -> int:
         """Clear all positions from a specific import. Returns count deleted."""
         with self.get_session() as session:

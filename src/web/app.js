@@ -2354,7 +2354,12 @@ function updateAllocationCharts(positions, summary) {
         plot_bgcolor: 'transparent',
         font: { color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)' },
         margin: { t: 10, b: 10, l: 10, r: 10 },
-        showlegend: false  // Hidden - percentages shown on chart, hover for details
+        showlegend: false,  // Hidden - percentages shown on chart, hover for details
+        hoverlabel: {
+            bgcolor: isDark ? '#1f1f1f' : 'white',
+            bordercolor: isDark ? '#424242' : '#d9d9d9',
+            font: { color: isDark ? 'white' : 'black' }
+        }
     };
 
     // Account type allocation
@@ -2469,7 +2474,12 @@ function updateHistoryChart(history) {
             gridcolor: isDark ? '#303030' : '#f0f0f0'
         },
         legend: { orientation: 'h', y: 1.1 },
-        hovermode: 'x unified'
+        hovermode: 'x unified',
+        hoverlabel: {
+            bgcolor: isDark ? '#1f1f1f' : 'white',
+            bordercolor: isDark ? '#424242' : '#d9d9d9',
+            font: { color: isDark ? 'white' : 'black' }
+        }
     }, plotlyConfig);
 }
 
@@ -3057,6 +3067,39 @@ async function analyzePortfolioFunds() {
 
     } catch (error) {
         showToast('Failed to analyze portfolio funds', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function updatePositionSectors() {
+    showLoading('Updating position sectors...');
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/analysis/positions/update-sectors`, {
+            method: 'POST'
+        });
+
+        const result = await resp.json();
+
+        if (result.error) {
+            showToast(result.error, 'error');
+            return;
+        }
+
+        if (result.positions_updated > 0) {
+            showToast(`Updated sectors for ${result.positions_updated} positions`, 'success');
+            // Refresh the page to show updated sectors
+            window.location.reload();
+        } else if (result.message) {
+            showToast(result.message, 'info');
+        } else {
+            showToast(`Analyzed ${result.total_tickers} tickers`, 'info');
+        }
+
+    } catch (error) {
+        console.error('Error updating sectors:', error);
+        showToast('Failed to update position sectors', 'error');
     } finally {
         hideLoading();
     }
@@ -4225,6 +4268,11 @@ function displayProjectionResults(result, retirementAge) {
             automargin: true
         },
         legend: { orientation: 'h', y: 1.15 },
+        hoverlabel: {
+            bgcolor: isDark ? '#1f1f1f' : 'white',
+            bordercolor: isDark ? '#424242' : '#d9d9d9',
+            font: { color: isDark ? 'white' : 'black' }
+        },
         shapes: retirementIdx >= 0 ? [{
             type: 'line',
             x0: retirementAge,

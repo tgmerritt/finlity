@@ -118,6 +118,14 @@ class CorrelationResponse(BaseModel):
     low_correlations: list[CorrelationEntry]
 
 
+def _sanitize_float(value: float, default: float = 0.0) -> float:
+    """Sanitize float values for JSON serialization (handle NaN, Inf)."""
+    import math
+    if value is None or math.isnan(value) or math.isinf(value):
+        return default
+    return value
+
+
 @router.get("/performance", response_model=PerformanceResponse)
 def get_performance(
     benchmark: str = "SPY",
@@ -144,16 +152,16 @@ def get_performance(
     perf = analyzer.get_portfolio_performance(portfolio, benchmark)
 
     return PerformanceResponse(
-        total_value=perf.total_value,
-        total_cost_basis=perf.total_cost_basis,
-        total_gain_loss=perf.total_gain_loss,
-        total_gain_loss_pct=perf.total_gain_loss_pct,
-        ytd_return=perf.ytd_return,
-        one_year_return=perf.one_year_return,
-        benchmark_ytd=perf.benchmark_ytd,
-        benchmark_one_year=perf.benchmark_one_year,
-        alpha_ytd=perf.alpha_ytd,
-        alpha_one_year=perf.alpha_one_year,
+        total_value=_sanitize_float(perf.total_value),
+        total_cost_basis=perf.total_cost_basis if perf.total_cost_basis is not None else None,
+        total_gain_loss=perf.total_gain_loss if perf.total_gain_loss is not None else None,
+        total_gain_loss_pct=_sanitize_float(perf.total_gain_loss_pct) if perf.total_gain_loss_pct is not None else None,
+        ytd_return=_sanitize_float(perf.ytd_return),
+        one_year_return=_sanitize_float(perf.one_year_return),
+        benchmark_ytd=_sanitize_float(perf.benchmark_ytd),
+        benchmark_one_year=_sanitize_float(perf.benchmark_one_year),
+        alpha_ytd=_sanitize_float(perf.alpha_ytd),
+        alpha_one_year=_sanitize_float(perf.alpha_one_year),
     )
 
 
@@ -181,14 +189,14 @@ def get_risk(
     risk = analyzer.get_portfolio_risk(portfolio, benchmark)
 
     return RiskResponse(
-        volatility=risk.volatility,
-        sharpe_ratio=risk.sharpe_ratio,
-        sortino_ratio=risk.sortino_ratio,
-        max_drawdown=risk.max_drawdown,
-        beta=risk.beta,
-        var_95=risk.var_95,
-        cvar_95=risk.cvar_95,
-        diversification_ratio=risk.diversification_ratio,
+        volatility=_sanitize_float(risk.volatility),
+        sharpe_ratio=_sanitize_float(risk.sharpe_ratio),
+        sortino_ratio=_sanitize_float(risk.sortino_ratio),
+        max_drawdown=_sanitize_float(risk.max_drawdown),
+        beta=_sanitize_float(risk.beta, 1.0),
+        var_95=_sanitize_float(risk.var_95),
+        cvar_95=_sanitize_float(risk.cvar_95),
+        diversification_ratio=_sanitize_float(risk.diversification_ratio, 1.0),
     )
 
 
@@ -801,8 +809,10 @@ def analyze_portfolio_funds(db: Database = Depends(get_db)):
         claude_api_key=claude_key,
     )
 
-    # Analyze each fund
+    # Analyze each fund and update positions with sector data
     results = []
+    positions_updated = 0
+
     for ticker in fund_tickers[:10]:  # Limit to 10 funds to avoid rate limits
         try:
             composition = fund_service.get_fund_composition(
@@ -810,12 +820,48 @@ def analyze_portfolio_funds(db: Database = Depends(get_db)):
                 use_claude=claude_key is not None,
             )
             if composition:
+                # Determine primary sector from breakdown or category
+                primary_sector = None
+                if composition.sector_breakdown:
+                    # Get the largest sector
+                    primary_sector = max(
+                        composition.sector_breakdown.items(),
+                        key=lambda x: x[1]
+                    )[0]
+                elif composition.morningstar_category:
+                    # Map category to sector (simplified)
+                    category_lower = composition.morningstar_category.lower()
+                    if "technology" in category_lower:
+                        primary_sector = "Technology"
+                    elif "healthcare" in category_lower or "health" in category_lower:
+                        primary_sector = "Healthcare"
+                    elif "financial" in category_lower:
+                        primary_sector = "Financials"
+                    elif "energy" in category_lower:
+                        primary_sector = "Energy"
+                    elif "real estate" in category_lower:
+                        primary_sector = "Real Estate"
+                    elif "consumer" in category_lower:
+                        primary_sector = "Consumer"
+                    elif "industrial" in category_lower:
+                        primary_sector = "Industrials"
+                    elif "blend" in category_lower or "growth" in category_lower or "value" in category_lower:
+                        # Market index funds - use "Diversified"
+                        primary_sector = "Diversified"
+
+                # Update positions in database with sector info
+                if primary_sector:
+                    updated = db.update_positions_sector(ticker, primary_sector)
+                    positions_updated += updated
+
                 results.append({
                     "ticker": composition.ticker,
                     "name": composition.name,
                     "morningstar_category": composition.morningstar_category,
                     "style": composition.style,
                     "region": composition.region,
+                    "sector_breakdown": composition.sector_breakdown,
+                    "primary_sector": primary_sector,
                     "data_source": composition.data_source,
                 })
         except Exception as e:
@@ -827,7 +873,218 @@ def analyze_portfolio_funds(db: Database = Depends(get_db)):
     return {
         "analyzed": results,
         "total_funds": len(fund_tickers),
+        "positions_updated": positions_updated,
         "claude_used": claude_key is not None,
+    }
+
+
+def _get_sector_from_yfinance(ticker: str) -> Optional[str]:
+    """Try to get sector from yfinance."""
+    try:
+        import yfinance as yf
+        stock = yf.Ticker(ticker)
+        info = stock.info
+
+        sector = info.get("sector")
+        if sector:
+            return sector
+
+        # For ETFs/funds, try to determine from category
+        category = info.get("category", "")
+        if category:
+            if "Technology" in category or "Tech" in category:
+                return "Technology"
+            elif "Health" in category:
+                return "Healthcare"
+            elif "Financial" in category or "Finance" in category:
+                return "Financials"
+            elif "Energy" in category:
+                return "Energy"
+            elif "Real Estate" in category or "REIT" in category:
+                return "Real Estate"
+            elif "Consumer" in category:
+                return "Consumer"
+            elif "Industrial" in category:
+                return "Industrials"
+            elif "Utilities" in category:
+                return "Utilities"
+            elif "Communication" in category or "Telecom" in category:
+                return "Communication"
+            elif "Materials" in category or "Basic" in category:
+                return "Materials"
+            elif "Blend" in category or "Index" in category or "Total" in category:
+                return "Diversified"
+            elif "Bond" in category or "Fixed" in category:
+                return "Fixed Income"
+            elif "International" in category or "Foreign" in category:
+                return "International"
+        return None
+    except Exception:
+        return None
+
+
+def _get_sector_from_finnhub(ticker: str, api_key: str) -> Optional[str]:
+    """Try to get sector from Finnhub company profile."""
+    import requests
+    try:
+        url = f"https://finnhub.io/api/v1/stock/profile2"
+        params = {"symbol": ticker, "token": api_key}
+        resp = requests.get(url, params=params, timeout=10)
+
+        if resp.status_code == 429:
+            return None  # Rate limited, let caller try another source
+
+        if resp.status_code != 200:
+            return None
+
+        data = resp.json()
+        sector = data.get("finnhubIndustry")
+        if sector:
+            # Map Finnhub industry to our sector categories
+            sector_lower = sector.lower()
+            if "technology" in sector_lower or "software" in sector_lower or "semiconductor" in sector_lower:
+                return "Technology"
+            elif "health" in sector_lower or "biotech" in sector_lower or "pharma" in sector_lower:
+                return "Healthcare"
+            elif "financial" in sector_lower or "bank" in sector_lower or "insurance" in sector_lower:
+                return "Financials"
+            elif "energy" in sector_lower or "oil" in sector_lower:
+                return "Energy"
+            elif "real estate" in sector_lower or "reit" in sector_lower:
+                return "Real Estate"
+            elif "consumer" in sector_lower or "retail" in sector_lower:
+                return "Consumer"
+            elif "industrial" in sector_lower or "manufacturing" in sector_lower:
+                return "Industrials"
+            elif "utility" in sector_lower or "utilities" in sector_lower:
+                return "Utilities"
+            elif "communication" in sector_lower or "media" in sector_lower or "telecom" in sector_lower:
+                return "Communication"
+            elif "material" in sector_lower or "chemical" in sector_lower or "mining" in sector_lower:
+                return "Materials"
+            else:
+                return sector.title()  # Return as-is
+        return None
+    except Exception:
+        return None
+
+
+def _get_sector_from_alphavantage(ticker: str, api_key: str) -> Optional[str]:
+    """Try to get sector from Alpha Vantage company overview."""
+    import requests
+    try:
+        url = "https://www.alphavantage.co/query"
+        params = {
+            "function": "OVERVIEW",
+            "symbol": ticker,
+            "apikey": api_key,
+        }
+        resp = requests.get(url, params=params, timeout=10)
+
+        if resp.status_code != 200:
+            return None
+
+        data = resp.json()
+
+        # Check for rate limit message
+        if "Note" in data:
+            return None
+
+        sector = data.get("Sector")
+        if sector and sector != "None":
+            return sector
+        return None
+    except Exception:
+        return None
+
+
+def _get_sector_multi_source(ticker: str, db: Database) -> tuple[Optional[str], str]:
+    """
+    Try multiple sources to get sector data.
+    Returns (sector, source_name) or (None, "none").
+    """
+    from src.services.secrets import SecretsManager
+    import os
+
+    # Try yfinance first (no API key required)
+    sector = _get_sector_from_yfinance(ticker)
+    if sector:
+        return sector, "yfinance"
+
+    # Get API keys for other sources
+    secrets = SecretsManager(db)
+
+    # Try Finnhub
+    finnhub_key = os.environ.get("FINNHUB_API_KEY") or secrets.get_api_key("finnhub")
+    if finnhub_key:
+        sector = _get_sector_from_finnhub(ticker, finnhub_key)
+        if sector:
+            return sector, "finnhub"
+
+    # Try Alpha Vantage
+    av_key = os.environ.get("ALPHA_VANTAGE_API_KEY") or secrets.get_api_key("alpha_vantage")
+    if av_key:
+        sector = _get_sector_from_alphavantage(ticker, av_key)
+        if sector:
+            return sector, "alphavantage"
+
+    return None, "none"
+
+
+@router.post("/positions/update-sectors")
+def update_position_sectors(db: Database = Depends(get_db)):
+    """Update sector data for all positions using multiple data sources."""
+    positions = db.get_all_positions()
+
+    # Get unique tickers that don't have sectors and are tradeable
+    tickers_to_update = []
+    for p in positions:
+        if (
+            p.ticker
+            and not p.sector
+            and not p.ticker.startswith(("CD-", "BOND-", "TBILL-", "IBOND-"))
+            and p.ticker not in ("CASH", "CD", "MONEY", "RE")
+        ):
+            ticker = p.ticker.upper().replace("/", "-")
+            if ticker not in tickers_to_update:
+                tickers_to_update.append(ticker)
+
+    if not tickers_to_update:
+        return {"message": "All positions already have sectors", "updated": 0}
+
+    results = []
+    positions_updated = 0
+
+    # Process in batches
+    for ticker in tickers_to_update[:20]:  # Limit to 20 to avoid rate limits
+        sector, source = _get_sector_multi_source(ticker, db)
+
+        if sector:
+            # Restore original ticker format for database update
+            original_ticker = ticker.replace("-", "/") if "/" not in ticker else ticker
+            # Try both formats
+            updated = db.update_positions_sector(ticker, sector)
+            if updated == 0:
+                updated = db.update_positions_sector(original_ticker, sector)
+            positions_updated += updated
+
+            results.append({
+                "ticker": ticker,
+                "sector": sector,
+                "source": source,
+                "positions_updated": updated,
+            })
+        else:
+            results.append({
+                "ticker": ticker,
+                "sector": None,
+                "error": "Could not determine sector from any source",
+            })
+
+    return {
+        "analyzed": results,
+        "total_tickers": len(tickers_to_update),
+        "positions_updated": positions_updated,
     }
 
 

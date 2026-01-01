@@ -2940,10 +2940,10 @@ th.sortable.sort-desc .sort-icon::after {
     color: var(--color-text-tertiary);
 }
 
-/* API Keys Status Grid */
+/* API Keys Status List */
 .api-keys-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 12px;
 }
 

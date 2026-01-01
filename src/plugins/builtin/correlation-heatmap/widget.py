@@ -14,8 +14,8 @@ from src.data import PriceService
 class CorrelationHeatmapWidget(WidgetPlugin):
     """Widget showing correlation heatmap of portfolio holdings."""
 
-    def __init__(self, manifest: Optional[PluginManifest] = None):
-        super().__init__(manifest)
+    def __init__(self, manifest: PluginManifest, settings: dict[str, Any] = None):
+        super().__init__(manifest, settings)
         self._price_service = None
 
     @property
@@ -105,39 +105,112 @@ class CorrelationHeatmapWidget(WidgetPlugin):
         )
 
     def _calculate_price_correlations(self, tickers: list[str]) -> Optional[list[list[float]]]:
-        """Calculate actual correlations from price history."""
+        """Calculate actual correlations from price history using yfinance."""
         import pandas as pd
         import numpy as np
 
-        # Fetch price history for each ticker
+        # Filter out non-tradeable tickers (CDs, cash, etc.)
+        tradeable_tickers = [
+            t for t in tickers
+            if not t.startswith(("CD-", "CASH", "BOND-", "TBILL-"))
+            and t not in ("CASH", "CD", "MONEY")
+        ]
+
+        if len(tradeable_tickers) < 2:
+            return None
+
+        try:
+            import yfinance as yf
+
+            # Fetch 1 year of daily data for all tickers at once
+            # Normalize ticker symbols (e.g., BRK/B -> BRK-B)
+            normalized = {t: t.replace("/", "-") for t in tradeable_tickers}
+            symbols = list(normalized.values())
+
+            data = yf.download(
+                symbols,
+                period="1y",
+                interval="1d",
+                progress=False,
+                auto_adjust=True,
+            )
+
+            if data.empty:
+                return None
+
+            # Handle single ticker case
+            if len(symbols) == 1:
+                prices = data[["Close"]].copy()
+                prices.columns = [symbols[0]]
+            else:
+                prices = data["Close"].copy()
+
+            # Calculate daily returns
+            returns = prices.pct_change().dropna()
+
+            if len(returns) < 20:
+                return None
+
+            # Calculate correlation matrix
+            corr_df = returns.corr()
+
+            # Build matrix for all requested tickers (including non-tradeable)
+            n = len(tickers)
+            matrix = []
+
+            # Create reverse mapping from normalized to original
+            norm_to_orig = {v: k for k, v in normalized.items()}
+
+            for i, ticker1 in enumerate(tickers):
+                row = []
+                norm1 = ticker1.replace("/", "-")
+                for j, ticker2 in enumerate(tickers):
+                    norm2 = ticker2.replace("/", "-")
+                    if i == j:
+                        row.append(1.0)
+                    elif norm1 in corr_df.columns and norm2 in corr_df.columns:
+                        corr = corr_df.loc[norm1, norm2]
+                        if pd.isna(corr):
+                            row.append(0.5)
+                        else:
+                            row.append(round(float(corr), 2))
+                    else:
+                        # Non-tradeable or missing - use moderate default
+                        row.append(0.5)
+                matrix.append(row)
+
+            return matrix
+
+        except ImportError:
+            # yfinance not installed, fall back to PriceService
+            pass
+        except Exception as e:
+            print(f"Error calculating correlations with yfinance: {e}")
+
+        # Fall back to PriceService method
         returns_data = {}
-        for ticker in tickers:
+        for ticker in tradeable_tickers:
             try:
                 history = self.price_service.get_price_history(ticker, "1y")
                 if history and len(history.returns) > 20:
-                    returns_data[ticker] = history.returns[1:]  # Skip first zero
+                    returns_data[ticker] = history.returns[1:]
             except Exception:
                 pass
 
-        # Need at least 2 tickers with data
         if len(returns_data) < 2:
             return None
 
-        # Align data - use minimum common length
         min_len = min(len(r) for r in returns_data.values())
         if min_len < 20:
             return None
 
-        # Build DataFrame
         df = pd.DataFrame({
             ticker: returns[-min_len:]
             for ticker, returns in returns_data.items()
         })
 
-        # Calculate correlation matrix
         corr_df = df.corr()
 
-        # Build matrix for all requested tickers
         n = len(tickers)
         matrix = []
 
@@ -148,13 +221,12 @@ class CorrelationHeatmapWidget(WidgetPlugin):
                     row.append(1.0)
                 elif ticker1 in corr_df.columns and ticker2 in corr_df.columns:
                     corr = corr_df.loc[ticker1, ticker2]
-                    # Handle NaN
                     if pd.isna(corr):
-                        row.append(0.5)  # Default for missing
+                        row.append(0.5)
                     else:
                         row.append(round(float(corr), 2))
                 else:
-                    row.append(0.5)  # No data available
+                    row.append(0.5)
             matrix.append(row)
 
         return matrix
