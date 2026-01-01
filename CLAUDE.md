@@ -98,11 +98,42 @@ SHA256 hashing prevents duplicate imports.
 4. **Dashboard** → Vanilla JS + Plotly.js served by FastAPI
 5. **Analysis** → Risk metrics, allocation, triggers, Monte Carlo
 
+### Database Lifecycle (DatabaseManager)
+
+The database is the **SOURCE OF TRUTH** once it exists and is valid. CSV/YAML files are only used for first-time initialization (seed data).
+
+**Startup Flow:**
+```
+App Start → Does DB exist? → Yes → Is DB valid? → Yes → USE AS SOURCE OF TRUTH
+                                                → No  → Backup corrupt + re-initialize
+                          → No  → FIRST-TIME INIT from CSV/YAML seed data
+```
+
+**Key Classes:**
+- `DatabaseManager`: Handles lifecycle (existence, integrity, initialization, recovery)
+- `SeedLoader`: Loads initial data from CSV/YAML for first-time setup
+- `check_database(path)`: Quick status check for any database file
+
+**Usage:**
+```python
+from src.database import check_database, DatabaseManager
+
+# Check status
+result = check_database("data/databases/default/portfolio.db")
+if result.is_usable:
+    db = DatabaseManager(path).get_database()  # Use as source of truth
+elif result.needs_initialization:
+    db = DatabaseManager(path).initialize()     # First-time setup
+elif result.needs_recovery:
+    db = DatabaseManager(path).recover()        # Backup + re-initialize
+```
+
 ### Profile-Aware Database
 - **IMPORTANT**: All API endpoints MUST use `get_database()` from `src.database` to get a profile-aware database instance
 - Never use `Database()` directly - this creates a connection to the wrong database file
 - Each profile has its own SQLite database in `data/databases/{profile_id}/portfolio.db`
 - The active profile is determined by the `get_profile_manager().get_active_profile()` method
+- ProfileManager now uses DatabaseManager internally for proper lifecycle handling
 
 ### Data Loading Pattern
 - **Current pattern**: Vanilla JS loads fresh data on each tab switch (no client-side caching)

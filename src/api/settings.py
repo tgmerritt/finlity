@@ -7,6 +7,8 @@ import yaml
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from src.database import get_database
+
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 CONFIG_PATH = Path("config.yaml")
@@ -220,10 +222,9 @@ class ApiKeyRequest(BaseModel):
 @router.post("/api-key")
 def set_api_key(request: ApiKeyRequest) -> dict:
     """Store an API key securely in the database."""
-    from src.database import Database
     from src.services import SecretsManager
 
-    db = Database()
+    db = get_database()
     secrets = SecretsManager(db)
     secrets.set_api_key(request.key, request.value)
     return {"status": "stored", "key": request.key, "masked": secrets.mask_key(request.value)}
@@ -232,10 +233,9 @@ def set_api_key(request: ApiKeyRequest) -> dict:
 @router.get("/api-key/{key_name}")
 def get_api_key_status(key_name: str) -> dict:
     """Check if an API key is set (without revealing the value)."""
-    from src.database import Database
     from src.services import SecretsManager
 
-    db = Database()
+    db = get_database()
     secrets = SecretsManager(db)
     has_key = secrets.has_api_key(key_name)
     source = secrets.get_key_source(key_name) if has_key else None
@@ -245,10 +245,9 @@ def get_api_key_status(key_name: str) -> dict:
 @router.delete("/api-key/{key_name}")
 def delete_api_key(key_name: str) -> dict:
     """Delete an API key from the database."""
-    from src.database import Database
     from src.services import SecretsManager
 
-    db = Database()
+    db = get_database()
     secrets = SecretsManager(db)
     deleted = secrets.delete_api_key(key_name)
     return {"status": "deleted" if deleted else "not_found", "key": key_name}
@@ -263,8 +262,7 @@ class ThemeSettings(BaseModel):
 @router.get("/theme")
 def get_theme() -> dict:
     """Get current theme setting."""
-    from src.database import Database
-    db = Database()
+    db = get_database()
     setting = db.get_setting("theme_mode")
     return {"mode": setting.value if setting else "dark"}
 
@@ -272,8 +270,7 @@ def get_theme() -> dict:
 @router.put("/theme")
 def set_theme(settings: ThemeSettings) -> dict:
     """Set theme preference."""
-    from src.database import Database
-    db = Database()
+    db = get_database()
     db.set_setting("theme_mode", settings.mode)
     return {"status": "updated", "mode": settings.mode}
 
@@ -305,8 +302,7 @@ class ViewResponse(BaseModel):
 @router.get("/views", response_model=list[ViewResponse])
 def get_all_views() -> list[ViewResponse]:
     """Get all portfolio views."""
-    from src.database import Database
-    db = Database()
+    db = get_database()
 
     # Ensure "All Accounts" view exists
     db.ensure_all_accounts_view()
@@ -326,8 +322,7 @@ def get_all_views() -> list[ViewResponse]:
 @router.get("/views/current")
 def get_current_view() -> dict:
     """Get the current/default view."""
-    from src.database import Database
-    db = Database()
+    db = get_database()
 
     view = db.get_default_view()
     if not view:
@@ -345,8 +340,7 @@ def get_current_view() -> dict:
 @router.post("/views", response_model=ViewResponse)
 def create_view(request: ViewCreateRequest) -> ViewResponse:
     """Create a new portfolio view."""
-    from src.database import Database
-    db = Database()
+    db = get_database()
 
     view = db.create_portfolio_view(
         name=request.name,
@@ -364,8 +358,7 @@ def create_view(request: ViewCreateRequest) -> ViewResponse:
 @router.put("/views/{view_id}", response_model=ViewResponse)
 def update_view(view_id: str, request: ViewUpdateRequest) -> ViewResponse:
     """Update a portfolio view."""
-    from src.database import Database
-    db = Database()
+    db = get_database()
 
     view = db.update_view(
         view_id=view_id,
@@ -387,8 +380,7 @@ def update_view(view_id: str, request: ViewUpdateRequest) -> ViewResponse:
 @router.delete("/views/{view_id}")
 def delete_view(view_id: str) -> dict:
     """Delete a portfolio view."""
-    from src.database import Database
-    db = Database()
+    db = get_database()
 
     # Don't allow deleting "All Accounts" view
     view = db.get_view_by_id(view_id)
@@ -403,8 +395,7 @@ def delete_view(view_id: str) -> dict:
 @router.put("/views/{view_id}/set-default")
 def set_default_view(view_id: str) -> dict:
     """Set a view as the default."""
-    from src.database import Database
-    db = Database()
+    db = get_database()
 
     view = db.update_view(view_id, is_default=True)
     if not view:
@@ -418,10 +409,9 @@ def set_default_view(view_id: str) -> dict:
 @router.get("/api-keys/status")
 def get_all_api_keys_status() -> dict:
     """Get status of all configured API keys."""
-    from src.database import Database
     from src.services import SecretsManager
 
-    db = Database()
+    db = get_database()
     secrets = SecretsManager(db)
 
     # Check each API key

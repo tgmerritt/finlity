@@ -73,37 +73,56 @@ def get_db_path():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
+    from src.database import (
+        DatabaseManager,
+        check_database,
+        create_seed_callback,
+    )
+
     # Store demo mode status in app state
     app.state.demo_mode = is_demo_mode()
     app.state.db_path = get_db_path()
 
-    # Initialize database with the appropriate path
-    db = Database(app.state.db_path)
-
     if app.state.demo_mode:
         print("*** DEMO MODE ENABLED ***")
 
-    # Scan for new imports on startup
+    # Check database status before loading
+    db_path = app.state.db_path
+    db_status = check_database(db_path)
+
+    # Log database status (no PII - just counts and status)
+    print(f"Database status: {db_status.status.value}")
+    if db_status.is_usable:
+        print(f"  Loaded: {db_status.account_count} accounts, {db_status.position_count} positions")
+
+    # Get database through profile manager (handles lifecycle automatically)
+    # The profile manager now uses DatabaseManager internally
+    db = get_database()
+
+    # If this is a new/empty database, seed with data from CSV/YAML
+    if db_status.needs_initialization:
+        print("First-time setup: importing seed data...")
+        seed_callback = create_seed_callback()
+        seed_callback(db)
+
+    # Scan for new imports on startup (incremental imports, not seed data)
     scanner = FolderScanner(db)
     pending = scanner.scan_for_new_files()
     if pending:
-        print(f"Found {len(pending)} new files to import")
+        print(f"Importing {len(pending)} new file(s)...")
         results = scanner.process_all_pending(fetch_prices=True)
-        for r in results:
-            status = "OK" if r.success else "FAILED"
-            print(f"  [{status}] {r.file_path.name}: {r.positions_imported} positions")
+        success_count = sum(1 for r in results if r.success)
+        total_positions = sum(r.positions_imported for r in results if r.success)
+        print(f"  Imported {total_positions} positions from {success_count} file(s)")
 
     # Refresh stale prices (>24 hours old) on startup
     stale_tickers = db.get_stale_tickers()
     if stale_tickers:
-        print(f"Refreshing {len(stale_tickers)} stale prices...")
+        print(f"Refreshing {len(stale_tickers)} stale price(s)...")
         scanner._fetch_and_update_prices(stale_tickers)
-        print(f"  Updated prices for: {', '.join(stale_tickers)}")
 
-    # Take a snapshot
-    snapshot = db.take_snapshot()
-    if snapshot.total_value > 0:
-        print(f"Portfolio snapshot: ${snapshot.total_value:,.0f}")
+    # Take a snapshot (don't log actual portfolio value - that's sensitive)
+    db.take_snapshot()
 
     yield
 
@@ -158,7 +177,7 @@ async def serve_dashboard():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    db = Database(get_db_path())
+    db = get_database()
     summary = db.get_portfolio_summary()
     return {
         "status": "healthy",
@@ -177,7 +196,7 @@ async def get_dashboard_data(view_id: str = None):
         view_id: Optional portfolio view ID to filter by. If not provided,
                  returns data for all accounts.
     """
-    db = Database(get_db_path())
+    db = get_database()
 
     # Get all accounts for reference
     all_accounts = {a.id: a for a in db.get_all_accounts()}
@@ -325,7 +344,7 @@ def reset_database_command():
         return
 
     print("\nResetting database...")
-    db = Database()
+    db = get_database()
     db.reset_database()
     print("Database has been reset. All data has been deleted.")
     print("The database schema has been recreated.\n")
@@ -334,7 +353,7 @@ def reset_database_command():
 def export_database_command(path: str):
     """Export database to JSON file."""
     print(f"\nExporting database to: {path}")
-    db = Database()
+    db = get_database()
     data = db.export_database(path)
     print(f"Exported {len(data.get('accounts', []))} accounts")
     print(f"Exported {len(data.get('positions', []))} positions")
@@ -352,7 +371,7 @@ def import_database_command(path: str):
         print("\nAborted. Database was NOT modified.")
         return
 
-    db = Database()
+    db = get_database()
     result = db.import_database(path)
     print(f"Imported {result.get('accounts', 0)} accounts")
     print(f"Imported {result.get('positions', 0)} positions")
@@ -362,7 +381,7 @@ def import_database_command(path: str):
 def check_cd_maturities_command():
     """Check for matured CDs and convert them to cash."""
     print("\nChecking for matured CDs...")
-    db = Database()
+    db = get_database()
 
     # Check and convert matured CDs
     matured = db.check_cd_maturities()

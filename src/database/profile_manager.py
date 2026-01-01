@@ -2,19 +2,29 @@
 
 Allows financial advisors and users to manage multiple separate portfolios
 with complete data isolation between clients/families.
+
+Uses DatabaseManager for proper database lifecycle:
+- Existence checking
+- Integrity validation
+- First-time initialization
+- Corruption recovery
 """
 
 import json
+import logging
 import shutil
 import zipfile
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 import re
 import os
 
 from .operations import Database
+from .database_manager import DatabaseManager, DatabaseStatus, DatabaseCheckResult
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -283,9 +293,10 @@ class ProfileManager:
         for account_type in PREDEFINED_ACCOUNT_TYPES:
             (imports_dir / account_type).mkdir(exist_ok=True)
 
-        # Initialize empty database
-        db = Database(self._get_db_path(profile_id))
-        del db  # Close connection
+        # Initialize empty database using DatabaseManager
+        db_path = self._get_db_path(profile_id)
+        manager = DatabaseManager(db_path)
+        manager.initialize()  # Creates schema with proper versioning
 
         # Add to config and save
         self._config.profiles.append(profile)
@@ -359,11 +370,35 @@ class ProfileManager:
 
         return True
 
-    def activate_profile(self, profile_id: str) -> Database:
+    def check_database_status(self, profile_id: str) -> DatabaseCheckResult:
+        """Check the status of a profile's database.
+
+        Uses DatabaseManager to perform integrity and validation checks.
+
+        Args:
+            profile_id: ID of the profile to check
+
+        Returns:
+            DatabaseCheckResult with status and details
+        """
+        db_path = self._get_db_path(profile_id)
+        manager = DatabaseManager(db_path)
+        return manager.check()
+
+    def activate_profile(
+        self,
+        profile_id: str,
+        seed_callback: Optional[Callable[[Database], None]] = None,
+    ) -> Database:
         """Switch to a different profile.
+
+        Uses DatabaseManager to ensure database is valid before activation.
+        If the database doesn't exist or is empty, it will be initialized.
+        If the database is corrupt, it will be recovered (with backup).
 
         Args:
             profile_id: ID of the profile to activate
+            seed_callback: Optional callback to seed new databases with data
 
         Returns:
             Database instance for the activated profile
@@ -381,10 +416,37 @@ class ProfileManager:
 
         # Close existing database connection
         self._active_db = None
-
-        # Create new database connection
         self._active_profile_id = profile_id
-        self._active_db = Database(self._get_db_path(profile_id))
+
+        # Use DatabaseManager for proper lifecycle handling
+        db_path = self._get_db_path(profile_id)
+        manager = DatabaseManager(db_path)
+        result = manager.check()
+
+        if result.is_usable:
+            # Database exists and is valid - use as source of truth
+            self._active_db = manager.get_database()
+        elif result.needs_initialization:
+            # First-time setup or empty database
+            self._active_db = manager.initialize(seed_callback=seed_callback)
+            logger.info(f"Initialized new database for profile_id={profile_id}")
+        elif result.needs_recovery:
+            # Corrupt database - backup and re-initialize
+            logger.warning(f"Database corrupt for profile_id={profile_id}: {result.error_message}")
+            backup_dir = self._get_profile_dir(profile_id)
+            self._active_db = manager.recover(
+                backup_dir=backup_dir,
+                seed_callback=seed_callback,
+            )
+            logger.info(f"Recovered database for profile_id={profile_id}")
+        elif result.status == DatabaseStatus.SCHEMA_MISMATCH:
+            # Schema version mismatch - for now, just open it and let migrations run
+            # Future: could add explicit migration handling here
+            self._active_db = manager.get_database()
+            logger.info(f"Schema version mismatch for profile_id={profile_id}, running migrations")
+        else:
+            # Fallback - just try to open it
+            self._active_db = manager.get_database()
 
         return self._active_db
 
@@ -392,7 +454,7 @@ class ProfileManager:
         """Get the database instance for the active profile.
 
         Returns:
-            Database instance
+            Database instance (source of truth)
         """
         if self._active_db is None or self._active_profile_id != self._config.active_profile:
             return self.activate_profile(self._config.active_profile)
