@@ -66,6 +66,16 @@ PREDEFINED_ACCOUNT_TYPES = {
         "is_retirement": False,
         "description": "Government bonds (I-bonds, T-bills, etc.)",
     },
+    "property": {
+        "label": "Property",
+        "is_retirement": False,
+        "description": "Real Estate including land and buildings",
+    },
+    "misc": {
+        "label": "Miscellaneous",
+        "is_retirement": False,
+        "description": "Other assets with a cost basis & present value (artwork, memorabilia, etc.)",
+    },
 }
 
 

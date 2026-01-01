@@ -3952,3 +3952,210 @@ th.sortable.sort-desc .sort-icon::after {
     background: var(--color-bg-spotlight);
     color: var(--color-text-tertiary);
 }
+
+/* File Import Zone */
+.file-import-zone {
+    padding: 0 24px;
+}
+
+.file-import-zone-modal {
+    margin-bottom: 0;
+}
+
+.file-import-zone-modal .file-import-dropzone {
+    padding: 24px 20px;
+}
+
+.file-import-zone-modal .file-import-content svg {
+    width: 32px;
+    height: 32px;
+}
+
+.file-import-zone-modal .file-import-title {
+    font-size: 14px;
+}
+
+.file-import-zone-modal .file-import-subtitle {
+    font-size: 13px;
+}
+
+.file-import-zone-modal .file-import-formats {
+    font-size: 11px;
+}
+
+/* Modal Divider */
+.modal-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 20px 0;
+    color: var(--color-text-muted);
+    font-size: 13px;
+}
+
+.modal-divider::before,
+.modal-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.modal-divider span {
+    padding: 0 16px;
+}
+
+.file-import-dropzone {
+    position: relative;
+    border: 2px dashed var(--color-border);
+    border-radius: var(--border-radius);
+    padding: 32px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    background: var(--color-bg-primary);
+}
+
+.file-import-dropzone:hover {
+    border-color: var(--color-primary);
+    background: var(--color-bg-secondary);
+}
+
+.file-import-dropzone.drag-over {
+    border-color: var(--color-primary);
+    background: var(--color-primary-bg);
+    border-style: solid;
+}
+
+.file-import-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.file-import-content svg {
+    color: var(--color-text-muted);
+    transition: color var(--transition-fast);
+}
+
+.file-import-dropzone:hover .file-import-content svg,
+.file-import-dropzone.drag-over .file-import-content svg {
+    color: var(--color-primary);
+}
+
+.file-import-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.file-import-subtitle {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin: 0;
+}
+
+.file-import-formats {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin: 0;
+}
+
+.file-import-status {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--color-bg-secondary);
+    border-radius: var(--border-radius);
+}
+
+.file-import-progress {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--color-text-secondary);
+}
+
+.file-import-progress .spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Import Modal Styles */
+.import-file-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--color-bg-secondary);
+    border-radius: var(--border-radius);
+    margin-bottom: 20px;
+}
+
+.import-filename {
+    font-weight: 500;
+    color: var(--color-text-primary);
+}
+
+.import-suggestion {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--color-success-bg);
+    color: var(--color-success);
+    border-radius: var(--border-radius-sm);
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+
+.import-suggestion svg {
+    flex-shrink: 0;
+}
+
+.import-preview-table {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+}
+
+.import-preview-table table {
+    margin: 0;
+}
+
+.import-preview-table th,
+.import-preview-table td {
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+.import-preview-table th:first-child,
+.import-preview-table td:first-child {
+    width: 40px;
+    text-align: center;
+}
+
+.import-preview-table input[type="checkbox"] {
+    margin: 0;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    margin: 0;
+}

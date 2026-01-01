@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse
 from src.api import (
     portfolio_router,
     imports_router,
+    import_router,
     analysis_router,
     projections_router,
     settings_router,
@@ -128,6 +129,7 @@ app.add_middleware(
 # Include API routers
 app.include_router(portfolio_router)
 app.include_router(imports_router)
+app.include_router(import_router)
 app.include_router(analysis_router)
 app.include_router(projections_router)
 app.include_router(settings_router)

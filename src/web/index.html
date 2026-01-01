@@ -1353,7 +1353,35 @@
                 <button class="modal-close" onclick="hideAddPositionModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <p class="modal-description">Add positions manually for accounts without export support.</p>
+                <!-- File Import Drop Zone -->
+                <div id="file-import-zone" class="file-import-zone-modal">
+                    <div class="file-import-dropzone"
+                         ondragover="handleDragOver(event)"
+                         ondragleave="handleDragLeave(event)"
+                         ondrop="handleFileDrop(event)">
+                        <input type="file" id="file-import-input" accept=".csv,.xls,.xlsx" onchange="handleFileSelect(event)" style="display: none;">
+                        <div class="file-import-content">
+                            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            <p class="file-import-title">Drop brokerage export file here</p>
+                            <p class="file-import-subtitle">or <button type="button" class="btn-link" onclick="document.getElementById('file-import-input').click()">browse to select</button></p>
+                            <p class="file-import-formats">Supports CSV, XLS, XLSX files</p>
+                        </div>
+                    </div>
+                    <div id="file-import-status" class="file-import-status" style="display: none;">
+                        <div class="file-import-progress">
+                            <div class="spinner"></div>
+                            <span id="file-import-status-text">Processing file...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-divider">
+                    <span>or add manually</span>
+                </div>
 
                 <form id="add-position-form" onsubmit="addManualPosition(event)">
                     <div class="form-group">
@@ -1794,6 +1822,105 @@
                             </button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Import Confirmation Modal -->
+    <div id="import-confirm-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop" onclick="hideImportModal()"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>Confirm Import</h2>
+                <button class="modal-close" onclick="hideImportModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="import-file-info" class="import-file-info">
+                    <span class="import-filename"></span>
+                </div>
+
+                <!-- Account Selection -->
+                <div class="form-group">
+                    <label for="import-account">Destination Account</label>
+                    <div id="import-account-suggestion" class="import-suggestion" style="display: none;">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="m9 12 2 2 4-4"></path>
+                        </svg>
+                        <span id="import-ai-suggestion"></span>
+                    </div>
+                    <select id="import-account">
+                        <!-- Populated dynamically -->
+                    </select>
+                    <button type="button" onclick="showImportNewAccountForm()" class="btn-link">+ Create New Account</button>
+                </div>
+
+                <div id="import-new-account-form" class="nested-form" style="display: none;">
+                    <h4>Create New Account</h4>
+                    <div class="form-group">
+                        <label for="import-new-account-name">Account Name</label>
+                        <input type="text" id="import-new-account-name" placeholder="e.g., Schwab Roth IRA">
+                    </div>
+                    <div class="form-group">
+                        <label for="import-new-account-type">Account Type</label>
+                        <select id="import-new-account-type">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="import-new-account-brokerage">Brokerage</label>
+                        <input type="text" id="import-new-account-brokerage" placeholder="e.g., Charles Schwab">
+                    </div>
+                    <button type="button" onclick="createImportAccount()" class="btn btn-default">Create Account</button>
+                </div>
+
+                <!-- Parsed Positions Preview -->
+                <div class="form-group">
+                    <label>Positions Found (<span id="import-position-count">0</span>)</label>
+                    <div class="table-container import-preview-table">
+                        <table id="import-preview-table">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        <input type="checkbox" id="import-select-all" checked onchange="toggleAllImportPositions()">
+                                    </th>
+                                    <th>Ticker</th>
+                                    <th>Name</th>
+                                    <th class="text-right">Shares</th>
+                                    <th class="text-right">Price</th>
+                                    <th class="text-right">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="import-preview-body">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Import Options -->
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="import-replace" checked>
+                        <span>Replace existing positions in this account</span>
+                    </label>
+                    <p class="text-muted" style="font-size: 0.85em; margin-top: 4px;">
+                        If unchecked, new positions will be added alongside existing ones
+                    </p>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" onclick="hideImportModal()" class="btn btn-default">Cancel</button>
+                    <button type="button" onclick="confirmImport()" class="btn btn-primary" id="confirm-import-btn">
+                        <span class="btn-text">Import Positions</span>
+                        <span class="btn-loading" style="display: none;">
+                            <svg class="spinner-icon" viewBox="0 0 24 24" width="16" height="16">
+                                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="32" stroke-linecap="round"></circle>
+                            </svg>
+                            Importing...
+                        </span>
+                    </button>
                 </div>
             </div>
         </div>

@@ -4325,7 +4325,48 @@ async function createNewAccount() {
 async function addManualPosition(event) {
     event.preventDefault();
 
-    const accountId = document.getElementById('position-account').value;
+    let accountId = document.getElementById('position-account').value;
+
+    // Check if new account form is visible and has data - auto-create if so
+    const newAccountForm = document.getElementById('new-account-form');
+    const newAccountName = document.getElementById('new-account-name').value.trim();
+
+    if (newAccountForm.style.display !== 'none' && newAccountName) {
+        // Auto-create the new account first
+        const accountType = document.getElementById('new-account-type').value;
+        const brokerage = document.getElementById('new-account-brokerage').value.trim() || 'other';
+
+        try {
+            const response = await fetch(`${API_BASE}/api/portfolio/accounts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: newAccountName,
+                    account_type: accountType,
+                    brokerage: brokerage
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showToast(`Account "${newAccountName}" created`, 'success');
+                accountId = result.id;
+                // Hide the form and refresh dropdown
+                newAccountForm.style.display = 'none';
+                await loadAccountsForSelect();
+                document.getElementById('position-account').value = accountId;
+            } else {
+                showToast(`Error creating account: ${result.detail || 'Unknown error'}`, 'error');
+                return;
+            }
+        } catch (error) {
+            console.error('Error auto-creating account:', error);
+            showToast('Failed to create account', 'error');
+            return;
+        }
+    }
+
     if (!accountId) {
         showToast('Please select an account first', 'error');
         return;
@@ -4458,6 +4499,321 @@ async function addManualPosition(event) {
         console.error('Error adding position:', error);
         showToast('Failed to add position', 'error');
     }
+}
+
+// ==================== File Import Functions ====================
+
+// Store parsed import data
+let pendingImportData = null;
+
+// Handle drag over event
+function handleDragOver(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.classList.add('drag-over');
+}
+
+// Handle drag leave event
+function handleDragLeave(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.classList.remove('drag-over');
+}
+
+// Handle file drop
+async function handleFileDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.classList.remove('drag-over');
+
+    const files = event.dataTransfer.files;
+    if (files.length > 0) {
+        await processImportFile(files[0]);
+    }
+}
+
+// Handle file select from input
+async function handleFileSelect(event) {
+    const files = event.target.files;
+    if (files.length > 0) {
+        await processImportFile(files[0]);
+    }
+    // Reset input so same file can be selected again
+    event.target.value = '';
+}
+
+// Process the imported file
+async function processImportFile(file) {
+    const validTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+    const validExtensions = ['.csv', '.xls', '.xlsx'];
+
+    const hasValidExt = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+    if (!hasValidExt && !validTypes.includes(file.type)) {
+        showToast('Please upload a CSV or Excel file', 'error');
+        return;
+    }
+
+    // Show processing status
+    const statusDiv = document.getElementById('file-import-status');
+    const statusText = document.getElementById('file-import-status-text');
+    statusDiv.style.display = 'block';
+    statusText.textContent = 'Uploading and analyzing file...';
+
+    try {
+        // Create form data
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Upload and parse file
+        const response = await fetch(`${API_BASE}/api/import/parse`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.detail || 'Failed to parse file');
+        }
+
+        // Store parsed data
+        pendingImportData = result;
+
+        // Hide status
+        statusDiv.style.display = 'none';
+
+        // Show confirmation modal
+        await showImportConfirmModal(file.name, result);
+
+    } catch (error) {
+        console.error('Error processing file:', error);
+        statusDiv.style.display = 'none';
+        showToast(`Error: ${error.message}`, 'error');
+    }
+}
+
+// Show import confirmation modal
+async function showImportConfirmModal(filename, parseResult) {
+    // Set filename
+    document.querySelector('.import-filename').textContent = filename;
+
+    // Load accounts for select
+    await loadImportAccounts();
+    await loadImportAccountTypes();
+
+    // Show AI suggestion if available
+    const suggestionDiv = document.getElementById('import-account-suggestion');
+    const suggestionText = document.getElementById('import-ai-suggestion');
+
+    if (parseResult.suggested_account) {
+        suggestionDiv.style.display = 'flex';
+        suggestionText.textContent = `AI suggests: ${parseResult.suggested_account.name} (${parseResult.suggested_account.reason})`;
+
+        // Pre-select the suggested account
+        const select = document.getElementById('import-account');
+        if (parseResult.suggested_account.id) {
+            select.value = parseResult.suggested_account.id;
+        }
+    } else {
+        suggestionDiv.style.display = 'none';
+    }
+
+    // Populate positions preview table
+    const tbody = document.getElementById('import-preview-body');
+    tbody.innerHTML = '';
+
+    const positions = parseResult.positions || [];
+    document.getElementById('import-position-count').textContent = positions.length;
+
+    positions.forEach((pos, index) => {
+        const value = (pos.shares || 0) * (pos.price || 0);
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><input type="checkbox" class="import-position-check" data-index="${index}" checked></td>
+            <td>${escapeHtml(pos.ticker || 'N/A')}</td>
+            <td>${escapeHtml(pos.name || '-')}</td>
+            <td class="text-right">${pos.shares ? pos.shares.toLocaleString(undefined, {maximumFractionDigits: 4}) : '-'}</td>
+            <td class="text-right">${pos.price ? '$' + pos.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td>
+            <td class="text-right">${value > 0 ? '$' + value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td>
+        `;
+        tbody.appendChild(row);
+    });
+
+    // Show modal
+    document.getElementById('import-confirm-modal').style.display = 'flex';
+}
+
+// Load accounts for import modal select
+async function loadImportAccounts() {
+    try {
+        const response = await fetch(`${API_BASE}/api/portfolio/accounts`);
+        const accounts = await response.json();
+
+        const select = document.getElementById('import-account');
+        select.innerHTML = '';
+
+        if (accounts.length === 0) {
+            select.innerHTML = '<option value="">-- Create an account first --</option>';
+        } else {
+            accounts.forEach(acc => {
+                const option = document.createElement('option');
+                option.value = acc.id;
+                option.textContent = `${acc.name} (${acc.brokerage})`;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading accounts:', error);
+    }
+}
+
+// Load account types for import modal
+async function loadImportAccountTypes() {
+    try {
+        const response = await fetch(`${API_BASE}/api/portfolio/account-types`);
+        const types = await response.json();
+
+        const select = document.getElementById('import-new-account-type');
+        select.innerHTML = '';
+
+        types.forEach(type => {
+            const option = document.createElement('option');
+            option.value = type.value;
+            option.textContent = type.label;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading account types:', error);
+    }
+}
+
+// Hide import modal
+function hideImportModal() {
+    document.getElementById('import-confirm-modal').style.display = 'none';
+    document.getElementById('import-new-account-form').style.display = 'none';
+    pendingImportData = null;
+}
+
+// Show new account form in import modal
+function showImportNewAccountForm() {
+    const form = document.getElementById('import-new-account-form');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+// Create account from import modal
+async function createImportAccount() {
+    const name = document.getElementById('import-new-account-name').value.trim();
+    const accountType = document.getElementById('import-new-account-type').value;
+    const brokerage = document.getElementById('import-new-account-brokerage').value.trim() || 'other';
+
+    if (!name) {
+        showToast('Please enter an account name', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/portfolio/accounts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, account_type: accountType, brokerage })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showToast('Account created', 'success');
+            // Reload accounts and select the new one
+            await loadImportAccounts();
+            document.getElementById('import-account').value = result.id;
+            document.getElementById('import-new-account-form').style.display = 'none';
+        } else {
+            showToast(`Error: ${result.detail || 'Failed to create account'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error creating account:', error);
+        showToast('Failed to create account', 'error');
+    }
+}
+
+// Toggle all import position checkboxes
+function toggleAllImportPositions() {
+    const selectAll = document.getElementById('import-select-all').checked;
+    document.querySelectorAll('.import-position-check').forEach(cb => {
+        cb.checked = selectAll;
+    });
+}
+
+// Confirm and execute import
+async function confirmImport() {
+    const accountId = document.getElementById('import-account').value;
+    if (!accountId) {
+        showToast('Please select an account', 'error');
+        return;
+    }
+
+    if (!pendingImportData || !pendingImportData.positions) {
+        showToast('No data to import', 'error');
+        return;
+    }
+
+    // Get selected positions
+    const selectedIndices = [];
+    document.querySelectorAll('.import-position-check:checked').forEach(cb => {
+        selectedIndices.push(parseInt(cb.dataset.index));
+    });
+
+    if (selectedIndices.length === 0) {
+        showToast('Please select at least one position to import', 'error');
+        return;
+    }
+
+    const selectedPositions = selectedIndices.map(i => pendingImportData.positions[i]);
+    const replaceExisting = document.getElementById('import-replace').checked;
+
+    // Show loading state
+    const btn = document.getElementById('confirm-import-btn');
+    btn.querySelector('.btn-text').style.display = 'none';
+    btn.querySelector('.btn-loading').style.display = 'inline-flex';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE}/api/import/positions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                account_id: accountId,
+                positions: selectedPositions,
+                replace_existing: replaceExisting
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showToast(`Successfully imported ${result.imported_count} positions`, 'success');
+            hideImportModal();
+            refreshData();
+        } else {
+            throw new Error(result.detail || 'Failed to import positions');
+        }
+
+    } catch (error) {
+        console.error('Error importing positions:', error);
+        showToast(`Error: ${error.message}`, 'error');
+    } finally {
+        // Reset button
+        btn.querySelector('.btn-text').style.display = 'inline';
+        btn.querySelector('.btn-loading').style.display = 'none';
+        btn.disabled = false;
+    }
+}
+
+// Helper to escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Initialize
