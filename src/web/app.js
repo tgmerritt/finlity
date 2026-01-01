@@ -79,8 +79,26 @@ function closeModal() {
     if (modal) modal.style.display = 'none';
 }
 
-// Loading overlay
-function showLoading(message = 'Loading...') {
+// Loading overlay with rotating messages
+let loadingMessageInterval = null;
+let loadingMessageIndex = 0;
+
+const loadingMessages = {
+    default: ['Loading...'],
+    monteCarlo: [
+        'Running Monte Carlo simulation...',
+        'Simulating market scenarios...',
+        'Crunching the numbers...',
+        'Analyzing thousands of outcomes...',
+        'Still working...',
+        'Projecting your future wealth...',
+        'Almost there...',
+        'Running statistical analysis...',
+        'Calculating probabilities...'
+    ]
+};
+
+function showLoading(message = 'Loading...', rotateMessages = false) {
     const overlay = document.getElementById('loading-overlay');
     const textEl = overlay.querySelector('.loading-text');
     if (textEl) textEl.textContent = message;
@@ -88,9 +106,32 @@ function showLoading(message = 'Loading...') {
     // Force reflow for transition
     overlay.offsetHeight;
     overlay.classList.add('visible');
+
+    // Clear any existing interval
+    if (loadingMessageInterval) {
+        clearInterval(loadingMessageInterval);
+        loadingMessageInterval = null;
+    }
+
+    // Set up rotating messages if requested
+    if (rotateMessages && textEl) {
+        loadingMessageIndex = 0;
+        const messages = loadingMessages.monteCarlo;
+
+        loadingMessageInterval = setInterval(() => {
+            loadingMessageIndex = (loadingMessageIndex + 1) % messages.length;
+            textEl.textContent = messages[loadingMessageIndex];
+        }, 5000);
+    }
 }
 
 function hideLoading() {
+    // Clear rotating messages interval
+    if (loadingMessageInterval) {
+        clearInterval(loadingMessageInterval);
+        loadingMessageInterval = null;
+    }
+
     const overlay = document.getElementById('loading-overlay');
     overlay.classList.remove('visible');
     // Wait for transition then hide
@@ -4016,7 +4057,7 @@ async function saveApiKey(event) {
 async function runProjection(event) {
     event.preventDefault();
 
-    showLoading('Running Monte Carlo simulation...');
+    showLoading('Running Monte Carlo simulation...', true);  // Enable rotating messages
     const form = event.target;
     form.classList.add('loading');
 
