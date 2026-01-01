@@ -106,10 +106,9 @@ def load_config() -> dict:
     return config
 
 
-def save_config(config: dict) -> None:
-    """Save config.yaml file (for backwards compatibility, but db is source of truth)."""
-    with open(CONFIG_PATH, "w") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+# NOTE: We intentionally do NOT provide a save_config function.
+# config.yaml contains defaults only and should never be modified at runtime.
+# All user settings are stored in the database (AppSettings table).
 
 
 class PersonalSettings(BaseModel):

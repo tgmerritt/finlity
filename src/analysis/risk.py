@@ -44,17 +44,19 @@ class RiskAnalyzer:
     def __init__(
         self,
         price_service: Optional[PriceService] = None,
-        config_path: str = "config.yaml",
+        config: dict | None = None,
     ):
         self.price_service = price_service or PriceService()
 
-        # Load risk-free rate from config
-        try:
-            with open(config_path) as f:
-                config = yaml.safe_load(f)
-            self.risk_free_rate = config.get("market", {}).get("risk_free_rate", 0.04)
-        except Exception:
-            self.risk_free_rate = 0.04
+        # Load risk-free rate from database-backed config
+        if config is None:
+            try:
+                from src.api.settings import load_config
+                config = load_config()
+            except Exception:
+                config = {}
+
+        self.risk_free_rate = config.get("market", {}).get("risk_free_rate", 0.04)
 
     def calculate_volatility(self, returns: list[float]) -> float:
         """Calculate annualized volatility from daily returns."""

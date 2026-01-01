@@ -334,43 +334,31 @@ class MonteCarloEngine:
     - Correlated returns between stocks and bonds
     """
 
-    def __init__(self, config_path: str = "config.yaml"):
-        # Load config
-        try:
-            with open(config_path) as f:
-                config = yaml.safe_load(f)
+    def __init__(self, config: dict | None = None):
+        # Load config from database (with yaml fallback) if not provided
+        if config is None:
+            try:
+                from src.api.settings import load_config
+                config = load_config()
+            except Exception:
+                config = {}
 
-            market = config.get("market", {})
-            mc = config.get("monte_carlo", {})
+        market = config.get("market", {})
+        mc = config.get("monte_carlo", {})
 
-            self.stock_mean = market.get("stock_mean_return", 0.09)
-            self.stock_std = market.get("stock_std_dev", 0.15)
-            self.bond_mean = market.get("bond_mean_return", 0.04)
-            self.bond_std = market.get("bond_std_dev", 0.06)
-            self.correlation = market.get("stock_bond_correlation", -0.2)
-            self.inflation = market.get("inflation_rate", 0.03)
+        self.stock_mean = market.get("stock_mean_return", 0.09)
+        self.stock_std = market.get("stock_std_dev", 0.15)
+        self.bond_mean = market.get("bond_mean_return", 0.04)
+        self.bond_std = market.get("bond_std_dev", 0.06)
+        self.correlation = market.get("stock_bond_correlation", -0.2)
+        self.inflation = market.get("inflation_rate", 0.03)
 
-            self.num_simulations = mc.get("num_simulations", 10000)
-            self.black_swan_prob = mc.get("black_swan_probability", 0.02)
-            self.black_swan_impact = mc.get("black_swan_impact", -0.40)
-            self.golden_swan_prob = mc.get("golden_swan_probability", 0.02)
-            self.golden_swan_impact = mc.get("golden_swan_impact", 0.27)
-            self.t_df = mc.get("t_distribution_df", 5)
-
-        except Exception:
-            # Use defaults
-            self.stock_mean = 0.09
-            self.stock_std = 0.15
-            self.bond_mean = 0.04
-            self.bond_std = 0.06
-            self.correlation = -0.2
-            self.inflation = 0.03
-            self.num_simulations = 10000
-            self.black_swan_prob = 0.02
-            self.black_swan_impact = -0.40
-            self.golden_swan_prob = 0.02
-            self.golden_swan_impact = 0.27
-            self.t_df = 5
+        self.num_simulations = mc.get("num_simulations", 10000)
+        self.black_swan_prob = mc.get("black_swan_probability", 0.02)
+        self.black_swan_impact = mc.get("black_swan_impact", -0.40)
+        self.golden_swan_prob = mc.get("golden_swan_probability", 0.02)
+        self.golden_swan_impact = mc.get("golden_swan_impact", 0.27)
+        self.t_df = mc.get("t_distribution_df", 5)
 
     def generate_annual_return(
         self,

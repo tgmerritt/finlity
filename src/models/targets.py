@@ -102,13 +102,25 @@ class AllocationTargets(BaseModel):
         )
 
     @classmethod
-    def from_config(cls, config_path: str = "config.yaml") -> "AllocationTargets":
-        """Load targets from config file."""
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
+    def from_config(cls, config: dict | None = None) -> "AllocationTargets":
+        """Load targets from database-backed config.
 
-        dob = date.fromisoformat(config["personal"]["dob"])
-        retirement_age = config["personal"]["retirement_age"]
+        Args:
+            config: Optional config dict. If not provided, loads from database
+                   with yaml fallback.
+        """
+        if config is None:
+            try:
+                from src.api.settings import load_config
+                config = load_config()
+            except Exception:
+                # Fallback to yaml if database not available
+                with open("config.yaml") as f:
+                    config = yaml.safe_load(f)
+
+        personal = config.get("personal", {})
+        dob = date.fromisoformat(personal.get("dob", "1990-01-01"))
+        retirement_age = personal.get("retirement_age", 65)
 
         targets_config = config.get("targets", {})
 
