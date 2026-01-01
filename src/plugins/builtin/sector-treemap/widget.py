@@ -10,19 +10,19 @@ from typing import Any
 from src.plugins.base import WidgetPlugin, WidgetContent, PluginManifest
 
 
-# Sector colors
+# Sector colors (darker shades for better dark mode compatibility)
 SECTOR_COLORS = {
     "technology": "#4A90D9",
     "healthcare": "#50C878",
-    "financials": "#FFD700",
+    "financials": "#D4A017",  # Darker gold
     "consumer": "#FF6B6B",
     "industrials": "#9B59B6",
     "energy": "#E67E22",
     "utilities": "#1ABC9C",
-    "real_estate": "#34495E",
-    "materials": "#95A5A6",
+    "real_estate": "#5D6D7E",  # Darker slate
+    "materials": "#7F8C8D",   # Darker gray
     "communication": "#3498DB",
-    "other": "#BDC3C7",
+    "other": "#566573",       # Dark slate gray for better dark mode visibility
 }
 
 
