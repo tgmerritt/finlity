@@ -1719,7 +1719,12 @@ async function loadRetirementMetrics() {
             if (metrics.success_probability !== null) {
                 successProbEl.textContent = `${metrics.success_probability}%`;
                 successProbEl.classList.remove('positive', 'negative');
-                successProbEl.classList.add(metrics.success_probability >= 80 ? 'positive' : (metrics.success_probability < 50 ? 'negative' : ''));
+                // Only add class if not empty (classList.add('') throws an error)
+                if (metrics.success_probability >= 80) {
+                    successProbEl.classList.add('positive');
+                } else if (metrics.success_probability < 50) {
+                    successProbEl.classList.add('negative');
+                }
                 if (successSublabel) {
                     successSublabel.textContent = `of not running out by age 90`;
                 }
