@@ -1413,6 +1413,17 @@ body {
     border-color: var(--color-error);
 }
 
+.btn-secondary {
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    border-color: var(--color-border);
+}
+
+.btn-secondary:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-border-secondary);
+}
+
 .btn-sm {
     padding: 4px 8px;
     font-size: 12px;
