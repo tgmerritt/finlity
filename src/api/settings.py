@@ -1,5 +1,10 @@
-"""Settings API endpoints for managing config.yaml."""
+"""Settings API endpoints.
 
+Settings are stored in the database (source of truth).
+config.yaml provides initial defaults for first-time setup.
+"""
+
+import json
 from pathlib import Path
 from typing import Any, Optional
 
@@ -14,16 +19,90 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 CONFIG_PATH = Path("config.yaml")
 
 
-def load_config() -> dict:
-    """Load config.yaml file."""
+def _load_yaml_defaults() -> dict:
+    """Load default config from config.yaml (for initial values only)."""
     if not CONFIG_PATH.exists():
         return {}
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f) or {}
 
 
+def load_config() -> dict:
+    """Load configuration with database values taking precedence over yaml defaults.
+
+    The database is the source of truth. config.yaml provides initial defaults.
+    """
+    # Start with yaml defaults
+    config = _load_yaml_defaults()
+
+    # Override with database values
+    db = get_database()
+
+    # Load personal settings from database
+    personal_json = db.get_setting("personal_settings")
+    if personal_json and personal_json.value:
+        try:
+            db_personal = json.loads(personal_json.value)
+            if "personal" not in config:
+                config["personal"] = {}
+            config["personal"].update(db_personal)
+        except json.JSONDecodeError:
+            pass
+
+    # Load target allocations from database
+    targets_json = db.get_setting("target_allocations")
+    if targets_json and targets_json.value:
+        try:
+            db_targets = json.loads(targets_json.value)
+            if "targets" not in config:
+                config["targets"] = {}
+            # Deep merge targets
+            for key, value in db_targets.items():
+                if key in config["targets"] and isinstance(config["targets"][key], dict):
+                    config["targets"][key].update(value)
+                else:
+                    config["targets"][key] = value
+        except json.JSONDecodeError:
+            pass
+
+    # Load market assumptions from database
+    market_json = db.get_setting("market_assumptions")
+    if market_json and market_json.value:
+        try:
+            db_market = json.loads(market_json.value)
+            if "market" not in config:
+                config["market"] = {}
+            config["market"].update(db_market)
+        except json.JSONDecodeError:
+            pass
+
+    # Load Monte Carlo settings from database
+    mc_json = db.get_setting("monte_carlo_settings")
+    if mc_json and mc_json.value:
+        try:
+            db_mc = json.loads(mc_json.value)
+            if "monte_carlo" not in config:
+                config["monte_carlo"] = {}
+            config["monte_carlo"].update(db_mc)
+        except json.JSONDecodeError:
+            pass
+
+    # Load withdrawal settings from database
+    withdrawal_json = db.get_setting("withdrawal_settings")
+    if withdrawal_json and withdrawal_json.value:
+        try:
+            db_withdrawal = json.loads(withdrawal_json.value)
+            if "withdrawal" not in config:
+                config["withdrawal"] = {}
+            config["withdrawal"].update(db_withdrawal)
+        except json.JSONDecodeError:
+            pass
+
+    return config
+
+
 def save_config(config: dict) -> None:
-    """Save config.yaml file."""
+    """Save config.yaml file (for backwards compatibility, but db is source of truth)."""
     with open(CONFIG_PATH, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
@@ -134,82 +213,92 @@ def get_config_section(section: str) -> dict:
 
 @router.put("/config/personal")
 def update_personal_settings(settings: PersonalSettings) -> dict:
-    """Update personal settings."""
-    config = load_config()
-    config["personal"] = settings.model_dump()
-    save_config(config)
-    return {"status": "updated", "personal": config["personal"]}
+    """Update personal settings.
+
+    Saves to database (source of truth).
+    """
+    db = get_database()
+
+    # Save to database as JSON
+    settings_dict = settings.model_dump()
+    db.set_setting("personal_settings", json.dumps(settings_dict))
+
+    return {"status": "updated", "personal": settings_dict}
+
+
+def _update_targets_in_db(section: str, data: dict) -> dict:
+    """Helper to update a targets section in the database."""
+    db = get_database()
+
+    # Load existing targets from database
+    targets_json = db.get_setting("target_allocations")
+    if targets_json and targets_json.value:
+        try:
+            targets = json.loads(targets_json.value)
+        except json.JSONDecodeError:
+            targets = {}
+    else:
+        targets = {}
+
+    # Update the section
+    targets[section] = data
+
+    # Save back to database
+    db.set_setting("target_allocations", json.dumps(targets))
+
+    return data
 
 
 @router.put("/config/targets/asset_class")
 def update_asset_class_targets(targets: AssetClassTargets) -> dict:
-    """Update asset class target allocations."""
-    config = load_config()
-    if "targets" not in config:
-        config["targets"] = {}
-    config["targets"]["asset_class"] = targets.model_dump()
-    save_config(config)
-    return {"status": "updated", "asset_class": config["targets"]["asset_class"]}
+    """Update asset class target allocations (saves to database)."""
+    result = _update_targets_in_db("asset_class", targets.model_dump())
+    return {"status": "updated", "asset_class": result}
 
 
 @router.put("/config/targets/sector")
 def update_sector_targets(targets: SectorTargets) -> dict:
-    """Update sector target allocations."""
-    config = load_config()
-    if "targets" not in config:
-        config["targets"] = {}
-    config["targets"]["sector"] = targets.model_dump()
-    save_config(config)
-    return {"status": "updated", "sector": config["targets"]["sector"]}
+    """Update sector target allocations (saves to database)."""
+    result = _update_targets_in_db("sector", targets.model_dump())
+    return {"status": "updated", "sector": result}
 
 
 @router.put("/config/targets/geography")
 def update_geography_targets(targets: GeographyTargets) -> dict:
-    """Update geography target allocations."""
-    config = load_config()
-    if "targets" not in config:
-        config["targets"] = {}
-    config["targets"]["geography"] = targets.model_dump()
-    save_config(config)
-    return {"status": "updated", "geography": config["targets"]["geography"]}
+    """Update geography target allocations (saves to database)."""
+    result = _update_targets_in_db("geography", targets.model_dump())
+    return {"status": "updated", "geography": result}
 
 
 @router.put("/config/targets/style")
 def update_style_targets(targets: StyleTargets) -> dict:
-    """Update style target allocations."""
-    config = load_config()
-    if "targets" not in config:
-        config["targets"] = {}
-    config["targets"]["style"] = targets.model_dump()
-    save_config(config)
-    return {"status": "updated", "style": config["targets"]["style"]}
+    """Update style target allocations (saves to database)."""
+    result = _update_targets_in_db("style", targets.model_dump())
+    return {"status": "updated", "style": result}
 
 
 @router.put("/config/market")
 def update_market_assumptions(settings: MarketAssumptions) -> dict:
-    """Update market assumptions."""
-    config = load_config()
-    config["market"] = settings.model_dump()
-    save_config(config)
-    return {"status": "updated", "market": config["market"]}
+    """Update market assumptions (saves to database)."""
+    db = get_database()
+    db.set_setting("market_assumptions", json.dumps(settings.model_dump()))
+    return {"status": "updated", "market": settings.model_dump()}
 
 
 @router.put("/config/monte_carlo")
 def update_monte_carlo_settings(settings: MonteCarloSettings) -> dict:
-    """Update Monte Carlo settings."""
-    config = load_config()
-    config["monte_carlo"] = settings.model_dump()
-    save_config(config)
-    return {"status": "updated", "monte_carlo": config["monte_carlo"]}
+    """Update Monte Carlo settings (saves to database)."""
+    db = get_database()
+    db.set_setting("monte_carlo_settings", json.dumps(settings.model_dump()))
+    return {"status": "updated", "monte_carlo": settings.model_dump()}
 
 
 @router.put("/config/withdrawal")
 def update_withdrawal_settings(settings: WithdrawalSettings) -> dict:
-    """Update withdrawal settings."""
-    config = load_config()
-    config["withdrawal"] = settings.model_dump()
-    save_config(config)
-    return {"status": "updated", "withdrawal": config["withdrawal"]}
+    """Update withdrawal settings (saves to database)."""
+    db = get_database()
+    db.set_setting("withdrawal_settings", json.dumps(settings.model_dump()))
+    return {"status": "updated", "withdrawal": settings.model_dump()}
 
 
 # API Key management endpoints
