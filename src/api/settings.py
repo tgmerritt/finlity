@@ -9,12 +9,17 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from src.database import get_database
+from src.database import get_database, Database
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+
+def get_db() -> Database:
+    """Dependency to get database instance."""
+    return get_database()
 
 CONFIG_PATH = Path("config.yaml")
 
@@ -527,31 +532,53 @@ class DemoModeSettings(BaseModel):
 
 @router.get("/demo-mode")
 def get_demo_mode() -> dict:
-    """Get current demo mode status."""
-    config = load_config()
-    demo_config = config.get("demo", {})
-    return {
-        "enabled": demo_config.get("enabled", False),
-        "database": demo_config.get("database", "data/demo/demo.db"),
-    }
+    """Get current demo mode status (dynamic, no restart needed)."""
+    from src.services.demo_mode import get_demo_manager
+    return get_demo_manager().get_status()
 
 
 @router.put("/demo-mode")
-def set_demo_mode(settings: DemoModeSettings) -> dict:
-    """Toggle demo mode on/off. Requires server restart to take effect."""
-    import os
+def set_demo_mode(
+    settings: DemoModeSettings,
+    db: Database = Depends(get_db),
+) -> dict:
+    """Toggle demo mode on/off dynamically (no server restart needed).
 
-    config = load_config()
-    if "demo" not in config:
-        config["demo"] = {}
-    config["demo"]["enabled"] = settings.enabled
-    save_config(config)
+    When enabled:
+    - Stores current profile ID for later restoration
+    - Switches to demo database
+    - Initializes demo database if it doesn't exist
 
-    return {
-        "status": "updated",
-        "enabled": settings.enabled,
-        "message": "Restart server for changes to take effect",
-    }
+    When disabled:
+    - Restores the previous profile
+    - Returns to personal portfolio data
+    """
+    from src.services.demo_mode import get_demo_manager
+    from src.database import get_profile_manager
+
+    demo_manager = get_demo_manager()
+    profile_manager = get_profile_manager()
+
+    if settings.enabled:
+        # Store current profile and enable demo mode
+        current_profile = profile_manager.get_active_profile_id()
+        result = demo_manager.enable(current_profile)
+    else:
+        # Disable demo mode and restore previous profile
+        result = demo_manager.disable()
+
+        # Restore the previous profile
+        if "restore_profile_id" in result:
+            try:
+                profile_manager.activate_profile(result["restore_profile_id"])
+            except Exception as e:
+                result["restore_error"] = str(e)
+
+    # Add instruction for frontend
+    result["action"] = "reload"
+    result["message"] = "Demo mode toggled. Reload the page to see changes."
+
+    return result
 
 
 @router.post("/demo/generate")
@@ -566,24 +593,12 @@ def generate_demo_data() -> dict:
 
     Returns status and summary of generated data.
     """
-    import sys
-    from pathlib import Path
+    from src.services.demo_mode import get_demo_manager
+    return get_demo_manager().generate_demo_data()
 
-    # Add scripts directory to path for import
-    scripts_path = Path(__file__).parent.parent.parent / "scripts"
-    if str(scripts_path) not in sys.path:
-        sys.path.insert(0, str(scripts_path))
 
-    try:
-        from scripts.generate_demo import generate_demo_data as run_generator
-
-        result = run_generator()
-        return result
-    except Exception as e:
-        import traceback
-
-        return {
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-        }
+@router.post("/demo/reset")
+def reset_demo_data() -> dict:
+    """Reset demo database (delete all demo data)."""
+    from src.services.demo_mode import get_demo_manager
+    return get_demo_manager().reset_demo_data()

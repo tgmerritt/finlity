@@ -645,9 +645,18 @@ def get_profile_manager() -> ProfileManager:
 
 
 def get_database() -> Database:
-    """Get the database for the active profile.
+    """Get the database for the active profile or demo database.
 
     This is the main entry point for getting a database connection.
     It replaces direct Database() instantiation throughout the app.
+
+    If demo mode is enabled, returns the demo database instead.
     """
+    # Check if demo mode is enabled
+    from src.services.demo_mode import get_demo_manager
+    demo_manager = get_demo_manager()
+
+    if demo_manager.is_enabled:
+        return demo_manager.get_demo_database()
+
     return get_profile_manager().get_active_database()

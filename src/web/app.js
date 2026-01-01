@@ -243,6 +243,8 @@ function updateDemoModeUI(isEnabled) {
 
 async function toggleDemoMode(enabled) {
     try {
+        showLoading(enabled ? 'Switching to demo mode...' : 'Switching to personal portfolio...');
+
         const response = await fetch(`${API_BASE}/api/settings/demo-mode`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -251,24 +253,28 @@ async function toggleDemoMode(enabled) {
 
         if (response.ok) {
             const data = await response.json();
-            showToast(data.message || 'Demo mode updated', 'success');
+            showToast(enabled ? 'Demo mode enabled' : 'Restored personal portfolio', 'success');
 
-            // Confirm reload with user
-            if (confirm('Demo mode has been ' + (enabled ? 'enabled' : 'disabled') + '. Reload page to apply changes?')) {
-                window.location.reload();
-            } else {
-                // Revert toggle if user cancels
-                const toggle = document.getElementById('demo-mode-toggle');
-                if (toggle) {
-                    toggle.checked = !enabled;
-                }
-            }
+            // Auto-reload to pick up database change
+            window.location.reload();
         } else {
+            hideLoading();
             showToast('Failed to update demo mode', 'error');
+            // Revert toggle on error
+            const toggle = document.getElementById('demo-mode-toggle');
+            if (toggle) {
+                toggle.checked = !enabled;
+            }
         }
     } catch (error) {
+        hideLoading();
         console.error('Error toggling demo mode:', error);
         showToast('Failed to update demo mode', 'error');
+        // Revert toggle on error
+        const toggle = document.getElementById('demo-mode-toggle');
+        if (toggle) {
+            toggle.checked = !enabled;
+        }
     }
 }
 

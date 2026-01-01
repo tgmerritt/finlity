@@ -41,12 +41,23 @@ def load_config():
 
 
 def is_demo_mode():
-    """Check if demo mode is enabled via env var or config."""
+    """Check if demo mode is enabled via env var, demo manager, or config."""
     # Environment variable takes precedence (set by CLI)
     env_demo = os.environ.get("PORTFOLIO_DEMO_MODE")
     if env_demo is not None:
         return env_demo.lower() == "true"
-    # Fall back to config
+
+    # Check the demo mode manager (dynamic state) - this is the source of truth
+    # once the user has interacted with demo mode via the UI
+    try:
+        from src.services.demo_mode import get_demo_manager
+        demo_manager = get_demo_manager()
+        # Always use the demo manager's state - don't fall back to config
+        return demo_manager.is_enabled
+    except Exception:
+        pass
+
+    # Fall back to config only if demo manager fails to load
     config = load_config()
     return config.get("demo", {}).get("enabled", False)
 

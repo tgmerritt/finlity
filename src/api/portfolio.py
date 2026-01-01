@@ -137,10 +137,12 @@ def get_portfolio_summary(db: Database = Depends(get_db)) -> PortfolioSummary:
             id=a["id"],
             name=a["name"],
             account_type=a["account_type"],
+            display_type=a["display_type"],
             brokerage=a["brokerage"],
             value=a["value"],
             cost_basis=a["cost_basis"],
             position_count=a["position_count"],
+            is_retirement=a["is_retirement"],
         )
         for a in summary["accounts"]
     ]

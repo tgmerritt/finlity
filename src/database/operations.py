@@ -718,14 +718,18 @@ class Database:
                 else:
                     taxable_value += account_value
 
+                from src.models.account_types import get_account_type_label
+
                 accounts_summary.append({
                     "id": account.id,
                     "name": account.name,
                     "account_type": account.account_type,
+                    "display_type": get_account_type_label(account.account_type),
                     "brokerage": account.brokerage,
                     "value": account_value,
                     "cost_basis": account_cost,
                     "position_count": len(positions),
+                    "is_retirement": account.is_retirement,
                 })
 
             return {
