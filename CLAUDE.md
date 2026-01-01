@@ -98,6 +98,20 @@ SHA256 hashing prevents duplicate imports.
 4. **Dashboard** → Vanilla JS + Plotly.js served by FastAPI
 5. **Analysis** → Risk metrics, allocation, triggers, Monte Carlo
 
+### Profile-Aware Database
+- **IMPORTANT**: All API endpoints MUST use `get_database()` from `src.database` to get a profile-aware database instance
+- Never use `Database()` directly - this creates a connection to the wrong database file
+- Each profile has its own SQLite database in `data/databases/{profile_id}/portfolio.db`
+- The active profile is determined by the `get_profile_manager().get_active_profile()` method
+
+### Data Loading Pattern
+- **Current pattern**: Vanilla JS loads fresh data on each tab switch (no client-side caching)
+- **Rationale**: This is a single-user local app, so performance gains from caching don't justify complexity
+- **NOTE FOR FUTURE**: If this app is hosted for multiple users, consider implementing:
+  - Client-side state management (Vue/Svelte reactivity or simple JS cache)
+  - API response caching with cache invalidation
+  - WebSocket updates for real-time sync
+
 ### Database Schema
 
 **Account**: id, name, account_type, brokerage, beneficiary, custom_type_name, is_retirement_account

@@ -15,8 +15,9 @@ router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
 
 def get_db() -> Database:
-    """Dependency to get database instance."""
-    return Database()
+    """Dependency to get database instance (profile-aware)."""
+    from src.database import get_database
+    return get_database()
 
 
 class AccountResponse(BaseModel):

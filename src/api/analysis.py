@@ -17,8 +17,9 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
 
 def get_db() -> Database:
-    """Dependency to get database instance."""
-    return Database()
+    """Dependency to get database instance (profile-aware)."""
+    from src.database import get_database
+    return get_database()
 
 
 def db_to_portfolio(db: Database) -> Portfolio:

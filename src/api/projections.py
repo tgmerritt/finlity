@@ -16,8 +16,9 @@ router = APIRouter(prefix="/api/projections", tags=["projections"])
 
 
 def get_db() -> Database:
-    """Dependency to get database instance."""
-    return Database()
+    """Dependency to get database instance (profile-aware)."""
+    from src.database import get_database
+    return get_database()
 
 
 class AccountBalancesRequest(BaseModel):
