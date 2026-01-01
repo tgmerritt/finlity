@@ -78,6 +78,7 @@ class Database:
                 mc_migrations = [
                     ("projected_value_at_retirement", "REAL"),
                     ("conservative_value_at_retirement", "REAL"),
+                    ("earliest_retirement_age", "REAL"),
                 ]
                 for col_name, col_type in mc_migrations:
                     if col_name not in existing_cols:

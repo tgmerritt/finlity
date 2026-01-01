@@ -1695,7 +1695,7 @@ async function loadRetirementMetrics() {
         const retireAgeEl = document.getElementById('earliest-retirement-age');
         const retireSublabel = document.getElementById('retire-sublabel');
         if (retireAgeEl) {
-            if (metrics.earliest_retirement_age !== null) {
+            if (metrics.earliest_retirement_age != null && metrics.earliest_retirement_age !== undefined) {
                 retireAgeEl.textContent = `Age ${metrics.earliest_retirement_age}`;
                 if (retireSublabel) {
                     retireSublabel.textContent = 'with 80%+ success rate';
@@ -2068,6 +2068,17 @@ function updateHoldings(positions) {
             valueDisplay = `<span title="Includes accrued interest at ${apyPct}% APY">${formatCurrency(pos.value)} 📈</span>`;
         }
 
+        // For real estate: Price = purchase price (cost_basis), Value = current value
+        // For stocks/funds: Price = share price, Value = shares * price
+        const isRealEstate = pos.position_type === 'real_estate';
+        let priceDisplay;
+        if (isRealEstate) {
+            // Real estate: show purchase price in Price column
+            priceDisplay = pos.cost_basis ? formatCurrency(pos.cost_basis) : '<span class="text-warning">$0.00</span>';
+        } else {
+            priceDisplay = pos.price ? formatPrice(pos.price, pos.ticker) : '<span class="text-warning">$0.00</span>';
+        }
+
         const row = document.createElement('tr');
         row.dataset.account = pos.account;
         row.innerHTML = `
@@ -2075,7 +2086,7 @@ function updateHoldings(positions) {
             <td>${pos.name || '-'}</td>
             <td>${pos.account}</td>
             <td class="text-right">${formatShares(pos.shares)}</td>
-            <td class="text-right">${pos.price ? formatPrice(pos.price, pos.ticker) : '<span class="text-warning">$0.00</span>'}</td>
+            <td class="text-right">${priceDisplay}</td>
             <td class="text-right">${valueDisplay}</td>
             <td class="text-right ${gainLoss >= 0 ? 'text-success' : 'text-error'}">
                 ${gainLoss !== null ? `${formatCurrency(gainLoss)} (${formatPercent(gainLossPct)})` : '-'}
@@ -4199,9 +4210,9 @@ async function calculateFire(event) {
         const result = await response.json();
 
         document.getElementById('fire-results').style.display = 'flex';
-        document.getElementById('fire-number').textContent = formatCurrency(result.fire_number);
-        document.getElementById('years-to-fire').textContent = result.years_to_fire === Infinity ? 'Never' : `${result.years_to_fire.toFixed(1)} years`;
-        document.getElementById('fire-progress').textContent = `${result.progress_pct.toFixed(1)}%`;
+        document.getElementById('fire-calc-number').textContent = formatCurrency(result.fire_number);
+        document.getElementById('fire-calc-years').textContent = result.years_to_fire === Infinity ? 'Never' : `${result.years_to_fire.toFixed(1)} years`;
+        document.getElementById('fire-calc-progress').textContent = `${result.progress_pct.toFixed(1)}%`;
 
     } catch (error) {
         console.error('Error calculating FIRE:', error);
