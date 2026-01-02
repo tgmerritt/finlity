@@ -1,4 +1,4 @@
-name: Test Suite
+name: Test and Deploy
 
 on:
   push:
@@ -10,10 +10,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        python-version: ['3.10', '3.11']
-
     steps:
       - name: Free disk space
         run: |
@@ -22,7 +18,6 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo docker image prune --all --force
-          df -h
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,80 +25,59 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.11'
           cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install playwright ruff
+          playwright install chromium
+
+      - name: Run linter
+        run: ruff check src/ --output-format=github || true
+        continue-on-error: true
 
       - name: Run unit tests
-        run: pytest tests/ -v --tb=short -x
+        run: pytest tests/ -v --tb=short
         env:
           PORTFOLIO_DEMO_MODE: "true"
           PORTFOLIO_TEST_MODE: "true"
 
-  lint:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install linting dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff
-
-      - name: Run Ruff linter
-        run: ruff check src/ --output-format=github || true
-        continue-on-error: true
-
-  e2e:
-    runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          df -h
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install playwright
-          playwright install chromium
-
-      - name: Start server
+      - name: Run E2E tests
         run: |
           python -m src.main --no-browser &
           sleep 5
+          python scripts/test_ui.py
         env:
           PORTFOLIO_DEMO_MODE: "true"
 
-      - name: Run E2E tests
-        run: python scripts/test_ui.py
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Heroku CLI
+        run: curl https://cli-assets.heroku.com/install.sh | sh
+
+      - name: Login to Heroku Container Registry
         env:
-          PORTFOLIO_DEMO_MODE: "true"
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: echo "$HEROKU_API_KEY" | docker login --username=_ --password-stdin registry.heroku.com
+
+      - name: Build and push Docker image
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          docker build -t registry.heroku.com/${{ secrets.HEROKU_APP_NAME }}/web .
+          docker push registry.heroku.com/${{ secrets.HEROKU_APP_NAME }}/web
+
+      - name: Release to Heroku
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: heroku container:release web --app ${{ secrets.HEROKU_APP_NAME }}
