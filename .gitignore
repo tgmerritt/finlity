@@ -19,11 +19,14 @@ build/
 
 # ----- Sensitive Data (contains financial info & PII) -----
 # Database files (contain account names, positions, API keys)
-data/
+# Note: data/demo/demo.db is explicitly tracked for deployments
 *.db
+!data/demo/demo.db
 *.sqlite
 *.sqlite3
 portfolio.db
+data/*
+!data/demo/
 
 # Exported data (contain account names with PII)
 exports/

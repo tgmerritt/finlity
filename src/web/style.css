@@ -1671,6 +1671,38 @@ tr:hover td {
     background: var(--color-bg-spotlight);
 }
 
+/* Sticky header table container */
+.table-container-sticky {
+    overflow-y: auto;
+    overflow-x: auto;
+    position: relative;
+}
+
+.table-container-sticky table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.table-container-sticky thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.table-container-sticky th {
+    background: var(--color-bg-secondary);
+    border-bottom: 2px solid var(--color-border-primary);
+}
+
+/* Ensure sticky header doesn't have gaps */
+.table-container-sticky th:first-child {
+    border-left: none;
+}
+
+.table-container-sticky th:last-child {
+    border-right: none;
+}
+
 .text-right {
     text-align: right;
 }
@@ -3937,6 +3969,111 @@ th.sortable.sort-desc .sort-icon::after {
     text-transform: uppercase;
     color: var(--color-text-tertiary);
     margin-bottom: 8px;
+}
+
+/* ============================== */
+/* Monte Carlo Form - 3 Col Layout */
+/* ============================== */
+
+.mc-form-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-bottom: 16px;
+}
+
+.mc-form-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Allow column to span 2 grid columns */
+.mc-form-col-2 {
+    grid-column: span 2;
+}
+
+.mc-form-group-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-text-tertiary);
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 20px;
+}
+
+.mc-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mc-form-group label {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.mc-form-group input {
+    padding: 8px 10px;
+    font-size: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-primary);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.mc-form-group input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+}
+
+.mc-form-divider {
+    margin: 16px 0;
+    padding: 12px 0;
+    border-top: 1px solid var(--color-border-light);
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+/* 2x2 grid for tax rates */
+.mc-form-grid-2x2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+/* Extra small button for inline use */
+.btn-xs {
+    padding: 2px 8px;
+    font-size: 10px;
+    border-radius: 4px;
+}
+
+/* Responsive: stack columns on smaller screens */
+@media (max-width: 900px) {
+    .mc-form-row {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .mc-form-col-2 {
+        grid-column: span 1;
+    }
+
+    .mc-form-grid-2x2 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 500px) {
+    .mc-form-grid-2x2 {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* ===================== */

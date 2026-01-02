@@ -5736,9 +5736,10 @@ function renderTaxBurdenChart(chartData) {
             color: isDark ? '#a3a3a3' : '#666'
         },
         yaxis: {
-            title: 'Tax Amount ($)',
+            title: 'Tax Amount',
             color: isDark ? '#a3a3a3' : '#666',
-            tickformat: '$,.0f'
+            tickprefix: '$',
+            tickformat: '.2s'  // SI notation: 60K instead of 60,000
         },
         yaxis2: {
             title: 'Effective Rate (%)',
@@ -5746,9 +5747,9 @@ function renderTaxBurdenChart(chartData) {
             side: 'right',
             color: isDark ? '#a3a3a3' : '#666',
             ticksuffix: '%',
-            range: [0, Math.max(...chartData.effective_rates) * 1.2]
+            range: [0, Math.max(...chartData.effective_rates.filter(r => r > 0), 30) * 1.2]
         },
-        margin: { t: 20, r: 60, b: 60, l: 80 },
+        margin: { t: 20, r: 60, b: 60, l: 60 },
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
         font: { color: isDark ? '#e5e5e5' : '#1a1a1a' }
@@ -5815,11 +5816,12 @@ function renderAccountBalanceChart(chartData) {
             color: isDark ? '#a3a3a3' : '#666'
         },
         yaxis: {
-            title: 'Balance ($)',
+            title: 'Balance',
             color: isDark ? '#a3a3a3' : '#666',
-            tickformat: '$,.0f'
+            tickprefix: '$',
+            tickformat: '.2s'  // SI notation: 60M instead of 60,000,000
         },
-        margin: { t: 20, r: 20, b: 60, l: 80 },
+        margin: { t: 20, r: 20, b: 60, l: 60 },
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
         font: { color: isDark ? '#e5e5e5' : '#1a1a1a' }
@@ -5850,7 +5852,21 @@ function renderTaxWithdrawalTable(years) {
         return;
     }
 
-    years.forEach(year => {
+    // Filter to only show retirement years (withdrawal phase)
+    const retirementYears = years.filter(year => year.phase === 'withdrawal');
+
+    if (retirementYears.length === 0) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 10;
+        cell.className = 'text-muted';
+        cell.textContent = 'No retirement years in projection';
+        row.appendChild(cell);
+        tbody.appendChild(row);
+        return;
+    }
+
+    retirementYears.forEach(year => {
         const row = document.createElement('tr');
 
         const cells = [

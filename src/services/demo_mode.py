@@ -55,11 +55,15 @@ class DemoModeManager:
             json.dump(self._state, f, indent=2)
 
     def _default_state(self) -> dict:
-        """Get default state."""
+        """Get default state.
+
+        Note: Demo mode is enabled by default for public deployments.
+        Users can switch to their personal portfolio via Settings.
+        """
         return {
-            "enabled": False,
+            "enabled": True,  # Demo mode ON by default
             "last_profile_id": "default",
-            "demo_initialized": False,
+            "demo_initialized": True,  # Assume demo.db is bundled with app
         }
 
     def _refresh_state_if_stale(self) -> None:

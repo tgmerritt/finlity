@@ -13,6 +13,14 @@ import numpy as np
 import yaml
 from scipy.stats import t as t_dist
 
+# Import tax calculator for pre-retirement tax calculations
+from src.budget.tax_calculator import (
+    PayrollTaxCalculator,
+    STANDARD_DEDUCTION,
+    FEDERAL_BRACKETS_2024,
+    FEDERAL_BRACKETS_2025,
+)
+
 
 @dataclass
 class AccountBalances:
@@ -145,6 +153,9 @@ class TaxYearProjection:
     net_withdrawal: float
     # Investment return for the year
     investment_return: float
+    # Phase tracking (for frontend filtering)
+    phase: str = "withdrawal"  # "accumulation" or "withdrawal"
+    income_source: str = "withdrawal"  # "salary" or "withdrawal"
 
 
 @dataclass
@@ -159,6 +170,15 @@ class TaxProjectionSummary:
     total_gross_withdrawn: float  # Gross withdrawals (before tax)
     final_balance: float
     depletion_age: Optional[int]
+    # Pre-retirement (accumulation phase) tax totals
+    pre_retirement_federal_tax: float = 0.0
+    pre_retirement_state_tax: float = 0.0
+    pre_retirement_total_tax: float = 0.0
+    pre_retirement_avg_effective_rate: float = 0.0
+    # Post-retirement (withdrawal phase) tax totals - same as total_ for backwards compat
+    post_retirement_federal_tax: float = 0.0
+    post_retirement_state_tax: float = 0.0
+    post_retirement_total_tax: float = 0.0
 
 
 @dataclass
@@ -419,12 +439,18 @@ class TaxAwareWithdrawalStrategy:
         contribution_to_traditional_pct: float = 0.60,
         contribution_to_roth_pct: float = 0.25,
         contribution_to_taxable_pct: float = 0.15,
+        # Pre-retirement income parameters (for accumulation phase taxes)
+        pre_retirement_income: float = 0.0,
+        pre_retirement_deductions: float = 0.0,
+        filing_status: str = "single",
+        state: str = "CA",
+        tax_year: int = 2024,
     ) -> TaxProjectionResult:
         """Project year-by-year tax burden and account balances.
 
         Includes two phases:
-        1. Accumulation (current_age to retirement_age): contributions + growth, no withdrawals
-        2. Withdrawal (retirement_age to end_age): withdrawals + growth, no contributions
+        1. Accumulation (current_age to retirement_age): contributions + growth, taxes on salary
+        2. Withdrawal (retirement_age to end_age): withdrawals + growth, taxes on withdrawals
 
         Args:
             current_age: Current age (start of projection)
@@ -438,6 +464,11 @@ class TaxAwareWithdrawalStrategy:
             contribution_to_traditional_pct: % of contributions to traditional accounts
             contribution_to_roth_pct: % of contributions to Roth accounts
             contribution_to_taxable_pct: % of contributions to taxable accounts
+            pre_retirement_income: Total annual gross income during working years
+            pre_retirement_deductions: Annual pre-tax deductions (401k, HSA, etc.)
+            filing_status: Tax filing status (single, married_joint, etc.)
+            state: Two-letter state code for state taxes
+            tax_year: Base tax year for brackets (will adjust for inflation in future years)
 
         Returns:
             TaxProjectionResult with year-by-year projections
@@ -456,8 +487,20 @@ class TaxAwareWithdrawalStrategy:
         depletion_age: Optional[int] = None
         effective_rates: list[float] = []
 
+        # Pre-retirement tax tracking
+        pre_retirement_federal = 0.0
+        pre_retirement_state = 0.0
+        pre_retirement_effective_rates: list[float] = []
+
         annual_contribution = monthly_contribution * 12
         year_num = 0
+
+        # Create tax calculator for pre-retirement income taxes
+        tax_calculator = PayrollTaxCalculator(
+            filing_status=filing_status,
+            state=state,
+            tax_year=tax_year,
+        )
 
         # ===== PHASE 1: ACCUMULATION (current_age to retirement_age - 1) =====
         for age in range(current_age, retirement_age):
@@ -480,7 +523,42 @@ class TaxAwareWithdrawalStrategy:
             balances.roth += annual_contribution * contribution_to_roth_pct
             balances.taxable += annual_contribution * contribution_to_taxable_pct
 
-            # Record accumulation year (no withdrawals, no taxes)
+            # Calculate taxes on salary income (if provided)
+            federal_tax_yr = 0.0
+            state_tax_yr = 0.0
+            effective_rate_yr = 0.0
+
+            if pre_retirement_income > 0:
+                # Calculate federal income tax using progressive brackets
+                federal_tax_yr = tax_calculator.calculate_federal_income_tax(
+                    annual_gross=pre_retirement_income,
+                    pretax_deductions=pre_retirement_deductions,
+                    use_standard_deduction=True,
+                )
+
+                # Calculate state income tax
+                state_tax_yr = tax_calculator.calculate_state_tax(
+                    annual_gross=pre_retirement_income,
+                    pretax_deductions=pre_retirement_deductions,
+                )
+
+                # Calculate FICA taxes (Social Security + Medicare)
+                ss, medicare, add_medicare = tax_calculator.calculate_fica(pre_retirement_income)
+                fica_tax = ss + medicare + add_medicare
+
+                # Add FICA to federal for display (it's federal tax)
+                federal_tax_yr += fica_tax
+
+                # Track pre-retirement totals
+                pre_retirement_federal += federal_tax_yr
+                pre_retirement_state += state_tax_yr
+
+                # Calculate effective rate on gross income
+                total_tax_yr = federal_tax_yr + state_tax_yr
+                effective_rate_yr = (total_tax_yr / pre_retirement_income * 100) if pre_retirement_income > 0 else 0
+                pre_retirement_effective_rates.append(effective_rate_yr)
+
+            # Record accumulation year with salary-based taxes
             years.append(TaxYearProjection(
                 year=year_num,
                 age=age,
@@ -492,13 +570,15 @@ class TaxAwareWithdrawalStrategy:
                 from_taxable=0,
                 from_traditional=0,
                 from_roth=0,
-                gross_withdrawal=0,
-                federal_tax=0,
-                state_tax=0,
-                total_tax=0,
-                effective_rate=0,
-                net_withdrawal=0,
+                gross_withdrawal=round(pre_retirement_income, 2),  # Salary as "income"
+                federal_tax=round(federal_tax_yr, 2),
+                state_tax=round(state_tax_yr, 2),
+                total_tax=round(federal_tax_yr + state_tax_yr, 2),
+                effective_rate=round(effective_rate_yr, 2),
+                net_withdrawal=round(pre_retirement_income - federal_tax_yr - state_tax_yr - pre_retirement_deductions, 2),
                 investment_return=round(investment_return, 2),
+                phase="accumulation",
+                income_source="salary",
             ))
 
         # ===== PHASE 2: WITHDRAWAL (retirement_age to end_age) =====
@@ -538,6 +618,8 @@ class TaxAwareWithdrawalStrategy:
                     effective_rate=0,
                     net_withdrawal=0,
                     investment_return=0,
+                    phase="withdrawal",
+                    income_source="withdrawal",
                 ))
                 continue
 
@@ -586,20 +668,39 @@ class TaxAwareWithdrawalStrategy:
                 effective_rate=round(effective_rate, 2),
                 net_withdrawal=round(breakdown.net_withdrawal, 2),
                 investment_return=round(investment_return, 2),
+                phase="withdrawal",
+                income_source="withdrawal",
             ))
 
         # Calculate summary
         avg_effective_rate = sum(effective_rates) / len(effective_rates) if effective_rates else 0.0
+        pre_retirement_avg_rate = (
+            sum(pre_retirement_effective_rates) / len(pre_retirement_effective_rates)
+            if pre_retirement_effective_rates else 0.0
+        )
+
+        # Total taxes include both pre-retirement and post-retirement
+        combined_federal = total_federal_tax + pre_retirement_federal
+        combined_state = total_state_tax + pre_retirement_state
 
         summary = TaxProjectionSummary(
-            total_federal_tax=round(total_federal_tax, 2),
-            total_state_tax=round(total_state_tax, 2),
-            total_tax=round(total_federal_tax + total_state_tax, 2),
-            average_effective_rate=round(avg_effective_rate, 2),
+            total_federal_tax=round(combined_federal, 2),
+            total_state_tax=round(combined_state, 2),
+            total_tax=round(combined_federal + combined_state, 2),
+            average_effective_rate=round(avg_effective_rate, 2),  # Retirement phase only
             total_withdrawn=round(total_withdrawn, 2),
             total_gross_withdrawn=round(total_gross_withdrawn, 2),
             final_balance=round(balances.total, 2),
             depletion_age=depletion_age,
+            # Pre-retirement totals
+            pre_retirement_federal_tax=round(pre_retirement_federal, 2),
+            pre_retirement_state_tax=round(pre_retirement_state, 2),
+            pre_retirement_total_tax=round(pre_retirement_federal + pre_retirement_state, 2),
+            pre_retirement_avg_effective_rate=round(pre_retirement_avg_rate, 2),
+            # Post-retirement totals (withdrawal phase only)
+            post_retirement_federal_tax=round(total_federal_tax, 2),
+            post_retirement_state_tax=round(total_state_tax, 2),
+            post_retirement_total_tax=round(total_federal_tax + total_state_tax, 2),
         )
 
         return TaxProjectionResult(years=years, summary=summary)

@@ -117,6 +117,13 @@
                     </svg>
                     Projections
                 </button>
+                <button class="nav-item" onclick="showTab('budget')" data-tab="budget">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                    Expenses & Income
+                </button>
                 <button class="nav-item" onclick="showTab('taxes')" data-tab="taxes">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="2" y="5" width="20" height="14" rx="2"></rect>
@@ -125,13 +132,6 @@
                         <line x1="10" y1="15" x2="14" y2="15"></line>
                     </svg>
                     Taxes
-                </button>
-                <button class="nav-item" onclick="showTab('budget')" data-tab="budget">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="1" x2="12" y2="23"></line>
-                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                    </svg>
-                    Expenses & Income
                 </button>
                 <button class="nav-item" onclick="showTab('settings')" data-tab="settings">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
@@ -805,92 +805,114 @@
                             <div class="config-panel-toggle">▼</div>
                         </div>
                         <div class="config-panel-body">
-                            <div class="compact-form-grid">
-                                <div class="form-group">
-                                    <label for="current-age">Current Age</label>
-                                    <input type="number" id="current-age" value="35" min="18" max="100" onchange="updateMonteCarloConfigSummary()">
+                            <!-- Basic Settings - 3 column layout -->
+                            <div class="mc-form-row">
+                                <div class="mc-form-col">
+                                    <div class="mc-form-group-title">Age & Timeline</div>
+                                    <div class="mc-form-group">
+                                        <label for="current-age">Current Age</label>
+                                        <input type="number" id="current-age" value="35" min="18" max="100" onchange="updateMonteCarloConfigSummary()">
+                                    </div>
+                                    <div class="mc-form-group">
+                                        <label for="retirement-age">Retirement Age</label>
+                                        <input type="number" id="retirement-age" value="65" min="30" max="100" onchange="updateMonteCarloConfigSummary()">
+                                    </div>
                                 </div>
-                                <div class="form-group">
-                                    <label for="retirement-age">Retire Age</label>
-                                    <input type="number" id="retirement-age" value="65" min="30" max="100" onchange="updateMonteCarloConfigSummary()">
+                                <div class="mc-form-col">
+                                    <div class="mc-form-group-title">Cash Flow</div>
+                                    <div class="mc-form-group">
+                                        <label for="monthly-contribution">Monthly Contribution</label>
+                                        <input type="number" id="monthly-contribution" value="2000" min="0" onchange="updateMonteCarloConfigSummary()">
+                                    </div>
+                                    <div class="mc-form-group">
+                                        <label for="monthly-withdrawal">Monthly Withdrawal</label>
+                                        <input type="number" id="monthly-withdrawal" value="8000" min="0" onchange="updateMonteCarloConfigSummary()">
+                                    </div>
                                 </div>
-                                <div class="form-group">
-                                    <label for="monthly-contribution">Monthly Contrib</label>
-                                    <input type="number" id="monthly-contribution" value="2000" min="0" onchange="updateMonteCarloConfigSummary()">
-                                </div>
-                                <div class="form-group">
-                                    <label for="monthly-withdrawal">Monthly Withdraw</label>
-                                    <input type="number" id="monthly-withdrawal" value="8000" min="0" onchange="updateMonteCarloConfigSummary()">
-                                </div>
-                                <div class="form-group">
-                                    <label for="stock-allocation">Stocks %</label>
-                                    <input type="number" id="stock-allocation" value="70" min="0" max="100">
-                                </div>
-                                <div class="form-group">
-                                    <label for="bond-allocation">Bonds %</label>
-                                    <input type="number" id="bond-allocation" value="25" min="0" max="100">
+                                <div class="mc-form-col">
+                                    <div class="mc-form-group-title">Asset Allocation</div>
+                                    <div class="mc-form-group">
+                                        <label for="stock-allocation">Stocks %</label>
+                                        <input type="number" id="stock-allocation" value="70" min="0" max="100">
+                                    </div>
+                                    <div class="mc-form-group">
+                                        <label for="bond-allocation">Bonds %</label>
+                                        <input type="number" id="bond-allocation" value="25" min="0" max="100">
+                                    </div>
                                 </div>
                             </div>
 
                             <!-- Tax-Aware Withdrawals Section -->
-                            <div class="compact-form-section">
-                                <div class="tax-aware-toggle" style="margin-bottom: 8px;">
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" id="use-tax-aware" onchange="toggleTaxAwareSettings()">
-                                        <span>Enable Tax-Aware Withdrawal Strategy</span>
-                                    </label>
-                                </div>
+                            <div class="mc-form-divider">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="use-tax-aware" onchange="toggleTaxAwareSettings()">
+                                    <span>Enable Tax-Aware Withdrawal Strategy</span>
+                                </label>
+                            </div>
 
-                                <div id="tax-aware-settings" style="display: none;">
-                                    <div class="compact-form-section-title">Account Balances (Taxable → Traditional → Roth)
-                                        <button type="button" class="btn btn-sm btn-default" onclick="loadAccountBalancesByType()" style="margin-left: 8px;">Load from Portfolio</button>
-                                    </div>
-                                    <div class="compact-form-grid">
-                                        <div class="form-group">
+                            <div id="tax-aware-settings" style="display: none;">
+                                <!-- Account Balances Row -->
+                                <div class="mc-form-row">
+                                    <div class="mc-form-col">
+                                        <div class="mc-form-group-title">
+                                            Account Balances
+                                            <button type="button" class="btn btn-xs btn-default" onclick="loadAccountBalancesByType()">Load from Portfolio</button>
+                                        </div>
+                                        <div class="mc-form-group">
                                             <label for="balance-taxable">Taxable</label>
                                             <input type="number" id="balance-taxable" value="0" min="0" step="1">
                                         </div>
-                                        <div class="form-group">
+                                    </div>
+                                    <div class="mc-form-col">
+                                        <div class="mc-form-group-title">&nbsp;</div>
+                                        <div class="mc-form-group">
                                             <label for="balance-traditional">Traditional</label>
                                             <input type="number" id="balance-traditional" value="0" min="0" step="1">
                                         </div>
-                                        <div class="form-group">
+                                    </div>
+                                    <div class="mc-form-col">
+                                        <div class="mc-form-group-title">&nbsp;</div>
+                                        <div class="mc-form-group">
                                             <label for="balance-roth">Roth</label>
                                             <input type="number" id="balance-roth" value="0" min="0" step="1">
                                         </div>
                                     </div>
+                                </div>
 
-                                    <div class="compact-form-section-title">Tax Rates</div>
-                                    <div class="compact-form-grid">
-                                        <div class="form-group">
-                                            <label for="tax-rate-ordinary">Federal %</label>
-                                            <input type="number" id="tax-rate-ordinary" value="22" min="0" max="50" step="1">
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="tax-rate-state">State %</label>
-                                            <input type="number" id="tax-rate-state" value="5" min="0" max="15" step="0.5">
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="tax-rate-cap-gains">Cap Gains %</label>
-                                            <input type="number" id="tax-rate-cap-gains" value="15" min="0" max="30" step="1">
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="cost-basis-ratio">Cost Basis %</label>
-                                            <input type="number" id="cost-basis-ratio" value="60" min="0" max="100" step="5">
+                                <!-- Tax Rates & Contribution Split Row -->
+                                <div class="mc-form-row">
+                                    <div class="mc-form-col mc-form-col-2">
+                                        <div class="mc-form-group-title">Tax Rates</div>
+                                        <div class="mc-form-grid-2x2">
+                                            <div class="mc-form-group">
+                                                <label for="tax-rate-ordinary">Federal %</label>
+                                                <input type="number" id="tax-rate-ordinary" value="22" min="0" max="50" step="1">
+                                            </div>
+                                            <div class="mc-form-group">
+                                                <label for="tax-rate-state">State %</label>
+                                                <input type="number" id="tax-rate-state" value="5" min="0" max="15" step="0.5">
+                                            </div>
+                                            <div class="mc-form-group">
+                                                <label for="tax-rate-cap-gains">Cap Gains %</label>
+                                                <input type="number" id="tax-rate-cap-gains" value="15" min="0" max="30" step="1">
+                                            </div>
+                                            <div class="mc-form-group">
+                                                <label for="cost-basis-ratio">Cost Basis %</label>
+                                                <input type="number" id="cost-basis-ratio" value="60" min="0" max="100" step="5">
+                                            </div>
                                         </div>
                                     </div>
-
-                                    <div class="compact-form-section-title">Contribution Split</div>
-                                    <div class="compact-form-grid">
-                                        <div class="form-group">
-                                            <label for="contrib-traditional">To Trad %</label>
+                                    <div class="mc-form-col">
+                                        <div class="mc-form-group-title">Contribution Split</div>
+                                        <div class="mc-form-group">
+                                            <label for="contrib-traditional">To Traditional %</label>
                                             <input type="number" id="contrib-traditional" value="60" min="0" max="100" step="5">
                                         </div>
-                                        <div class="form-group">
+                                        <div class="mc-form-group">
                                             <label for="contrib-roth">To Roth %</label>
                                             <input type="number" id="contrib-roth" value="25" min="0" max="100" step="5">
                                         </div>
-                                        <div class="form-group">
+                                        <div class="mc-form-group">
                                             <label for="contrib-taxable">To Taxable %</label>
                                             <input type="number" id="contrib-taxable" value="15" min="0" max="100" step="5">
                                         </div>
@@ -898,7 +920,7 @@
                                 </div>
                             </div>
 
-                            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">Run Simulation</button>
+                            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 16px;">Run Simulation</button>
                         </div>
                     </div>
                 </form>
@@ -1191,7 +1213,7 @@
                                 <h3>Year-by-Year Withdrawal Breakdown</h3>
                             </div>
                             <div class="card-body">
-                                <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                                <div class="table-container-sticky" style="max-height: 400px;">
                                     <table class="data-table" id="tax-withdrawal-table">
                                         <thead>
                                             <tr>

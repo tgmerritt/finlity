@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 from src.database import Database
+from src.database.models import BudgetIncomeSource, BudgetPretaxDeduction, BudgetTaxConfig
+from src.budget.tax_calculator import PAY_FREQUENCIES
 from src.projections.engine import (
     MonteCarloEngine,
     ProjectionParams,
@@ -765,6 +767,29 @@ class TaxProjectionRequest(BaseModel):
         description="Portion of taxable account that is cost basis"
     )
 
+    # Pre-retirement income settings
+    use_budget_income: bool = Field(
+        True,
+        description="Pull income from Expenses & Income page for pre-retirement taxes"
+    )
+    # Manual income override (used only if use_budget_income is False)
+    manual_pre_retirement_income: float = Field(
+        0.0, ge=0,
+        description="Manual annual gross income (only used if use_budget_income is False)"
+    )
+    manual_pre_retirement_deductions: float = Field(
+        0.0, ge=0,
+        description="Manual annual pre-tax deductions (only used if use_budget_income is False)"
+    )
+    filing_status: str = Field(
+        "single",
+        description="Tax filing status: single, married_joint, married_separate, head_household"
+    )
+    state: str = Field(
+        "CA",
+        description="Two-letter state code for state taxes"
+    )
+
 
 class TaxYearProjectionResponse(BaseModel):
     """Single year in tax projection."""
@@ -785,6 +810,9 @@ class TaxYearProjectionResponse(BaseModel):
     effective_rate: float
     net_withdrawal: float
     investment_return: float
+    # Phase tracking
+    phase: str = "withdrawal"  # "accumulation" or "withdrawal"
+    income_source: str = "withdrawal"  # "salary" or "withdrawal"
 
 
 class TaxProjectionSummaryResponse(BaseModel):
@@ -797,6 +825,15 @@ class TaxProjectionSummaryResponse(BaseModel):
     total_gross_withdrawn: float  # Gross (before-tax)
     final_balance: float
     depletion_age: Optional[int]
+    # Pre-retirement (accumulation phase) tax totals
+    pre_retirement_federal_tax: float = 0.0
+    pre_retirement_state_tax: float = 0.0
+    pre_retirement_total_tax: float = 0.0
+    pre_retirement_avg_effective_rate: float = 0.0
+    # Post-retirement (withdrawal phase) tax totals
+    post_retirement_federal_tax: float = 0.0
+    post_retirement_state_tax: float = 0.0
+    post_retirement_total_tax: float = 0.0
 
 
 class TaxProjectionResponse(BaseModel):
@@ -848,6 +885,52 @@ def run_tax_projection(
         roth=roth,
     )
 
+    # Fetch pre-retirement income from database if requested
+    pre_retirement_income = 0.0
+    pre_retirement_deductions = 0.0
+    filing_status = request.filing_status
+    state = request.state
+
+    if request.use_budget_income:
+        # Fetch income sources from database
+        with db.session() as session:
+            income_sources = session.query(BudgetIncomeSource).filter(
+                BudgetIncomeSource.is_active == True
+            ).all()
+
+            # Sum up all active income sources
+            for source in income_sources:
+                pre_retirement_income += source.gross_annual
+                # Use the first source's state if not specified
+                if state == "CA" and source.state:
+                    state = source.state
+
+            # Fetch pre-tax deductions linked to income sources
+            for source in income_sources:
+                deductions = session.query(BudgetPretaxDeduction).filter(
+                    BudgetPretaxDeduction.income_source_id == source.id
+                ).all()
+                for ded in deductions:
+                    # Convert per-period to annual
+                    periods_per_year = PAY_FREQUENCIES.get(source.pay_frequency, 26)
+                    if ded.is_percentage:
+                        # Deduction is a percentage of gross
+                        annual_ded = source.gross_annual * (ded.amount_per_period / 100)
+                    else:
+                        annual_ded = ded.amount_per_period * periods_per_year
+                    pre_retirement_deductions += annual_ded
+
+            # Fetch tax config for filing status
+            tax_config = session.query(BudgetTaxConfig).first()
+            if tax_config:
+                filing_status = tax_config.filing_status
+                if tax_config.state:
+                    state = tax_config.state
+    else:
+        # Use manual values
+        pre_retirement_income = request.manual_pre_retirement_income
+        pre_retirement_deductions = request.manual_pre_retirement_deductions
+
     # Create withdrawal strategy with specified tax rates
     strategy = TaxAwareWithdrawalStrategy(
         tax_rate_ordinary=request.federal_tax_rate,
@@ -869,6 +952,12 @@ def run_tax_projection(
         contribution_to_traditional_pct=request.contribution_to_traditional_pct,
         contribution_to_roth_pct=request.contribution_to_roth_pct,
         contribution_to_taxable_pct=request.contribution_to_taxable_pct,
+        # Pre-retirement income parameters
+        pre_retirement_income=pre_retirement_income,
+        pre_retirement_deductions=pre_retirement_deductions,
+        filing_status=filing_status,
+        state=state,
+        tax_year=2024,
     )
 
     # Convert to response model
@@ -891,6 +980,8 @@ def run_tax_projection(
             effective_rate=y.effective_rate,
             net_withdrawal=y.net_withdrawal,
             investment_return=y.investment_return,
+            phase=y.phase,
+            income_source=y.income_source,
         )
         for y in result.years
     ]
@@ -904,6 +995,15 @@ def run_tax_projection(
         total_gross_withdrawn=result.summary.total_gross_withdrawn,
         final_balance=result.summary.final_balance,
         depletion_age=result.summary.depletion_age,
+        # Pre-retirement tax totals
+        pre_retirement_federal_tax=result.summary.pre_retirement_federal_tax,
+        pre_retirement_state_tax=result.summary.pre_retirement_state_tax,
+        pre_retirement_total_tax=result.summary.pre_retirement_total_tax,
+        pre_retirement_avg_effective_rate=result.summary.pre_retirement_avg_effective_rate,
+        # Post-retirement tax totals
+        post_retirement_federal_tax=result.summary.post_retirement_federal_tax,
+        post_retirement_state_tax=result.summary.post_retirement_state_tax,
+        post_retirement_total_tax=result.summary.post_retirement_total_tax,
     )
 
     # Build chart-ready data arrays
@@ -920,6 +1020,8 @@ def run_tax_projection(
         "from_traditional": [y.from_traditional for y in result.years],
         "from_roth": [y.from_roth for y in result.years],
         "rmd_amounts": [y.rmd_amount for y in result.years],
+        "phases": [y.phase for y in result.years],
+        "income_sources": [y.income_source for y in result.years],
     }
 
     return TaxProjectionResponse(

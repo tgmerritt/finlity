@@ -22,6 +22,21 @@ def get_db() -> Database:
     return get_database()
 
 
+def check_demo_mode_write():
+    """Raise error if demo mode is enabled (prevents data pollution).
+
+    Demo mode should use pre-generated data only.
+    User modifications would pollute the demo database with real data.
+    """
+    from fastapi import HTTPException
+    from src.services.demo_mode import is_demo_mode
+    if is_demo_mode():
+        raise HTTPException(
+            status_code=403,
+            detail="Modifications are disabled in demo mode. Disable demo mode to modify your portfolio."
+        )
+
+
 def db_to_portfolio(db: Database) -> Portfolio:
     """Convert database data to Portfolio model for analysis."""
     accounts = []
@@ -599,6 +614,7 @@ def get_triggers(active_only: bool = False, db: Database = Depends(get_db)):
 @router.post("/triggers", response_model=TriggerResponse)
 def create_trigger(request: TriggerRequest, db: Database = Depends(get_db)):
     """Create a new allocation trigger."""
+    check_demo_mode_write()
     trigger = db.create_trigger(
         name=request.name,
         condition_type=request.condition_type,
@@ -624,6 +640,7 @@ def create_trigger(request: TriggerRequest, db: Database = Depends(get_db)):
 @router.delete("/triggers/{trigger_id}")
 def delete_trigger(trigger_id: str, db: Database = Depends(get_db)):
     """Delete a trigger."""
+    check_demo_mode_write()
     if db.delete_trigger(trigger_id):
         return {"message": "Trigger deleted"}
     from fastapi import HTTPException
@@ -633,6 +650,7 @@ def delete_trigger(trigger_id: str, db: Database = Depends(get_db)):
 @router.put("/triggers/{trigger_id}/toggle")
 def toggle_trigger(trigger_id: str, db: Database = Depends(get_db)):
     """Toggle a trigger's active status."""
+    check_demo_mode_write()
     trigger = db.get_trigger_by_id(trigger_id)
     if not trigger:
         from fastapi import HTTPException
@@ -1034,6 +1052,7 @@ def _get_sector_multi_source(ticker: str, db: Database) -> tuple[Optional[str], 
 @router.post("/positions/update-sectors")
 def update_position_sectors(db: Database = Depends(get_db)):
     """Update sector data for all positions using multiple data sources."""
+    check_demo_mode_write()
     positions = db.get_all_positions()
 
     # Get unique tickers that don't have sectors and are tradeable

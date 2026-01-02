@@ -20,6 +20,20 @@ def get_db() -> Database:
     return get_database()
 
 
+def check_demo_mode_write():
+    """Raise error if demo mode is enabled (prevents data pollution).
+
+    Demo mode should use pre-generated data only.
+    User modifications would pollute the demo database with real data.
+    """
+    from src.services.demo_mode import is_demo_mode
+    if is_demo_mode():
+        raise HTTPException(
+            status_code=403,
+            detail="Modifications are disabled in demo mode. Disable demo mode to modify your portfolio."
+        )
+
+
 class AccountResponse(BaseModel):
     """Account response model."""
     id: str
@@ -287,6 +301,7 @@ def get_snapshots(limit: int = 365, db: Database = Depends(get_db)):
 @router.delete("/accounts/{account_id}")
 def delete_account(account_id: str, db: Database = Depends(get_db)):
     """Delete an account and all its positions."""
+    check_demo_mode_write()
     if db.delete_account(account_id):
         return {"message": "Account deleted"}
     raise HTTPException(status_code=404, detail="Account not found")
@@ -295,6 +310,7 @@ def delete_account(account_id: str, db: Database = Depends(get_db)):
 @router.post("/accounts")
 def create_account(request: CreateAccountRequest, db: Database = Depends(get_db)):
     """Create a new account for manual position entry."""
+    check_demo_mode_write()
     # For custom types, ensure the custom_type_name is set
     custom_name = request.custom_type_name
     if request.account_type.startswith("custom:") and not custom_name:
@@ -327,6 +343,7 @@ def create_account(request: CreateAccountRequest, db: Database = Depends(get_db)
 @router.post("/positions")
 def create_position(request: CreatePositionRequest, db: Database = Depends(get_db)):
     """Manually add a position to an account."""
+    check_demo_mode_write()
     # Verify account exists
     account = db.get_account_by_id(request.account_id)
     if not account:
@@ -357,6 +374,7 @@ def create_position(request: CreatePositionRequest, db: Database = Depends(get_d
 @router.post("/positions/cash")
 def create_cash_position(request: CreateCashPositionRequest, db: Database = Depends(get_db)):
     """Add a cash position to an account."""
+    check_demo_mode_write()
     # Verify account exists
     account = db.get_account_by_id(request.account_id)
     if not account:
@@ -392,6 +410,7 @@ def create_cash_position(request: CreateCashPositionRequest, db: Database = Depe
 @router.post("/positions/cd")
 def create_cd_position(request: CreateCDPositionRequest, db: Database = Depends(get_db)):
     """Add a CD position to an account."""
+    check_demo_mode_write()
     # Verify account exists
     account = db.get_account_by_id(request.account_id)
     if not account:
@@ -447,6 +466,7 @@ def get_upcoming_cd_maturities(days: int = 30, db: Database = Depends(get_db)):
 @router.post("/positions/cd/check-maturities")
 def check_cd_maturities(db: Database = Depends(get_db)):
     """Check for matured CDs and convert them to cash."""
+    check_demo_mode_write()
     matured = db.check_cd_maturities()
     return {
         "matured_count": len(matured),
@@ -474,6 +494,7 @@ def create_real_estate_position(request: CreateRealEstateRequest, db: Database =
     Note: This tracks the property value, not net equity after mortgage.
     For net equity, subtract your mortgage balance from the current_value.
     """
+    check_demo_mode_write()
     # Verify account exists
     account = db.get_account_by_id(request.account_id)
     if not account:
@@ -522,6 +543,7 @@ class UpdatePositionRequest(BaseModel):
 @router.put("/positions/{position_id}")
 def update_position(position_id: str, request: UpdatePositionRequest, db: Database = Depends(get_db)):
     """Update a position's shares, price, or other fields."""
+    check_demo_mode_write()
     position = db.get_position_by_id(position_id)
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
@@ -555,6 +577,7 @@ def update_position(position_id: str, request: UpdatePositionRequest, db: Databa
 @router.delete("/positions/{position_id}")
 def delete_position(position_id: str, db: Database = Depends(get_db)):
     """Delete a position."""
+    check_demo_mode_write()
     if db.delete_position(position_id):
         return {"message": "Position deleted"}
     raise HTTPException(status_code=404, detail="Position not found")

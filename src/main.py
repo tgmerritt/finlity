@@ -119,14 +119,16 @@ async def lifespan(app: FastAPI):
         seed_callback(db)
 
     # Scan for new imports on startup (incremental imports, not seed data)
+    # Skip in demo mode to prevent real data from contaminating the demo database
     scanner = FolderScanner(db)
-    pending = scanner.scan_for_new_files()
-    if pending:
-        print(f"Importing {len(pending)} new file(s)...")
-        results = scanner.process_all_pending(fetch_prices=True)
-        success_count = sum(1 for r in results if r.success)
-        total_positions = sum(r.positions_imported for r in results if r.success)
-        print(f"  Imported {total_positions} positions from {success_count} file(s)")
+    if not app.state.demo_mode:
+        pending = scanner.scan_for_new_files()
+        if pending:
+            print(f"Importing {len(pending)} new file(s)...")
+            results = scanner.process_all_pending(fetch_prices=True)
+            success_count = sum(1 for r in results if r.success)
+            total_positions = sum(r.positions_imported for r in results if r.success)
+            print(f"  Imported {total_positions} positions from {success_count} file(s)")
 
     # Refresh stale prices (>24 hours old) on startup
     stale_tickers = db.get_stale_tickers()
