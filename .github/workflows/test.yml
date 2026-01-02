@@ -31,24 +31,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Cache Python dependencies
-        uses: actions/cache@v4
-        id: cache-deps
-        with:
-          path: ~/.local
-          key: python-${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}
+          cache: 'pip'
 
       - name: Install dependencies
-        if: steps.cache-deps.outputs.cache-hit != 'true'
         run: |
           python -m pip install --upgrade pip
-          pip install --user -r requirements.txt
+          pip install -r requirements.txt
 
       - name: Run unit tests
-        run: |
-          export PATH="$HOME/.local/bin:$PATH"
-          pytest tests/ -v --tb=short -x
+        run: pytest tests/ -v --tb=short -x
         env:
           PORTFOLIO_DEMO_MODE: "true"
           PORTFOLIO_TEST_MODE: "true"
@@ -64,24 +55,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Cache linting dependencies
-        uses: actions/cache@v4
-        id: cache-lint
-        with:
-          path: ~/.local
-          key: lint-3.11-ruff
+          cache: 'pip'
 
       - name: Install linting dependencies
-        if: steps.cache-lint.outputs.cache-hit != 'true'
         run: |
           python -m pip install --upgrade pip
-          pip install --user ruff
+          pip install ruff
 
       - name: Run Ruff linter
-        run: |
-          export PATH="$HOME/.local/bin:$PATH"
-          ruff check src/ --output-format=github || true
+        run: ruff check src/ --output-format=github || true
         continue-on-error: true
 
   e2e:
@@ -105,45 +87,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Cache Python dependencies
-        uses: actions/cache@v4
-        id: cache-e2e-deps
-        with:
-          path: ~/.local
-          key: e2e-3.11-${{ hashFiles('requirements.txt') }}
+          cache: 'pip'
 
       - name: Install dependencies
-        if: steps.cache-e2e-deps.outputs.cache-hit != 'true'
         run: |
           python -m pip install --upgrade pip
-          pip install --user -r requirements.txt
-          pip install --user playwright
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        id: cache-playwright
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}
-
-      - name: Install Playwright browsers
-        if: steps.cache-playwright.outputs.cache-hit != 'true'
-        run: |
-          export PATH="$HOME/.local/bin:$PATH"
+          pip install -r requirements.txt
+          pip install playwright
           playwright install chromium
 
       - name: Start server
         run: |
-          export PATH="$HOME/.local/bin:$PATH"
           python -m src.main --no-browser &
           sleep 5
         env:
           PORTFOLIO_DEMO_MODE: "true"
 
       - name: Run E2E tests
-        run: |
-          export PATH="$HOME/.local/bin:$PATH"
-          python scripts/test_ui.py
+        run: python scripts/test_ui.py
         env:
           PORTFOLIO_DEMO_MODE: "true"
