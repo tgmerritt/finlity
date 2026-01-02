@@ -53,7 +53,8 @@ output/
 *.env
 .envrc
 credentials*
-secrets*
+secrets.*
+!src/services/secrets.py
 *.pem
 *.key
 *_key.txt
