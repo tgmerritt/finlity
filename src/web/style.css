@@ -2379,6 +2379,8 @@ tr:hover td {
     border-radius: 12px;
     padding: 16px;
     text-align: center;
+    overflow: hidden;
+    min-width: 0;
 }
 
 .budget-stats-row .stat-card.highlight {
@@ -2400,9 +2402,13 @@ tr:hover td {
 }
 
 .budget-stats-row .stat-value {
-    font-size: 20px;
-    font-weight: 600;
+    font-size: 18px;
+    font-weight: 500;
     color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 .budget-stats-row .stat-value.positive {

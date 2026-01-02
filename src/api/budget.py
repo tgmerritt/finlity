@@ -886,6 +886,8 @@ async def get_paycheck_chart_data():
         expense_amounts = []
         savings_amounts = []
 
+        takehome_amounts = []
+
         for period in range(1, periods_per_year + 1):
             breakdown = calculator.calculate_paycheck(
                 gross_per_period=gross_per_period,
@@ -898,23 +900,24 @@ async def get_paycheck_chart_data():
             state_taxes.append(round(breakdown.state_income_tax, 2))
             fica_taxes.append(round(breakdown.total_fica, 2))
             pretax_deductions.append(round(breakdown.total_pretax_deductions, 2))
+            takehome_amounts.append(round(breakdown.net_pay, 2))
             expense_amounts.append(round(expenses_per_period, 2))
 
             remaining = breakdown.net_pay - expenses_per_period
             savings_amounts.append(round(max(0, remaining), 2))
 
+        # Return flat structure matching frontend expectations
         return {
             "periods": periods,
             "pay_frequency": source.pay_frequency,
             "gross_per_period": round(gross_per_period, 2),
-            "data": {
-                "federal_tax": federal_taxes,
-                "state_tax": state_taxes,
-                "fica": fica_taxes,
-                "pretax_deductions": pretax_deductions,
-                "expenses": expense_amounts,
-                "savings": savings_amounts,
-            },
+            "federal_tax": federal_taxes,
+            "state_tax": state_taxes,
+            "fica": fica_taxes,
+            "pretax": pretax_deductions,
+            "takehome": takehome_amounts,
+            "expenses": expense_amounts,
+            "savings": savings_amounts,
         }
     finally:
         session.close()

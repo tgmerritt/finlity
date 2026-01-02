@@ -6351,6 +6351,8 @@ async function loadPaycheckChart() {
             return;
         }
 
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
         const traces = [
             {
                 name: 'Federal Tax',
@@ -6391,13 +6393,26 @@ async function loadPaycheckChart() {
 
         const layout = {
             barmode: 'stack',
-            xaxis: { title: 'Pay Period', tickmode: 'linear', dtick: 2 },
-            yaxis: { title: 'Amount ($)', tickformat: '$,.0f' },
-            legend: { orientation: 'h', y: -0.2 },
+            xaxis: {
+                title: 'Pay Period',
+                tickmode: 'linear',
+                dtick: 2,
+                gridcolor: isDark ? '#303030' : '#f0f0f0'
+            },
+            yaxis: {
+                title: 'Amount ($)',
+                tickformat: '$,.0f',
+                gridcolor: isDark ? '#303030' : '#f0f0f0'
+            },
+            legend: {
+                orientation: 'h',
+                y: -0.2,
+                font: { color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)' }
+            },
             margin: { t: 20, r: 20, b: 80, l: 60 },
             paper_bgcolor: 'transparent',
             plot_bgcolor: 'transparent',
-            font: { color: getComputedStyle(document.body).getPropertyValue('--color-text') }
+            font: { color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)' }
         };
 
         Plotly.newPlot('paycheck-chart', traces, layout, { responsive: true });
@@ -6408,6 +6423,8 @@ async function loadPaycheckChart() {
 
 // Render cash flow waterfall chart
 function renderCashFlowWaterfall(summary) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
     const trace = {
         type: 'waterfall',
         orientation: 'v',
@@ -6423,18 +6440,23 @@ function renderCashFlowWaterfall(summary) {
             0  // final total
         ],
         measure: ['absolute', 'relative', 'relative', 'relative', 'relative', 'total', 'relative', 'total'],
-        connector: { line: { color: 'rgb(63, 63, 63)' } },
+        connector: { line: { color: isDark ? '#424242' : 'rgb(63, 63, 63)' } },
         decreasing: { marker: { color: '#ef4444' } },
         increasing: { marker: { color: '#22c55e' } },
         totals: { marker: { color: '#3b82f6' } }
     };
 
     const layout = {
-        yaxis: { title: 'Annual Amount ($)', tickformat: '$,.0f' },
+        xaxis: { gridcolor: isDark ? '#303030' : '#f0f0f0' },
+        yaxis: {
+            title: 'Annual Amount ($)',
+            tickformat: '$,.0f',
+            gridcolor: isDark ? '#303030' : '#f0f0f0'
+        },
         margin: { t: 20, r: 20, b: 60, l: 80 },
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        font: { color: getComputedStyle(document.body).getPropertyValue('--color-text') },
+        font: { color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)' },
         showlegend: false
     };
 
@@ -6459,19 +6481,23 @@ function updateExpensesCategoryChart(expenses) {
     const labels = Object.keys(byCategory);
     const values = Object.values(byCategory);
 
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const textColor = isDark ? 'rgba(255, 255, 255, 0.85)' : 'rgba(0, 0, 0, 0.85)';
+
     const trace = {
         type: 'pie',
         labels: labels,
         values: values,
         hole: 0.4,
         textinfo: 'label+percent',
-        textposition: 'outside'
+        textposition: 'outside',
+        textfont: { color: textColor }
     };
 
     const layout = {
         margin: { t: 20, r: 20, b: 20, l: 20 },
         paper_bgcolor: 'transparent',
-        font: { color: getComputedStyle(document.body).getPropertyValue('--color-text') },
+        font: { color: textColor },
         showlegend: false
     };
 
@@ -6513,6 +6539,10 @@ async function runTransitionProjection() {
 // Render income transition chart
 function renderTransitionChart(years) {
     const ages = years.map(y => y.age);
+
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const textColor = isDark ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.65)';
+    const gridColor = isDark ? '#303030' : '#e0e0e0';
 
     const traces = [
         {
@@ -6556,13 +6586,26 @@ function renderTransitionChart(years) {
     ];
 
     const layout = {
-        xaxis: { title: 'Age' },
-        yaxis: { title: 'Annual Amount ($)', tickformat: '$,.0f' },
-        legend: { orientation: 'h', y: -0.2 },
+        xaxis: {
+            title: 'Age',
+            titlefont: { color: textColor },
+            tickfont: { color: textColor },
+            gridcolor: gridColor,
+            zerolinecolor: gridColor
+        },
+        yaxis: {
+            title: 'Annual Amount ($)',
+            tickformat: '$,.0f',
+            titlefont: { color: textColor },
+            tickfont: { color: textColor },
+            gridcolor: gridColor,
+            zerolinecolor: gridColor
+        },
+        legend: { orientation: 'h', y: -0.2, font: { color: textColor } },
         margin: { t: 20, r: 20, b: 80, l: 80 },
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        font: { color: getComputedStyle(document.body).getPropertyValue('--color-text') }
+        font: { color: textColor }
     };
 
     Plotly.newPlot('transition-chart', traces, layout, { responsive: true });
