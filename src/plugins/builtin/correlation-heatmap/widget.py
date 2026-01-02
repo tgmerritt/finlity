@@ -144,8 +144,8 @@ class CorrelationHeatmapWidget(WidgetPlugin):
             else:
                 prices = data["Close"].copy()
 
-            # Calculate daily returns
-            returns = prices.pct_change().dropna()
+            # Calculate daily returns (fill_method=None to avoid FutureWarning)
+            returns = prices.pct_change(fill_method=None).dropna()
 
             if len(returns) < 20:
                 return None

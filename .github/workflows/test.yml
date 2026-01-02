@@ -73,20 +73,11 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          df -h
-
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Heroku CLI
-        run: curl https://cli-assets.heroku.com/install.sh | sh
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Heroku Container Registry
         env:
@@ -94,11 +85,16 @@ jobs:
         run: echo "$HEROKU_API_KEY" | docker login --username=_ --password-stdin registry.heroku.com
 
       - name: Build and push Docker image
-        env:
-          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
-        run: |
-          docker build -t registry.heroku.com/${{ secrets.HEROKU_APP_NAME }}/web .
-          docker push registry.heroku.com/${{ secrets.HEROKU_APP_NAME }}/web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: registry.heroku.com/${{ secrets.HEROKU_APP_NAME }}/web
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install Heroku CLI
+        run: curl https://cli-assets.heroku.com/install.sh | sh
 
       - name: Release to Heroku
         env:
