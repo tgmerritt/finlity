@@ -1,10 +1,12 @@
 """Monte Carlo projections API endpoints."""
 
-from fastapi import APIRouter, Depends
+import os
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from typing import Optional
 
 from src.database import Database
+from src.services.background_tasks import task_manager
 from src.database.models import BudgetIncomeSource, BudgetPretaxDeduction, BudgetTaxConfig
 from src.budget.tax_calculator import PAY_FREQUENCIES
 from src.projections.engine import (
@@ -16,6 +18,12 @@ from src.projections.engine import (
 )
 
 router = APIRouter(prefix="/api/projections", tags=["projections"])
+
+
+def is_hosted_environment() -> bool:
+    """Check if running on Heroku or similar platform with request timeouts."""
+    # DYNO is set on Heroku, PORT is set but may also be set locally
+    return bool(os.environ.get("DYNO"))
 
 
 def get_db() -> Database:
@@ -123,22 +131,182 @@ class SensitivityResponse(BaseModel):
     withdrawal_impacts: dict[str, float]
 
 
-@router.post("/monte-carlo", response_model=ProjectionResponse)
+def _run_monte_carlo_task(
+    request_dict: dict,
+    db_path: str,
+) -> dict:
+    """
+    Background task function for Monte Carlo simulation.
+
+    This is separated so it can be run in a background thread.
+    Returns a dict that can be converted to ProjectionResponse.
+    """
+    # Recreate database connection in background thread
+    from src.database import Database
+
+    db = Database(db_path)
+
+    # Recreate request from dict
+    current_balance = request_dict.get("current_balance")
+    if current_balance is None:
+        summary = db.get_portfolio_summary()
+        current_balance = summary["total_value"]
+
+    # Validate allocations
+    stock_allocation = request_dict.get("stock_allocation", 0.70)
+    bond_allocation = request_dict.get("bond_allocation", 0.25)
+    cash_allocation = 1.0 - stock_allocation - bond_allocation
+    if cash_allocation < 0:
+        cash_allocation = 0
+        total = stock_allocation + bond_allocation
+        stock_alloc = stock_allocation / total
+        bond_alloc = bond_allocation / total
+    else:
+        stock_alloc = stock_allocation
+        bond_alloc = bond_allocation
+
+    # Build account balances if tax-aware mode is enabled
+    account_balances = None
+    if request_dict.get("use_tax_aware_withdrawals") and request_dict.get("account_balances"):
+        ab = request_dict["account_balances"]
+        account_balances = AccountBalances(
+            taxable=ab.get("taxable", 0),
+            traditional=ab.get("traditional", 0),
+            roth=ab.get("roth", 0),
+        )
+        current_balance = account_balances.total
+
+    params = ProjectionParams(
+        current_age=request_dict["current_age"],
+        retirement_age=request_dict["retirement_age"],
+        current_balance=current_balance,
+        monthly_contribution=request_dict["monthly_contribution"],
+        monthly_withdrawal=request_dict["monthly_withdrawal"],
+        stock_allocation=stock_alloc,
+        bond_allocation=bond_alloc,
+        cash_allocation=cash_allocation,
+        use_tax_aware_withdrawals=request_dict.get("use_tax_aware_withdrawals", False),
+        account_balances=account_balances,
+        tax_rate_ordinary=request_dict.get("tax_rate_ordinary", 0.22),
+        tax_rate_capital_gains=request_dict.get("tax_rate_capital_gains", 0.15),
+        tax_rate_state=request_dict.get("tax_rate_state", 0.05),
+        cost_basis_ratio=request_dict.get("cost_basis_ratio", 0.60),
+        contribution_traditional_pct=request_dict.get("contribution_traditional_pct", 0.60),
+        contribution_roth_pct=request_dict.get("contribution_roth_pct", 0.25),
+        contribution_taxable_pct=request_dict.get("contribution_taxable_pct", 0.15),
+    )
+
+    engine = MonteCarloEngine()
+    end_age = request_dict.get("end_age", 95)
+    result = engine.run_projection(params, end_age=end_age)
+
+    # Extract projected portfolio value at retirement age
+    retirement_index = request_dict["retirement_age"] - request_dict["current_age"]
+    projected_value_at_retirement = None
+    conservative_value_at_retirement = None
+
+    if 0 <= retirement_index < len(result.median_values):
+        projected_value_at_retirement = result.median_values[retirement_index]
+        conservative_value_at_retirement = result.percentile_25[retirement_index]
+
+    # Calculate earliest retirement age
+    earliest_retirement_age = None
+    if request_dict["monthly_withdrawal"] > 0:
+        earliest_retirement_age = _find_earliest_retirement_age(
+            engine=engine,
+            current_age=request_dict["current_age"],
+            current_balance=current_balance,
+            monthly_contribution=request_dict["monthly_contribution"],
+            monthly_withdrawal=request_dict["monthly_withdrawal"],
+            stock_allocation=stock_alloc,
+            bond_allocation=bond_alloc,
+            end_age=end_age,
+            target_success_rate=0.80,
+        )
+
+    # Save results to database
+    db.save_monte_carlo_result(
+        current_age=request_dict["current_age"],
+        retirement_age=request_dict["retirement_age"],
+        portfolio_balance=current_balance,
+        success_rate=result.success_rate,
+        monthly_contribution=request_dict["monthly_contribution"],
+        monthly_withdrawal=request_dict["monthly_withdrawal"],
+        median_final_value=result.median_final_value,
+        worst_case_final=result.worst_case_final,
+        best_case_final=result.best_case_final,
+        earliest_retirement_age=earliest_retirement_age,
+        projected_value_at_retirement=projected_value_at_retirement,
+        conservative_value_at_retirement=conservative_value_at_retirement,
+    )
+
+    return {
+        "ages": result.ages,
+        "median_values": result.median_values,
+        "percentile_10": result.percentile_10,
+        "percentile_25": result.percentile_25,
+        "percentile_75": result.percentile_75,
+        "percentile_90": result.percentile_90,
+        "success_rate": result.success_rate,
+        "median_final_value": result.median_final_value,
+        "worst_case_final": result.worst_case_final,
+        "best_case_final": result.best_case_final,
+    }
+
+
+@router.post("/monte-carlo")
 def run_monte_carlo(
     request: ProjectionRequest,
+    async_mode: bool = Query(
+        default=None,
+        description="Run in background and return task_id. Defaults to True on Heroku, False locally."
+    ),
     db: Database = Depends(get_db),
-) -> ProjectionResponse:
+):
     """
     Run Monte Carlo simulation for retirement projection.
 
     Returns percentile bands showing the range of possible outcomes.
     Also saves results to database for dashboard metrics.
 
+    On hosted platforms (Heroku), this runs asynchronously by default to avoid
+    30-second request timeouts. Use `async_mode=false` to force synchronous execution.
+
+    When async_mode is True:
+    - Returns `{"task_id": "..."}` immediately
+    - Poll `GET /api/tasks/{task_id}` for results
+
     Supports two modes:
     - Simple mode (default): Single pool of money with no tax considerations
     - Tax-aware mode: Tracks taxable, traditional, and Roth accounts separately
       with proper withdrawal ordering (taxable -> traditional -> Roth) and tax treatment
     """
+    # Determine if we should run async
+    use_async = async_mode if async_mode is not None else is_hosted_environment()
+
+    if use_async:
+        # Convert request to dict for background task
+        request_dict = request.model_dump()
+        if request.account_balances:
+            request_dict["account_balances"] = request.account_balances.model_dump()
+
+        # Get database path for background thread
+        db_path = db.db_path
+
+        # Submit to background task manager
+        task_id = task_manager.submit(
+            _run_monte_carlo_task,
+            request_dict,
+            db_path,
+        )
+
+        return {
+            "task_id": task_id,
+            "status": "pending",
+            "message": "Monte Carlo simulation started. Poll GET /api/tasks/{task_id} for results.",
+        }
+
+    # Synchronous execution (local development)
     # Get current balance from portfolio if not provided
     current_balance = request.current_balance
     if current_balance is None:

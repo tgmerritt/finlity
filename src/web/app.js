@@ -77,6 +77,68 @@ async function apiCall(endpoint, options = {}) {
     return response.text();
 }
 
+// Background task polling for long-running operations
+async function pollForTaskResult(taskId, options = {}) {
+    const {
+        maxWaitMs = 300000,      // 5 minutes max
+        pollIntervalMs = 2000,   // Poll every 2 seconds
+        onProgress = null,       // Callback for progress updates
+    } = options;
+
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitMs) {
+        const response = await fetch(`${API_BASE}/api/tasks/${taskId}`);
+        if (!response.ok) {
+            throw new Error(`Failed to check task status: ${response.status}`);
+        }
+
+        const task = await response.json();
+
+        // Call progress callback if provided
+        if (onProgress && typeof onProgress === 'function') {
+            onProgress(task);
+        }
+
+        if (task.status === 'completed') {
+            return task.result;
+        }
+
+        if (task.status === 'failed') {
+            throw new Error(task.error || 'Task failed');
+        }
+
+        // Wait before next poll
+        await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    }
+
+    throw new Error('Task timed out');
+}
+
+// Helper to run API call that may return async task
+async function runAsyncApiCall(endpoint, options = {}, taskOptions = {}) {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    // Check if this is an async task response
+    if (data.task_id && data.status === 'pending') {
+        // Poll for the result
+        return await pollForTaskResult(data.task_id, taskOptions);
+    }
+
+    // Synchronous response - return directly
+    return data;
+}
+
 // Toast notifications
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
@@ -168,6 +230,15 @@ function hideLoading() {
             overlay.style.display = 'none';
         }
     }, 200);
+}
+
+function updateLoadingMessage(message) {
+    // Update loading message without affecting visibility
+    const overlay = document.getElementById('loading-overlay');
+    const textEl = overlay?.querySelector('.loading-text');
+    if (textEl) {
+        textEl.textContent = message;
+    }
 }
 
 // Theme Management
@@ -4412,18 +4483,32 @@ async function runProjection(event) {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/api/projections/monte-carlo`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(params)
-        });
+        // Use async API helper - handles both sync and async (background task) responses
+        // Always use async_mode=true for consistent experience (works locally and on Heroku)
+        const result = await runAsyncApiCall(
+            '/api/projections/monte-carlo?async_mode=true',
+            {
+                method: 'POST',
+                body: JSON.stringify(params)
+            },
+            {
+                // Task polling options
+                maxWaitMs: 300000,  // 5 minutes max
+                pollIntervalMs: 2000,
+                onProgress: (task) => {
+                    // Update loading message with progress
+                    const progress = task.progress ? Math.round(task.progress * 100) : 0;
+                    const message = task.progress_message || `Running simulation... ${progress}%`;
+                    updateLoadingMessage(message);
+                }
+            }
+        );
 
-        const result = await response.json();
         displayProjectionResults(result, params.retirement_age);
 
     } catch (error) {
         console.error('Error running projection:', error);
-        showToast('Failed to run projection', 'error');
+        showToast('Failed to run projection: ' + error.message, 'error');
     } finally {
         form.classList.remove('loading');
         hideLoading();

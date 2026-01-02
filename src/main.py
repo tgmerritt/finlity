@@ -30,6 +30,7 @@ from src.api import (
 )
 from src.api.budget import router as budget_router
 from src.api.commentary import router as commentary_router
+from src.api.tasks import router as tasks_router
 from src.database import get_profile_manager, get_database
 from src.importers import FolderScanner
 
@@ -188,6 +189,7 @@ app.include_router(profiles_router)
 app.include_router(plugins_router)
 app.include_router(budget_router)
 app.include_router(commentary_router)
+app.include_router(tasks_router)
 
 # Serve static files (web dashboard)
 web_dir = Path(__file__).parent / "web"
