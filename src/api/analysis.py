@@ -27,9 +27,16 @@ def check_demo_mode_write():
 
     Demo mode should use pre-generated data only.
     User modifications would pollute the demo database with real data.
+    Test mode bypasses this check to allow testing write operations.
     """
+    import os
     from fastapi import HTTPException
     from src.services.demo_mode import is_demo_mode
+
+    # Allow writes in test mode even if demo mode is enabled
+    if os.environ.get("PORTFOLIO_TEST_MODE", "").lower() == "true":
+        return
+
     if is_demo_mode():
         raise HTTPException(
             status_code=403,
