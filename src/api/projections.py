@@ -890,7 +890,8 @@ def run_tax_projection(
 
     if request.use_budget_income:
         # Fetch income sources from database
-        with db.session() as session:
+        session = db.get_session()
+        try:
             income_sources = session.query(BudgetIncomeSource).filter(
                 BudgetIncomeSource.is_active.is_(True)
             ).all()
@@ -923,6 +924,8 @@ def run_tax_projection(
                 filing_status = tax_config.filing_status
                 if tax_config.state:
                     state = tax_config.state
+        finally:
+            session.close()
     else:
         # Use manual values
         pre_retirement_income = request.manual_pre_retirement_income
