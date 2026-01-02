@@ -114,7 +114,58 @@ class WithdrawalBreakdown:
     from_roth: float  # Withdrawn from Roth accounts
     rmd_amount: float  # Required minimum distribution (may overlap with from_traditional)
     taxes_paid: float  # Total taxes on withdrawals
-    net_withdrawal: float  # After-tax amount available for spending
+    federal_tax: float = 0.0  # Federal portion of taxes
+    state_tax: float = 0.0  # State portion of taxes
+    net_withdrawal: float = 0.0  # After-tax amount available for spending
+
+
+@dataclass
+class TaxYearProjection:
+    """Single year in tax-aware withdrawal projection."""
+
+    year: int
+    age: int
+    # Balances at start of year
+    taxable_balance: float
+    traditional_balance: float
+    roth_balance: float
+    total_balance: float
+    # Withdrawals
+    rmd_amount: float
+    from_taxable: float
+    from_traditional: float
+    from_roth: float
+    gross_withdrawal: float
+    # Taxes
+    federal_tax: float
+    state_tax: float
+    total_tax: float
+    effective_rate: float
+    # Net
+    net_withdrawal: float
+    # Investment return for the year
+    investment_return: float
+
+
+@dataclass
+class TaxProjectionSummary:
+    """Summary statistics for tax projection."""
+
+    total_federal_tax: float
+    total_state_tax: float
+    total_tax: float
+    average_effective_rate: float
+    total_withdrawn: float
+    final_balance: float
+    depletion_age: Optional[int]
+
+
+@dataclass
+class TaxProjectionResult:
+    """Result of year-by-year tax projection."""
+
+    years: list[TaxYearProjection]
+    summary: TaxProjectionSummary
 
 
 class TaxAwareWithdrawalStrategy:
@@ -183,20 +234,42 @@ class TaxAwareWithdrawalStrategy:
         Returns:
             Tax amount
         """
+        federal, state = self.calculate_tax_breakdown(amount, source)
+        return federal + state
+
+    def calculate_tax_breakdown(
+        self,
+        amount: float,
+        source: str,  # "taxable", "traditional", "roth"
+    ) -> tuple[float, float]:
+        """Calculate federal and state tax on a withdrawal.
+
+        Args:
+            amount: Withdrawal amount
+            source: Account type
+
+        Returns:
+            Tuple of (federal_tax, state_tax)
+        """
         if source == "roth":
-            return 0.0  # Roth withdrawals are tax-free
+            return 0.0, 0.0  # Roth withdrawals are tax-free
 
         elif source == "taxable":
             # Only gains are taxed (at capital gains rate)
             taxable_portion = amount * (1 - self.cost_basis_ratio)
-            return taxable_portion * self.tax_rate_capital_gains
+            # Capital gains are taxed at federal rate only (simplified)
+            federal_tax = taxable_portion * self.tax_rate_capital_gains
+            # Some states also tax capital gains
+            state_tax = taxable_portion * self.tax_rate_state * 0.5  # Reduced state rate on cap gains
+            return federal_tax, state_tax
 
         elif source == "traditional":
             # Entire amount is ordinary income
-            total_rate = self.tax_rate_ordinary + self.tax_rate_state
-            return amount * total_rate
+            federal_tax = amount * self.tax_rate_ordinary
+            state_tax = amount * self.tax_rate_state
+            return federal_tax, state_tax
 
-        return 0.0
+        return 0.0, 0.0
 
     def gross_up_for_taxes(
         self,
@@ -247,7 +320,8 @@ class TaxAwareWithdrawalStrategy:
         from_taxable = 0.0
         from_traditional = 0.0
         from_roth = 0.0
-        taxes_paid = 0.0
+        total_federal_tax = 0.0
+        total_state_tax = 0.0
         remaining_need = spending_needed
 
         new_balances = AccountBalances(
@@ -265,8 +339,10 @@ class TaxAwareWithdrawalStrategy:
             new_balances.traditional -= actual_rmd
 
             # Calculate tax on RMD
-            rmd_tax = self.calculate_tax_on_withdrawal(actual_rmd, "traditional")
-            taxes_paid += rmd_tax
+            federal, state = self.calculate_tax_breakdown(actual_rmd, "traditional")
+            total_federal_tax += federal
+            total_state_tax += state
+            rmd_tax = federal + state
 
             # RMD provides after-tax spending
             rmd_after_tax = actual_rmd - rmd_tax
@@ -280,8 +356,10 @@ class TaxAwareWithdrawalStrategy:
             from_taxable += actual_withdrawal
             new_balances.taxable -= actual_withdrawal
 
-            tax = self.calculate_tax_on_withdrawal(actual_withdrawal, "taxable")
-            taxes_paid += tax
+            federal, state = self.calculate_tax_breakdown(actual_withdrawal, "taxable")
+            total_federal_tax += federal
+            total_state_tax += state
+            tax = federal + state
 
             after_tax = actual_withdrawal - tax
             remaining_need = max(0, remaining_need - after_tax)
@@ -294,8 +372,10 @@ class TaxAwareWithdrawalStrategy:
             from_traditional += actual_withdrawal
             new_balances.traditional -= actual_withdrawal
 
-            tax = self.calculate_tax_on_withdrawal(actual_withdrawal, "traditional")
-            taxes_paid += tax
+            federal, state = self.calculate_tax_breakdown(actual_withdrawal, "traditional")
+            total_federal_tax += federal
+            total_state_tax += state
+            tax = federal + state
 
             after_tax = actual_withdrawal - tax
             remaining_need = max(0, remaining_need - after_tax)
@@ -310,6 +390,7 @@ class TaxAwareWithdrawalStrategy:
             # No tax on Roth
             remaining_need = max(0, remaining_need - actual_withdrawal)
 
+        taxes_paid = total_federal_tax + total_state_tax
         breakdown = WithdrawalBreakdown(
             gross_needed=spending_needed,
             from_taxable=from_taxable,
@@ -317,10 +398,207 @@ class TaxAwareWithdrawalStrategy:
             from_roth=from_roth,
             rmd_amount=rmd_amount,
             taxes_paid=taxes_paid,
+            federal_tax=total_federal_tax,
+            state_tax=total_state_tax,
             net_withdrawal=spending_needed - remaining_need,
         )
 
         return breakdown, new_balances
+
+    def project_year_by_year(
+        self,
+        current_age: int,
+        retirement_age: int,
+        end_age: int,
+        initial_balances: AccountBalances,
+        annual_spending: float,
+        expected_return: float = 0.06,
+        inflation_rate: float = 0.03,
+        monthly_contribution: float = 0.0,
+        contribution_to_traditional_pct: float = 0.60,
+        contribution_to_roth_pct: float = 0.25,
+        contribution_to_taxable_pct: float = 0.15,
+    ) -> TaxProjectionResult:
+        """Project year-by-year tax burden and account balances.
+
+        Includes two phases:
+        1. Accumulation (current_age to retirement_age): contributions + growth, no withdrawals
+        2. Withdrawal (retirement_age to end_age): withdrawals + growth, no contributions
+
+        Args:
+            current_age: Current age (start of projection)
+            retirement_age: Age to begin withdrawals
+            end_age: Age to project to
+            initial_balances: Starting account balances
+            annual_spending: Annual spending need in retirement (will be inflation-adjusted)
+            expected_return: Expected annual investment return
+            inflation_rate: Annual inflation rate
+            monthly_contribution: Monthly contribution during accumulation phase
+            contribution_to_traditional_pct: % of contributions to traditional accounts
+            contribution_to_roth_pct: % of contributions to Roth accounts
+            contribution_to_taxable_pct: % of contributions to taxable accounts
+
+        Returns:
+            TaxProjectionResult with year-by-year projections
+        """
+        years: list[TaxYearProjection] = []
+        balances = AccountBalances(
+            taxable=initial_balances.taxable,
+            traditional=initial_balances.traditional,
+            roth=initial_balances.roth,
+        )
+
+        total_federal_tax = 0.0
+        total_state_tax = 0.0
+        total_withdrawn = 0.0
+        depletion_age: Optional[int] = None
+        effective_rates: list[float] = []
+
+        annual_contribution = monthly_contribution * 12
+        year_num = 0
+
+        # ===== PHASE 1: ACCUMULATION (current_age to retirement_age - 1) =====
+        for age in range(current_age, retirement_age):
+            year_num += 1
+
+            # Record starting balances
+            start_taxable = balances.taxable
+            start_traditional = balances.traditional
+            start_roth = balances.roth
+            start_total = balances.total
+
+            # Apply investment return first (beginning of year)
+            investment_return = balances.total * expected_return
+            balances.taxable *= (1 + expected_return)
+            balances.traditional *= (1 + expected_return)
+            balances.roth *= (1 + expected_return)
+
+            # Add contributions (end of year)
+            balances.traditional += annual_contribution * contribution_to_traditional_pct
+            balances.roth += annual_contribution * contribution_to_roth_pct
+            balances.taxable += annual_contribution * contribution_to_taxable_pct
+
+            # Record accumulation year (no withdrawals, no taxes)
+            years.append(TaxYearProjection(
+                year=year_num,
+                age=age,
+                taxable_balance=round(start_taxable, 2),
+                traditional_balance=round(start_traditional, 2),
+                roth_balance=round(start_roth, 2),
+                total_balance=round(start_total, 2),
+                rmd_amount=0,
+                from_taxable=0,
+                from_traditional=0,
+                from_roth=0,
+                gross_withdrawal=0,
+                federal_tax=0,
+                state_tax=0,
+                total_tax=0,
+                effective_rate=0,
+                net_withdrawal=0,
+                investment_return=round(investment_return, 2),
+            ))
+
+        # ===== PHASE 2: WITHDRAWAL (retirement_age to end_age) =====
+        years_in_retirement = 0
+        for age in range(retirement_age, end_age + 1):
+            year_num += 1
+            years_in_retirement += 1
+
+            # Record starting balances
+            start_taxable = balances.taxable
+            start_traditional = balances.traditional
+            start_roth = balances.roth
+            start_total = balances.total
+
+            # Calculate inflation-adjusted spending need (from retirement start)
+            inflation_adjusted_spending = annual_spending * (1 + inflation_rate) ** (years_in_retirement - 1)
+
+            # Skip if already depleted
+            if balances.total <= 0:
+                if depletion_age is None:
+                    depletion_age = age - 1
+                years.append(TaxYearProjection(
+                    year=year_num,
+                    age=age,
+                    taxable_balance=0,
+                    traditional_balance=0,
+                    roth_balance=0,
+                    total_balance=0,
+                    rmd_amount=0,
+                    from_taxable=0,
+                    from_traditional=0,
+                    from_roth=0,
+                    gross_withdrawal=0,
+                    federal_tax=0,
+                    state_tax=0,
+                    total_tax=0,
+                    effective_rate=0,
+                    net_withdrawal=0,
+                    investment_return=0,
+                ))
+                continue
+
+            # Execute withdrawal
+            breakdown, balances = self.execute_withdrawal(
+                spending_needed=inflation_adjusted_spending,
+                balances=balances,
+                age=age,
+            )
+
+            # Calculate effective tax rate
+            gross_withdrawal = breakdown.from_taxable + breakdown.from_traditional + breakdown.from_roth
+            if gross_withdrawal > 0:
+                effective_rate = (breakdown.federal_tax + breakdown.state_tax) / gross_withdrawal * 100
+            else:
+                effective_rate = 0.0
+
+            # Apply investment return to remaining balances
+            investment_return = balances.total * expected_return
+            balances.taxable *= (1 + expected_return)
+            balances.traditional *= (1 + expected_return)
+            balances.roth *= (1 + expected_return)
+
+            # Track totals
+            total_federal_tax += breakdown.federal_tax
+            total_state_tax += breakdown.state_tax
+            total_withdrawn += breakdown.net_withdrawal
+            effective_rates.append(effective_rate)
+
+            years.append(TaxYearProjection(
+                year=year_num,
+                age=age,
+                taxable_balance=round(start_taxable, 2),
+                traditional_balance=round(start_traditional, 2),
+                roth_balance=round(start_roth, 2),
+                total_balance=round(start_total, 2),
+                rmd_amount=round(breakdown.rmd_amount, 2),
+                from_taxable=round(breakdown.from_taxable, 2),
+                from_traditional=round(breakdown.from_traditional, 2),
+                from_roth=round(breakdown.from_roth, 2),
+                gross_withdrawal=round(gross_withdrawal, 2),
+                federal_tax=round(breakdown.federal_tax, 2),
+                state_tax=round(breakdown.state_tax, 2),
+                total_tax=round(breakdown.federal_tax + breakdown.state_tax, 2),
+                effective_rate=round(effective_rate, 2),
+                net_withdrawal=round(breakdown.net_withdrawal, 2),
+                investment_return=round(investment_return, 2),
+            ))
+
+        # Calculate summary
+        avg_effective_rate = sum(effective_rates) / len(effective_rates) if effective_rates else 0.0
+
+        summary = TaxProjectionSummary(
+            total_federal_tax=round(total_federal_tax, 2),
+            total_state_tax=round(total_state_tax, 2),
+            total_tax=round(total_federal_tax + total_state_tax, 2),
+            average_effective_rate=round(avg_effective_rate, 2),
+            total_withdrawn=round(total_withdrawn, 2),
+            final_balance=round(balances.total, 2),
+            depletion_age=depletion_age,
+        )
+
+        return TaxProjectionResult(years=years, summary=summary)
 
 
 class MonteCarloEngine:

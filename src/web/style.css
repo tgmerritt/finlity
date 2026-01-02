@@ -1838,6 +1838,31 @@ tr:hover td {
     margin-bottom: 16px;
 }
 
+/* Form rows - horizontal layout */
+.form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 12px;
+}
+
+.form-row .form-group {
+    flex: 1;
+    min-width: 100px;
+    margin-bottom: 0;
+}
+
+.form-row .form-group label {
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.form-row .form-group input {
+    padding: 6px 8px;
+    font-size: 13px;
+}
+
 /* Inline form row - all fields in one horizontal row */
 .form-row-inline {
     display: flex;
@@ -2083,6 +2108,7 @@ tr:hover td {
 
 .modal-content {
     position: relative;
+    z-index: 1;
     background: var(--color-bg-elevated);
     border-radius: var(--border-radius-lg);
     box-shadow: var(--shadow-lg);
@@ -2123,6 +2149,14 @@ tr:hover td {
 
 .modal-body {
     padding: 24px;
+}
+
+.modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
 }
 
 .modal-description {
@@ -2253,6 +2287,314 @@ tr:hover td {
     }
 }
 
+/* Budget Tab Styles */
+.budget-subnav {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--color-border);
+    flex-wrap: wrap;
+}
+
+.budget-nav-item {
+    padding: 10px 20px;
+    border: 1px solid var(--color-border);
+    background: var(--color-card-bg);
+    color: var(--color-text);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.budget-nav-item:hover {
+    background: var(--color-bg-hover);
+    border-color: var(--color-primary);
+}
+
+.budget-nav-item.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: white;
+}
+
+.budget-subtab {
+    display: none;
+}
+
+.budget-subtab.active {
+    display: block;
+}
+
+.budget-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 16px;
+}
+
+.budget-stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.budget-stats-row .stat-card {
+    background: var(--color-card-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+}
+
+.budget-stats-row .stat-card.highlight {
+    background: linear-gradient(135deg, var(--color-primary) 0%, #1d4ed8 100%);
+    color: white;
+    border-color: var(--color-primary);
+}
+
+.budget-stats-row .stat-card.highlight .stat-label {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.budget-stats-row .stat-label {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.budget-stats-row .stat-value {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.budget-stats-row .stat-value.positive {
+    color: var(--color-positive);
+}
+
+.budget-stats-row .stat-value.negative {
+    color: var(--color-negative);
+}
+
+.chart-subtitle {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    margin-top: 4px;
+}
+
+/* Income/Expense List Styles */
+.income-item,
+.expense-item,
+.deduction-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.income-item:hover,
+.expense-item:hover,
+.deduction-item:hover {
+    background: var(--color-bg-hover);
+}
+
+.income-item-info,
+.expense-item-info,
+.deduction-item-info {
+    flex: 1;
+}
+
+.income-item-name,
+.expense-item-name,
+.deduction-item-name {
+    font-weight: 500;
+    margin-bottom: 2px;
+}
+
+.income-item-details,
+.expense-item-details,
+.deduction-item-details {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.income-item-amount,
+.expense-item-amount,
+.deduction-item-amount {
+    font-size: 16px;
+    font-weight: 600;
+    margin-right: 16px;
+}
+
+.income-item-actions,
+.expense-item-actions,
+.deduction-item-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.income-item-actions button,
+.expense-item-actions button,
+.deduction-item-actions button {
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+/* Paycheck Breakdown Preview */
+.paycheck-breakdown-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.paycheck-section {
+    background: var(--color-bg);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.paycheck-section h4 {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.paycheck-line {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.paycheck-line:last-child {
+    border-bottom: none;
+}
+
+.paycheck-line.total {
+    font-weight: 600;
+    border-top: 2px solid var(--color-border);
+    margin-top: 8px;
+    padding-top: 12px;
+}
+
+.paycheck-line .label {
+    color: var(--color-text-secondary);
+}
+
+.paycheck-line .amount {
+    font-weight: 500;
+}
+
+.paycheck-line .amount.negative {
+    color: var(--color-negative);
+}
+
+.paycheck-line .amount.positive {
+    color: var(--color-positive);
+}
+
+/* Empty state styling */
+.empty-state {
+    text-align: center;
+    color: var(--color-text-secondary);
+    padding: 24px;
+    font-style: italic;
+}
+
+/* Budget card specific */
+.paycheck-preview-card {
+    grid-column: 1 / -1;
+}
+
+/* Budget Modal Overlay */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-overlay .modal {
+    background: var(--color-card-bg);
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 500px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    transform: translateY(-20px);
+    transition: transform 0.3s ease;
+}
+
+.modal-overlay.active .modal {
+    transform: translateY(0);
+}
+
+.modal-overlay .modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-overlay .modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.modal-overlay .modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    padding: 0;
+    line-height: 1;
+}
+
+.modal-overlay .modal-close:hover {
+    color: var(--color-text);
+}
+
+.modal-overlay .modal-body {
+    padding: 24px;
+}
+
+.modal-overlay .modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
     .sidebar {
@@ -2313,6 +2655,20 @@ tr:hover td {
     /* Tax settings grid to single column on mobile */
     .tax-settings-panel .form-row-inline {
         grid-template-columns: 1fr;
+    }
+
+    /* Compact form grid to 2 columns on mobile */
+    .compact-form-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    /* Form row to stack on mobile */
+    .form-row {
+        flex-direction: column;
+    }
+
+    .form-row .form-group {
+        width: 100%;
     }
 
     .projection-stats-row {
@@ -3478,6 +3834,281 @@ th.sortable.sort-desc .sort-icon::after {
     color: var(--color-success);
 }
 
+/* Collapsible Configuration Panel */
+.config-panel {
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    margin-bottom: 16px;
+    background: var(--color-bg-container);
+}
+
+.config-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    cursor: pointer;
+    background: var(--color-bg-spotlight);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+    transition: background var(--transition-fast);
+}
+
+.config-panel-header:hover {
+    background: var(--color-bg-hover);
+}
+
+.config-panel.collapsed .config-panel-header {
+    border-radius: var(--border-radius);
+}
+
+.config-panel-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.config-panel-summary {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    display: none;
+}
+
+.config-panel.collapsed .config-panel-summary {
+    display: inline;
+    margin-left: 8px;
+}
+
+.config-panel-toggle {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-secondary);
+    transition: transform var(--transition-fast);
+}
+
+.config-panel.collapsed .config-panel-toggle {
+    transform: rotate(-90deg);
+}
+
+.config-panel-body {
+    padding: 16px;
+    border-top: 1px solid var(--color-border);
+}
+
+.config-panel.collapsed .config-panel-body {
+    display: none;
+}
+
+/* Compact form layout for configuration panels */
+.compact-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.compact-form-grid .form-group {
+    margin-bottom: 0;
+}
+
+.compact-form-grid .form-group label {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+}
+
+.compact-form-grid .form-group input {
+    padding: 6px 8px;
+    font-size: 13px;
+}
+
+.compact-form-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-border-light);
+}
+
+.compact-form-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-text-tertiary);
+    margin-bottom: 8px;
+}
+
+/* ===================== */
+/* Tax Summary Cards     */
+/* ===================== */
+
+.tax-summary-section {
+    margin-bottom: 24px;
+}
+
+.tax-summary-context {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--color-bg-spotlight);
+    border-radius: var(--border-radius);
+    margin-bottom: 16px;
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    border-left: 3px solid var(--color-primary);
+}
+
+.tax-summary-context svg {
+    color: var(--color-primary);
+    flex-shrink: 0;
+}
+
+.tax-summary-context strong {
+    color: var(--color-text-primary);
+}
+
+.tax-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.tax-stat-card {
+    display: flex;
+    gap: 14px;
+    padding: 16px;
+    background: var(--color-bg-container);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--color-border);
+    transition: all var(--transition-fast);
+}
+
+.tax-stat-card:hover {
+    border-color: var(--color-border-hover);
+    box-shadow: var(--shadow-sm);
+}
+
+.tax-stat-icon {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--border-radius);
+    flex-shrink: 0;
+}
+
+.tax-stat-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.tax-stat-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.tax-stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    line-height: 1.2;
+}
+
+.tax-stat-detail {
+    font-size: 11px;
+    color: var(--color-text-tertiary);
+    line-height: 1.3;
+}
+
+/* Color variations for each stat type */
+.tax-stat-federal .tax-stat-icon {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+}
+
+.tax-stat-state .tax-stat-icon {
+    background: rgba(168, 85, 247, 0.15);
+    color: #a855f7;
+}
+
+.tax-stat-total .tax-stat-icon {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.tax-stat-total {
+    background: linear-gradient(135deg, var(--color-bg-container) 0%, rgba(239, 68, 68, 0.05) 100%);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.tax-stat-total .tax-stat-value {
+    color: #ef4444;
+}
+
+.tax-stat-rate .tax-stat-icon {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+
+.tax-stat-withdrawn .tax-stat-icon {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.tax-stat-balance .tax-stat-icon {
+    background: rgba(20, 184, 166, 0.15);
+    color: #14b8a6;
+}
+
+/* Special styling for final balance based on value */
+.tax-stat-balance.depleted .tax-stat-icon {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.tax-stat-balance.depleted .tax-stat-value {
+    color: #ef4444;
+}
+
+.tax-stat-balance.healthy .tax-stat-icon {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.tax-stat-balance.healthy .tax-stat-value {
+    color: #22c55e;
+}
+
+/* Responsive: 2 columns on medium screens */
+@media (max-width: 1200px) {
+    .tax-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Responsive: 1 column on small screens */
+@media (max-width: 768px) {
+    .tax-stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tax-stat-card {
+        padding: 14px;
+    }
+
+    .tax-stat-value {
+        font-size: 20px;
+    }
+}
+
 /* Alert Banners */
 .alert {
     display: flex;
@@ -4169,4 +4800,142 @@ th.sortable.sort-desc .sort-icon::after {
 
 .checkbox-label input[type="checkbox"] {
     margin: 0;
+}
+
+/* =====================
+   Storage Mode Selector
+   ===================== */
+
+.storage-mode-selector {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.radio-card {
+    cursor: pointer;
+}
+
+.radio-card input[type="radio"] {
+    display: none;
+}
+
+.radio-card-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: var(--border-radius);
+    transition: all 0.2s ease;
+    background: var(--color-bg-container);
+}
+
+.radio-card-content svg {
+    flex-shrink: 0;
+    color: var(--color-text-secondary);
+}
+
+.radio-card-content div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.radio-card-content strong {
+    color: var(--color-text-primary);
+}
+
+.radio-card-content small {
+    color: var(--color-text-tertiary);
+    font-size: 0.75rem;
+}
+
+.radio-card:hover .radio-card-content {
+    border-color: var(--color-primary);
+    background: var(--color-primary-bg);
+}
+
+.radio-card input[type="radio"]:checked + .radio-card-content {
+    border-color: var(--color-primary);
+    background: var(--color-primary-bg);
+}
+
+.radio-card input[type="radio"]:checked + .radio-card-content svg {
+    color: var(--color-primary);
+}
+
+/* Info box for status messages */
+.info-box {
+    padding: 0.75rem 1rem;
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-spotlight);
+    border: 1px solid var(--border-color);
+    font-size: 0.875rem;
+}
+
+.info-box.success {
+    background: var(--color-success-bg);
+    border-color: var(--color-success);
+    color: var(--color-success);
+}
+
+.info-box.warning {
+    background: var(--color-warning-bg);
+    border-color: var(--color-warning);
+    color: var(--color-warning);
+}
+
+.info-box.error {
+    background: var(--color-error-bg);
+    border-color: var(--color-error);
+    color: var(--color-error);
+}
+
+/* Button group for action buttons */
+.button-group {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Small button variant */
+.btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+}
+
+/* File upload label styling */
+.file-upload-label {
+    display: inline-block;
+    cursor: pointer;
+}
+
+.file-upload-label .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Badge in card header */
+.card-header .badge {
+    margin-left: auto;
+}
+
+#storage-mode-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--border-radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+#storage-mode-badge.server {
+    background: var(--color-primary-bg);
+    color: var(--color-primary);
+}
+
+#storage-mode-badge.local {
+    background: var(--color-success-bg);
+    color: var(--color-success);
 }

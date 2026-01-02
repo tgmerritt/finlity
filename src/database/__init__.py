@@ -25,6 +25,7 @@ from .profile_manager import (
     ProfileManager,
     get_profile_manager,
     get_database,
+    reset_database_caches,
 )
 from .database_manager import (
     DatabaseManager,
@@ -55,6 +56,7 @@ __all__ = [
     "ProfileManager",
     "get_profile_manager",
     "get_database",
+    "reset_database_caches",
     # Database lifecycle management
     "DatabaseManager",
     "DatabaseStatus",

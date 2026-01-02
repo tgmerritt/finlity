@@ -114,3 +114,5 @@ screenshots/
 *.jpeg
 !src/web/assets/*.png
 !src/web/assets/*.jpg
+!docs/images/*.png
+!docs/images/*.jpg

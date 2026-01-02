@@ -644,6 +644,27 @@ def get_profile_manager() -> ProfileManager:
     return _profile_manager
 
 
+def reset_database_caches() -> None:
+    """Reset all cached database connections.
+
+    Call this when demo mode changes to ensure fresh connections.
+    This clears:
+    - ProfileManager's cached active database
+    - DemoModeManager's cached demo database
+    """
+    global _profile_manager
+    if _profile_manager is not None:
+        _profile_manager._active_db = None
+        _profile_manager._active_profile_id = None
+        logger.info("Cleared profile manager database cache")
+
+    # Also clear demo manager cache
+    from src.services.demo_mode import get_demo_manager
+    demo_manager = get_demo_manager()
+    demo_manager._demo_db = None
+    logger.info("Cleared demo manager database cache")
+
+
 def get_database() -> Database:
     """Get the database for the active profile or demo database.
 

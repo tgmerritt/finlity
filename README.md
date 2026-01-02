@@ -1,6 +1,6 @@
 # Investment Portfolio Analyzer
 
-A Python-based investment portfolio tracking and analysis system with FastAPI backend, automated CSV/Excel import, risk-adjusted analytics, allocation triggers, and Monte Carlo retirement projections.
+A Python-based investment portfolio tracking and analysis system with FastAPI backend, automated CSV/Excel import, risk-adjusted analytics, allocation triggers, Monte Carlo retirement projections, and an extensible plugin system.
 
 > **Privacy Note**: All data is stored locally. No financial information is transmitted to external servers (except optional Claude API for fund metadata enrichment).
 
@@ -8,12 +8,15 @@ A Python-based investment portfolio tracking and analysis system with FastAPI ba
 
 ### Portfolio Management
 - **Automated File Import** - Drop CSV/Excel files into folders, auto-detected and imported
+- **Drag-and-Drop Upload** - Import files directly in the browser with AI-powered account type detection
 - **Multi-Account Support** - Track Roth IRA, Traditional 401(k), 529, HYSA, Treasury Direct, and custom account types
+- **Multi-Profile System** - Financial advisors can manage separate databases for multiple clients
 - **Cash Position Tracking** - Track uninvested cash with optional APY for interest-bearing accounts
 - **CD Support** - Track Certificates of Deposit with APY, maturity dates, and automatic interest accrual
+- **Real Estate Tracking** - Track property values including home, rental properties, and land
 - **Interest Accrual** - Automatic simple interest calculation for CDs and cash with APY
 - **Manual Position Entry** - Add positions directly via dashboard or API
-- **Demo Mode** - Use fake portfolio data for demonstrations without exposing real finances
+- **Demo Mode** - Toggle between real/demo portfolios instantly without server restart
 
 ### Account Types
 - **Retirement**: Traditional 401(k), Roth 401(k), Traditional IRA, Roth IRA, HSA, Pension
@@ -24,13 +27,24 @@ A Python-based investment portfolio tracking and analysis system with FastAPI ba
 - **Risk Metrics** - Sharpe ratio, Sortino ratio, max drawdown, VaR, CVaR, beta vs S&P 500
 - **Allocation Analysis** - Sector, geography, style, and cap-size breakdowns matching xlsm format
 - **User-Configurable Triggers** - Alert when allocations exceed thresholds
-- **Correlation Matrix** - Interactive correlation heatmap for positions
+- **Correlation Matrix** - Interactive correlation heatmap for positions (via plugin)
+- **Sector Treemap** - Visual sector allocation breakdown (via plugin)
+- **Tax-Loss Harvesting** - Identify positions with unrealized losses for tax optimization
+- **Dividend Tracking** - Estimate annual dividend income across holdings
 
 ### Projections
 - **Monte Carlo Simulations** - 10,000 simulations with black swan/golden swan modeling
 - **Year-by-Year Withdrawal Tables** - Detailed projections showing balance, withdrawals, and returns
 - **FIRE Calculator** - Calculate your Financial Independence number
 - **Withdrawal Rate Comparison** - Compare 3%, 4%, 5% withdrawal scenarios
+- **Retirement Dashboard Metrics** - Years to retirement, projected balance, monthly income estimates
+
+### Plugin System
+- **Importer Plugins** - Add support for new brokerage file formats
+- **Analysis Plugins** - Create custom metrics and insights
+- **Widget Plugins** - Build custom dashboard visualizations
+- **Security & Sandboxing** - Permission-based system protects your data
+- **Marketplace** - Install third-party plugins from Git repositories or ZIP files
 
 ### Integration
 - **Claude API Integration** - Optional fund metadata enrichment via Anthropic API
@@ -178,21 +192,45 @@ curl -X POST http://localhost:8000/api/portfolio/positions/cash \
 
 ### Demo Mode
 
-Demo mode allows you to demonstrate the application with fake portfolio data.
+Demo mode allows you to demonstrate the application with fake portfolio data. You can switch between real and demo data **instantly without restarting the server**.
 
 ```bash
 # Generate demo portfolio data (run once)
 python scripts/generate_demo.py
 
-# Start server in demo mode
-python -m src.main --demo
+# Or via the dashboard
+# Settings → Demo Mode → Generate Demo Data
+
+# Or via API
+curl -X POST http://localhost:8000/api/settings/demo/generate
 ```
 
-You can also enable demo mode persistently:
-- Via Settings page in the dashboard (toggle switch)
-- Or set `demo.enabled: true` in `config.yaml`
+**To toggle demo mode:**
+- **Dashboard**: Settings → Demo Mode toggle (instant switch)
+- **CLI flag**: `python -m src.main --demo`
+- **Environment**: `PORTFOLIO_DEMO_MODE=true`
 
-Demo mode creates ~50 realistic positions across 6 account types with real current prices.
+Demo mode creates ~50 realistic positions across 6 account types with real current prices. Your real portfolio is preserved and restored when you disable demo mode.
+
+### Multi-Profile System (Financial Advisors)
+
+Manage multiple client portfolios with separate databases:
+
+```bash
+# Create a new profile via API
+curl -X POST http://localhost:8000/api/profiles \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Client A", "description": "Retirement planning client"}'
+
+# Switch active profile
+curl -X PUT http://localhost:8000/api/profiles/active \
+  -H "Content-Type: application/json" \
+  -d '{"profile_id": "client-a"}'
+
+# Or use the dashboard profile switcher in the header
+```
+
+Each profile has its own database in `data/databases/{profile_id}/`.
 
 ### Database Management
 
@@ -313,15 +351,16 @@ curl -X POST http://localhost:8000/api/settings/api-key \
 ## API Endpoints
 
 ### Portfolio
-- `GET /api/portfolio` - Portfolio summary
+- `GET /api/portfolio` - Portfolio summary with retirement metrics
 - `GET /api/portfolio/accounts` - List all accounts
 - `GET /api/portfolio/account-types` - Available account types
 - `POST /api/portfolio/accounts` - Create account
 - `DELETE /api/portfolio/accounts/{id}` - Delete account
 - `GET /api/portfolio/positions` - List all positions
 - `POST /api/portfolio/positions` - Add position
-- `POST /api/portfolio/positions/cash` - Add cash position
+- `POST /api/portfolio/positions/cash` - Add cash position (with optional APY)
 - `POST /api/portfolio/positions/cd` - Add CD position
+- `POST /api/portfolio/positions/real-estate` - Add real estate property
 - `DELETE /api/portfolio/positions/{id}` - Delete position
 - `GET /api/portfolio/positions/cd/upcoming` - CDs maturing soon
 - `POST /api/portfolio/positions/cd/check-maturities` - Convert matured CDs
@@ -337,6 +376,8 @@ curl -X POST http://localhost:8000/api/settings/api-key \
 - `POST /api/analysis/triggers` - Create trigger
 - `GET /api/analysis/triggers/evaluate` - Evaluate all triggers
 - `GET /api/analysis/triggers/triggered` - Get triggered alerts
+- `GET /api/analysis/widgets` - Render all widget plugins
+- `GET /api/analysis/plugins` - Run all analysis plugins
 
 ### Projections
 - `POST /api/projections/monte-carlo` - Run Monte Carlo simulation
@@ -346,57 +387,111 @@ curl -X POST http://localhost:8000/api/settings/api-key \
 - `GET /api/projections/withdrawal-comparison` - Compare withdrawal rates
 
 ### Imports
+- `POST /api/imports/upload` - Drag-drop file upload with AI account detection
 - `GET /api/imports/pending` - List pending imports
 - `POST /api/imports/process` - Process pending imports
 - `GET /api/imports/history` - Import history
+
+### Settings & Demo
+- `GET /api/settings/config` - Get configuration
+- `PUT /api/settings/config` - Update configuration
+- `GET /api/settings/demo-mode` - Get demo mode status
+- `PUT /api/settings/demo-mode` - Toggle demo mode (no restart needed)
+- `POST /api/settings/demo/generate` - Generate demo data
+
+### Profiles
+- `GET /api/profiles` - List all profiles
+- `POST /api/profiles` - Create new profile
+- `PUT /api/profiles/active` - Switch active profile
+- `DELETE /api/profiles/{id}` - Delete profile
+
+### Plugins
+- `GET /api/plugins` - List all plugins
+- `POST /api/plugins/{id}/enable` - Enable plugin
+- `POST /api/plugins/{id}/disable` - Disable plugin
+- `POST /api/plugins/install/git` - Install from Git repository
+- `DELETE /api/plugins/installed/{id}` - Uninstall plugin
 
 ## Project Structure
 
 ```
 investment-portfolio-analyzer/
 ├── src/
-│   ├── main.py              # FastAPI server & CLI
-│   ├── api/                  # REST API endpoints
-│   │   ├── portfolio.py      # Portfolio CRUD
-│   │   ├── analysis.py       # Analysis & triggers
-│   │   ├── projections.py    # Monte Carlo & withdrawals
-│   │   └── imports.py        # File imports
-│   ├── database/             # SQLite persistence
-│   │   ├── models.py         # SQLAlchemy models
-│   │   └── operations.py     # Database operations
-│   ├── models/               # Type definitions
-│   │   ├── position.py       # Position, Account, Portfolio
-│   │   ├── account_types.py  # Predefined account types
-│   │   └── position_types.py # Position type enum
-│   ├── services/             # External integrations
-│   │   ├── secrets.py        # API key management
-│   │   ├── fund_data.py      # Fund metadata (Claude/yfinance)
-│   │   └── triggers.py       # Trigger evaluation
-│   ├── importers/            # File import
-│   │   └── folder_scanner.py # Auto-detect & import
-│   ├── analysis/             # Analytics engine
-│   │   ├── performance.py    # Returns, CAGR
-│   │   ├── risk.py           # Sharpe, Sortino, VaR
-│   │   ├── allocation.py     # Allocation analysis
-│   │   └── correlation.py    # Correlation matrix
-│   ├── projections/          # Retirement modeling
-│   │   └── engine.py         # Monte Carlo & withdrawals
-│   └── web/                  # Dashboard UI
-│       └── index.html        # Single-page dashboard
+│   ├── main.py               # FastAPI server & CLI
+│   ├── api/                   # REST API endpoints
+│   │   ├── portfolio.py       # Portfolio CRUD
+│   │   ├── analysis.py        # Analysis & triggers
+│   │   ├── projections.py     # Monte Carlo & withdrawals
+│   │   ├── imports.py         # File imports + drag-drop
+│   │   ├── settings.py        # App settings & demo mode
+│   │   ├── profiles.py        # Multi-profile management
+│   │   └── plugins.py         # Plugin management
+│   ├── database/              # SQLite persistence
+│   │   ├── models.py          # SQLAlchemy models
+│   │   ├── operations.py      # Database operations
+│   │   ├── database_manager.py # DB lifecycle management
+│   │   ├── profile_manager.py  # Multi-profile support
+│   │   └── seed_loader.py     # First-time data loading
+│   ├── models/                # Type definitions
+│   │   ├── position.py        # Position, Account, Portfolio
+│   │   ├── account_types.py   # Predefined account types
+│   │   ├── position_types.py  # Position type enum
+│   │   └── targets.py         # Allocation targets
+│   ├── services/              # External integrations
+│   │   ├── secrets.py         # API key management
+│   │   ├── fund_data.py       # Fund metadata (Claude/yfinance)
+│   │   ├── triggers.py        # Trigger evaluation
+│   │   └── demo_mode.py       # Dynamic demo mode switching
+│   ├── importers/             # File import
+│   │   └── folder_scanner.py  # Auto-detect & import
+│   ├── analysis/              # Analytics engine
+│   │   ├── performance.py     # Returns, CAGR
+│   │   ├── risk.py            # Sharpe, Sortino, VaR
+│   │   ├── allocation.py      # Allocation analysis
+│   │   └── correlation.py     # Correlation matrix
+│   ├── projections/           # Retirement modeling
+│   │   └── engine.py          # Monte Carlo & withdrawals
+│   ├── plugins/               # Plugin system
+│   │   ├── base.py            # Base plugin classes
+│   │   ├── registry.py        # Plugin discovery
+│   │   ├── events.py          # Event bus
+│   │   ├── security.py        # Permission system
+│   │   ├── installer.py       # Git/ZIP installation
+│   │   ├── import_pipeline.py # Importer routing
+│   │   ├── analysis_pipeline.py # Analysis runner
+│   │   ├── widget_pipeline.py # Widget renderer
+│   │   └── builtin/           # Built-in plugins
+│   │       ├── schwab-csv/
+│   │       ├── fidelity-csv/
+│   │       ├── generic-csv/
+│   │       ├── dividend-tracker/
+│   │       ├── tax-loss-harvester/
+│   │       ├── correlation-heatmap/
+│   │       └── sector-treemap/
+│   └── web/                   # Dashboard UI
+│       ├── index.html         # Single-page dashboard
+│       ├── app.js             # Frontend JavaScript
+│       └── style.css          # Styles
 ├── scripts/
-│   └── generate_demo.py      # Demo data generator
+│   └── generate_demo.py       # Demo data generator
 ├── data/
-│   ├── imports/              # Import folders by account type
+│   ├── imports/               # Import folders by account type
 │   │   ├── roth_ira/
 │   │   ├── traditional_401k/
 │   │   ├── taxable/
 │   │   └── ...
-│   ├── demo/                 # Demo mode database
-│   │   └── demo.db
-│   └── portfolio.db          # SQLite database
-├── config.yaml               # Target allocations
-├── funds.yaml                # Fund metadata cache
-├── SKILL.md                  # Claude Code skills documentation
+│   ├── databases/             # Profile databases
+│   │   ├── default/
+│   │   │   └── portfolio.db
+│   │   └── {profile-id}/
+│   │       └── portfolio.db
+│   └── demo/                  # Demo mode database
+│       └── demo.db
+├── config.yaml                # Target allocations & settings
+├── funds.yaml                 # Fund metadata cache
+├── .claude/                   # Claude Code configuration
+│   └── skills/
+│       └── portfolio-analyzer.md
 └── requirements.txt
 ```
 
@@ -406,14 +501,15 @@ investment-portfolio-analyzer/
 - **Database reset requires confirmation** - Type "DELETE ALL DATA" to confirm
 - **Local SQLite database** - All data stored locally, never transmitted
 - **API keys masked** - Never displayed after entry in the UI
+- **Plugin sandboxing** - Third-party plugins run with limited permissions
+- **Permission system** - Plugins must declare and receive approval for sensitive operations
 
 **Files excluded from git (see .gitignore):**
-- `data/` - Database, import files, and cache
+- `data/` - Databases, import files, and cache
 - `exports/` - CSV exports containing account data
 - `.env` - Environment variables and API keys
 - `*.db`, `*.sqlite*` - Database files
 - `*.csv`, `*.xlsx`, `*.xls` - Spreadsheet files with financial data
-- `.claude/` - Local Claude Code settings
 - `logs/` - Application logs
 
 ## Contributing

@@ -10,6 +10,10 @@ from src.projections.engine import (
     ProjectionParams,
     WithdrawalProjection,
     AccountBalances,
+    TaxAwareWithdrawalStrategy,
+    TaxYearProjection,
+    TaxProjectionResult,
+    TaxProjectionSummary,
 )
 
 router = APIRouter(prefix="/api/projections", tags=["projections"])
@@ -683,3 +687,241 @@ def compare_withdrawal_rates(
         "safe_withdrawal_rate": f"{safe_rate * 100:.2f}%",
         "scenarios": results,
     }
+
+
+# ====================
+# Tax Projection Endpoints
+# ====================
+
+class TaxProjectionRequest(BaseModel):
+    """Request model for tax-aware year-by-year projection."""
+    current_age: int = Field(..., ge=18, le=100, description="Current age")
+    retirement_age: int = Field(..., ge=30, le=100, description="Age to begin withdrawals")
+    end_age: int = Field(95, ge=50, le=120, description="Maximum age to project")
+
+    # Account balances - can be provided or auto-filled
+    taxable_balance: Optional[float] = Field(
+        None, ge=0,
+        description="Taxable brokerage account balance (auto-filled if not provided)"
+    )
+    traditional_balance: Optional[float] = Field(
+        None, ge=0,
+        description="Traditional IRA/401k balance (auto-filled if not provided)"
+    )
+    roth_balance: Optional[float] = Field(
+        None, ge=0,
+        description="Roth IRA/401k balance (auto-filled if not provided)"
+    )
+
+    # Spending
+    annual_spending: float = Field(
+        ..., gt=0,
+        description="Annual spending need in retirement (will be inflation-adjusted)"
+    )
+
+    # Contributions during accumulation phase (before retirement)
+    monthly_contribution: float = Field(
+        0, ge=0,
+        description="Monthly contribution during accumulation phase (before retirement)"
+    )
+    contribution_to_traditional_pct: float = Field(
+        0.60, ge=0, le=1.0,
+        description="Percentage of contributions going to traditional accounts"
+    )
+    contribution_to_roth_pct: float = Field(
+        0.25, ge=0, le=1.0,
+        description="Percentage of contributions going to Roth accounts"
+    )
+    contribution_to_taxable_pct: float = Field(
+        0.15, ge=0, le=1.0,
+        description="Percentage of contributions going to taxable accounts"
+    )
+
+    # Return assumptions
+    expected_return: float = Field(
+        0.06, ge=0, le=0.20,
+        description="Expected annual investment return"
+    )
+    inflation_rate: float = Field(
+        0.03, ge=0, le=0.10,
+        description="Expected annual inflation rate"
+    )
+
+    # Tax rates
+    federal_tax_rate: float = Field(
+        0.22, ge=0, le=0.50,
+        description="Federal marginal tax rate for ordinary income"
+    )
+    state_tax_rate: float = Field(
+        0.05, ge=0, le=0.15,
+        description="State income tax rate"
+    )
+    capital_gains_rate: float = Field(
+        0.15, ge=0, le=0.30,
+        description="Long-term capital gains tax rate"
+    )
+    cost_basis_ratio: float = Field(
+        0.60, ge=0, le=1.0,
+        description="Portion of taxable account that is cost basis"
+    )
+
+
+class TaxYearProjectionResponse(BaseModel):
+    """Single year in tax projection."""
+    year: int
+    age: int
+    taxable_balance: float
+    traditional_balance: float
+    roth_balance: float
+    total_balance: float
+    rmd_amount: float
+    from_taxable: float
+    from_traditional: float
+    from_roth: float
+    gross_withdrawal: float
+    federal_tax: float
+    state_tax: float
+    total_tax: float
+    effective_rate: float
+    net_withdrawal: float
+    investment_return: float
+
+
+class TaxProjectionSummaryResponse(BaseModel):
+    """Summary statistics for tax projection."""
+    total_federal_tax: float
+    total_state_tax: float
+    total_tax: float
+    average_effective_rate: float
+    total_withdrawn: float
+    final_balance: float
+    depletion_age: Optional[int]
+
+
+class TaxProjectionResponse(BaseModel):
+    """Response model for tax-aware projection."""
+    years: list[TaxYearProjectionResponse]
+    summary: TaxProjectionSummaryResponse
+    # Chart-ready data arrays
+    chart_data: dict
+
+
+@router.post("/tax-projection", response_model=TaxProjectionResponse)
+def run_tax_projection(
+    request: TaxProjectionRequest,
+    db: Database = Depends(get_db),
+) -> TaxProjectionResponse:
+    """
+    Run year-by-year tax-aware withdrawal projection.
+
+    Returns detailed breakdown of:
+    - Account balances over time (taxable, traditional, Roth)
+    - Taxes paid each year (federal vs state)
+    - Effective tax rate over time
+    - Withdrawal sources (which accounts are drawn from)
+    - RMD amounts when applicable
+
+    This endpoint is specifically designed to power the Taxes dashboard tab
+    with two main visualizations:
+    1. Tax burden over time (stacked bar + effective rate line)
+    2. Account balances over time (multi-line chart)
+    """
+    # Get account balances from portfolio if not provided
+    taxable = request.taxable_balance
+    traditional = request.traditional_balance
+    roth = request.roth_balance
+
+    if taxable is None or traditional is None or roth is None:
+        # Fetch from portfolio
+        balances_response = get_account_balances_by_type(db)
+        if taxable is None:
+            taxable = balances_response.taxable
+        if traditional is None:
+            traditional = balances_response.traditional
+        if roth is None:
+            roth = balances_response.roth
+
+    initial_balances = AccountBalances(
+        taxable=taxable,
+        traditional=traditional,
+        roth=roth,
+    )
+
+    # Create withdrawal strategy with specified tax rates
+    strategy = TaxAwareWithdrawalStrategy(
+        tax_rate_ordinary=request.federal_tax_rate,
+        tax_rate_capital_gains=request.capital_gains_rate,
+        tax_rate_state=request.state_tax_rate,
+        cost_basis_ratio=request.cost_basis_ratio,
+    )
+
+    # Run year-by-year projection (includes accumulation phase from current_age to retirement_age)
+    result = strategy.project_year_by_year(
+        current_age=request.current_age,
+        retirement_age=request.retirement_age,
+        end_age=request.end_age,
+        initial_balances=initial_balances,
+        annual_spending=request.annual_spending,
+        expected_return=request.expected_return,
+        inflation_rate=request.inflation_rate,
+        monthly_contribution=request.monthly_contribution,
+        contribution_to_traditional_pct=request.contribution_to_traditional_pct,
+        contribution_to_roth_pct=request.contribution_to_roth_pct,
+        contribution_to_taxable_pct=request.contribution_to_taxable_pct,
+    )
+
+    # Convert to response model
+    years_response = [
+        TaxYearProjectionResponse(
+            year=y.year,
+            age=y.age,
+            taxable_balance=y.taxable_balance,
+            traditional_balance=y.traditional_balance,
+            roth_balance=y.roth_balance,
+            total_balance=y.total_balance,
+            rmd_amount=y.rmd_amount,
+            from_taxable=y.from_taxable,
+            from_traditional=y.from_traditional,
+            from_roth=y.from_roth,
+            gross_withdrawal=y.gross_withdrawal,
+            federal_tax=y.federal_tax,
+            state_tax=y.state_tax,
+            total_tax=y.total_tax,
+            effective_rate=y.effective_rate,
+            net_withdrawal=y.net_withdrawal,
+            investment_return=y.investment_return,
+        )
+        for y in result.years
+    ]
+
+    summary_response = TaxProjectionSummaryResponse(
+        total_federal_tax=result.summary.total_federal_tax,
+        total_state_tax=result.summary.total_state_tax,
+        total_tax=result.summary.total_tax,
+        average_effective_rate=result.summary.average_effective_rate,
+        total_withdrawn=result.summary.total_withdrawn,
+        final_balance=result.summary.final_balance,
+        depletion_age=result.summary.depletion_age,
+    )
+
+    # Build chart-ready data arrays
+    chart_data = {
+        "ages": [y.age for y in result.years],
+        "federal_taxes": [y.federal_tax for y in result.years],
+        "state_taxes": [y.state_tax for y in result.years],
+        "effective_rates": [y.effective_rate for y in result.years],
+        "taxable_balances": [y.taxable_balance for y in result.years],
+        "traditional_balances": [y.traditional_balance for y in result.years],
+        "roth_balances": [y.roth_balance for y in result.years],
+        "total_balances": [y.total_balance for y in result.years],
+        "from_taxable": [y.from_taxable for y in result.years],
+        "from_traditional": [y.from_traditional for y in result.years],
+        "from_roth": [y.from_roth for y in result.years],
+        "rmd_amounts": [y.rmd_amount for y in result.years],
+    }
+
+    return TaxProjectionResponse(
+        years=years_response,
+        summary=summary_response,
+        chart_data=chart_data,
+    )

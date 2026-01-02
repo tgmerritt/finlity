@@ -2,9 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Important: Prefer Docker Commands
+
+**When executing commands, prefer running them inside the Docker container** rather than on the host machine. The application runs in Docker and all Python/pip commands should use `docker exec`:
+
+```bash
+# PREFERRED: Run commands inside container
+docker exec -it portfolio-analyzer python -m src.main --check-cds
+docker exec -it portfolio-analyzer pip install <package>
+docker exec -it portfolio-analyzer python scripts/generate_demo.py
+
+# NOT PREFERRED: Running directly on host (unless Docker is unavailable)
+python -m src.main --check-cds
+```
+
 ## Docker Deployment
 
-The application can be run in Docker for easy deployment:
+The application runs in Docker for easy deployment:
 
 ```bash
 # Build and run with docker compose (recommended)
@@ -28,6 +42,12 @@ docker run -d -p 8000:8000 -e PORTFOLIO_DEMO_MODE=true portfolio-analyzer
 
 # Rebuild after code changes (production mode)
 docker compose down && docker compose build && docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Shell into container
+docker exec -it portfolio-analyzer /bin/bash
 ```
 
 **Development Mode:** Use `docker compose --profile dev up portfolio-dev` to mount the `src/` directory. Changes to Python files will auto-reload, and changes to HTML/CSS/JS files take effect on browser refresh.
@@ -44,32 +64,45 @@ docker compose down && docker compose build && docker compose up -d
 ## Project Overview
 
 Investment portfolio tracking and analysis system with:
-- **File-based imports** - CSV/Excel from brokerage exports auto-detected and imported
+- **File-based imports** - CSV/Excel from brokerage exports auto-detected and imported (plus drag-drop with AI account detection)
 - **SQLite persistence** - Accounts, positions, triggers, settings stored locally
 - **Multi-account support** - Retirement, taxable, 529, HYSA, custom account types
-- **Cash & CD tracking** - Track uninvested cash and CDs with maturity dates
+- **Multi-profile system** - Separate databases for financial advisors managing multiple clients
+- **Cash & CD tracking** - Track uninvested cash and CDs with maturity dates and APY
+- **Real estate tracking** - Track property values (home, rental, land)
 - **Allocation triggers** - User-configurable alerts for portfolio conditions
 - **Claude API integration** - Optional fund metadata enrichment
 - **Year-by-year withdrawal projections** - Detailed retirement planning tables
+- **Plugin system** - Extensible importers, analyzers, and dashboard widgets
+- **Dynamic demo mode** - Toggle between real/demo data without server restart
 - **REST API + Web Dashboard** - FastAPI backend with interactive dashboard
 
 ## Common Commands
 
+**Prefer running commands inside Docker** (see "Important: Prefer Docker Commands" above).
+
 ```bash
-# Setup
+# Docker commands (PREFERRED)
+docker exec -it portfolio-analyzer python -m src.main --check-cds
+docker exec -it portfolio-analyzer python -m src.main --export-db /app/data/backup.json
+docker exec -it portfolio-analyzer python -m src.main --import-db /app/data/backup.json
+docker exec -it portfolio-analyzer python -m src.main --create-folders
+docker exec -it portfolio-analyzer python scripts/generate_demo.py
+
+# Local setup (only if not using Docker)
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Start the server (opens browser automatically)
+# Start the server locally (opens browser automatically)
 python -m src.main
 
-# Server options
+# Server options (local)
 python -m src.main --port 8000        # Custom port
 python -m src.main --no-browser       # Don't open browser
 python -m src.main --reload           # Development mode with auto-reload
 
-# Database management
+# Database management (local)
 python -m src.main --reset-database   # Delete all data (requires confirmation)
 python -m src.main --export-db backup.json  # Backup to JSON
 python -m src.main --import-db backup.json  # Restore from backup
@@ -79,7 +112,7 @@ python -m src.main --create-folders   # Create all import folders
 
 ## Importing Data
 
-1. Create folders: `python -m src.main --create-folders`
+1. Create folders: `docker exec -it portfolio-analyzer python -m src.main --create-folders`
 2. Drop brokerage export files into `data/imports/{account_type}/`:
    - `roth_ira/`, `traditional_ira/`, `traditional_401k/`, `roth_401k/`
    - `taxable/`, `hsa/`, `pension/`
@@ -164,26 +197,45 @@ elif result.needs_recovery:
 **Database** (`src/database/`):
 - `models.py`: SQLAlchemy models (Account, Position, AllocationTrigger, AppSettings, etc.)
 - `operations.py`: CRUD + CD maturity checks + database export/import
+- `database_manager.py`: Database lifecycle (existence, integrity, initialization, recovery)
+- `profile_manager.py`: Multi-database profile support for financial advisors
+- `seed_loader.py`: First-time data initialization from CSV/YAML
 
 **Importers** (`src/importers/`):
 - `folder_scanner.py`: Auto-detect columns, dynamic folder creation, custom account types
 
 **API** (`src/api/`):
-- `portfolio.py`: Portfolio CRUD + cash/CD endpoints + account types
-- `analysis.py`: Performance, risk, allocation, triggers evaluation
+- `portfolio.py`: Portfolio CRUD + cash/CD/real-estate endpoints + account types
+- `analysis.py`: Performance, risk, allocation, triggers evaluation, widgets
 - `projections.py`: Monte Carlo + year-by-year withdrawal tables
+- `settings.py`: App settings, demo mode, personal config
+- `imports.py`: File imports + drag-drop upload with AI account detection
+- `plugins.py`: Plugin management, marketplace, security
+- `profiles.py`: Multi-profile management
 
 **Services** (`src/services/`):
 - `secrets.py`: Encrypted API key storage (env var / .env / database)
 - `fund_data.py`: Fund metadata via yfinance + Claude API fallback
 - `triggers.py`: Trigger evaluation engine
+- `demo_mode.py`: Dynamic demo mode switching
 
 **Models** (`src/models/`):
 - `account_types.py`: PREDEFINED_ACCOUNT_TYPES dict + helpers
-- `position_types.py`: PositionType enum (equity, fund, cash, cd, bond, treasury)
+- `position_types.py`: PositionType enum (equity, fund, cash, cd, bond, treasury, real_estate)
+- `targets.py`: Allocation targets model
 
 **Projections** (`src/projections/`):
 - `engine.py`: MonteCarloEngine + WithdrawalProjection
+
+**Plugins** (`src/plugins/`):
+- `base.py`: Base classes for all plugin types
+- `registry.py`: Plugin discovery, enabling/disabling
+- `events.py`: Event bus for plugin communication
+- `import_pipeline.py`: Routes files to importer plugins
+- `analysis_pipeline.py`: Runs analysis plugins
+- `widget_pipeline.py`: Renders widget plugins
+- `security.py`: Permission system and sandboxing
+- `installer.py`: Install plugins from Git/ZIP
 
 ### Account Types
 
@@ -224,20 +276,89 @@ CONDITION_TYPES = {
 }
 ```
 
+## Plugin System
+
+The app supports a plugin architecture for extending functionality. See `src/plugins/README.md` for full documentation.
+
+### Plugin Types
+- **Importer plugins** - Parse brokerage-specific file formats (Schwab, Fidelity, generic CSV)
+- **Analysis plugins** - Custom metrics (dividend tracker, tax-loss harvester)
+- **Widget plugins** - Dashboard visualizations (correlation heatmap, sector treemap)
+
+### Built-in Plugins
+- `schwab-csv`, `fidelity-csv`, `generic-csv` - File importers
+- `dividend-tracker` - Estimated annual dividend income
+- `tax-loss-harvester` - Unrealized losses and tax savings opportunities
+- `correlation-heatmap` - Position correlation matrix visualization
+- `sector-treemap` - Interactive sector allocation treemap
+
+### Plugin Security
+- Plugins declare required permissions (file_read, file_write, network, database)
+- Third-party plugins with sensitive permissions require user approval
+- Sandboxed execution with 30-second timeout
+
+## Demo Mode
+
+Demo mode uses a separate database with fake portfolio data for testing/demonstrations.
+
+### Dynamic Switching
+- Toggle via Settings UI (no server restart required)
+- State persisted in `data/demo_state.json`
+- Remembers last active profile for seamless restore
+
+### Generate Demo Data
+```bash
+# CLI (Docker - preferred)
+docker exec -it portfolio-analyzer python scripts/generate_demo.py
+
+# CLI (local)
+python scripts/generate_demo.py
+
+# API
+POST /api/settings/demo/generate
+
+# Dashboard
+Settings → Demo Mode → Generate Demo Data
+```
+
+## Multi-Profile System
+
+For financial advisors managing multiple client portfolios, each profile has its own database.
+
+### Profile Structure
+```
+data/databases/
+├── default/           # Default profile
+│   └── portfolio.db
+├── client-a/          # Custom profile
+│   └── portfolio.db
+└── client-b/
+    └── portfolio.db
+```
+
+### Profile API
+- `GET /api/profiles` - List all profiles
+- `POST /api/profiles` - Create new profile
+- `PUT /api/profiles/active` - Switch active profile
+- `DELETE /api/profiles/{id}` - Delete profile
+
 ## API Endpoints
 
 ### Portfolio
-- `GET /api/portfolio` - Summary
+- `GET /api/portfolio` - Summary with retirement metrics
 - `GET /api/portfolio/accounts` - List accounts
 - `GET /api/portfolio/account-types` - Available types
 - `POST /api/portfolio/accounts` - Create account
+- `DELETE /api/portfolio/accounts/{id}` - Delete account
 - `GET /api/portfolio/positions` - List positions
 - `POST /api/portfolio/positions` - Add position
-- `POST /api/portfolio/positions/cash` - Add cash
-- `POST /api/portfolio/positions/cd` - Add CD
+- `PUT /api/portfolio/positions/{id}` - Update position
+- `DELETE /api/portfolio/positions/{id}` - Delete position
+- `POST /api/portfolio/positions/cash` - Add cash (with optional APY)
+- `POST /api/portfolio/positions/cd` - Add CD with maturity date
+- `POST /api/portfolio/positions/real-estate` - Add real estate property
 - `GET /api/portfolio/positions/cd/upcoming` - Upcoming maturities
 - `POST /api/portfolio/positions/cd/check-maturities` - Convert matured CDs
-- `POST /api/portfolio/positions/real-estate` - Add real estate property
 
 ### Analysis
 - `GET /api/analysis/performance` - Returns, alpha
@@ -248,6 +369,10 @@ CONDITION_TYPES = {
 - `POST /api/analysis/triggers` - Create trigger
 - `GET /api/analysis/triggers/evaluate` - Evaluate all
 - `GET /api/analysis/triggers/triggered` - Active alerts
+- `GET /api/analysis/widgets` - Render all widget plugins
+- `GET /api/analysis/widgets/{id}` - Render specific widget
+- `GET /api/analysis/plugins` - Run all analysis plugins
+- `GET /api/analysis/plugins/{id}` - Run specific analysis plugin
 
 ### Projections
 - `POST /api/projections/monte-carlo` - Retirement simulation
@@ -257,9 +382,29 @@ CONDITION_TYPES = {
 
 ### Settings & Demo
 - `GET /api/settings/config` - Get full configuration
-- `PUT /api/settings/demo-mode` - Enable/disable demo mode
+- `PUT /api/settings/config` - Update configuration
+- `GET /api/settings/demo-mode` - Get demo mode status
+- `PUT /api/settings/demo-mode` - Enable/disable demo mode (dynamic)
 - `POST /api/settings/demo/generate` - Generate demo portfolio data
+- `POST /api/settings/demo/reset` - Reset demo database
 - `GET /api/settings/api-keys/status` - Check API key configuration status
+
+### Imports
+- `POST /api/imports/upload` - Drag-drop file upload with AI account detection
+- `GET /api/imports/pending` - List pending imports
+- `POST /api/imports/process` - Process pending imports
+- `GET /api/imports/history` - Import history
+
+### Plugins
+- `GET /api/plugins` - List all plugins
+- `GET /api/plugins/{id}` - Get plugin details
+- `POST /api/plugins/{id}/enable` - Enable plugin
+- `POST /api/plugins/{id}/disable` - Disable plugin
+- `GET /api/plugins/installed` - List installed third-party plugins
+- `POST /api/plugins/install/git` - Install from Git repository
+- `POST /api/plugins/install/upload` - Install from ZIP upload
+- `DELETE /api/plugins/installed/{id}` - Uninstall plugin
+- `GET /api/plugins/security/pending` - Plugins awaiting permission approval
 
 ## Security
 

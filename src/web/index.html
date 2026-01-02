@@ -10,6 +10,8 @@
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- sql.js for client-side SQLite database -->
+    <script src="https://sql.js.org/dist/sql-wasm.js"></script>
     <!-- Custom styles -->
     <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -114,6 +116,22 @@
                         <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"></polyline>
                     </svg>
                     Projections
+                </button>
+                <button class="nav-item" onclick="showTab('taxes')" data-tab="taxes">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                        <line x1="2" y1="10" x2="22" y2="10"></line>
+                        <line x1="6" y1="15" x2="6" y2="15"></line>
+                        <line x1="10" y1="15" x2="14" y2="15"></line>
+                    </svg>
+                    Taxes
+                </button>
+                <button class="nav-item" onclick="showTab('budget')" data-tab="budget">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                    Expenses & Income
                 </button>
                 <button class="nav-item" onclick="showTab('settings')" data-tab="settings">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
@@ -776,119 +794,114 @@
                     </div>
                 </div>
 
-                <!-- Monte Carlo Form -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Monte Carlo Retirement Projection</h3>
-                    </div>
-                    <div class="card-body">
-                        <form id="projection-form" onsubmit="runProjection(event)">
-                            <div class="form-row-inline">
+                <!-- Monte Carlo Form - Collapsible -->
+                <form id="projection-form" onsubmit="runProjection(event)">
+                    <div class="config-panel" id="monte-carlo-config-panel">
+                        <div class="config-panel-header" onclick="toggleConfigPanel('monte-carlo-config-panel')">
+                            <div class="config-panel-title">
+                                <span>⚙️ Monte Carlo Settings</span>
+                                <span class="config-panel-summary" id="monte-carlo-config-summary"></span>
+                            </div>
+                            <div class="config-panel-toggle">▼</div>
+                        </div>
+                        <div class="config-panel-body">
+                            <div class="compact-form-grid">
                                 <div class="form-group">
                                     <label for="current-age">Current Age</label>
-                                    <input type="number" id="current-age" value="35" min="18" max="100">
+                                    <input type="number" id="current-age" value="35" min="18" max="100" onchange="updateMonteCarloConfigSummary()">
                                 </div>
                                 <div class="form-group">
-                                    <label for="retirement-age">Retirement Age</label>
-                                    <input type="number" id="retirement-age" value="65" min="30" max="100">
+                                    <label for="retirement-age">Retire Age</label>
+                                    <input type="number" id="retirement-age" value="65" min="30" max="100" onchange="updateMonteCarloConfigSummary()">
                                 </div>
                                 <div class="form-group">
-                                    <label for="monthly-contribution">Monthly Contribution ($)</label>
-                                    <input type="number" id="monthly-contribution" value="2000" min="0">
+                                    <label for="monthly-contribution">Monthly Contrib</label>
+                                    <input type="number" id="monthly-contribution" value="2000" min="0" onchange="updateMonteCarloConfigSummary()">
                                 </div>
                                 <div class="form-group">
-                                    <label for="monthly-withdrawal">Monthly Withdrawal ($)</label>
-                                    <input type="number" id="monthly-withdrawal" value="8000" min="0">
+                                    <label for="monthly-withdrawal">Monthly Withdraw</label>
+                                    <input type="number" id="monthly-withdrawal" value="8000" min="0" onchange="updateMonteCarloConfigSummary()">
                                 </div>
                                 <div class="form-group">
-                                    <label for="stock-allocation">Stock Allocation (%)</label>
+                                    <label for="stock-allocation">Stocks %</label>
                                     <input type="number" id="stock-allocation" value="70" min="0" max="100">
                                 </div>
                                 <div class="form-group">
-                                    <label for="bond-allocation">Bond Allocation (%)</label>
+                                    <label for="bond-allocation">Bonds %</label>
                                     <input type="number" id="bond-allocation" value="25" min="0" max="100">
-                                </div>
-                                <div class="form-group form-group-button">
-                                    <button type="submit" class="btn btn-primary">Run Simulation</button>
                                 </div>
                             </div>
 
                             <!-- Tax-Aware Withdrawals Section -->
-                            <div class="tax-aware-section">
-                                <div class="tax-aware-toggle">
+                            <div class="compact-form-section">
+                                <div class="tax-aware-toggle" style="margin-bottom: 8px;">
                                     <label class="checkbox-label">
                                         <input type="checkbox" id="use-tax-aware" onchange="toggleTaxAwareSettings()">
                                         <span>Enable Tax-Aware Withdrawal Strategy</span>
                                     </label>
-                                    <span class="help-text">Simulates withdrawing from taxable accounts first, then traditional, then Roth. Includes RMDs after age 73.</span>
                                 </div>
 
-                                <div id="tax-aware-settings" class="tax-settings-panel" style="display: none;">
-                                    <h4>Account Balances by Tax Type</h4>
-                                    <p class="settings-description">
-                                        Current balances from your portfolio. Withdrawal order: Taxable → Traditional → Roth
-                                        <button type="button" class="btn btn-sm btn-default" onclick="loadAccountBalancesByType()">Load from Portfolio</button>
-                                    </p>
-                                    <div class="form-row-inline">
+                                <div id="tax-aware-settings" style="display: none;">
+                                    <div class="compact-form-section-title">Account Balances (Taxable → Traditional → Roth)
+                                        <button type="button" class="btn btn-sm btn-default" onclick="loadAccountBalancesByType()" style="margin-left: 8px;">Load from Portfolio</button>
+                                    </div>
+                                    <div class="compact-form-grid">
                                         <div class="form-group">
-                                            <label for="balance-taxable">Taxable Accounts ($)</label>
+                                            <label for="balance-taxable">Taxable</label>
                                             <input type="number" id="balance-taxable" value="0" min="0" step="1">
-                                            <span class="help-text">Capital gains tax on gains</span>
                                         </div>
                                         <div class="form-group">
-                                            <label for="balance-traditional">Traditional IRA/401k ($)</label>
+                                            <label for="balance-traditional">Traditional</label>
                                             <input type="number" id="balance-traditional" value="0" min="0" step="1">
-                                            <span class="help-text">Ordinary income tax on withdrawal</span>
                                         </div>
                                         <div class="form-group">
-                                            <label for="balance-roth">Roth IRA/401k ($)</label>
+                                            <label for="balance-roth">Roth</label>
                                             <input type="number" id="balance-roth" value="0" min="0" step="1">
-                                            <span class="help-text">Tax-free withdrawals</span>
                                         </div>
                                     </div>
 
-                                    <h4>Tax Rates</h4>
-                                    <div class="form-row-inline">
+                                    <div class="compact-form-section-title">Tax Rates</div>
+                                    <div class="compact-form-grid">
                                         <div class="form-group">
-                                            <label for="tax-rate-ordinary">Federal Marginal Rate (%)</label>
+                                            <label for="tax-rate-ordinary">Federal %</label>
                                             <input type="number" id="tax-rate-ordinary" value="22" min="0" max="50" step="1">
                                         </div>
                                         <div class="form-group">
-                                            <label for="tax-rate-state">State Income Tax (%)</label>
+                                            <label for="tax-rate-state">State %</label>
                                             <input type="number" id="tax-rate-state" value="5" min="0" max="15" step="0.5">
                                         </div>
                                         <div class="form-group">
-                                            <label for="tax-rate-cap-gains">Capital Gains Rate (%)</label>
+                                            <label for="tax-rate-cap-gains">Cap Gains %</label>
                                             <input type="number" id="tax-rate-cap-gains" value="15" min="0" max="30" step="1">
                                         </div>
                                         <div class="form-group">
-                                            <label for="cost-basis-ratio">Cost Basis Ratio (%)</label>
+                                            <label for="cost-basis-ratio">Cost Basis %</label>
                                             <input type="number" id="cost-basis-ratio" value="60" min="0" max="100" step="5">
-                                            <span class="help-text">% of taxable account that is cost basis (not taxed)</span>
                                         </div>
                                     </div>
 
-                                    <h4>Contribution Allocation</h4>
-                                    <p class="settings-description">How monthly contributions are split between account types.</p>
-                                    <div class="form-row-inline">
+                                    <div class="compact-form-section-title">Contribution Split</div>
+                                    <div class="compact-form-grid">
                                         <div class="form-group">
-                                            <label for="contrib-traditional">To Traditional (%)</label>
+                                            <label for="contrib-traditional">To Trad %</label>
                                             <input type="number" id="contrib-traditional" value="60" min="0" max="100" step="5">
                                         </div>
                                         <div class="form-group">
-                                            <label for="contrib-roth">To Roth (%)</label>
+                                            <label for="contrib-roth">To Roth %</label>
                                             <input type="number" id="contrib-roth" value="25" min="0" max="100" step="5">
                                         </div>
                                         <div class="form-group">
-                                            <label for="contrib-taxable">To Taxable (%)</label>
+                                            <label for="contrib-taxable">To Taxable %</label>
                                             <input type="number" id="contrib-taxable" value="15" min="0" max="100" step="5">
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </form>
+
+                            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">Run Simulation</button>
+                        </div>
                     </div>
-                </div>
+                </form>
 
                 <!-- FIRE Calculator -->
                 <div class="card">
@@ -929,9 +942,660 @@
                 </div>
             </div>
 
+            <!-- Taxes Tab -->
+            <div id="tab-taxes" class="tab-content">
+                <div class="projections-layout">
+                    <!-- Tax Projection Form - Collapsible -->
+                    <form id="tax-projection-form" onsubmit="runTaxProjection(event)">
+                        <div class="config-panel" id="tax-config-panel">
+                            <div class="config-panel-header" onclick="toggleConfigPanel('tax-config-panel')">
+                                <div class="config-panel-title">
+                                    <span>⚙️ Tax Projection Settings</span>
+                                    <span class="config-panel-summary" id="tax-config-summary"></span>
+                                </div>
+                                <div class="config-panel-toggle">▼</div>
+                            </div>
+                            <div class="config-panel-body">
+                                <!-- All parameters in compact grid -->
+                                <div class="compact-form-grid">
+                                    <div class="form-group">
+                                        <label for="tax-current-age">Current Age</label>
+                                        <input type="number" id="tax-current-age" min="18" max="100" value="35" required onchange="updateTaxConfigSummary()">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="tax-retirement-age">Retire Age</label>
+                                        <input type="number" id="tax-retirement-age" min="30" max="100" value="65" required onchange="updateTaxConfigSummary()">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="tax-end-age">End Age</label>
+                                        <input type="number" id="tax-end-age" min="50" max="120" value="95" required onchange="updateTaxConfigSummary()">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="tax-annual-spending">Annual Spend</label>
+                                        <input type="number" id="tax-annual-spending" min="0" step="1000" value="60000" required onchange="updateTaxConfigSummary()">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="tax-expected-return">Return %</label>
+                                        <input type="number" id="tax-expected-return" min="0" max="20" step="0.5" value="6" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="tax-inflation-rate">Inflation %</label>
+                                        <input type="number" id="tax-inflation-rate" min="0" max="10" step="0.5" value="3" required>
+                                    </div>
+                                </div>
+
+                                <!-- Accumulation Phase Section (contributions before retirement) -->
+                                <div class="compact-form-section">
+                                    <div class="compact-form-section-title">Pre-Retirement Contributions (until retire age)</div>
+                                    <div class="compact-form-grid">
+                                        <div class="form-group">
+                                            <label for="tax-monthly-contribution">Monthly $</label>
+                                            <input type="number" id="tax-monthly-contribution" min="0" step="100" value="2000" title="Monthly contribution until retirement">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tax-contrib-traditional">To Trad %</label>
+                                            <input type="number" id="tax-contrib-traditional" min="0" max="100" step="5" value="60" title="% to traditional IRA/401k">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tax-contrib-roth">To Roth %</label>
+                                            <input type="number" id="tax-contrib-roth" min="0" max="100" step="5" value="25" title="% to Roth IRA/401k">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tax-contrib-taxable">To Taxable %</label>
+                                            <input type="number" id="tax-contrib-taxable" min="0" max="100" step="5" value="15" title="% to taxable brokerage">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Tax Rates Section -->
+                                <div class="compact-form-section">
+                                    <div class="compact-form-section-title">Tax Rates (during retirement withdrawals)</div>
+                                    <div class="compact-form-grid">
+                                        <div class="form-group">
+                                            <label for="tax-federal-rate">Federal %</label>
+                                            <input type="number" id="tax-federal-rate" min="0" max="50" step="1" value="22" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tax-state-rate">State %</label>
+                                            <input type="number" id="tax-state-rate" min="0" max="15" step="0.5" value="5" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tax-capgains-rate">Cap Gains %</label>
+                                            <input type="number" id="tax-capgains-rate" min="0" max="30" step="1" value="15" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tax-cost-basis">Cost Basis %</label>
+                                            <input type="number" id="tax-cost-basis" min="0" max="100" step="5" value="60" required title="Portion of taxable account that is original investment (not gains)">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Account Balances Section -->
+                                <div class="compact-form-section">
+                                    <div class="compact-form-section-title">Account Balances (auto-filled from portfolio)</div>
+                                    <div class="compact-form-grid">
+                                        <div class="form-group">
+                                            <label for="tax-taxable-balance">Taxable</label>
+                                            <input type="number" id="tax-taxable-balance" min="0" step="1000" placeholder="Auto">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tax-traditional-balance">Traditional</label>
+                                            <input type="number" id="tax-traditional-balance" min="0" step="1000" placeholder="Auto">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="tax-roth-balance">Roth</label>
+                                            <input type="number" id="tax-roth-balance" min="0" step="1000" placeholder="Auto">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">
+                                    Run Tax Projection
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- Tax Projection Results -->
+                    <div class="projection-results">
+                        <!-- Summary Stats -->
+                        <div class="tax-summary-section" id="tax-summary-stats">
+                            <!-- Time Period Context Banner -->
+                            <div class="tax-summary-context" id="tax-summary-context">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                                <span>Projection: <strong id="tax-context-period">Age 65 → 95</strong> (<span id="tax-context-years">30 years</span> of retirement withdrawals)</span>
+                            </div>
+
+                            <!-- Stats Grid -->
+                            <div class="tax-stats-grid">
+                                <!-- Federal Tax Card -->
+                                <div class="tax-stat-card tax-stat-federal">
+                                    <div class="tax-stat-icon">
+                                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                            <line x1="3" y1="9" x2="21" y2="9"></line>
+                                            <line x1="9" y1="21" x2="9" y2="9"></line>
+                                        </svg>
+                                    </div>
+                                    <div class="tax-stat-content">
+                                        <span class="tax-stat-label">Federal Income Tax</span>
+                                        <span class="tax-stat-value" id="tax-total-federal">-</span>
+                                        <span class="tax-stat-detail" id="tax-federal-detail">From traditional IRA/401k withdrawals</span>
+                                    </div>
+                                </div>
+
+                                <!-- State Tax Card -->
+                                <div class="tax-stat-card tax-stat-state">
+                                    <div class="tax-stat-icon">
+                                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                            <circle cx="12" cy="10" r="3"></circle>
+                                        </svg>
+                                    </div>
+                                    <div class="tax-stat-content">
+                                        <span class="tax-stat-label">State Income Tax</span>
+                                        <span class="tax-stat-value" id="tax-total-state">-</span>
+                                        <span class="tax-stat-detail" id="tax-state-detail">Based on <span id="tax-state-rate-display">0%</span> state rate</span>
+                                    </div>
+                                </div>
+
+                                <!-- Total Tax Card (highlighted) -->
+                                <div class="tax-stat-card tax-stat-total">
+                                    <div class="tax-stat-icon">
+                                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="12" y1="1" x2="12" y2="23"></line>
+                                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                        </svg>
+                                    </div>
+                                    <div class="tax-stat-content">
+                                        <span class="tax-stat-label">Total Lifetime Tax Burden</span>
+                                        <span class="tax-stat-value" id="tax-total-all">-</span>
+                                        <span class="tax-stat-detail" id="tax-total-detail">Combined federal + state taxes paid</span>
+                                    </div>
+                                </div>
+
+                                <!-- Effective Rate Card -->
+                                <div class="tax-stat-card tax-stat-rate">
+                                    <div class="tax-stat-icon">
+                                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="18" y1="20" x2="18" y2="10"></line>
+                                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                                            <line x1="6" y1="20" x2="6" y2="14"></line>
+                                        </svg>
+                                    </div>
+                                    <div class="tax-stat-content">
+                                        <span class="tax-stat-label">Avg Effective Tax Rate</span>
+                                        <span class="tax-stat-value" id="tax-avg-rate">-</span>
+                                        <span class="tax-stat-detail">% of withdrawals paid as taxes</span>
+                                    </div>
+                                </div>
+
+                                <!-- Total Withdrawn Card -->
+                                <div class="tax-stat-card tax-stat-withdrawn">
+                                    <div class="tax-stat-icon">
+                                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="7 10 12 15 17 10"></polyline>
+                                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                                        </svg>
+                                    </div>
+                                    <div class="tax-stat-content">
+                                        <span class="tax-stat-label">Total Withdrawn</span>
+                                        <span class="tax-stat-value" id="tax-total-withdrawn">-</span>
+                                        <span class="tax-stat-detail" id="tax-withdrawn-detail">Gross amount from all accounts</span>
+                                    </div>
+                                </div>
+
+                                <!-- Final Balance Card -->
+                                <div class="tax-stat-card tax-stat-balance">
+                                    <div class="tax-stat-icon">
+                                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                                        </svg>
+                                    </div>
+                                    <div class="tax-stat-content">
+                                        <span class="tax-stat-label">Final Portfolio Balance</span>
+                                        <span class="tax-stat-value" id="tax-final-balance">-</span>
+                                        <span class="tax-stat-detail" id="tax-balance-detail">Remaining at end of projection</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tax Burden Chart -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Tax Burden Over Time</h3>
+                            </div>
+                            <div class="card-body">
+                                <div id="tax-burden-chart" style="height: 350px;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Account Balance Chart -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Account Balances Over Time</h3>
+                            </div>
+                            <div class="card-body">
+                                <div id="tax-balance-chart" style="height: 350px;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Withdrawal Sequence Table -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Year-by-Year Withdrawal Breakdown</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                                    <table class="data-table" id="tax-withdrawal-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Age</th>
+                                                <th>Total Balance</th>
+                                                <th>RMD</th>
+                                                <th>From Taxable</th>
+                                                <th>From Traditional</th>
+                                                <th>From Roth</th>
+                                                <th>Federal Tax</th>
+                                                <th>State Tax</th>
+                                                <th>Eff. Rate</th>
+                                                <th>Net Withdrawal</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td colspan="10" class="text-muted">Run a projection to see results</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Budget Tab -->
+            <div id="tab-budget" class="tab-content">
+                <!-- Budget Sub-navigation -->
+                <div class="budget-subnav">
+                    <button class="budget-nav-item active" onclick="showBudgetTab('income')" data-budget-tab="income">
+                        Income & Taxes
+                    </button>
+                    <button class="budget-nav-item" onclick="showBudgetTab('expenses')" data-budget-tab="expenses">
+                        Expenses
+                    </button>
+                    <button class="budget-nav-item" onclick="showBudgetTab('cashflow')" data-budget-tab="cashflow">
+                        Cash Flow
+                    </button>
+                    <button class="budget-nav-item" onclick="showBudgetTab('transition')" data-budget-tab="transition">
+                        Retirement Transition
+                    </button>
+                </div>
+
+                <!-- Income Sub-tab -->
+                <div id="budget-income" class="budget-subtab active">
+                    <div class="budget-grid">
+                        <!-- Tax Configuration Card -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Tax Configuration</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="filing-status">Filing Status</label>
+                                        <select id="filing-status" onchange="updateBudgetCalc()">
+                                            <option value="single">Single</option>
+                                            <option value="married_joint">Married Filing Jointly</option>
+                                            <option value="married_separate">Married Filing Separately</option>
+                                            <option value="head_household">Head of Household</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="tax-state">State</label>
+                                        <select id="tax-state" onchange="updateBudgetCalc()">
+                                            <option value="CA">California</option>
+                                            <option value="NY">New York</option>
+                                            <option value="TX">Texas (No Income Tax)</option>
+                                            <option value="FL">Florida (No Income Tax)</option>
+                                            <option value="WA">Washington (No Income Tax)</option>
+                                            <option value="NV">Nevada (No Income Tax)</option>
+                                            <option value="IL">Illinois</option>
+                                            <option value="PA">Pennsylvania</option>
+                                            <option value="OH">Ohio</option>
+                                            <option value="GA">Georgia</option>
+                                            <option value="NC">North Carolina</option>
+                                            <option value="NJ">New Jersey</option>
+                                            <option value="VA">Virginia</option>
+                                            <option value="MA">Massachusetts</option>
+                                            <option value="AZ">Arizona</option>
+                                            <option value="CO">Colorado</option>
+                                            <option value="MN">Minnesota</option>
+                                            <option value="OR">Oregon</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Income Sources Card -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Income Sources</h3>
+                                <button class="btn btn-primary btn-sm" onclick="showAddIncomeModal()">
+                                    + Add Income
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="income-sources-list">
+                                    <p class="empty-state">No income sources added yet. Click "Add Income" to get started.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pre-tax Deductions Card -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Pre-tax Deductions</h3>
+                                <button class="btn btn-secondary btn-sm" onclick="showAddDeductionModal()">
+                                    + Add Deduction
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="deductions-list">
+                                    <p class="empty-state">No pre-tax deductions. Add 401k, HSA, FSA contributions here.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Paycheck Preview Card -->
+                        <div class="card paycheck-preview-card">
+                            <div class="card-header">
+                                <h3>Paycheck Preview</h3>
+                            </div>
+                            <div class="card-body">
+                                <div id="paycheck-breakdown">
+                                    <p class="empty-state">Add income to see paycheck breakdown.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Expenses Sub-tab -->
+                <div id="budget-expenses" class="budget-subtab">
+                    <div class="budget-grid">
+                        <!-- Add Expense Card -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Expenses</h3>
+                                <button class="btn btn-primary btn-sm" onclick="showAddExpenseModal()">
+                                    + Add Expense
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="expenses-list">
+                                    <p class="empty-state">No expenses added yet. Click "Add Expense" to track your spending.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Expenses by Category Card -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Expenses by Category</h3>
+                            </div>
+                            <div class="card-body">
+                                <div id="expenses-category-chart" style="height: 300px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cash Flow Sub-tab -->
+                <div id="budget-cashflow" class="budget-subtab">
+                    <div class="budget-stats-row">
+                        <div class="stat-card">
+                            <div class="stat-label">Monthly Gross</div>
+                            <div class="stat-value" id="stat-monthly-gross">$0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Monthly Taxes</div>
+                            <div class="stat-value negative" id="stat-monthly-taxes">$0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Monthly Net</div>
+                            <div class="stat-value" id="stat-monthly-net">$0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Monthly Expenses</div>
+                            <div class="stat-value negative" id="stat-monthly-expenses">$0</div>
+                        </div>
+                        <div class="stat-card highlight">
+                            <div class="stat-label">Monthly Savings</div>
+                            <div class="stat-value positive" id="stat-monthly-savings">$0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Savings Rate</div>
+                            <div class="stat-value" id="stat-savings-rate">0%</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Annual Paycheck Breakdown</h3>
+                            <p class="chart-subtitle">Each bar represents one pay period</p>
+                        </div>
+                        <div class="card-body">
+                            <div id="paycheck-chart" style="height: 400px;"></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Annual Cash Flow Waterfall</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="cashflow-waterfall-chart" style="height: 350px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Retirement Transition Sub-tab -->
+                <div id="budget-transition" class="budget-subtab">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Retirement Transition Parameters</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="transition-current-age">Current Age</label>
+                                    <input type="number" id="transition-current-age" value="35" min="18" max="80">
+                                </div>
+                                <div class="form-group">
+                                    <label for="transition-retirement-age">Target Retirement Age</label>
+                                    <input type="number" id="transition-retirement-age" value="65" min="50" max="80">
+                                </div>
+                                <div class="form-group">
+                                    <label for="transition-ss-age">Social Security Claiming Age</label>
+                                    <input type="number" id="transition-ss-age" value="67" min="62" max="70">
+                                </div>
+                                <div class="form-group">
+                                    <label for="transition-end-age">Plan Through Age</label>
+                                    <input type="number" id="transition-end-age" value="95" min="70" max="100">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="ss-override">Social Security Monthly Benefit (optional)</label>
+                                    <input type="number" id="ss-override" placeholder="Leave blank to estimate" min="0" step="100">
+                                    <span class="form-help">Leave blank to estimate from income</span>
+                                </div>
+                                <div class="form-group">
+                                    <label>&nbsp;</label>
+                                    <button class="btn btn-primary" onclick="runTransitionProjection()">
+                                        Run Projection
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Income Source Transition</h3>
+                            <p class="chart-subtitle">How your income sources change over time</p>
+                        </div>
+                        <div class="card-body">
+                            <div id="transition-chart" style="height: 400px;">
+                                <p class="empty-state">Run a projection to see the income transition visualization.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Social Security Comparison</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="ss-comparison-table">
+                                <p class="empty-state">Run a projection to see Social Security claiming age comparisons.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Settings Tab -->
             <div id="tab-settings" class="tab-content">
                 <div class="settings-grid">
+                    <!-- Data Storage Settings -->
+                    <div class="card" id="data-storage-card">
+                        <div class="card-header">
+                            <h3>Data Storage</h3>
+                            <span class="badge" id="storage-mode-badge">Server</span>
+                        </div>
+                        <div class="card-body">
+                            <p class="form-help" style="margin-bottom: 1rem;">
+                                Choose where your portfolio data is stored. <strong>Local mode</strong> keeps all data on your device - nothing is sent to the server.
+                            </p>
+
+                            <div class="storage-mode-selector">
+                                <label class="radio-card">
+                                    <input type="radio" name="storage-mode" value="server" checked onchange="setStorageMode('server')">
+                                    <div class="radio-card-content">
+                                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                                            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                                            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                                            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                                        </svg>
+                                        <div>
+                                            <strong>Server Mode</strong>
+                                            <small>Data stored on server (current behavior)</small>
+                                        </div>
+                                    </div>
+                                </label>
+
+                                <label class="radio-card">
+                                    <input type="radio" name="storage-mode" value="local" onchange="setStorageMode('local')">
+                                    <div class="radio-card-content">
+                                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                        </svg>
+                                        <div>
+                                            <strong>Local Mode</strong>
+                                            <small>Data stays on your device only</small>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <!-- Local mode options (hidden by default) -->
+                            <div id="local-storage-options" style="display: none; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+                                <h4 style="margin-bottom: 1rem;">Local Database</h4>
+
+                                <div id="local-db-status" class="info-box" style="margin-bottom: 1rem;">
+                                    <span id="local-db-status-text">No database loaded</span>
+                                </div>
+
+                                <div class="button-group" style="flex-wrap: wrap; gap: 0.5rem;">
+                                    <button type="button" class="btn btn-primary" onclick="openLocalDatabase()">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                        </svg>
+                                        Open Database File
+                                    </button>
+
+                                    <button type="button" class="btn btn-secondary" onclick="createNewLocalDatabase()">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                                        </svg>
+                                        Create New
+                                    </button>
+
+                                    <button type="button" class="btn btn-secondary" onclick="saveLocalDatabase()" id="btn-save-local-db" disabled>
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                            <polyline points="7 3 7 8 15 8"></polyline>
+                                        </svg>
+                                        Save
+                                    </button>
+
+                                    <button type="button" class="btn btn-secondary" onclick="downloadLocalDatabase()" id="btn-download-local-db" disabled>
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="7 10 12 15 17 10"></polyline>
+                                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                                        </svg>
+                                        Export
+                                    </button>
+                                </div>
+
+                                <div style="margin-top: 1rem;">
+                                    <label class="file-upload-label">
+                                        <input type="file" id="import-db-file" accept=".db,.sqlite,.sqlite3" onchange="importLocalDatabase(event)" style="display: none;">
+                                        <span class="btn btn-secondary">
+                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                <polyline points="17 8 12 3 7 8"></polyline>
+                                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                                            </svg>
+                                            Import Database File
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <div id="browser-storage-section" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                                    <h5>Browser Storage</h5>
+                                    <p class="form-help">Automatically saves your database in the browser for persistence.</p>
+                                    <div class="button-group" style="margin-top: 0.5rem;">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="loadFromBrowserStorage()">
+                                            Load from Browser
+                                        </button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="saveToBrowserStorage()">
+                                            Save to Browser
+                                        </button>
+                                        <button type="button" class="btn btn-danger btn-sm" onclick="clearBrowserStorage()">
+                                            Clear Browser Data
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Personal Settings -->
                     <div class="card">
                         <div class="card-header">
@@ -2001,6 +2665,10 @@
         </svg>
     </button>
 
+    <!-- Client-side database support -->
+    <script src="/static/js/client-database.js"></script>
+    <script src="/static/js/local-api.js"></script>
+    <!-- Main application -->
     <script src="/static/app.js"></script>
 </body>
 </html>

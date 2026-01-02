@@ -350,6 +350,8 @@ function showTab(tabName) {
         'holdings': 'Holdings',
         'analysis': 'Analysis',
         'projections': 'Projections',
+        'taxes': 'Taxes',
+        'budget': 'Expenses & Income',
         'settings': 'Settings'
     };
     document.getElementById('page-title').textContent = titles[tabName] || tabName;
@@ -363,6 +365,10 @@ function showTab(tabName) {
         loadAnalysisData();
     } else if (tabName === 'projections') {
         loadProjectionsSettings();
+    } else if (tabName === 'taxes') {
+        loadTaxesTab();
+    } else if (tabName === 'budget') {
+        loadBudgetTab();
     } else if (tabName === 'settings') {
         loadSettings();
         loadProfilesForSettings();
@@ -4919,6 +4925,1549 @@ async function confirmImport() {
     }
 }
 
+// =====================
+// Storage Mode & Local Database Functions
+// =====================
+
+// Current storage mode: 'server' or 'local'
+let currentStorageMode = 'server';
+
+/**
+ * Set storage mode (server or local)
+ */
+function setStorageMode(mode) {
+    currentStorageMode = mode;
+
+    // Update UI
+    const badge = document.getElementById('storage-mode-badge');
+    const localOptions = document.getElementById('local-storage-options');
+
+    badge.textContent = mode === 'server' ? 'Server' : 'Local';
+    badge.className = `badge ${mode}`;
+
+    localOptions.style.display = mode === 'local' ? 'block' : 'none';
+
+    // Save preference
+    localStorage.setItem('storageMode', mode);
+
+    if (mode === 'local') {
+        // Check if we have browser storage data
+        checkBrowserStorageData();
+    } else {
+        // Switch back to server mode - refresh data
+        refreshData();
+    }
+
+    showToast(`Switched to ${mode} mode`, 'info');
+}
+
+/**
+ * Check if browser has saved database
+ */
+async function checkBrowserStorageData() {
+    try {
+        const hasData = await clientDB.hasIndexedDBData();
+        if (hasData) {
+            updateLocalDbStatus('Browser storage found - click "Load from Browser" to restore', 'info');
+        } else {
+            updateLocalDbStatus('No database loaded. Open a file or create new.', 'warning');
+        }
+    } catch (error) {
+        console.error('Error checking browser storage:', error);
+    }
+}
+
+/**
+ * Update local database status display
+ */
+function updateLocalDbStatus(message, type = 'info') {
+    const statusEl = document.getElementById('local-db-status');
+    const textEl = document.getElementById('local-db-status-text');
+
+    textEl.textContent = message;
+    statusEl.className = `info-box ${type}`;
+
+    // Update button states
+    const saveBtn = document.getElementById('btn-save-local-db');
+    const downloadBtn = document.getElementById('btn-download-local-db');
+    const isOpen = clientDB && clientDB.isOpen();
+
+    saveBtn.disabled = !isOpen;
+    downloadBtn.disabled = !isOpen;
+}
+
+/**
+ * Open local database file
+ */
+async function openLocalDatabase() {
+    try {
+        if (!clientDB.hasFileSystemAccess()) {
+            showToast('File System Access not supported. Use Import instead.', 'warning');
+            return;
+        }
+
+        const result = await clientDB.openFile();
+        if (result) {
+            initLocalAPI();
+            updateLocalDbStatus(`Opened: ${result.name} (${formatBytes(result.size)})`, 'success');
+            showToast(`Database opened: ${result.name}`, 'success');
+            refreshLocalData();
+        }
+    } catch (error) {
+        console.error('Error opening database:', error);
+        showToast(`Error: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Create new empty local database
+ */
+async function createNewLocalDatabase() {
+    try {
+        const result = await clientDB.createNew();
+        initLocalAPI();
+        updateLocalDbStatus('New database created (in memory - save to persist)', 'success');
+        showToast('New database created', 'success');
+        refreshLocalData();
+    } catch (error) {
+        console.error('Error creating database:', error);
+        showToast(`Error: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Save local database to file
+ */
+async function saveLocalDatabase() {
+    try {
+        const result = await clientDB.saveToFile();
+        if (result.saved) {
+            updateLocalDbStatus(`Saved: ${result.name}`, 'success');
+            showToast('Database saved', 'success');
+        } else if (result.cancelled) {
+            showToast('Save cancelled', 'info');
+        }
+    } catch (error) {
+        console.error('Error saving database:', error);
+        showToast(`Error: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Download local database as file
+ */
+function downloadLocalDatabase() {
+    try {
+        const result = clientDB.downloadDatabase();
+        showToast(`Downloaded: ${result.name}`, 'success');
+    } catch (error) {
+        console.error('Error downloading database:', error);
+        showToast(`Error: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Import database from file input
+ */
+async function importLocalDatabase(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+        const result = await clientDB.importFromFile(file);
+        initLocalAPI();
+        updateLocalDbStatus(`Imported: ${result.name} (${formatBytes(result.size)})`, 'success');
+        showToast(`Database imported: ${result.name}`, 'success');
+        refreshLocalData();
+    } catch (error) {
+        console.error('Error importing database:', error);
+        showToast(`Error: ${error.message}`, 'error');
+    }
+
+    // Reset file input
+    event.target.value = '';
+}
+
+/**
+ * Load database from browser storage (IndexedDB)
+ */
+async function loadFromBrowserStorage() {
+    try {
+        const result = await clientDB.loadFromIndexedDB();
+        if (result.loaded) {
+            initLocalAPI();
+            updateLocalDbStatus('Loaded from browser storage', 'success');
+            showToast('Database loaded from browser', 'success');
+            refreshLocalData();
+        } else {
+            showToast('No saved database found in browser', 'warning');
+        }
+    } catch (error) {
+        console.error('Error loading from browser:', error);
+        showToast(`Error: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Save database to browser storage (IndexedDB)
+ */
+async function saveToBrowserStorage() {
+    if (!clientDB.isOpen()) {
+        showToast('No database open', 'warning');
+        return;
+    }
+
+    try {
+        await clientDB.saveToIndexedDB();
+        updateLocalDbStatus('Saved to browser storage', 'success');
+        showToast('Database saved to browser', 'success');
+    } catch (error) {
+        console.error('Error saving to browser:', error);
+        showToast(`Error: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Clear browser storage
+ */
+async function clearBrowserStorage() {
+    if (!confirm('Are you sure you want to clear the browser database? This cannot be undone.')) {
+        return;
+    }
+
+    try {
+        await clientDB.clearIndexedDB();
+        showToast('Browser storage cleared', 'success');
+        updateLocalDbStatus('Browser storage cleared', 'info');
+    } catch (error) {
+        console.error('Error clearing browser storage:', error);
+        showToast(`Error: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Refresh data from local database
+ */
+function refreshLocalData() {
+    if (!localAPI) {
+        console.error('Local API not initialized');
+        return;
+    }
+
+    try {
+        // Get portfolio summary
+        const summary = localAPI.getPortfolio();
+        updateDashboardWithData(summary, localAPI.getPositions(), localAPI.getAccounts());
+        showToast('Local data refreshed', 'success');
+    } catch (error) {
+        console.error('Error refreshing local data:', error);
+        showToast(`Error: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Helper to update dashboard with data (works for both server and local mode)
+ */
+function updateDashboardWithData(summary, positions, accounts) {
+    // Update portfolio summary stats
+    const totalValueEl = document.getElementById('total-value');
+    const gainLossEl = document.getElementById('total-gain-loss');
+    const accountCountEl = document.getElementById('account-count');
+    const positionCountEl = document.getElementById('position-count');
+
+    if (totalValueEl) totalValueEl.textContent = formatCurrency(summary.total_value);
+    if (gainLossEl) {
+        gainLossEl.textContent = formatCurrency(summary.total_gain_loss);
+        if (summary.total_gain_loss >= 0) {
+            gainLossEl.classList.remove('text-error');
+            gainLossEl.classList.add('text-success');
+        } else {
+            gainLossEl.classList.remove('text-success');
+            gainLossEl.classList.add('text-error');
+        }
+    }
+    if (accountCountEl) accountCountEl.textContent = summary.account_count;
+    if (positionCountEl) positionCountEl.textContent = summary.position_count;
+}
+
+/**
+ * Format bytes to human readable
+ */
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+/**
+ * Initialize storage mode from saved preference
+ */
+function initStorageMode() {
+    const savedMode = localStorage.getItem('storageMode') || 'server';
+    const radioEl = document.querySelector(`input[name="storage-mode"][value="${savedMode}"]`);
+    if (radioEl) {
+        radioEl.checked = true;
+        if (savedMode === 'local') {
+            setStorageMode('local');
+        }
+    }
+}
+
+// =====================
+// Collapsible Config Panel Functions
+// =====================
+
+function toggleConfigPanel(panelId) {
+    const panel = document.getElementById(panelId);
+    if (panel) {
+        panel.classList.toggle('collapsed');
+        // Save state to localStorage
+        const isCollapsed = panel.classList.contains('collapsed');
+        localStorage.setItem(`config-panel-${panelId}`, isCollapsed ? 'collapsed' : 'expanded');
+    }
+}
+
+function initConfigPanels() {
+    // Restore saved panel states
+    document.querySelectorAll('.config-panel').forEach(panel => {
+        const savedState = localStorage.getItem(`config-panel-${panel.id}`);
+        if (savedState === 'collapsed') {
+            panel.classList.add('collapsed');
+        }
+    });
+    // Initialize summaries
+    updateTaxConfigSummary();
+    updateMonteCarloConfigSummary();
+}
+
+function updateTaxConfigSummary() {
+    const currentAge = document.getElementById('tax-current-age')?.value || '35';
+    const retireAge = document.getElementById('tax-retirement-age')?.value || '65';
+    const spending = document.getElementById('tax-annual-spending')?.value || '60000';
+    const spendingFormatted = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0
+    }).format(spending);
+
+    const summary = document.getElementById('tax-config-summary');
+    if (summary) {
+        summary.textContent = `| Age ${currentAge}→${retireAge} | ${spendingFormatted}/yr`;
+    }
+}
+
+function updateMonteCarloConfigSummary() {
+    const currentAge = document.getElementById('current-age')?.value || '35';
+    const retireAge = document.getElementById('retirement-age')?.value || '65';
+    const contribution = document.getElementById('monthly-contribution')?.value || '2000';
+    const withdrawal = document.getElementById('monthly-withdrawal')?.value || '8000';
+
+    const formatter = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0
+    });
+
+    const summary = document.getElementById('monte-carlo-config-summary');
+    if (summary) {
+        summary.textContent = `| Age ${currentAge}→${retireAge} | +${formatter.format(contribution)}/mo | -${formatter.format(withdrawal)}/mo`;
+    }
+}
+
+// =====================
+// Tax Projection Functions
+// =====================
+
+async function runTaxProjection(event) {
+    event.preventDefault();
+
+    showLoading('Running tax projection...', true);
+    const form = event.target;
+    form.classList.add('loading');
+
+    const params = {
+        current_age: parseInt(document.getElementById('tax-current-age').value),
+        retirement_age: parseInt(document.getElementById('tax-retirement-age').value),
+        end_age: parseInt(document.getElementById('tax-end-age').value),
+        annual_spending: parseFloat(document.getElementById('tax-annual-spending').value),
+        expected_return: parseFloat(document.getElementById('tax-expected-return').value) / 100,
+        inflation_rate: parseFloat(document.getElementById('tax-inflation-rate').value) / 100,
+        // Pre-retirement contributions
+        monthly_contribution: parseFloat(document.getElementById('tax-monthly-contribution').value) || 0,
+        contribution_to_traditional_pct: parseFloat(document.getElementById('tax-contrib-traditional').value) / 100,
+        contribution_to_roth_pct: parseFloat(document.getElementById('tax-contrib-roth').value) / 100,
+        contribution_to_taxable_pct: parseFloat(document.getElementById('tax-contrib-taxable').value) / 100,
+        // Tax rates
+        federal_tax_rate: parseFloat(document.getElementById('tax-federal-rate').value) / 100,
+        state_tax_rate: parseFloat(document.getElementById('tax-state-rate').value) / 100,
+        capital_gains_rate: parseFloat(document.getElementById('tax-capgains-rate').value) / 100,
+        cost_basis_ratio: parseFloat(document.getElementById('tax-cost-basis').value) / 100
+    };
+
+    // Get optional balances (leave null if empty to auto-fill from portfolio)
+    const taxableBalance = document.getElementById('tax-taxable-balance').value;
+    const traditionalBalance = document.getElementById('tax-traditional-balance').value;
+    const rothBalance = document.getElementById('tax-roth-balance').value;
+
+    if (taxableBalance) params.taxable_balance = parseFloat(taxableBalance);
+    if (traditionalBalance) params.traditional_balance = parseFloat(traditionalBalance);
+    if (rothBalance) params.roth_balance = parseFloat(rothBalance);
+
+    try {
+        const response = await fetch(`${API_BASE}/api/projections/tax-projection`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to run projection');
+        }
+
+        const result = await response.json();
+        displayTaxProjectionResults(result);
+        showToast('Tax projection complete', 'success');
+
+    } catch (error) {
+        console.error('Error running tax projection:', error);
+        showToast(`Error: ${error.message}`, 'error');
+    } finally {
+        form.classList.remove('loading');
+        hideLoading();
+    }
+}
+
+function displayTaxProjectionResults(result) {
+    // Get input parameters for context
+    const currentAge = parseInt(document.getElementById('tax-current-age').value);
+    const retirementAge = parseInt(document.getElementById('tax-retirement-age').value);
+    const endAge = parseInt(document.getElementById('tax-end-age').value);
+    const stateRate = parseFloat(document.getElementById('tax-state-rate').value);
+    const federalRate = parseFloat(document.getElementById('tax-federal-rate').value);
+    const monthlyContrib = parseFloat(document.getElementById('tax-monthly-contribution').value) || 0;
+    const accumulationYears = retirementAge - currentAge;
+    const withdrawalYears = endAge - retirementAge;
+
+    // Update context banner
+    const contextPeriod = document.getElementById('tax-context-period');
+    const contextYears = document.getElementById('tax-context-years');
+    if (contextPeriod) {
+        if (accumulationYears > 0) {
+            contextPeriod.textContent = `Age ${currentAge} → ${retirementAge} → ${endAge}`;
+        } else {
+            contextPeriod.textContent = `Age ${retirementAge} → ${endAge}`;
+        }
+    }
+    if (contextYears) {
+        if (accumulationYears > 0 && monthlyContrib > 0) {
+            contextYears.textContent = `${accumulationYears}yr accumulation + ${withdrawalYears}yr`;
+        } else {
+            contextYears.textContent = `${withdrawalYears} years`;
+        }
+    }
+
+    // Update summary stats
+    document.getElementById('tax-total-federal').textContent = formatCurrency(result.summary.total_federal_tax);
+    document.getElementById('tax-total-state').textContent = formatCurrency(result.summary.total_state_tax);
+    document.getElementById('tax-total-all').textContent = formatCurrency(result.summary.total_tax);
+    document.getElementById('tax-avg-rate').textContent = `${result.summary.average_effective_rate.toFixed(1)}%`;
+    document.getElementById('tax-total-withdrawn').textContent = formatCurrency(result.summary.total_withdrawn);
+    document.getElementById('tax-final-balance').textContent = formatCurrency(result.summary.final_balance);
+
+    // Update detail descriptions
+    const federalDetail = document.getElementById('tax-federal-detail');
+    if (federalDetail) {
+        const avgAnnualFederal = result.summary.total_federal_tax / withdrawalYears;
+        federalDetail.textContent = `~${formatCurrency(avgAnnualFederal)}/yr at ${federalRate}% marginal rate`;
+    }
+
+    const stateDetail = document.getElementById('tax-state-detail');
+    const stateRateDisplay = document.getElementById('tax-state-rate-display');
+    if (stateRateDisplay) stateRateDisplay.textContent = `${stateRate}%`;
+    if (stateDetail && stateRate === 0) {
+        stateDetail.textContent = 'No state income tax configured';
+    }
+
+    const totalDetail = document.getElementById('tax-total-detail');
+    if (totalDetail) {
+        const taxAsPercent = ((result.summary.total_tax / result.summary.total_withdrawn) * 100).toFixed(1);
+        totalDetail.textContent = `${taxAsPercent}% of gross withdrawals over ${withdrawalYears} years`;
+    }
+
+    const withdrawnDetail = document.getElementById('tax-withdrawn-detail');
+    if (withdrawnDetail) {
+        const avgAnnualWithdrawal = result.summary.total_withdrawn / withdrawalYears;
+        withdrawnDetail.textContent = `~${formatCurrency(avgAnnualWithdrawal)}/yr from all account types`;
+    }
+
+    const balanceDetail = document.getElementById('tax-balance-detail');
+    const balanceCard = document.querySelector('.tax-stat-balance');
+    if (balanceCard) {
+        balanceCard.classList.remove('depleted', 'healthy');
+        if (result.summary.final_balance <= 0) {
+            balanceCard.classList.add('depleted');
+            if (balanceDetail) balanceDetail.textContent = 'Portfolio depleted before end of projection';
+        } else if (result.summary.final_balance > result.summary.total_withdrawn * 0.1) {
+            balanceCard.classList.add('healthy');
+            if (balanceDetail) balanceDetail.textContent = 'Healthy balance remaining for legacy/emergencies';
+        } else {
+            if (balanceDetail) balanceDetail.textContent = 'Remaining at end of projection';
+        }
+    }
+
+    // Render charts
+    renderTaxBurdenChart(result.chart_data);
+    renderAccountBalanceChart(result.chart_data);
+
+    // Render withdrawal table
+    renderTaxWithdrawalTable(result.years);
+}
+
+function renderTaxBurdenChart(chartData) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+    const traces = [
+        {
+            x: chartData.ages,
+            y: chartData.federal_taxes,
+            type: 'bar',
+            name: 'Federal Tax',
+            marker: { color: '#3b82f6' }
+        },
+        {
+            x: chartData.ages,
+            y: chartData.state_taxes,
+            type: 'bar',
+            name: 'State Tax',
+            marker: { color: '#8b5cf6' }
+        },
+        {
+            x: chartData.ages,
+            y: chartData.effective_rates,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Effective Rate (%)',
+            yaxis: 'y2',
+            line: { color: '#f59e0b', width: 2 },
+            marker: { size: 4 }
+        }
+    ];
+
+    const layout = {
+        barmode: 'stack',
+        showlegend: true,
+        legend: {
+            orientation: 'h',
+            y: -0.15
+        },
+        xaxis: {
+            title: 'Age',
+            color: isDark ? '#a3a3a3' : '#666'
+        },
+        yaxis: {
+            title: 'Tax Amount ($)',
+            color: isDark ? '#a3a3a3' : '#666',
+            tickformat: '$,.0f'
+        },
+        yaxis2: {
+            title: 'Effective Rate (%)',
+            overlaying: 'y',
+            side: 'right',
+            color: isDark ? '#a3a3a3' : '#666',
+            ticksuffix: '%',
+            range: [0, Math.max(...chartData.effective_rates) * 1.2]
+        },
+        margin: { t: 20, r: 60, b: 60, l: 80 },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        font: { color: isDark ? '#e5e5e5' : '#1a1a1a' }
+    };
+
+    Plotly.newPlot('tax-burden-chart', traces, layout, {
+        responsive: true,
+        displayModeBar: false
+    });
+}
+
+function renderAccountBalanceChart(chartData) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+
+    const traces = [
+        {
+            x: chartData.ages,
+            y: chartData.taxable_balances,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Taxable',
+            line: { color: '#22c55e', width: 2 },
+            fill: 'tozeroy',
+            fillcolor: 'rgba(34, 197, 94, 0.1)'
+        },
+        {
+            x: chartData.ages,
+            y: chartData.traditional_balances,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Traditional (IRA/401k)',
+            line: { color: '#f97316', width: 2 },
+            fill: 'tozeroy',
+            fillcolor: 'rgba(249, 115, 22, 0.1)'
+        },
+        {
+            x: chartData.ages,
+            y: chartData.roth_balances,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Roth',
+            line: { color: '#06b6d4', width: 2 },
+            fill: 'tozeroy',
+            fillcolor: 'rgba(6, 182, 212, 0.1)'
+        },
+        {
+            x: chartData.ages,
+            y: chartData.total_balances,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Total',
+            line: { color: isDark ? '#ffffff' : '#1a1a1a', width: 2, dash: 'dash' }
+        }
+    ];
+
+    const layout = {
+        showlegend: true,
+        legend: {
+            orientation: 'h',
+            y: -0.15
+        },
+        xaxis: {
+            title: 'Age',
+            color: isDark ? '#a3a3a3' : '#666'
+        },
+        yaxis: {
+            title: 'Balance ($)',
+            color: isDark ? '#a3a3a3' : '#666',
+            tickformat: '$,.0f'
+        },
+        margin: { t: 20, r: 20, b: 60, l: 80 },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        font: { color: isDark ? '#e5e5e5' : '#1a1a1a' }
+    };
+
+    Plotly.newPlot('tax-balance-chart', traces, layout, {
+        responsive: true,
+        displayModeBar: false
+    });
+}
+
+function renderTaxWithdrawalTable(years) {
+    const tbody = document.querySelector('#tax-withdrawal-table tbody');
+
+    // Clear existing rows
+    while (tbody.firstChild) {
+        tbody.removeChild(tbody.firstChild);
+    }
+
+    if (!years || years.length === 0) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 10;
+        cell.className = 'text-muted';
+        cell.textContent = 'No data available';
+        row.appendChild(cell);
+        tbody.appendChild(row);
+        return;
+    }
+
+    years.forEach(year => {
+        const row = document.createElement('tr');
+
+        const cells = [
+            year.age.toString(),
+            formatCurrency(year.total_balance),
+            year.rmd_amount > 0 ? formatCurrency(year.rmd_amount) : '-',
+            year.from_taxable > 0 ? formatCurrency(year.from_taxable) : '-',
+            year.from_traditional > 0 ? formatCurrency(year.from_traditional) : '-',
+            year.from_roth > 0 ? formatCurrency(year.from_roth) : '-',
+            formatCurrency(year.federal_tax),
+            formatCurrency(year.state_tax),
+            `${year.effective_rate.toFixed(1)}%`,
+            formatCurrency(year.net_withdrawal)
+        ];
+
+        cells.forEach(text => {
+            const td = document.createElement('td');
+            td.textContent = text;
+            row.appendChild(td);
+        });
+
+        tbody.appendChild(row);
+    });
+}
+
+// Load taxes tab - auto-fill balances from portfolio
+async function loadTaxesTab() {
+    try {
+        const response = await fetch(`${API_BASE}/api/projections/account-balances-by-type`);
+        if (response.ok) {
+            const data = await response.json();
+            // Only auto-fill if fields are empty (user hasn't entered custom values)
+            const taxableEl = document.getElementById('tax-taxable-balance');
+            const traditionalEl = document.getElementById('tax-traditional-balance');
+            const rothEl = document.getElementById('tax-roth-balance');
+
+            if (!taxableEl.value) taxableEl.placeholder = formatCurrency(data.taxable);
+            if (!traditionalEl.value) traditionalEl.placeholder = formatCurrency(data.traditional);
+            if (!rothEl.value) rothEl.placeholder = formatCurrency(data.roth);
+        }
+    } catch (error) {
+        console.error('Error loading account balances for taxes tab:', error);
+    }
+}
+
+// =========================================================================
+// BUDGET TAB FUNCTIONS
+// =========================================================================
+
+// Budget sub-tab navigation
+function showBudgetTab(tabName) {
+    // Hide all budget subtabs
+    document.querySelectorAll('.budget-subtab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.budget-nav-item').forEach(nav => {
+        nav.classList.remove('active');
+    });
+
+    // Show selected subtab
+    const subtab = document.getElementById(`budget-${tabName}`);
+    if (subtab) {
+        subtab.classList.add('active');
+    }
+
+    // Activate nav item
+    const navItem = document.querySelector(`.budget-nav-item[data-budget-tab="${tabName}"]`);
+    if (navItem) {
+        navItem.classList.add('active');
+    }
+
+    // Load subtab-specific data
+    if (tabName === 'cashflow') {
+        loadCashFlowData();
+    } else if (tabName === 'transition') {
+        // Transition chart is loaded on demand
+    }
+}
+
+// Load budget tab data
+async function loadBudgetTab() {
+    try {
+        await Promise.all([
+            loadTaxConfig(),
+            loadIncomeSources(),
+            loadDeductions(),
+            loadExpenses()
+        ]);
+        updatePaycheckPreview();
+    } catch (error) {
+        console.error('Error loading budget tab:', error);
+    }
+}
+
+// Load tax configuration
+async function loadTaxConfig() {
+    try {
+        const data = await apiCall('/api/budget/tax-config');
+        if (data) {
+            const filingEl = document.getElementById('filing-status');
+            const stateEl = document.getElementById('tax-state');
+            if (filingEl && data.filing_status) {
+                filingEl.value = data.filing_status;
+            }
+            if (stateEl && data.state) {
+                stateEl.value = data.state;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading tax config:', error);
+    }
+}
+
+// Save tax configuration
+async function saveTaxConfig() {
+    const filingStatus = document.getElementById('filing-status').value;
+    const state = document.getElementById('tax-state').value;
+
+    try {
+        await apiCall('/api/budget/tax-config', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                filing_status: filingStatus,
+                state: state
+            })
+        });
+        updatePaycheckPreview();
+    } catch (error) {
+        console.error('Error saving tax config:', error);
+    }
+}
+
+// Update budget calculations when config changes
+function updateBudgetCalc() {
+    saveTaxConfig();
+}
+
+// Load income sources
+async function loadIncomeSources() {
+    try {
+        const data = await apiCall('/api/budget/income');
+        const container = document.getElementById('income-sources-list');
+
+        if (!data || data.length === 0) {
+            container.innerHTML = '<p class="empty-state">No income sources added yet. Click "Add Income" to get started.</p>';
+            return;
+        }
+
+        container.innerHTML = data.map(income => `
+            <div class="income-item">
+                <div class="income-item-info">
+                    <div class="income-item-name">${escapeHtml(income.name)}</div>
+                    <div class="income-item-details">
+                        ${formatIncomeType(income.income_type)} • ${formatPayFrequency(income.pay_frequency)} • ${income.state}
+                    </div>
+                </div>
+                <div class="income-item-amount">${formatCurrency(income.gross_annual)}/yr</div>
+                <div class="income-item-actions">
+                    <button class="btn btn-sm" onclick="editIncome('${income.id}')">Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteIncome('${income.id}')">Delete</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading income sources:', error);
+    }
+}
+
+// Load pre-tax deductions
+async function loadDeductions() {
+    try {
+        const data = await apiCall('/api/budget/deductions');
+        const container = document.getElementById('deductions-list');
+
+        if (!data || data.length === 0) {
+            container.innerHTML = '<p class="empty-state">No pre-tax deductions. Add 401k, HSA, FSA contributions here.</p>';
+            return;
+        }
+
+        container.innerHTML = data.map(ded => `
+            <div class="deduction-item">
+                <div class="deduction-item-info">
+                    <div class="deduction-item-name">${formatDeductionType(ded.deduction_type)}</div>
+                    <div class="deduction-item-details">
+                        ${ded.is_percentage ? ded.amount_per_period + '% of gross' : formatCurrency(ded.amount_per_period) + '/period'}
+                        ${ded.employer_match > 0 ? ' + ' + formatCurrency(ded.employer_match) + ' employer match' : ''}
+                    </div>
+                </div>
+                <div class="deduction-item-amount">${formatCurrency(ded.amount_per_period * 26)}/yr</div>
+                <div class="deduction-item-actions">
+                    <button class="btn btn-sm" onclick="editDeduction('${ded.id}')">Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteDeduction('${ded.id}')">Delete</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading deductions:', error);
+    }
+}
+
+// Load expenses
+async function loadExpenses() {
+    try {
+        const data = await apiCall('/api/budget/expenses');
+        const container = document.getElementById('expenses-list');
+
+        if (!data || data.length === 0) {
+            container.innerHTML = '<p class="empty-state">No expenses added yet. Click "Add Expense" to track your spending.</p>';
+            return;
+        }
+
+        container.innerHTML = data.map(exp => `
+            <div class="expense-item">
+                <div class="expense-item-info">
+                    <div class="expense-item-name">${escapeHtml(exp.name)}</div>
+                    <div class="expense-item-details">
+                        ${exp.category_name || 'Uncategorized'} • ${formatExpenseFrequency(exp.frequency)}
+                    </div>
+                </div>
+                <div class="expense-item-amount">${formatCurrency(exp.monthly_amount)}/mo</div>
+                <div class="expense-item-actions">
+                    <button class="btn btn-sm" onclick="editExpense('${exp.id}')">Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteExpense('${exp.id}')">Delete</button>
+                </div>
+            </div>
+        `).join('');
+
+        // Update category chart
+        updateExpensesCategoryChart(data);
+    } catch (error) {
+        console.error('Error loading expenses:', error);
+    }
+}
+
+// Update paycheck preview
+async function updatePaycheckPreview() {
+    try {
+        const incomeData = await apiCall('/api/budget/income');
+        const container = document.getElementById('paycheck-breakdown');
+
+        if (!incomeData || incomeData.length === 0) {
+            container.innerHTML = '<p class="empty-state">Add income to see paycheck breakdown.</p>';
+            return;
+        }
+
+        // Calculate paycheck for first/primary income source
+        const primaryIncome = incomeData[0];
+        const filingStatus = document.getElementById('filing-status').value;
+        const state = document.getElementById('tax-state').value;
+
+        const paycheck = await apiCall('/api/budget/calculate-paycheck', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                gross_annual: primaryIncome.gross_annual,
+                pay_frequency: primaryIncome.pay_frequency,
+                filing_status: filingStatus,
+                state: state
+            })
+        });
+
+        if (paycheck) {
+            container.innerHTML = `
+                <div class="paycheck-breakdown-grid">
+                    <div class="paycheck-section">
+                        <h4>Earnings</h4>
+                        <div class="paycheck-line">
+                            <span class="label">Gross Pay</span>
+                            <span class="amount">${formatCurrency(paycheck.gross_pay)}</span>
+                        </div>
+                    </div>
+                    <div class="paycheck-section">
+                        <h4>Deductions</h4>
+                        <div class="paycheck-line">
+                            <span class="label">Federal Income Tax</span>
+                            <span class="amount negative">-${formatCurrency(paycheck.federal_income_tax)}</span>
+                        </div>
+                        <div class="paycheck-line">
+                            <span class="label">State Income Tax</span>
+                            <span class="amount negative">-${formatCurrency(paycheck.state_income_tax)}</span>
+                        </div>
+                        <div class="paycheck-line">
+                            <span class="label">Social Security</span>
+                            <span class="amount negative">-${formatCurrency(paycheck.social_security_tax)}</span>
+                        </div>
+                        <div class="paycheck-line">
+                            <span class="label">Medicare</span>
+                            <span class="amount negative">-${formatCurrency(paycheck.medicare_tax)}</span>
+                        </div>
+                        <div class="paycheck-line">
+                            <span class="label">Pre-tax Deductions</span>
+                            <span class="amount negative">-${formatCurrency(paycheck.pretax_deductions || 0)}</span>
+                        </div>
+                        <div class="paycheck-line total">
+                            <span class="label">Net Pay</span>
+                            <span class="amount positive">${formatCurrency(paycheck.net_pay)}</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px; font-size: 13px; color: var(--color-text-secondary);">
+                    Effective Tax Rate: ${(paycheck.effective_tax_rate * 100).toFixed(1)}% •
+                    Marginal Federal Rate: ${(paycheck.marginal_federal_rate * 100).toFixed(1)}%
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error updating paycheck preview:', error);
+    }
+}
+
+// Load cash flow data
+async function loadCashFlowData() {
+    try {
+        const summary = await apiCall('/api/budget/calculate-annual');
+
+        if (summary) {
+            // Update stats
+            document.getElementById('stat-monthly-gross').textContent = formatCurrency(summary.monthly_gross);
+            document.getElementById('stat-monthly-taxes').textContent = formatCurrency(summary.total_taxes / 12);
+            document.getElementById('stat-monthly-net').textContent = formatCurrency(summary.monthly_net);
+            document.getElementById('stat-monthly-expenses').textContent = formatCurrency(summary.monthly_expenses);
+            document.getElementById('stat-monthly-savings').textContent = formatCurrency(summary.monthly_savings);
+            document.getElementById('stat-savings-rate').textContent = summary.savings_rate.toFixed(1) + '%';
+
+            // Load paycheck chart
+            await loadPaycheckChart();
+
+            // Load waterfall chart
+            renderCashFlowWaterfall(summary);
+        }
+    } catch (error) {
+        console.error('Error loading cash flow data:', error);
+    }
+}
+
+// Load paycheck chart (stacked bar for all pay periods)
+async function loadPaycheckChart() {
+    try {
+        const chartData = await apiCall('/api/budget/paycheck-chart-data');
+
+        if (!chartData || !chartData.periods || chartData.periods.length === 0) {
+            document.getElementById('paycheck-chart').innerHTML =
+                '<p class="empty-state">Add income to see paycheck breakdown chart.</p>';
+            return;
+        }
+
+        const traces = [
+            {
+                name: 'Federal Tax',
+                x: chartData.periods,
+                y: chartData.federal_tax,
+                type: 'bar',
+                marker: { color: '#ef4444' }
+            },
+            {
+                name: 'State Tax',
+                x: chartData.periods,
+                y: chartData.state_tax,
+                type: 'bar',
+                marker: { color: '#f97316' }
+            },
+            {
+                name: 'FICA',
+                x: chartData.periods,
+                y: chartData.fica,
+                type: 'bar',
+                marker: { color: '#eab308' }
+            },
+            {
+                name: 'Pre-tax Deductions',
+                x: chartData.periods,
+                y: chartData.pretax,
+                type: 'bar',
+                marker: { color: '#8b5cf6' }
+            },
+            {
+                name: 'Take-home',
+                x: chartData.periods,
+                y: chartData.takehome,
+                type: 'bar',
+                marker: { color: '#22c55e' }
+            }
+        ];
+
+        const layout = {
+            barmode: 'stack',
+            xaxis: { title: 'Pay Period', tickmode: 'linear', dtick: 2 },
+            yaxis: { title: 'Amount ($)', tickformat: '$,.0f' },
+            legend: { orientation: 'h', y: -0.2 },
+            margin: { t: 20, r: 20, b: 80, l: 60 },
+            paper_bgcolor: 'transparent',
+            plot_bgcolor: 'transparent',
+            font: { color: getComputedStyle(document.body).getPropertyValue('--color-text') }
+        };
+
+        Plotly.newPlot('paycheck-chart', traces, layout, { responsive: true });
+    } catch (error) {
+        console.error('Error loading paycheck chart:', error);
+    }
+}
+
+// Render cash flow waterfall chart
+function renderCashFlowWaterfall(summary) {
+    const trace = {
+        type: 'waterfall',
+        orientation: 'v',
+        x: ['Gross Income', 'Federal Tax', 'State Tax', 'FICA', 'Pre-tax', 'Net Income', 'Expenses', 'Savings'],
+        y: [
+            summary.gross_income,
+            -summary.federal_income_tax,
+            -summary.state_income_tax,
+            -(summary.social_security_tax + summary.medicare_tax),
+            -summary.total_pretax_deductions,
+            0, // subtotal
+            -summary.total_expenses,
+            0  // final total
+        ],
+        measure: ['absolute', 'relative', 'relative', 'relative', 'relative', 'total', 'relative', 'total'],
+        connector: { line: { color: 'rgb(63, 63, 63)' } },
+        decreasing: { marker: { color: '#ef4444' } },
+        increasing: { marker: { color: '#22c55e' } },
+        totals: { marker: { color: '#3b82f6' } }
+    };
+
+    const layout = {
+        yaxis: { title: 'Annual Amount ($)', tickformat: '$,.0f' },
+        margin: { t: 20, r: 20, b: 60, l: 80 },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        font: { color: getComputedStyle(document.body).getPropertyValue('--color-text') },
+        showlegend: false
+    };
+
+    Plotly.newPlot('cashflow-waterfall-chart', [trace], layout, { responsive: true });
+}
+
+// Update expenses category chart
+function updateExpensesCategoryChart(expenses) {
+    if (!expenses || expenses.length === 0) {
+        document.getElementById('expenses-category-chart').innerHTML =
+            '<p class="empty-state">Add expenses to see category breakdown.</p>';
+        return;
+    }
+
+    // Group by category
+    const byCategory = {};
+    expenses.forEach(exp => {
+        const cat = exp.category_name || 'Other';
+        byCategory[cat] = (byCategory[cat] || 0) + exp.monthly_amount;
+    });
+
+    const labels = Object.keys(byCategory);
+    const values = Object.values(byCategory);
+
+    const trace = {
+        type: 'pie',
+        labels: labels,
+        values: values,
+        hole: 0.4,
+        textinfo: 'label+percent',
+        textposition: 'outside'
+    };
+
+    const layout = {
+        margin: { t: 20, r: 20, b: 20, l: 20 },
+        paper_bgcolor: 'transparent',
+        font: { color: getComputedStyle(document.body).getPropertyValue('--color-text') },
+        showlegend: false
+    };
+
+    Plotly.newPlot('expenses-category-chart', [trace], layout, { responsive: true });
+}
+
+// Run retirement transition projection
+async function runTransitionProjection() {
+    const currentAge = parseInt(document.getElementById('transition-current-age').value) || 35;
+    const retirementAge = parseInt(document.getElementById('transition-retirement-age').value) || 65;
+    const ssAge = parseInt(document.getElementById('transition-ss-age').value) || 67;
+    const endAge = parseInt(document.getElementById('transition-end-age').value) || 95;
+    const ssOverride = document.getElementById('ss-override').value ?
+        parseFloat(document.getElementById('ss-override').value) : null;
+
+    try {
+        const data = await apiCall('/api/budget/income-transition', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                current_age: currentAge,
+                retirement_age: retirementAge,
+                ss_claiming_age: ssAge,
+                end_age: endAge,
+                ss_benefit_override: ssOverride
+            })
+        });
+
+        if (data && data.years) {
+            renderTransitionChart(data.years);
+            renderSSComparison(data.ss_comparison);
+        }
+    } catch (error) {
+        console.error('Error running transition projection:', error);
+        showToast('Error running projection', 'error');
+    }
+}
+
+// Render income transition chart
+function renderTransitionChart(years) {
+    const ages = years.map(y => y.age);
+
+    const traces = [
+        {
+            name: 'Employment Income',
+            x: ages,
+            y: years.map(y => y.employment_income),
+            type: 'scatter',
+            mode: 'none',
+            fill: 'tozeroy',
+            fillcolor: 'rgba(34, 197, 94, 0.6)',
+            stackgroup: 'one'
+        },
+        {
+            name: 'Portfolio Withdrawals',
+            x: ages,
+            y: years.map(y => y.portfolio_withdrawals),
+            type: 'scatter',
+            mode: 'none',
+            fill: 'tonexty',
+            fillcolor: 'rgba(59, 130, 246, 0.6)',
+            stackgroup: 'one'
+        },
+        {
+            name: 'Social Security',
+            x: ages,
+            y: years.map(y => y.social_security_income),
+            type: 'scatter',
+            mode: 'none',
+            fill: 'tonexty',
+            fillcolor: 'rgba(139, 92, 246, 0.6)',
+            stackgroup: 'one'
+        },
+        {
+            name: 'Expenses',
+            x: ages,
+            y: years.map(y => y.total_expenses),
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#ef4444', width: 2, dash: 'dash' }
+        }
+    ];
+
+    const layout = {
+        xaxis: { title: 'Age' },
+        yaxis: { title: 'Annual Amount ($)', tickformat: '$,.0f' },
+        legend: { orientation: 'h', y: -0.2 },
+        margin: { t: 20, r: 20, b: 80, l: 80 },
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        font: { color: getComputedStyle(document.body).getPropertyValue('--color-text') }
+    };
+
+    Plotly.newPlot('transition-chart', traces, layout, { responsive: true });
+}
+
+// Render Social Security comparison table
+function renderSSComparison(ssData) {
+    if (!ssData || ssData.length === 0) {
+        document.getElementById('ss-comparison-table').innerHTML =
+            '<p class="empty-state">No Social Security data available.</p>';
+        return;
+    }
+
+    const html = `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Claiming Age</th>
+                    <th>Monthly Benefit</th>
+                    <th>Annual Benefit</th>
+                    <th>% of FRA</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${ssData.map(row => `
+                    <tr>
+                        <td>${row.claiming_age}</td>
+                        <td>${formatCurrency(row.monthly_benefit)}</td>
+                        <td>${formatCurrency(row.annual_benefit)}</td>
+                        <td>${row.percent_of_fra.toFixed(1)}%</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+
+    document.getElementById('ss-comparison-table').innerHTML = html;
+}
+
+// Modal functions for adding income/expenses/deductions
+function showAddIncomeModal() {
+    const modal = createModal('Add Income Source', `
+        <div class="form-group">
+            <label for="income-name">Name</label>
+            <input type="text" id="income-name" placeholder="e.g., Primary Job">
+        </div>
+        <div class="form-group">
+            <label for="income-type">Type</label>
+            <select id="income-type">
+                <option value="employment">Employment (W-2)</option>
+                <option value="self_employment">Self-Employment (1099)</option>
+                <option value="rental">Rental Income</option>
+                <option value="investment">Investment Income</option>
+                <option value="other">Other</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="income-gross">Annual Gross Income</label>
+            <input type="number" id="income-gross" placeholder="100000" min="0" step="1000">
+        </div>
+        <div class="form-group">
+            <label for="income-frequency">Pay Frequency</label>
+            <select id="income-frequency">
+                <option value="weekly">Weekly (52/year)</option>
+                <option value="biweekly" selected>Bi-weekly (26/year)</option>
+                <option value="semimonthly">Semi-monthly (24/year)</option>
+                <option value="monthly">Monthly (12/year)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="income-state">State</label>
+            <select id="income-state">
+                <option value="CA">California</option>
+                <option value="NY">New York</option>
+                <option value="TX">Texas</option>
+                <option value="FL">Florida</option>
+                <option value="WA">Washington</option>
+            </select>
+        </div>
+    `, async () => {
+        const data = {
+            name: document.getElementById('income-name').value,
+            income_type: document.getElementById('income-type').value,
+            gross_annual: parseFloat(document.getElementById('income-gross').value) || 0,
+            pay_frequency: document.getElementById('income-frequency').value,
+            state: document.getElementById('income-state').value
+        };
+
+        await apiCall('/api/budget/income', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        closeBudgetModal();
+        loadIncomeSources();
+        updatePaycheckPreview();
+        showToast('Income source added', 'success');
+    });
+}
+
+function showAddExpenseModal() {
+    const modal = createModal('Add Expense', `
+        <div class="form-group">
+            <label for="expense-name">Name</label>
+            <input type="text" id="expense-name" placeholder="e.g., Mortgage">
+        </div>
+        <div class="form-group">
+            <label for="expense-category">Category</label>
+            <select id="expense-category">
+                <option value="1">Housing</option>
+                <option value="2">Utilities</option>
+                <option value="3">Transportation</option>
+                <option value="4">Insurance</option>
+                <option value="5">Healthcare</option>
+                <option value="6">Debt Payments</option>
+                <option value="7">Food & Dining</option>
+                <option value="8">Entertainment</option>
+                <option value="9">Savings & Investments</option>
+                <option value="10">Personal</option>
+                <option value="11">Education</option>
+                <option value="12">Other</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="expense-amount">Amount</label>
+            <input type="number" id="expense-amount" placeholder="2000" min="0" step="10">
+        </div>
+        <div class="form-group">
+            <label for="expense-frequency">Frequency</label>
+            <select id="expense-frequency">
+                <option value="monthly" selected>Monthly</option>
+                <option value="biweekly">Bi-weekly</option>
+                <option value="weekly">Weekly</option>
+                <option value="annual">Annual</option>
+            </select>
+        </div>
+    `, async () => {
+        const data = {
+            name: document.getElementById('expense-name').value,
+            category_id: document.getElementById('expense-category').value,
+            amount: parseFloat(document.getElementById('expense-amount').value) || 0,
+            frequency: document.getElementById('expense-frequency').value
+        };
+
+        await apiCall('/api/budget/expenses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        closeBudgetModal();
+        loadExpenses();
+        showToast('Expense added', 'success');
+    });
+}
+
+function showAddDeductionModal() {
+    const modal = createModal('Add Pre-tax Deduction', `
+        <div class="form-group">
+            <label for="deduction-type">Deduction Type</label>
+            <select id="deduction-type">
+                <option value="401k">401(k) Contribution</option>
+                <option value="hsa">HSA Contribution</option>
+                <option value="fsa">FSA (Healthcare/Dependent Care)</option>
+                <option value="dental">Dental Insurance</option>
+                <option value="vision">Vision Insurance</option>
+                <option value="other">Other Pre-tax</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="deduction-amount">Amount Per Pay Period</label>
+            <input type="number" id="deduction-amount" placeholder="500" min="0" step="25">
+        </div>
+        <div class="form-group">
+            <label for="deduction-match">Employer Match Per Period (optional)</label>
+            <input type="number" id="deduction-match" placeholder="250" min="0" step="25">
+        </div>
+    `, async () => {
+        const data = {
+            deduction_type: document.getElementById('deduction-type').value,
+            amount_per_period: parseFloat(document.getElementById('deduction-amount').value) || 0,
+            employer_match: parseFloat(document.getElementById('deduction-match').value) || 0
+        };
+
+        await apiCall('/api/budget/deductions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        closeBudgetModal();
+        loadDeductions();
+        updatePaycheckPreview();
+        showToast('Deduction added', 'success');
+    });
+}
+
+// Delete functions
+async function deleteIncome(id) {
+    if (confirm('Delete this income source?')) {
+        await apiCall(`/api/budget/income/${id}`, { method: 'DELETE' });
+        loadIncomeSources();
+        updatePaycheckPreview();
+    }
+}
+
+async function deleteExpense(id) {
+    if (confirm('Delete this expense?')) {
+        await apiCall(`/api/budget/expenses/${id}`, { method: 'DELETE' });
+        loadExpenses();
+    }
+}
+
+async function deleteDeduction(id) {
+    if (confirm('Delete this deduction?')) {
+        await apiCall(`/api/budget/deductions/${id}`, { method: 'DELETE' });
+        loadDeductions();
+        updatePaycheckPreview();
+    }
+}
+
+// Edit functions (stub - would open edit modal)
+function editIncome(id) {
+    showToast('Edit functionality coming soon', 'info');
+}
+
+function editExpense(id) {
+    showToast('Edit functionality coming soon', 'info');
+}
+
+function editDeduction(id) {
+    showToast('Edit functionality coming soon', 'info');
+}
+
+// Helper modal function for budget page (uses same structure as other app modals)
+function createModal(title, content, onSave) {
+    // Remove existing budget modal if any
+    closeBudgetModal();
+
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id = 'budget-modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="modal-backdrop" onclick="closeBudgetModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>${title}</h2>
+                <button class="modal-close" onclick="closeBudgetModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                ${content}
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeBudgetModal()">Cancel</button>
+                <button class="btn btn-primary" id="modal-save-btn">Save</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Add save handler
+    document.getElementById('modal-save-btn').addEventListener('click', onSave);
+
+    return modal;
+}
+
+function closeBudgetModal() {
+    const modal = document.getElementById('budget-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+// Format helpers for budget
+function formatIncomeType(type) {
+    const types = {
+        'employment': 'Employment',
+        'self_employment': 'Self-Employment',
+        'rental': 'Rental',
+        'investment': 'Investment',
+        'other': 'Other'
+    };
+    return types[type] || type;
+}
+
+function formatPayFrequency(freq) {
+    const freqs = {
+        'weekly': 'Weekly',
+        'biweekly': 'Bi-weekly',
+        'semimonthly': 'Semi-monthly',
+        'monthly': 'Monthly'
+    };
+    return freqs[freq] || freq;
+}
+
+function formatExpenseFrequency(freq) {
+    const freqs = {
+        'weekly': 'Weekly',
+        'biweekly': 'Bi-weekly',
+        'monthly': 'Monthly',
+        'quarterly': 'Quarterly',
+        'annual': 'Annual',
+        'one_time': 'One-time'
+    };
+    return freqs[freq] || freq;
+}
+
+function formatDeductionType(type) {
+    const types = {
+        '401k': '401(k)',
+        'hsa': 'HSA',
+        'fsa': 'FSA',
+        'dental': 'Dental Insurance',
+        'vision': 'Vision Insurance',
+        'other': 'Other Pre-tax'
+    };
+    return types[type] || type;
+}
+
+// =========================================================================
+// END BUDGET TAB FUNCTIONS
+// =========================================================================
+
 // Helper to escape HTML
 function escapeHtml(text) {
     if (!text) return '';
@@ -4930,6 +6479,8 @@ function escapeHtml(text) {
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
+    initStorageMode();  // Initialize storage mode preference
+    initConfigPanels();  // Initialize collapsible config panels
     await loadProfiles();  // Load profiles for multi-database support
     await loadViews();  // Load views first to set up view selector
     await updatePriceStatus();  // Show price freshness status

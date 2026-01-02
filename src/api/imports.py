@@ -24,6 +24,20 @@ def get_db() -> Database:
     return get_database()
 
 
+def check_demo_mode_write():
+    """Raise error if demo mode is enabled (prevents data pollution).
+
+    Demo mode should be read-only with pre-generated data.
+    Importing real data would pollute the demo database.
+    """
+    from src.services.demo_mode import is_demo_mode
+    if is_demo_mode():
+        raise HTTPException(
+            status_code=403,
+            detail="Imports are disabled in demo mode. Disable demo mode to import your data."
+        )
+
+
 class PendingFileResponse(BaseModel):
     """Pending file response model."""
     path: str
@@ -77,6 +91,7 @@ def process_pending_imports(
     db: Database = Depends(get_db),
 ) -> ImportResultResponse:
     """Process all pending imports."""
+    check_demo_mode_write()  # Prevent imports in demo mode
     scanner = FolderScanner(db)
     results = scanner.process_all_pending(
         brokerage=brokerage,
@@ -136,6 +151,8 @@ async def upload_file(
 
     The file will be saved to the appropriate import folder based on account_type.
     """
+    check_demo_mode_write()  # Prevent imports in demo mode
+
     # Validate account type
     valid_account_types = [
         "roth_ira", "traditional_ira", "traditional_401k",
@@ -506,6 +523,8 @@ async def parse_file(
 
     Uses AI to suggest which account to import to based on filename and content.
     """
+    check_demo_mode_write()  # Prevent imports in demo mode
+
     import pandas as pd
     import io
 
@@ -626,6 +645,8 @@ async def import_positions(
 
     If replace_existing is True, all existing positions in the account will be cleared first.
     """
+    check_demo_mode_write()  # Prevent imports in demo mode
+
     # Get account
     account = db.get_account_by_id(request.account_id)
     if not account:

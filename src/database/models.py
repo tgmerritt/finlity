@@ -251,3 +251,102 @@ class MonteCarloResult(Base):
     conservative_value_at_retirement = Column(Float)  # 25th percentile (1 std below median)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# =============================================================================
+# Budget Module Tables
+# =============================================================================
+
+
+class BudgetIncomeSource(Base):
+    """Income source for budget tracking (employment, self-employment, etc.)."""
+
+    __tablename__ = "budget_income_sources"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False)  # "Primary Job", "Spouse Job", etc.
+    income_type = Column(String, nullable=False, default="employment")  # employment, self_employment, other
+    gross_annual = Column(Float, nullable=False)  # Annual gross income
+    pay_frequency = Column(String, nullable=False, default="biweekly")  # weekly, biweekly, semimonthly, monthly
+    state = Column(String, default="CA")  # State for tax purposes
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    deductions = relationship("BudgetPretaxDeduction", back_populates="income_source", cascade="all, delete-orphan")
+
+
+class BudgetTaxConfig(Base):
+    """Household tax configuration for budget calculations."""
+
+    __tablename__ = "budget_tax_config"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    tax_year = Column(Float, nullable=False, default=2024)
+    filing_status = Column(String, nullable=False, default="single")  # single, married_joint, married_separate, head_household
+    state = Column(String, default="CA")  # Primary state of residence
+    ss_benefit_override = Column(Float, nullable=True)  # User-specified Social Security benefit
+    additional_withholding = Column(Float, default=0)
+    itemized_deduction = Column(Float, nullable=True)  # None = use standard deduction
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class BudgetExpenseCategory(Base):
+    """Expense category for grouping budget expenses."""
+
+    __tablename__ = "budget_expense_categories"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False)
+    icon = Column(String, default="")  # Icon name for UI
+    color = Column(String, default="#6b7280")  # Hex color for charts
+    sort_order = Column(Float, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    expenses = relationship("BudgetExpense", back_populates="category")
+
+
+class BudgetExpense(Base):
+    """Individual expense item for budget tracking."""
+
+    __tablename__ = "budget_expenses"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    category_id = Column(String, ForeignKey("budget_expense_categories.id"), nullable=False)
+    name = Column(String, nullable=False)  # "Mortgage", "Electric Bill", etc.
+    amount = Column(Float, nullable=False)
+    frequency = Column(String, nullable=False, default="monthly")  # monthly, biweekly, weekly, annual, one_time
+    is_pretax = Column(Boolean, default=False)  # 401k contributions, HSA, etc.
+    is_mortgage = Column(Boolean, default=False)  # For mortgage breakdown
+    principal_portion = Column(Float, nullable=True)  # Monthly principal (if mortgage)
+    interest_portion = Column(Float, nullable=True)  # Monthly interest (if mortgage)
+    is_active = Column(Boolean, default=True)
+    start_date = Column(DateTime, nullable=True)  # For temporary expenses
+    end_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    category = relationship("BudgetExpenseCategory", back_populates="expenses")
+
+
+class BudgetPretaxDeduction(Base):
+    """Pre-tax deduction from income (401k, HSA, FSA, etc.)."""
+
+    __tablename__ = "budget_pretax_deductions"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    income_source_id = Column(String, ForeignKey("budget_income_sources.id"), nullable=True)
+    deduction_type = Column(String, nullable=False, default="401k")  # 401k, hsa, fsa, dental, vision, other
+    amount_per_period = Column(Float, nullable=False)  # Per paycheck amount
+    employer_match = Column(Float, default=0)  # Employer contribution per period
+    is_percentage = Column(Boolean, default=False)  # If true, amount is % of gross
+    max_annual = Column(Float, nullable=True)  # Max annual contribution (for limits)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    income_source = relationship("BudgetIncomeSource", back_populates="deductions")

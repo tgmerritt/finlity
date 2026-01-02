@@ -62,19 +62,42 @@ class DemoModeManager:
             "demo_initialized": False,
         }
 
+    def _refresh_state_if_stale(self) -> None:
+        """Reload state from file if it might be stale.
+
+        This handles multi-worker scenarios where one worker might have
+        changed the state while another worker has a cached version.
+        """
+        if self.state_file.exists():
+            try:
+                with open(self.state_file, "r") as f:
+                    file_state = json.load(f)
+                    # Only update if file has different enabled state
+                    if file_state.get("enabled") != self._state.get("enabled"):
+                        logger.info(f"Demo mode state changed on disk, reloading")
+                        self._state = file_state
+            except Exception as e:
+                logger.warning(f"Failed to refresh demo state: {e}")
+
     @property
     def is_enabled(self) -> bool:
-        """Check if demo mode is currently enabled."""
+        """Check if demo mode is currently enabled.
+
+        Always refreshes from disk to handle multi-worker scenarios.
+        """
+        self._refresh_state_if_stale()
         return self._state.get("enabled", False)
 
     @property
     def last_profile_id(self) -> str:
         """Get the last used profile ID before demo mode."""
+        self._refresh_state_if_stale()
         return self._state.get("last_profile_id", "default")
 
     @property
     def demo_initialized(self) -> bool:
         """Check if demo database has been initialized."""
+        self._refresh_state_if_stale()
         return self._state.get("demo_initialized", False) and self.demo_db_path.exists()
 
     def enable(self, current_profile_id: str) -> dict:

@@ -553,7 +553,7 @@ def set_demo_mode(
     - Returns to personal portfolio data
     """
     from src.services.demo_mode import get_demo_manager
-    from src.database import get_profile_manager
+    from src.database import get_profile_manager, reset_database_caches
 
     demo_manager = get_demo_manager()
     profile_manager = get_profile_manager()
@@ -572,6 +572,9 @@ def set_demo_mode(
                 profile_manager.activate_profile(result["restore_profile_id"])
             except Exception as e:
                 result["restore_error"] = str(e)
+
+    # CRITICAL: Reset all cached database connections to ensure fresh data
+    reset_database_caches()
 
     # Add instruction for frontend
     result["action"] = "reload"
