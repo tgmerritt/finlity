@@ -4474,6 +4474,24 @@ th.sortable.sort-desc .sort-icon::after {
     50% { opacity: 0; }
 }
 
+/* Tool indicator for context-aware chat */
+.tool-indicator {
+    display: inline-block;
+    padding: 4px 10px;
+    margin: 6px 0;
+    background: rgba(100, 149, 237, 0.15);
+    border: 1px solid rgba(100, 149, 237, 0.3);
+    border-radius: 12px;
+    font-size: 0.85em;
+    color: var(--color-text-secondary);
+    animation: tool-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes tool-pulse {
+    0%, 100% { opacity: 0.6; background: rgba(100, 149, 237, 0.1); }
+    50% { opacity: 1; background: rgba(100, 149, 237, 0.2); }
+}
+
 /* ==================== Demo Mode ==================== */
 
 /* Demo Mode Banner */

@@ -114,6 +114,23 @@ def list_plugins(
     ]
 
 
+# Note: This route MUST come before /{plugin_id} to prevent route conflict
+@router.get("/installed")
+def list_installed_plugins():
+    """
+    List all installed (non-builtin) plugins.
+
+    Returns plugins installed via git, zip, or local directory.
+    """
+    installer = get_plugin_installer()
+    plugins = installer.get_installed_plugins()
+
+    return {
+        "plugins": plugins,
+        "count": len(plugins),
+    }
+
+
 @router.get("/{plugin_id}", response_model=PluginResponse)
 def get_plugin(plugin_id: str):
     """Get details for a specific plugin."""
@@ -866,20 +883,8 @@ class GitInstallRequest(BaseModel):
     source: str  # github:user/repo, gitlab:user/repo, or full URL
 
 
-@router.get("/installed")
-def list_installed_plugins():
-    """
-    List all installed (non-builtin) plugins.
-
-    Returns plugins installed via git, zip, or local directory.
-    """
-    installer = get_plugin_installer()
-    plugins = installer.get_installed_plugins()
-
-    return {
-        "plugins": plugins,
-        "count": len(plugins),
-    }
+# Note: @router.get("/installed") is defined earlier in the file
+# to prevent route conflict with /{plugin_id}
 
 
 @router.post("/install/git")

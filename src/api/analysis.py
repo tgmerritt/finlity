@@ -1127,6 +1127,34 @@ class ChatResponse(BaseModel):
     history: list[dict]
 
 
+class PageVisibleData(BaseModel):
+    """Data visible on the current page."""
+    portfolio_summary: Optional[dict] = None
+    positions: Optional[list[dict]] = None
+    allocation: Optional[dict] = None
+    performance: Optional[dict] = None
+    risk: Optional[dict] = None
+    triggered_alerts: Optional[list[dict]] = None
+    monte_carlo_params: Optional[dict] = None
+    monte_carlo_results: Optional[dict] = None
+    tax_projection: Optional[dict] = None
+
+
+class PageContext(BaseModel):
+    """Context from the current page/tab the user is viewing."""
+    active_tab: str
+    visible_data: PageVisibleData = PageVisibleData()
+    selected_ticker: Optional[str] = None
+
+
+class EnhancedChatRequest(BaseModel):
+    """Request model for context-aware advisor chat."""
+    message: str
+    ticker: Optional[str] = None
+    include_portfolio: bool = True
+    page_context: Optional[PageContext] = None
+
+
 @router.post("/advisor/analyze", response_model=AdvisorAnalysisResponse)
 def get_advisor_analysis(request: AdvisorAnalysisRequest, db: Database = Depends(get_db)):
     """Get financial advisor-style analysis of a fund.
@@ -1292,6 +1320,78 @@ def clear_chat_history():
     global _chat_services
     _chat_services = {}
     return {"message": "Chat history cleared"}
+
+
+@router.post("/advisor/chat/stream/v2")
+def chat_with_advisor_stream_v2(request: EnhancedChatRequest, db: Database = Depends(get_db)):
+    """Enhanced streaming chat with tool support and page context.
+
+    This endpoint provides context-aware chat that:
+    - Knows what page/tab the user is viewing
+    - Has access to visible data on that page
+    - Can call tools to query the database for more information
+
+    Returns Server-Sent Events with different event types:
+    - data: {"type": "text", "content": "..."} - Text chunks
+    - data: {"type": "tool_start", "name": "...", "id": "..."} - Tool call starting
+    - data: {"type": "tool_result", "name": "...", "result": {...}} - Tool result
+    - data: {"type": "done"} - Stream complete
+    - data: {"type": "error", "message": "..."} - Error
+    """
+    import json
+    from src.services.secrets import SecretsManager
+    from src.services.advisor_analysis import AdvisorAnalysisService
+
+    # Get Claude API key
+    secrets = SecretsManager(db)
+    claude_key = secrets.get_api_key(secrets.ANTHROPIC_API_KEY)
+
+    if not claude_key:
+        def error_stream():
+            yield f'data: {json.dumps({"type": "error", "message": "Claude API key not configured. Please add your API key in Settings."})}\n\n'
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
+
+    # Get or create chat service
+    session_key = "default"
+    if session_key not in _chat_services or _chat_api_keys.get(session_key) != claude_key:
+        _chat_services[session_key] = AdvisorAnalysisService(
+            claude_api_key=claude_key, db=db
+        )
+        _chat_api_keys[session_key] = claude_key
+
+    advisor = _chat_services[session_key]
+
+    # Convert PageContext to dict for the service
+    page_context_dict = None
+    if request.page_context:
+        page_context_dict = {
+            "active_tab": request.page_context.active_tab,
+            "visible_data": request.page_context.visible_data.model_dump() if request.page_context.visible_data else {},
+            "selected_ticker": request.page_context.selected_ticker,
+        }
+
+    def generate():
+        """Generate SSE stream from advisor response with tool support."""
+        try:
+            for event in advisor.chat_stream_with_tools(
+                user_message=request.message,
+                ticker=request.ticker,
+                include_portfolio=request.include_portfolio,
+                page_context=page_context_dict,
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as e:
+            yield f'data: {json.dumps({"type": "error", "message": str(e)})}\n\n'
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 # ====================

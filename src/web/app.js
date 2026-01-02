@@ -49,6 +49,34 @@ function formatNumber(value, decimals = 2) {
     return value.toFixed(decimals);
 }
 
+// Generic API call helper
+async function apiCall(endpoint, options = {}) {
+    const url = `${API_BASE}${endpoint}`;
+    const config = {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+    };
+
+    // If body is an object, stringify it
+    if (config.body && typeof config.body === 'object') {
+        config.body = JSON.stringify(config.body);
+    }
+
+    const response = await fetch(url, config);
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API error ${response.status}: ${errorText}`);
+    }
+
+    // Return JSON if content-type is JSON, otherwise return text
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+        return response.json();
+    }
+    return response.text();
+}
+
 // Toast notifications
 function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');
@@ -3225,7 +3253,233 @@ function renderMarkdown(content) {
     return content.replace(/\n/g, '<br>');
 }
 
-// Generic streaming chat function that works with any container
+// Build page context for context-aware chat
+function buildPageContext() {
+    // Get active tab
+    const activeTabBtn = document.querySelector('.tab-btn.active');
+    const activeTab = activeTabBtn?.dataset?.tab || 'dashboard';
+
+    const context = {
+        active_tab: activeTab,
+        visible_data: {},
+        selected_ticker: currentAnalysisTicker || null
+    };
+
+    // Try to get portfolio summary from the DOM
+    try {
+        const totalValueEl = document.getElementById('total-value');
+        const retirementValueEl = document.getElementById('retirement-value');
+        const taxableValueEl = document.getElementById('taxable-value');
+
+        if (totalValueEl) {
+            context.visible_data.portfolio_summary = {
+                total_value: parseFloat(totalValueEl.textContent.replace(/[$,]/g, '')) || 0,
+                retirement_value: retirementValueEl ? parseFloat(retirementValueEl.textContent.replace(/[$,]/g, '')) || 0 : 0,
+                taxable_value: taxableValueEl ? parseFloat(taxableValueEl.textContent.replace(/[$,]/g, '')) || 0 : 0,
+            };
+        }
+    } catch (e) {
+        console.log('Could not get portfolio summary for context');
+    }
+
+    // Tab-specific data
+    if (activeTab === 'holdings' && currentPositions && currentPositions.length > 0) {
+        context.visible_data.positions = currentPositions.slice(0, 20).map(p => ({
+            ticker: p.ticker,
+            name: p.name,
+            value: p.value || (p.shares * p.current_price) || 0,
+            shares: p.shares,
+            account_name: p.account_name,
+            account_type: p.account_type
+        }));
+    }
+
+    if (activeTab === 'analysis' && window.detailedAllocation) {
+        const alloc = window.detailedAllocation;
+        context.visible_data.allocation = {
+            cash_allocation: alloc.cash_allocation || 0,
+            invested_allocation: alloc.invested_allocation || 0,
+            by_sector: {},
+            concentration_top5: 0
+        };
+
+        // Convert sector array to object
+        if (alloc.by_sector && Array.isArray(alloc.by_sector)) {
+            for (const item of alloc.by_sector) {
+                if (item.name && item.current_pct !== undefined) {
+                    context.visible_data.allocation.by_sector[item.name] = item.current_pct;
+                }
+            }
+        }
+
+        // Try to get concentration from DOM
+        const concEl = document.getElementById('concentration-top5');
+        if (concEl) {
+            context.visible_data.allocation.concentration_top5 = parseFloat(concEl.textContent) || 0;
+        }
+
+        // Get performance data from DOM
+        const ytdEl = document.getElementById('ytd-return');
+        const alphaEl = document.getElementById('alpha-ytd');
+        if (ytdEl) {
+            context.visible_data.performance = {
+                ytd_return: parseFloat(ytdEl.textContent) || 0,
+                alpha_ytd: alphaEl ? parseFloat(alphaEl.textContent) || 0 : 0
+            };
+        }
+
+        // Get risk data from DOM
+        const volEl = document.getElementById('volatility');
+        const sharpeEl = document.getElementById('sharpe-ratio');
+        const betaEl = document.getElementById('beta');
+        if (volEl || sharpeEl || betaEl) {
+            context.visible_data.risk = {
+                volatility: volEl ? parseFloat(volEl.textContent) || 0 : null,
+                sharpe_ratio: sharpeEl ? parseFloat(sharpeEl.textContent) || 0 : null,
+                beta: betaEl ? parseFloat(betaEl.textContent) || 1.0 : null
+            };
+        }
+    }
+
+    // Add projection context if available
+    if (activeTab === 'projections' && window.lastMonteCarloResult) {
+        context.visible_data.monte_carlo_results = {
+            success_rate: window.lastMonteCarloResult.success_rate,
+            median_final_value: window.lastMonteCarloResult.median_final_value
+        };
+    }
+
+    // Store last Monte Carlo params if available
+    if (activeTab === 'projections') {
+        const currentAge = document.getElementById('projection-current-age')?.value;
+        const retirementAge = document.getElementById('projection-retirement-age')?.value;
+        const monthlyWithdrawal = document.getElementById('projection-withdrawal')?.value;
+        if (currentAge || retirementAge || monthlyWithdrawal) {
+            context.visible_data.monte_carlo_params = {
+                current_age: currentAge ? parseInt(currentAge) : null,
+                retirement_age: retirementAge ? parseInt(retirementAge) : null,
+                monthly_withdrawal: monthlyWithdrawal ? parseFloat(monthlyWithdrawal) : null
+            };
+        }
+    }
+
+    return context;
+}
+
+// Format tool names for display
+function formatToolName(name) {
+    const names = {
+        'get_positions_by_account': 'account positions',
+        'get_allocation_details': 'allocation data',
+        'get_position_details': 'position details',
+        'get_performance_metrics': 'performance metrics',
+        'get_risk_metrics': 'risk metrics',
+        'get_trigger_status': 'alerts',
+        'run_monte_carlo_projection': 'retirement projection',
+        'get_withdrawal_table': 'withdrawal projections',
+        'get_tax_projection': 'tax projections'
+    };
+    return names[name] || name.replace(/_/g, ' ');
+}
+
+// Enhanced streaming chat function with tool support and page context
+async function sendStreamingChatMessageV2(containerId, inputId, ticker = null) {
+    const input = document.getElementById(inputId);
+    const container = document.getElementById(containerId);
+    const message = input.value.trim();
+
+    if (!message) return;
+
+    // Clear input and disable while streaming
+    input.value = '';
+    input.disabled = true;
+
+    // Add user message to chat
+    addChatMessageToContainer(container, 'user', message);
+
+    // Create assistant message div for streaming
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'chat-message assistant';
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'chat-message-content streaming-cursor';
+    messageDiv.appendChild(contentDiv);
+    container.appendChild(messageDiv);
+    container.scrollTop = container.scrollHeight;
+
+    let fullContent = '';
+    const pageContext = buildPageContext();
+
+    try {
+        const response = await fetch(`${API_BASE}/api/analysis/advisor/chat/stream/v2`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: message,
+                ticker: ticker,
+                include_portfolio: true,
+                page_context: pageContext
+            })
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const event = JSON.parse(line.substring(6));
+
+                        if (event.type === 'text') {
+                            fullContent += event.content;
+                            contentDiv.textContent = fullContent;
+                            container.scrollTop = container.scrollHeight;
+                        } else if (event.type === 'tool_start') {
+                            // Show tool indicator
+                            const toolIndicator = document.createElement('div');
+                            toolIndicator.className = 'tool-indicator';
+                            toolIndicator.id = `tool-${event.id}`;
+                            toolIndicator.textContent = `Looking up ${formatToolName(event.name)}...`;
+                            contentDiv.appendChild(toolIndicator);
+                            container.scrollTop = container.scrollHeight;
+                        } else if (event.type === 'tool_result') {
+                            // Remove tool indicator
+                            const indicators = contentDiv.querySelectorAll('.tool-indicator');
+                            indicators.forEach(ind => ind.remove());
+                        } else if (event.type === 'done') {
+                            contentDiv.classList.remove('streaming-cursor');
+                            // Remove any remaining tool indicators
+                            const indicators = contentDiv.querySelectorAll('.tool-indicator');
+                            indicators.forEach(ind => ind.remove());
+                            // Use safe markdown rendering (marked.js with existing config)
+                            contentDiv.innerHTML = renderMarkdown(fullContent);
+                        } else if (event.type === 'error') {
+                            contentDiv.classList.remove('streaming-cursor');
+                            contentDiv.textContent = `Error: ${event.message}`;
+                        }
+                    } catch (e) {
+                        // JSON parse error - might be partial data, ignore
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Chat stream error:', error);
+        contentDiv.classList.remove('streaming-cursor');
+        contentDiv.textContent = 'Sorry, I encountered an error. Please try again.';
+    } finally {
+        input.disabled = false;
+        input.focus();
+    }
+}
+
+// Generic streaming chat function that works with any container (legacy v1)
 async function sendStreamingChatMessage(containerId, inputId, ticker = null) {
     const input = document.getElementById(inputId);
     const container = document.getElementById(containerId);
@@ -3329,7 +3583,7 @@ function addChatMessageToContainer(container, role, content, useMarkdown = false
 
 // Analysis page chat (embedded in Analysis tab)
 async function sendChatMessage() {
-    await sendStreamingChatMessage('chat-messages', 'chat-input', currentAnalysisTicker);
+    await sendStreamingChatMessageV2('chat-messages', 'chat-input', currentAnalysisTicker);
 }
 
 function addChatMessage(role, content, isHtml = false) {
@@ -3398,7 +3652,7 @@ function hideGlobalChat() {
 }
 
 async function sendGlobalChatMessage() {
-    await sendStreamingChatMessage('global-chat-messages', 'global-chat-input', null);
+    await sendStreamingChatMessageV2('global-chat-messages', 'global-chat-input', null);
 }
 
 function handleGlobalChatKeypress(event) {
@@ -5731,9 +5985,15 @@ function updateBudgetCalc() {
 }
 
 // Load income sources
+// Global storage for budget data (for editing)
+let budgetIncomeSources = [];
+let budgetDeductions = [];
+let budgetExpenses = [];
+
 async function loadIncomeSources() {
     try {
         const data = await apiCall('/api/budget/income');
+        budgetIncomeSources = data || [];  // Store for editing
         const container = document.getElementById('income-sources-list');
 
         if (!data || data.length === 0) {
@@ -5751,7 +6011,7 @@ async function loadIncomeSources() {
                 </div>
                 <div class="income-item-amount">${formatCurrency(income.gross_annual)}/yr</div>
                 <div class="income-item-actions">
-                    <button class="btn btn-sm" onclick="editIncome('${income.id}')">Edit</button>
+                    <button class="btn btn-sm btn-default" onclick="editIncome('${income.id}')">Edit</button>
                     <button class="btn btn-sm btn-danger" onclick="deleteIncome('${income.id}')">Delete</button>
                 </div>
             </div>
@@ -5765,6 +6025,7 @@ async function loadIncomeSources() {
 async function loadDeductions() {
     try {
         const data = await apiCall('/api/budget/deductions');
+        budgetDeductions = data || [];  // Store for editing
         const container = document.getElementById('deductions-list');
 
         if (!data || data.length === 0) {
@@ -5783,7 +6044,7 @@ async function loadDeductions() {
                 </div>
                 <div class="deduction-item-amount">${formatCurrency(ded.amount_per_period * 26)}/yr</div>
                 <div class="deduction-item-actions">
-                    <button class="btn btn-sm" onclick="editDeduction('${ded.id}')">Edit</button>
+                    <button class="btn btn-sm btn-default" onclick="editDeduction('${ded.id}')">Edit</button>
                     <button class="btn btn-sm btn-danger" onclick="deleteDeduction('${ded.id}')">Delete</button>
                 </div>
             </div>
@@ -5797,6 +6058,7 @@ async function loadDeductions() {
 async function loadExpenses() {
     try {
         const data = await apiCall('/api/budget/expenses');
+        budgetExpenses = data || [];  // Store for editing
         const container = document.getElementById('expenses-list');
 
         if (!data || data.length === 0) {
@@ -5814,7 +6076,7 @@ async function loadExpenses() {
                 </div>
                 <div class="expense-item-amount">${formatCurrency(exp.monthly_amount)}/mo</div>
                 <div class="expense-item-actions">
-                    <button class="btn btn-sm" onclick="editExpense('${exp.id}')">Edit</button>
+                    <button class="btn btn-sm btn-default" onclick="editExpense('${exp.id}')">Edit</button>
                     <button class="btn btn-sm btn-danger" onclick="deleteExpense('${exp.id}')">Delete</button>
                 </div>
             </div>
@@ -5840,18 +6102,44 @@ async function updatePaycheckPreview() {
 
         // Calculate paycheck for first/primary income source
         const primaryIncome = incomeData[0];
-        const filingStatus = document.getElementById('filing-status').value;
-        const state = document.getElementById('tax-state').value;
+        const filingStatus = document.getElementById('filing-status')?.value || 'single';
+        const state = document.getElementById('tax-state')?.value || primaryIncome.state || 'CA';
+
+        // Convert annual to per-period based on pay frequency
+        const periodsPerYear = {
+            'weekly': 52,
+            'biweekly': 26,
+            'semimonthly': 24,
+            'monthly': 12
+        };
+        const periods = periodsPerYear[primaryIncome.pay_frequency] || 26;
+        const grossPerPeriod = primaryIncome.gross_annual / periods;
+
+        // Get deductions for this income source
+        const deductions = await apiCall('/api/budget/deductions');
+        let pretax401k = 0, pretaxHsa = 0, pretaxFsa = 0, pretaxOther = 0;
+
+        if (deductions && deductions.length > 0) {
+            for (const ded of deductions) {
+                if (ded.deduction_type === '401k') pretax401k = ded.amount_per_period || 0;
+                else if (ded.deduction_type === 'hsa') pretaxHsa = ded.amount_per_period || 0;
+                else if (ded.deduction_type === 'fsa') pretaxFsa = ded.amount_per_period || 0;
+                else pretaxOther += ded.amount_per_period || 0;
+            }
+        }
 
         const paycheck = await apiCall('/api/budget/calculate-paycheck', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                gross_annual: primaryIncome.gross_annual,
+            body: {
+                gross_per_period: grossPerPeriod,
                 pay_frequency: primaryIncome.pay_frequency,
                 filing_status: filingStatus,
-                state: state
-            })
+                state: state,
+                pretax_401k: pretax401k,
+                pretax_hsa: pretaxHsa,
+                pretax_fsa: pretaxFsa,
+                pretax_other: pretaxOther
+            }
         });
 
         if (paycheck) {
@@ -5906,16 +6194,34 @@ async function updatePaycheckPreview() {
 // Load cash flow data
 async function loadCashFlowData() {
     try {
-        const summary = await apiCall('/api/budget/calculate-annual');
+        // Get tax configuration for the request
+        const filingStatus = document.getElementById('filing-status')?.value || 'single';
+        const state = document.getElementById('tax-state')?.value || 'CA';
+
+        const summary = await apiCall('/api/budget/calculate-annual', {
+            method: 'POST',
+            body: {
+                filing_status: filingStatus,
+                state: state,
+                tax_year: new Date().getFullYear()
+            }
+        });
 
         if (summary) {
-            // Update stats
-            document.getElementById('stat-monthly-gross').textContent = formatCurrency(summary.monthly_gross);
-            document.getElementById('stat-monthly-taxes').textContent = formatCurrency(summary.total_taxes / 12);
-            document.getElementById('stat-monthly-net').textContent = formatCurrency(summary.monthly_net);
-            document.getElementById('stat-monthly-expenses').textContent = formatCurrency(summary.monthly_expenses);
-            document.getElementById('stat-monthly-savings').textContent = formatCurrency(summary.monthly_savings);
-            document.getElementById('stat-savings-rate').textContent = summary.savings_rate.toFixed(1) + '%';
+            // Update stats - handle both property name formats
+            const monthlyGross = summary.monthly_gross || (summary.gross_income / 12) || 0;
+            const monthlyTaxes = summary.total_taxes ? summary.total_taxes / 12 : 0;
+            const monthlyNet = summary.monthly_net || (summary.net_income / 12) || 0;
+            const monthlyExpenses = summary.monthly_expenses || (summary.total_expenses / 12) || 0;
+            const monthlySavings = summary.monthly_savings || (summary.net_savings / 12) || 0;
+            const savingsRate = summary.savings_rate || 0;
+
+            document.getElementById('stat-monthly-gross').textContent = formatCurrency(monthlyGross);
+            document.getElementById('stat-monthly-taxes').textContent = formatCurrency(monthlyTaxes);
+            document.getElementById('stat-monthly-net').textContent = formatCurrency(monthlyNet);
+            document.getElementById('stat-monthly-expenses').textContent = formatCurrency(monthlyExpenses);
+            document.getElementById('stat-monthly-savings').textContent = formatCurrency(monthlySavings);
+            document.getElementById('stat-savings-rate').textContent = savingsRate.toFixed(1) + '%';
 
             // Load paycheck chart
             await loadPaycheckChart();
@@ -6373,17 +6679,180 @@ async function deleteDeduction(id) {
     }
 }
 
-// Edit functions (stub - would open edit modal)
+// Edit functions - open pre-filled modals
 function editIncome(id) {
-    showToast('Edit functionality coming soon', 'info');
+    const income = budgetIncomeSources.find(i => i.id === id);
+    if (!income) {
+        showToast('Income source not found', 'error');
+        return;
+    }
+
+    const modal = createModal('Edit Income Source', `
+        <div class="form-group">
+            <label for="income-name">Name</label>
+            <input type="text" id="income-name" value="${escapeHtml(income.name || '')}">
+        </div>
+        <div class="form-group">
+            <label for="income-type">Type</label>
+            <select id="income-type">
+                <option value="employment" ${income.income_type === 'employment' ? 'selected' : ''}>Employment (W-2)</option>
+                <option value="self_employment" ${income.income_type === 'self_employment' ? 'selected' : ''}>Self-Employment (1099)</option>
+                <option value="rental" ${income.income_type === 'rental' ? 'selected' : ''}>Rental Income</option>
+                <option value="investment" ${income.income_type === 'investment' ? 'selected' : ''}>Investment Income</option>
+                <option value="other" ${income.income_type === 'other' ? 'selected' : ''}>Other</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="income-gross">Annual Gross Income</label>
+            <input type="number" id="income-gross" value="${income.gross_annual || ''}" min="0" step="1000">
+        </div>
+        <div class="form-group">
+            <label for="income-frequency">Pay Frequency</label>
+            <select id="income-frequency">
+                <option value="weekly" ${income.pay_frequency === 'weekly' ? 'selected' : ''}>Weekly (52/year)</option>
+                <option value="biweekly" ${income.pay_frequency === 'biweekly' ? 'selected' : ''}>Bi-weekly (26/year)</option>
+                <option value="semimonthly" ${income.pay_frequency === 'semimonthly' ? 'selected' : ''}>Semi-monthly (24/year)</option>
+                <option value="monthly" ${income.pay_frequency === 'monthly' ? 'selected' : ''}>Monthly (12/year)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="income-state">State</label>
+            <select id="income-state">
+                <option value="CA" ${income.state === 'CA' ? 'selected' : ''}>California</option>
+                <option value="NY" ${income.state === 'NY' ? 'selected' : ''}>New York</option>
+                <option value="TX" ${income.state === 'TX' ? 'selected' : ''}>Texas</option>
+                <option value="FL" ${income.state === 'FL' ? 'selected' : ''}>Florida</option>
+                <option value="WA" ${income.state === 'WA' ? 'selected' : ''}>Washington</option>
+            </select>
+        </div>
+    `, async () => {
+        const data = {
+            name: document.getElementById('income-name').value,
+            income_type: document.getElementById('income-type').value,
+            gross_annual: parseFloat(document.getElementById('income-gross').value) || 0,
+            pay_frequency: document.getElementById('income-frequency').value,
+            state: document.getElementById('income-state').value
+        };
+
+        await apiCall(`/api/budget/income/${id}`, {
+            method: 'PUT',
+            body: data
+        });
+
+        closeBudgetModal();
+        loadIncomeSources();
+        updatePaycheckPreview();
+        showToast('Income source updated', 'success');
+    });
 }
 
 function editExpense(id) {
-    showToast('Edit functionality coming soon', 'info');
+    const expense = budgetExpenses.find(e => e.id === id);
+    if (!expense) {
+        showToast('Expense not found', 'error');
+        return;
+    }
+
+    const modal = createModal('Edit Expense', `
+        <div class="form-group">
+            <label for="expense-name">Name</label>
+            <input type="text" id="expense-name" value="${escapeHtml(expense.name || '')}">
+        </div>
+        <div class="form-group">
+            <label for="expense-category">Category</label>
+            <select id="expense-category">
+                <option value="1" ${expense.category_id === '1' ? 'selected' : ''}>Housing</option>
+                <option value="2" ${expense.category_id === '2' ? 'selected' : ''}>Utilities</option>
+                <option value="3" ${expense.category_id === '3' ? 'selected' : ''}>Transportation</option>
+                <option value="4" ${expense.category_id === '4' ? 'selected' : ''}>Insurance</option>
+                <option value="5" ${expense.category_id === '5' ? 'selected' : ''}>Healthcare</option>
+                <option value="6" ${expense.category_id === '6' ? 'selected' : ''}>Debt Payments</option>
+                <option value="7" ${expense.category_id === '7' ? 'selected' : ''}>Food & Dining</option>
+                <option value="8" ${expense.category_id === '8' ? 'selected' : ''}>Entertainment</option>
+                <option value="9" ${expense.category_id === '9' ? 'selected' : ''}>Savings & Investments</option>
+                <option value="10" ${expense.category_id === '10' ? 'selected' : ''}>Personal</option>
+                <option value="11" ${expense.category_id === '11' ? 'selected' : ''}>Education</option>
+                <option value="12" ${expense.category_id === '12' ? 'selected' : ''}>Other</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="expense-amount">Monthly Amount</label>
+            <input type="number" id="expense-amount" value="${expense.monthly_amount || ''}" min="0" step="10">
+        </div>
+        <div class="form-group">
+            <label for="expense-frequency">Frequency</label>
+            <select id="expense-frequency">
+                <option value="monthly" ${expense.frequency === 'monthly' ? 'selected' : ''}>Monthly</option>
+                <option value="weekly" ${expense.frequency === 'weekly' ? 'selected' : ''}>Weekly</option>
+                <option value="biweekly" ${expense.frequency === 'biweekly' ? 'selected' : ''}>Bi-weekly</option>
+                <option value="quarterly" ${expense.frequency === 'quarterly' ? 'selected' : ''}>Quarterly</option>
+                <option value="annual" ${expense.frequency === 'annual' ? 'selected' : ''}>Annual</option>
+                <option value="one_time" ${expense.frequency === 'one_time' ? 'selected' : ''}>One-time</option>
+            </select>
+        </div>
+    `, async () => {
+        const data = {
+            name: document.getElementById('expense-name').value,
+            category_id: document.getElementById('expense-category').value,
+            amount: parseFloat(document.getElementById('expense-amount').value) || 0,
+            frequency: document.getElementById('expense-frequency').value
+        };
+
+        await apiCall(`/api/budget/expenses/${id}`, {
+            method: 'PUT',
+            body: data
+        });
+
+        closeBudgetModal();
+        loadExpenses();
+        showToast('Expense updated', 'success');
+    });
 }
 
 function editDeduction(id) {
-    showToast('Edit functionality coming soon', 'info');
+    const deduction = budgetDeductions.find(d => d.id === id);
+    if (!deduction) {
+        showToast('Deduction not found', 'error');
+        return;
+    }
+
+    const modal = createModal('Edit Pre-tax Deduction', `
+        <div class="form-group">
+            <label for="deduction-type">Type</label>
+            <select id="deduction-type">
+                <option value="401k" ${deduction.deduction_type === '401k' ? 'selected' : ''}>401(k)</option>
+                <option value="hsa" ${deduction.deduction_type === 'hsa' ? 'selected' : ''}>HSA</option>
+                <option value="fsa" ${deduction.deduction_type === 'fsa' ? 'selected' : ''}>FSA</option>
+                <option value="dental" ${deduction.deduction_type === 'dental' ? 'selected' : ''}>Dental Insurance</option>
+                <option value="vision" ${deduction.deduction_type === 'vision' ? 'selected' : ''}>Vision Insurance</option>
+                <option value="other" ${deduction.deduction_type === 'other' ? 'selected' : ''}>Other Pre-tax</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="deduction-amount">Amount per Period</label>
+            <input type="number" id="deduction-amount" value="${deduction.amount_per_period || ''}" min="0" step="10">
+        </div>
+        <div class="form-group">
+            <label for="deduction-match">Employer Match (%)</label>
+            <input type="number" id="deduction-match" value="${deduction.employer_match || 0}" min="0" max="100" step="0.5">
+        </div>
+    `, async () => {
+        const data = {
+            deduction_type: document.getElementById('deduction-type').value,
+            amount_per_period: parseFloat(document.getElementById('deduction-amount').value) || 0,
+            employer_match: parseFloat(document.getElementById('deduction-match').value) || 0
+        };
+
+        await apiCall(`/api/budget/deductions/${id}`, {
+            method: 'PUT',
+            body: data
+        });
+
+        closeBudgetModal();
+        loadDeductions();
+        updatePaycheckPreview();
+        showToast('Deduction updated', 'success');
+    });
 }
 
 // Helper modal function for budget page (uses same structure as other app modals)

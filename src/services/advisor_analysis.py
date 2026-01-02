@@ -398,3 +398,278 @@ Return ONLY valid JSON, no markdown or explanation."""
             {"role": msg.role, "content": msg.content, "timestamp": msg.timestamp.isoformat()}
             for msg in self._chat_history
         ]
+
+    def _build_enhanced_system_prompt(
+        self,
+        page_context: dict = None,
+        ticker: str = None,
+    ) -> str:
+        """Build context-aware system prompt based on current page and visible data.
+
+        Args:
+            page_context: Dictionary with active_tab, visible_data, selected_ticker
+            ticker: Optional specific ticker being discussed
+
+        Returns:
+            System prompt string
+        """
+        parts = [
+            "You are a knowledgeable financial advisor assistant for a portfolio analysis application.",
+            "Provide helpful, accurate advice based on the user's actual portfolio data.",
+            "Always remind users this is educational and they should consult a qualified advisor for personalized advice.",
+            "Use markdown for formatting: **bold** for emphasis, bullet points for lists, and ## headers where appropriate.",
+            "",
+            "You have access to tools to query the portfolio database for detailed information.",
+            "Use tools when the user asks for specific data not already provided in the context below.",
+            "Prefer using provided context over making tool calls when the information is already available.",
+        ]
+
+        # Add page-specific context
+        if page_context:
+            active_tab = page_context.get("active_tab", "unknown")
+            parts.append(f"\n## Current Context")
+            parts.append(f"User is viewing: **{active_tab.upper()}** tab")
+
+            visible_data = page_context.get("visible_data", {})
+
+            # Portfolio summary (always useful)
+            portfolio_summary = visible_data.get("portfolio_summary")
+            if portfolio_summary:
+                total = portfolio_summary.get("total_value", 0)
+                retirement = portfolio_summary.get("retirement_value", 0)
+                taxable = portfolio_summary.get("taxable_value", 0)
+                parts.append(f"\n**Portfolio Overview:**")
+                parts.append(f"- Total Value: ${total:,.0f}")
+                if retirement:
+                    parts.append(f"- Retirement Accounts: ${retirement:,.0f}")
+                if taxable:
+                    parts.append(f"- Taxable Accounts: ${taxable:,.0f}")
+
+            # Tab-specific context (keep concise)
+            if active_tab == "analysis":
+                allocation = visible_data.get("allocation")
+                if allocation:
+                    cash = allocation.get("cash_allocation", 0)
+                    top5 = allocation.get("concentration_top5", 0)
+                    parts.append(f"\n**Allocation Summary:**")
+                    parts.append(f"- Cash: {cash:.1f}%")
+                    if top5:
+                        parts.append(f"- Top 5 Concentration: {top5:.1f}%")
+                    by_sector = allocation.get("by_sector", {})
+                    if by_sector:
+                        top_sectors = sorted(by_sector.items(), key=lambda x: x[1], reverse=True)[:3]
+                        if top_sectors:
+                            parts.append(f"- Top Sectors: {', '.join(f'{s}: {p:.0f}%' for s, p in top_sectors)}")
+
+                performance = visible_data.get("performance")
+                if performance:
+                    ytd = performance.get("ytd_return")
+                    alpha = performance.get("alpha_ytd")
+                    if ytd is not None:
+                        parts.append(f"\n**Performance:**")
+                        parts.append(f"- YTD Return: {ytd:+.2f}%")
+                        if alpha is not None:
+                            parts.append(f"- Alpha vs S&P: {alpha:+.2f}%")
+
+                risk = visible_data.get("risk")
+                if risk:
+                    parts.append(f"\n**Risk Metrics:**")
+                    if risk.get("volatility") is not None:
+                        parts.append(f"- Volatility: {risk['volatility']:.1f}%")
+                    if risk.get("sharpe_ratio") is not None:
+                        parts.append(f"- Sharpe Ratio: {risk['sharpe_ratio']:.2f}")
+                    if risk.get("beta") is not None:
+                        parts.append(f"- Beta: {risk['beta']:.2f}")
+
+            elif active_tab == "projections":
+                mc_results = visible_data.get("monte_carlo_results")
+                if mc_results:
+                    parts.append(f"\n**Retirement Projection:**")
+                    success_rate = mc_results.get("success_rate")
+                    if success_rate is not None:
+                        parts.append(f"- Success Rate: {success_rate:.0f}%")
+                    median = mc_results.get("median_final_value")
+                    if median is not None:
+                        parts.append(f"- Median Final Value: ${median:,.0f}")
+
+                mc_params = visible_data.get("monte_carlo_params")
+                if mc_params:
+                    parts.append(f"\n**Projection Parameters:**")
+                    if mc_params.get("current_age"):
+                        parts.append(f"- Current Age: {mc_params['current_age']}")
+                    if mc_params.get("retirement_age"):
+                        parts.append(f"- Retirement Age: {mc_params['retirement_age']}")
+                    if mc_params.get("monthly_withdrawal"):
+                        parts.append(f"- Monthly Withdrawal: ${mc_params['monthly_withdrawal']:,.0f}")
+
+            elif active_tab == "taxes":
+                tax_projection = visible_data.get("tax_projection")
+                if tax_projection:
+                    parts.append(f"\n**Tax Projection:**")
+                    if tax_projection.get("average_effective_rate") is not None:
+                        parts.append(f"- Avg Effective Rate: {tax_projection['average_effective_rate']:.1f}%")
+                    if tax_projection.get("total_tax") is not None:
+                        parts.append(f"- Total Lifetime Tax: ${tax_projection['total_tax']:,.0f}")
+                    if tax_projection.get("depletion_age") is not None:
+                        parts.append(f"- Depletion Age: {tax_projection['depletion_age']}")
+
+            elif active_tab == "holdings":
+                positions = visible_data.get("positions", [])
+                if positions:
+                    parts.append(f"\n**Holdings:** {len(positions)} positions visible")
+                    # Show top 5 by value
+                    top_positions = sorted(positions, key=lambda x: x.get("value", 0), reverse=True)[:5]
+                    for p in top_positions:
+                        parts.append(f"- {p.get('ticker', 'N/A')}: ${p.get('value', 0):,.0f}")
+
+            # Triggered alerts (always relevant)
+            alerts = visible_data.get("triggered_alerts", [])
+            if alerts:
+                parts.append(f"\n**Active Alerts:** {len(alerts)} triggered")
+                for alert in alerts[:3]:  # Limit to 3
+                    parts.append(f"- {alert.get('name', 'Alert')}: {alert.get('message', '')}")
+
+        # Add ticker focus
+        focus_ticker = ticker or (page_context.get("selected_ticker") if page_context else None)
+        if focus_ticker:
+            parts.append(f"\n**Currently discussing:** {focus_ticker}")
+
+        return "\n".join(parts)
+
+    def chat_stream_with_tools(
+        self,
+        user_message: str,
+        ticker: str = None,
+        include_portfolio: bool = True,
+        page_context: dict = None,
+    ):
+        """Stream a conversation with tool support.
+
+        Args:
+            user_message: User's question or message
+            ticker: Optional ticker for context
+            include_portfolio: Whether to include portfolio context
+            page_context: Dictionary with active_tab, visible_data, selected_ticker
+
+        Yields:
+            Events in the format:
+            {"type": "text", "content": "..."} - Text chunks
+            {"type": "tool_start", "name": "...", "id": "..."} - Tool call starting
+            {"type": "tool_result", "name": "...", "result": {...}} - Tool result
+            {"type": "done"} - Stream complete
+            {"type": "error", "message": "..."} - Error occurred
+        """
+        from src.services.chat_tools import CHAT_TOOLS, ChatToolExecutor
+
+        client = self._get_client()
+        if not client:
+            yield {"type": "error", "message": "Claude API is not available. Please configure your API key in Settings."}
+            return
+
+        # Build enhanced system prompt
+        system_prompt = self._build_enhanced_system_prompt(page_context, ticker)
+
+        # Build messages from chat history
+        messages = []
+        for msg in self._chat_history[-10:]:
+            messages.append({"role": msg.role, "content": msg.content})
+        messages.append({"role": "user", "content": user_message})
+
+        # Store user message immediately
+        self._chat_history.append(ChatMessage(role="user", content=user_message))
+
+        tool_executor = ChatToolExecutor(self.db)
+        full_response = ""
+        max_tool_iterations = 5  # Prevent infinite tool loops
+
+        for iteration in range(max_tool_iterations):
+            try:
+                # Make streaming request with tools
+                with client.messages.stream(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=2048,
+                    system=system_prompt,
+                    messages=messages,
+                    tools=CHAT_TOOLS,
+                ) as stream:
+                    current_tool_use = None
+                    tool_input_json = ""
+                    has_tool_use = False
+
+                    for event in stream:
+                        if event.type == "content_block_start":
+                            if hasattr(event.content_block, "type") and event.content_block.type == "tool_use":
+                                current_tool_use = {
+                                    "id": event.content_block.id,
+                                    "name": event.content_block.name,
+                                }
+                                tool_input_json = ""
+                                has_tool_use = True
+                                yield {"type": "tool_start", "name": current_tool_use["name"], "id": current_tool_use["id"]}
+
+                        elif event.type == "content_block_delta":
+                            if hasattr(event.delta, "type"):
+                                if event.delta.type == "text_delta":
+                                    full_response += event.delta.text
+                                    yield {"type": "text", "content": event.delta.text}
+                                elif event.delta.type == "input_json_delta":
+                                    tool_input_json += event.delta.partial_json
+
+                        elif event.type == "content_block_stop":
+                            if current_tool_use:
+                                # Parse and execute tool
+                                try:
+                                    tool_input = json.loads(tool_input_json) if tool_input_json else {}
+                                except json.JSONDecodeError:
+                                    tool_input = {}
+
+                                result = tool_executor.execute_tool(current_tool_use["name"], tool_input)
+                                yield {"type": "tool_result", "name": current_tool_use["name"], "result": result}
+
+                                # Add tool use and result to messages for continuation
+                                messages.append({
+                                    "role": "assistant",
+                                    "content": [
+                                        {
+                                            "type": "tool_use",
+                                            "id": current_tool_use["id"],
+                                            "name": current_tool_use["name"],
+                                            "input": tool_input
+                                        }
+                                    ]
+                                })
+                                messages.append({
+                                    "role": "user",
+                                    "content": [
+                                        {
+                                            "type": "tool_result",
+                                            "tool_use_id": current_tool_use["id"],
+                                            "content": json.dumps(result)
+                                        }
+                                    ]
+                                })
+
+                                current_tool_use = None
+                                tool_input_json = ""
+
+                    # Get final message to check stop reason
+                    final_message = stream.get_final_message()
+
+                    if final_message.stop_reason == "end_turn":
+                        # No more tool calls, we're done
+                        break
+                    elif final_message.stop_reason != "tool_use":
+                        # Unexpected stop reason, but still done
+                        break
+                    # If stop_reason is "tool_use", continue the loop to process tool results
+
+            except Exception as e:
+                logger.error(f"Chat stream with tools error: {e}")
+                yield {"type": "error", "message": str(e)}
+                return
+
+        # Store complete response
+        if full_response:
+            self._chat_history.append(ChatMessage(role="assistant", content=full_response))
+
+        yield {"type": "done"}

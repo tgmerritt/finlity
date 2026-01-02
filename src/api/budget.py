@@ -106,6 +106,16 @@ class DeductionCreate(BaseModel):
     max_annual: Optional[float] = None
 
 
+class DeductionUpdate(BaseModel):
+    """Request model for updating a pre-tax deduction."""
+    income_source_id: Optional[str] = None
+    deduction_type: Optional[str] = None
+    amount_per_period: Optional[float] = None
+    employer_match: Optional[float] = None
+    is_percentage: Optional[bool] = None
+    max_annual: Optional[float] = None
+
+
 class PaycheckRequest(BaseModel):
     """Request model for paycheck calculation."""
     gross_per_period: float
@@ -143,7 +153,7 @@ class SocialSecurityRequest(BaseModel):
 async def list_income_sources():
     """List all income sources."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         sources = session.query(BudgetIncomeSource).filter(
             BudgetIncomeSource.is_active == True
@@ -170,7 +180,7 @@ async def list_income_sources():
 async def create_income_source(data: IncomeSourceCreate):
     """Create a new income source."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         source = BudgetIncomeSource(
             name=data.name,
@@ -200,7 +210,7 @@ async def create_income_source(data: IncomeSourceCreate):
 async def update_income_source(income_id: str, data: IncomeSourceUpdate):
     """Update an income source."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         source = session.query(BudgetIncomeSource).filter(
             BudgetIncomeSource.id == income_id
@@ -233,7 +243,7 @@ async def update_income_source(income_id: str, data: IncomeSourceUpdate):
 async def delete_income_source(income_id: str):
     """Delete an income source."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         source = session.query(BudgetIncomeSource).filter(
             BudgetIncomeSource.id == income_id
@@ -259,7 +269,7 @@ async def delete_income_source(income_id: str):
 async def get_tax_config():
     """Get current tax configuration."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         config = session.query(BudgetTaxConfig).first()
 
@@ -294,7 +304,7 @@ async def get_tax_config():
 async def update_tax_config(data: TaxConfigUpdate):
     """Update tax configuration."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         config = session.query(BudgetTaxConfig).first()
 
@@ -346,7 +356,7 @@ async def list_states():
 async def list_expense_categories():
     """List all expense categories."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         categories = session.query(BudgetExpenseCategory).order_by(
             BudgetExpenseCategory.sort_order
@@ -391,7 +401,7 @@ async def list_expense_categories():
 async def list_expenses():
     """List all expenses."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         expenses = session.query(BudgetExpense).filter(
             BudgetExpense.is_active == True
@@ -437,7 +447,7 @@ async def list_expenses():
 async def create_expense(data: ExpenseCreate):
     """Create a new expense."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         expense = BudgetExpense(
             category_id=data.category_id,
@@ -467,7 +477,7 @@ async def create_expense(data: ExpenseCreate):
 async def update_expense(expense_id: str, data: ExpenseUpdate):
     """Update an expense."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         expense = session.query(BudgetExpense).filter(
             BudgetExpense.id == expense_id
@@ -506,7 +516,7 @@ async def update_expense(expense_id: str, data: ExpenseUpdate):
 async def delete_expense(expense_id: str):
     """Delete an expense."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         expense = session.query(BudgetExpense).filter(
             BudgetExpense.id == expense_id
@@ -532,7 +542,7 @@ async def delete_expense(expense_id: str):
 async def list_deductions():
     """List all pre-tax deductions."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         deductions = session.query(BudgetPretaxDeduction).all()
 
@@ -556,7 +566,7 @@ async def list_deductions():
 async def create_deduction(data: DeductionCreate):
     """Create a new pre-tax deduction."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         deduction = BudgetPretaxDeduction(
             income_source_id=data.income_source_id,
@@ -578,11 +588,53 @@ async def create_deduction(data: DeductionCreate):
         session.close()
 
 
+@router.put("/deductions/{deduction_id}")
+async def update_deduction(deduction_id: str, data: DeductionUpdate):
+    """Update a pre-tax deduction."""
+    db = get_database()
+    session = db.get_session()
+    try:
+        deduction = session.query(BudgetPretaxDeduction).filter(
+            BudgetPretaxDeduction.id == deduction_id
+        ).first()
+
+        if not deduction:
+            raise HTTPException(status_code=404, detail="Deduction not found")
+
+        # Update fields if provided
+        if data.income_source_id is not None:
+            deduction.income_source_id = data.income_source_id
+        if data.deduction_type is not None:
+            deduction.deduction_type = data.deduction_type
+        if data.amount_per_period is not None:
+            deduction.amount_per_period = data.amount_per_period
+        if data.employer_match is not None:
+            deduction.employer_match = data.employer_match
+        if data.is_percentage is not None:
+            deduction.is_percentage = data.is_percentage
+        if data.max_annual is not None:
+            deduction.max_annual = data.max_annual
+
+        session.commit()
+
+        return {
+            "id": deduction.id,
+            "income_source_id": deduction.income_source_id,
+            "deduction_type": deduction.deduction_type,
+            "amount_per_period": deduction.amount_per_period,
+            "employer_match": deduction.employer_match,
+            "is_percentage": deduction.is_percentage,
+            "max_annual": deduction.max_annual,
+        }
+    finally:
+        session.close()
+
+
 @router.delete("/deductions/{deduction_id}")
 async def delete_deduction(deduction_id: str):
     """Delete a pre-tax deduction."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         deduction = session.query(BudgetPretaxDeduction).filter(
             BudgetPretaxDeduction.id == deduction_id
@@ -634,7 +686,7 @@ async def calculate_paycheck(data: PaycheckRequest):
 async def calculate_annual_summary(data: AnnualSummaryRequest):
     """Calculate annual budget summary from stored income and expenses."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         # Get all active income sources
         income_sources = session.query(BudgetIncomeSource).filter(
@@ -775,7 +827,7 @@ async def calculate_social_security(data: SocialSecurityRequest):
 async def get_paycheck_chart_data():
     """Get data for paycheck stacked bar chart (all pay periods in a year)."""
     db = get_database()
-    session = db.Session()
+    session = db.get_session()
     try:
         # Get tax config
         config = session.query(BudgetTaxConfig).first()
