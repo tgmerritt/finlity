@@ -103,6 +103,12 @@ def load_config() -> dict:
         except json.JSONDecodeError:
             pass
 
+    # SECURITY: Remove sensitive sections before returning
+    # API keys should NEVER be exposed through the config endpoint
+    sensitive_sections = ["api_keys", "secrets", "credentials"]
+    for section in sensitive_sections:
+        config.pop(section, None)
+
     return config
 
 
