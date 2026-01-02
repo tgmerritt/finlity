@@ -604,15 +604,42 @@ def get_account_balances_by_type(
     )
 
 
-@router.post("/sensitivity", response_model=SensitivityResponse)
+def _run_sensitivity_task(request_dict: dict, current_balance: float) -> dict:
+    """Background task for sensitivity analysis."""
+    params = ProjectionParams(
+        current_age=request_dict["current_age"],
+        retirement_age=request_dict["retirement_age"],
+        current_balance=current_balance,
+        monthly_contribution=request_dict["monthly_contribution"],
+        monthly_withdrawal=request_dict["monthly_withdrawal"],
+        stock_allocation=request_dict.get("stock_allocation", 0.70),
+        bond_allocation=request_dict.get("bond_allocation", 0.25),
+    )
+
+    engine = MonteCarloEngine()
+    result = engine.run_sensitivity_analysis(params, end_age=request_dict.get("end_age", 95))
+
+    return {
+        "contribution_impacts": {f"${k:,.0f}": v for k, v in result.contribution_impacts.items()},
+        "return_impacts": {f"{k*100:.0f}% stocks": v for k, v in result.return_impacts.items()},
+        "withdrawal_impacts": {f"${k:,.0f}": v for k, v in result.withdrawal_impacts.items()},
+    }
+
+
+@router.post("/sensitivity")
 def run_sensitivity_analysis(
     request: ProjectionRequest,
+    async_mode: bool = Query(
+        default=None,
+        description="Run in background. Defaults to True on Heroku, False locally."
+    ),
     db: Database = Depends(get_db),
-) -> SensitivityResponse:
+):
     """
     Run sensitivity analysis on projection parameters.
 
     Shows how changes in contribution, returns, and withdrawals affect outcomes.
+    Runs multiple Monte Carlo simulations, so supports async mode for hosted platforms.
     """
     # Get current balance from portfolio if not provided
     current_balance = request.current_balance
@@ -620,6 +647,23 @@ def run_sensitivity_analysis(
         summary = db.get_portfolio_summary()
         current_balance = summary["total_value"]
 
+    # Determine if we should run async
+    use_async = async_mode if async_mode is not None else is_hosted_environment()
+
+    if use_async:
+        request_dict = request.model_dump()
+        task_id = task_manager.submit(
+            _run_sensitivity_task,
+            request_dict,
+            current_balance,
+        )
+        return {
+            "task_id": task_id,
+            "status": "pending",
+            "message": "Sensitivity analysis started. Poll GET /api/tasks/{task_id} for results.",
+        }
+
+    # Synchronous execution
     params = ProjectionParams(
         current_age=request.current_age,
         retirement_age=request.retirement_age,
@@ -1009,11 +1053,117 @@ class TaxProjectionResponse(BaseModel):
     chart_data: dict
 
 
-@router.post("/tax-projection", response_model=TaxProjectionResponse)
+def _run_tax_projection_task(params: dict) -> dict:
+    """Background task for tax projection."""
+    initial_balances = AccountBalances(
+        taxable=params["taxable"],
+        traditional=params["traditional"],
+        roth=params["roth"],
+    )
+
+    strategy = TaxAwareWithdrawalStrategy(
+        tax_rate_ordinary=params["federal_tax_rate"],
+        tax_rate_capital_gains=params["capital_gains_rate"],
+        tax_rate_state=params["state_tax_rate"],
+        cost_basis_ratio=params["cost_basis_ratio"],
+    )
+
+    result = strategy.project_year_by_year(
+        current_age=params["current_age"],
+        retirement_age=params["retirement_age"],
+        end_age=params["end_age"],
+        initial_balances=initial_balances,
+        annual_spending=params["annual_spending"],
+        expected_return=params["expected_return"],
+        inflation_rate=params["inflation_rate"],
+        monthly_contribution=params["monthly_contribution"],
+        contribution_to_traditional_pct=params["contribution_to_traditional_pct"],
+        contribution_to_roth_pct=params["contribution_to_roth_pct"],
+        contribution_to_taxable_pct=params["contribution_to_taxable_pct"],
+        pre_retirement_income=params["pre_retirement_income"],
+        pre_retirement_deductions=params["pre_retirement_deductions"],
+        filing_status=params["filing_status"],
+        state=params["state"],
+        tax_year=2024,
+    )
+
+    # Convert to dict for JSON serialization
+    years_data = [
+        {
+            "year": y.year,
+            "age": y.age,
+            "taxable_balance": y.taxable_balance,
+            "traditional_balance": y.traditional_balance,
+            "roth_balance": y.roth_balance,
+            "total_balance": y.total_balance,
+            "rmd_amount": y.rmd_amount,
+            "from_taxable": y.from_taxable,
+            "from_traditional": y.from_traditional,
+            "from_roth": y.from_roth,
+            "gross_withdrawal": y.gross_withdrawal,
+            "federal_tax": y.federal_tax,
+            "state_tax": y.state_tax,
+            "total_tax": y.total_tax,
+            "effective_rate": y.effective_rate,
+            "net_withdrawal": y.net_withdrawal,
+            "investment_return": y.investment_return,
+            "phase": y.phase,
+            "income_source": y.income_source,
+        }
+        for y in result.years
+    ]
+
+    summary_data = {
+        "total_federal_tax": result.summary.total_federal_tax,
+        "total_state_tax": result.summary.total_state_tax,
+        "total_tax": result.summary.total_tax,
+        "average_effective_rate": result.summary.average_effective_rate,
+        "total_withdrawn": result.summary.total_withdrawn,
+        "total_gross_withdrawn": result.summary.total_gross_withdrawn,
+        "final_balance": result.summary.final_balance,
+        "depletion_age": result.summary.depletion_age,
+        "pre_retirement_federal_tax": result.summary.pre_retirement_federal_tax,
+        "pre_retirement_state_tax": result.summary.pre_retirement_state_tax,
+        "pre_retirement_total_tax": result.summary.pre_retirement_total_tax,
+        "pre_retirement_avg_effective_rate": result.summary.pre_retirement_avg_effective_rate,
+        "post_retirement_federal_tax": result.summary.post_retirement_federal_tax,
+        "post_retirement_state_tax": result.summary.post_retirement_state_tax,
+        "post_retirement_total_tax": result.summary.post_retirement_total_tax,
+    }
+
+    chart_data = {
+        "ages": [y.age for y in result.years],
+        "federal_taxes": [y.federal_tax for y in result.years],
+        "state_taxes": [y.state_tax for y in result.years],
+        "effective_rates": [y.effective_rate for y in result.years],
+        "taxable_balances": [y.taxable_balance for y in result.years],
+        "traditional_balances": [y.traditional_balance for y in result.years],
+        "roth_balances": [y.roth_balance for y in result.years],
+        "total_balances": [y.total_balance for y in result.years],
+        "from_taxable": [y.from_taxable for y in result.years],
+        "from_traditional": [y.from_traditional for y in result.years],
+        "from_roth": [y.from_roth for y in result.years],
+        "rmd_amounts": [y.rmd_amount for y in result.years],
+        "phases": [y.phase for y in result.years],
+        "income_sources": [y.income_source for y in result.years],
+    }
+
+    return {
+        "years": years_data,
+        "summary": summary_data,
+        "chart_data": chart_data,
+    }
+
+
+@router.post("/tax-projection")
 def run_tax_projection(
     request: TaxProjectionRequest,
+    async_mode: bool = Query(
+        default=None,
+        description="Run in background. Defaults to True on Heroku, False locally."
+    ),
     db: Database = Depends(get_db),
-) -> TaxProjectionResponse:
+):
     """
     Run year-by-year tax-aware withdrawal projection.
 
@@ -1028,6 +1178,8 @@ def run_tax_projection(
     with two main visualizations:
     1. Tax burden over time (stacked bar + effective rate line)
     2. Account balances over time (multi-line chart)
+
+    Supports async mode for hosted platforms with request timeouts.
     """
     # Get account balances from portfolio if not provided
     taxable = request.taxable_balance
@@ -1043,12 +1195,6 @@ def run_tax_projection(
             traditional = balances_response.traditional
         if roth is None:
             roth = balances_response.roth
-
-    initial_balances = AccountBalances(
-        taxable=taxable,
-        traditional=traditional,
-        roth=roth,
-    )
 
     # Fetch pre-retirement income from database if requested
     pre_retirement_income = 0.0
@@ -1099,101 +1245,48 @@ def run_tax_projection(
         pre_retirement_income = request.manual_pre_retirement_income
         pre_retirement_deductions = request.manual_pre_retirement_deductions
 
-    # Create withdrawal strategy with specified tax rates
-    strategy = TaxAwareWithdrawalStrategy(
-        tax_rate_ordinary=request.federal_tax_rate,
-        tax_rate_capital_gains=request.capital_gains_rate,
-        tax_rate_state=request.state_tax_rate,
-        cost_basis_ratio=request.cost_basis_ratio,
-    )
+    # Determine if we should run async
+    use_async = async_mode if async_mode is not None else is_hosted_environment()
 
-    # Run year-by-year projection (includes accumulation phase from current_age to retirement_age)
-    result = strategy.project_year_by_year(
-        current_age=request.current_age,
-        retirement_age=request.retirement_age,
-        end_age=request.end_age,
-        initial_balances=initial_balances,
-        annual_spending=request.annual_spending,
-        expected_return=request.expected_return,
-        inflation_rate=request.inflation_rate,
-        monthly_contribution=request.monthly_contribution,
-        contribution_to_traditional_pct=request.contribution_to_traditional_pct,
-        contribution_to_roth_pct=request.contribution_to_roth_pct,
-        contribution_to_taxable_pct=request.contribution_to_taxable_pct,
-        # Pre-retirement income parameters
-        pre_retirement_income=pre_retirement_income,
-        pre_retirement_deductions=pre_retirement_deductions,
-        filing_status=filing_status,
-        state=state,
-        tax_year=2024,
-    )
-
-    # Convert to response model
-    years_response = [
-        TaxYearProjectionResponse(
-            year=y.year,
-            age=y.age,
-            taxable_balance=y.taxable_balance,
-            traditional_balance=y.traditional_balance,
-            roth_balance=y.roth_balance,
-            total_balance=y.total_balance,
-            rmd_amount=y.rmd_amount,
-            from_taxable=y.from_taxable,
-            from_traditional=y.from_traditional,
-            from_roth=y.from_roth,
-            gross_withdrawal=y.gross_withdrawal,
-            federal_tax=y.federal_tax,
-            state_tax=y.state_tax,
-            total_tax=y.total_tax,
-            effective_rate=y.effective_rate,
-            net_withdrawal=y.net_withdrawal,
-            investment_return=y.investment_return,
-            phase=y.phase,
-            income_source=y.income_source,
-        )
-        for y in result.years
-    ]
-
-    summary_response = TaxProjectionSummaryResponse(
-        total_federal_tax=result.summary.total_federal_tax,
-        total_state_tax=result.summary.total_state_tax,
-        total_tax=result.summary.total_tax,
-        average_effective_rate=result.summary.average_effective_rate,
-        total_withdrawn=result.summary.total_withdrawn,
-        total_gross_withdrawn=result.summary.total_gross_withdrawn,
-        final_balance=result.summary.final_balance,
-        depletion_age=result.summary.depletion_age,
-        # Pre-retirement tax totals
-        pre_retirement_federal_tax=result.summary.pre_retirement_federal_tax,
-        pre_retirement_state_tax=result.summary.pre_retirement_state_tax,
-        pre_retirement_total_tax=result.summary.pre_retirement_total_tax,
-        pre_retirement_avg_effective_rate=result.summary.pre_retirement_avg_effective_rate,
-        # Post-retirement tax totals
-        post_retirement_federal_tax=result.summary.post_retirement_federal_tax,
-        post_retirement_state_tax=result.summary.post_retirement_state_tax,
-        post_retirement_total_tax=result.summary.post_retirement_total_tax,
-    )
-
-    # Build chart-ready data arrays
-    chart_data = {
-        "ages": [y.age for y in result.years],
-        "federal_taxes": [y.federal_tax for y in result.years],
-        "state_taxes": [y.state_tax for y in result.years],
-        "effective_rates": [y.effective_rate for y in result.years],
-        "taxable_balances": [y.taxable_balance for y in result.years],
-        "traditional_balances": [y.traditional_balance for y in result.years],
-        "roth_balances": [y.roth_balance for y in result.years],
-        "total_balances": [y.total_balance for y in result.years],
-        "from_taxable": [y.from_taxable for y in result.years],
-        "from_traditional": [y.from_traditional for y in result.years],
-        "from_roth": [y.from_roth for y in result.years],
-        "rmd_amounts": [y.rmd_amount for y in result.years],
-        "phases": [y.phase for y in result.years],
-        "income_sources": [y.income_source for y in result.years],
+    # Prepare params for both sync and async execution
+    task_params = {
+        "taxable": taxable,
+        "traditional": traditional,
+        "roth": roth,
+        "current_age": request.current_age,
+        "retirement_age": request.retirement_age,
+        "end_age": request.end_age,
+        "annual_spending": request.annual_spending,
+        "expected_return": request.expected_return,
+        "inflation_rate": request.inflation_rate,
+        "monthly_contribution": request.monthly_contribution,
+        "contribution_to_traditional_pct": request.contribution_to_traditional_pct,
+        "contribution_to_roth_pct": request.contribution_to_roth_pct,
+        "contribution_to_taxable_pct": request.contribution_to_taxable_pct,
+        "federal_tax_rate": request.federal_tax_rate,
+        "capital_gains_rate": request.capital_gains_rate,
+        "state_tax_rate": request.state_tax_rate,
+        "cost_basis_ratio": request.cost_basis_ratio,
+        "pre_retirement_income": pre_retirement_income,
+        "pre_retirement_deductions": pre_retirement_deductions,
+        "filing_status": filing_status,
+        "state": state,
     }
 
+    if use_async:
+        task_id = task_manager.submit(_run_tax_projection_task, task_params)
+        return {
+            "task_id": task_id,
+            "status": "pending",
+            "message": "Tax projection started. Poll GET /api/tasks/{task_id} for results.",
+        }
+
+    # Synchronous execution - run the task function directly
+    result = _run_tax_projection_task(task_params)
+
+    # Convert dict result to response model
     return TaxProjectionResponse(
-        years=years_response,
-        summary=summary_response,
-        chart_data=chart_data,
+        years=[TaxYearProjectionResponse(**y) for y in result["years"]],
+        summary=TaxProjectionSummaryResponse(**result["summary"]),
+        chart_data=result["chart_data"],
     )

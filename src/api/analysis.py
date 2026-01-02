@@ -1,6 +1,7 @@
 """Analysis API endpoints."""
 
-from fastapi import APIRouter, Depends
+import os
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import TYPE_CHECKING, Optional
@@ -9,6 +10,7 @@ if TYPE_CHECKING:
     from src.services.advisor_analysis import AdvisorAnalysisService
 
 from src.database import Database
+from src.services.background_tasks import task_manager
 from src.models import Portfolio, Account as PydanticAccount, Position as PydanticPosition
 from src.models import AccountType, Brokerage
 from src.analysis.performance import PerformanceAnalyzer
@@ -17,6 +19,11 @@ from src.analysis.allocation import AllocationAnalyzer
 from src.analysis.correlation import CorrelationAnalyzer
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
+
+
+def is_hosted_environment() -> bool:
+    """Check if running on Heroku or similar platform with request timeouts."""
+    return bool(os.environ.get("DYNO"))
 
 
 def get_db() -> Database:
@@ -151,12 +158,58 @@ def _sanitize_float(value: float, default: float = 0.0) -> float:
     return value
 
 
-@router.get("/performance", response_model=PerformanceResponse)
+def _run_performance_task(portfolio_dict: dict, benchmark: str) -> dict:
+    """Background task for performance analysis."""
+    import math
+
+    def sanitize(value, default=0.0):
+        if value is None or math.isnan(value) or math.isinf(value):
+            return default
+        return value
+
+    # Reconstruct portfolio from dict
+    portfolio = Portfolio(
+        accounts=[
+            PydanticAccount(
+                id=a["id"],
+                name=a["name"],
+                account_type=AccountType(a["account_type"]),
+                brokerage=Brokerage(a["brokerage"]) if a.get("brokerage") else None,
+                positions=[
+                    PydanticPosition(**p) for p in a.get("positions", [])
+                ]
+            )
+            for a in portfolio_dict["accounts"]
+        ]
+    )
+
+    analyzer = PerformanceAnalyzer()
+    perf = analyzer.get_portfolio_performance(portfolio, benchmark)
+
+    return {
+        "total_value": sanitize(perf.total_value),
+        "total_cost_basis": perf.total_cost_basis if perf.total_cost_basis is not None else None,
+        "total_gain_loss": perf.total_gain_loss if perf.total_gain_loss is not None else None,
+        "total_gain_loss_pct": sanitize(perf.total_gain_loss_pct) if perf.total_gain_loss_pct is not None else None,
+        "ytd_return": sanitize(perf.ytd_return),
+        "one_year_return": sanitize(perf.one_year_return),
+        "benchmark_ytd": sanitize(perf.benchmark_ytd),
+        "benchmark_one_year": sanitize(perf.benchmark_one_year),
+        "alpha_ytd": sanitize(perf.alpha_ytd),
+        "alpha_one_year": sanitize(perf.alpha_one_year),
+    }
+
+
+@router.get("/performance")
 def get_performance(
     benchmark: str = "SPY",
+    async_mode: bool = Query(
+        default=None,
+        description="Run in background. Defaults to True on Heroku, False locally."
+    ),
     db: Database = Depends(get_db),
-) -> PerformanceResponse:
-    """Get portfolio performance metrics."""
+):
+    """Get portfolio performance metrics. Supports async mode for hosted platforms."""
     portfolio = db_to_portfolio(db)
 
     if not portfolio.accounts:
@@ -173,6 +226,31 @@ def get_performance(
             alpha_one_year=0,
         )
 
+    # Determine if we should run async
+    use_async = async_mode if async_mode is not None else is_hosted_environment()
+
+    if use_async:
+        # Convert portfolio to dict for background task
+        portfolio_dict = {
+            "accounts": [
+                {
+                    "id": a.id,
+                    "name": a.name,
+                    "account_type": a.account_type.value,
+                    "brokerage": a.brokerage.value if a.brokerage else None,
+                    "positions": [p.model_dump() for p in a.positions]
+                }
+                for a in portfolio.accounts
+            ]
+        }
+        task_id = task_manager.submit(_run_performance_task, portfolio_dict, benchmark)
+        return {
+            "task_id": task_id,
+            "status": "pending",
+            "message": "Performance analysis started. Poll GET /api/tasks/{task_id} for results.",
+        }
+
+    # Synchronous execution
     analyzer = PerformanceAnalyzer()
     perf = analyzer.get_portfolio_performance(portfolio, benchmark)
 
@@ -190,12 +268,56 @@ def get_performance(
     )
 
 
-@router.get("/risk", response_model=RiskResponse)
+def _run_risk_task(portfolio_dict: dict, benchmark: str) -> dict:
+    """Background task for risk analysis."""
+    import math
+
+    def sanitize(value, default=0.0):
+        if value is None or math.isnan(value) or math.isinf(value):
+            return default
+        return value
+
+    # Reconstruct portfolio from dict
+    portfolio = Portfolio(
+        accounts=[
+            PydanticAccount(
+                id=a["id"],
+                name=a["name"],
+                account_type=AccountType(a["account_type"]),
+                brokerage=Brokerage(a["brokerage"]) if a.get("brokerage") else None,
+                positions=[
+                    PydanticPosition(**p) for p in a.get("positions", [])
+                ]
+            )
+            for a in portfolio_dict["accounts"]
+        ]
+    )
+
+    analyzer = RiskAnalyzer()
+    risk = analyzer.get_portfolio_risk(portfolio, benchmark)
+
+    return {
+        "volatility": sanitize(risk.volatility),
+        "sharpe_ratio": sanitize(risk.sharpe_ratio),
+        "sortino_ratio": sanitize(risk.sortino_ratio),
+        "max_drawdown": sanitize(risk.max_drawdown),
+        "beta": sanitize(risk.beta, 1.0),
+        "var_95": sanitize(risk.var_95),
+        "cvar_95": sanitize(risk.cvar_95),
+        "diversification_ratio": sanitize(risk.diversification_ratio, 1.0),
+    }
+
+
+@router.get("/risk")
 def get_risk(
     benchmark: str = "SPY",
+    async_mode: bool = Query(
+        default=None,
+        description="Run in background. Defaults to True on Heroku, False locally."
+    ),
     db: Database = Depends(get_db),
-) -> RiskResponse:
-    """Get portfolio risk metrics."""
+):
+    """Get portfolio risk metrics. Supports async mode for hosted platforms."""
     portfolio = db_to_portfolio(db)
 
     if not portfolio.accounts:
@@ -210,6 +332,31 @@ def get_risk(
             diversification_ratio=1.0,
         )
 
+    # Determine if we should run async
+    use_async = async_mode if async_mode is not None else is_hosted_environment()
+
+    if use_async:
+        # Convert portfolio to dict for background task
+        portfolio_dict = {
+            "accounts": [
+                {
+                    "id": a.id,
+                    "name": a.name,
+                    "account_type": a.account_type.value,
+                    "brokerage": a.brokerage.value if a.brokerage else None,
+                    "positions": [p.model_dump() for p in a.positions]
+                }
+                for a in portfolio.accounts
+            ]
+        }
+        task_id = task_manager.submit(_run_risk_task, portfolio_dict, benchmark)
+        return {
+            "task_id": task_id,
+            "status": "pending",
+            "message": "Risk analysis started. Poll GET /api/tasks/{task_id} for results.",
+        }
+
+    # Synchronous execution
     analyzer = RiskAnalyzer()
     risk = analyzer.get_portfolio_risk(portfolio, benchmark)
 
