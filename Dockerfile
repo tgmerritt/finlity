@@ -45,6 +45,9 @@ COPY pytest.ini .
 RUN mkdir -p data/imports data/demo data/cache data/logs \
     && chown -R appuser:appuser /app
 
+# Copy pre-built demo database for out-of-box demo mode
+COPY --chown=appuser:appuser data/demo/demo.db ./data/demo/
+
 # Switch to non-root user
 USER appuser
 

@@ -1,6 +1,7 @@
 services:
   portfolio:
     build: .
+    image: portfolio-analyzer:latest
     container_name: portfolio-analyzer
     ports:
       - "8000:8000"
@@ -29,6 +30,7 @@ services:
   # Development mode with hot reload - use: docker-compose --profile dev up portfolio-dev
   portfolio-dev:
     build: .
+    image: portfolio-analyzer:latest
     container_name: portfolio-analyzer-dev
     profiles:
       - dev
