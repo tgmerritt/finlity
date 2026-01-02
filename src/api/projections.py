@@ -793,7 +793,8 @@ class TaxProjectionSummaryResponse(BaseModel):
     total_state_tax: float
     total_tax: float
     average_effective_rate: float
-    total_withdrawn: float
+    total_withdrawn: float  # Net (after-tax)
+    total_gross_withdrawn: float  # Gross (before-tax)
     final_balance: float
     depletion_age: Optional[int]
 
@@ -900,6 +901,7 @@ def run_tax_projection(
         total_tax=result.summary.total_tax,
         average_effective_rate=result.summary.average_effective_rate,
         total_withdrawn=result.summary.total_withdrawn,
+        total_gross_withdrawn=result.summary.total_gross_withdrawn,
         final_balance=result.summary.final_balance,
         depletion_age=result.summary.depletion_age,
     )

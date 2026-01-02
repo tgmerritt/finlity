@@ -155,7 +155,8 @@ class TaxProjectionSummary:
     total_state_tax: float
     total_tax: float
     average_effective_rate: float
-    total_withdrawn: float
+    total_withdrawn: float  # Net withdrawals (after tax)
+    total_gross_withdrawn: float  # Gross withdrawals (before tax)
     final_balance: float
     depletion_age: Optional[int]
 
@@ -450,7 +451,8 @@ class TaxAwareWithdrawalStrategy:
 
         total_federal_tax = 0.0
         total_state_tax = 0.0
-        total_withdrawn = 0.0
+        total_withdrawn = 0.0  # Net (after-tax)
+        total_gross_withdrawn = 0.0  # Gross (before-tax)
         depletion_age: Optional[int] = None
         effective_rates: list[float] = []
 
@@ -563,6 +565,7 @@ class TaxAwareWithdrawalStrategy:
             total_federal_tax += breakdown.federal_tax
             total_state_tax += breakdown.state_tax
             total_withdrawn += breakdown.net_withdrawal
+            total_gross_withdrawn += gross_withdrawal
             effective_rates.append(effective_rate)
 
             years.append(TaxYearProjection(
@@ -594,6 +597,7 @@ class TaxAwareWithdrawalStrategy:
             total_tax=round(total_federal_tax + total_state_tax, 2),
             average_effective_rate=round(avg_effective_rate, 2),
             total_withdrawn=round(total_withdrawn, 2),
+            total_gross_withdrawn=round(total_gross_withdrawn, 2),
             final_balance=round(balances.total, 2),
             depletion_age=depletion_age,
         )

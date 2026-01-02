@@ -5374,7 +5374,9 @@ function displayTaxProjectionResults(result) {
     document.getElementById('tax-total-state').textContent = formatCurrency(result.summary.total_state_tax);
     document.getElementById('tax-total-all').textContent = formatCurrency(result.summary.total_tax);
     document.getElementById('tax-avg-rate').textContent = `${result.summary.average_effective_rate.toFixed(1)}%`;
-    document.getElementById('tax-total-withdrawn').textContent = formatCurrency(result.summary.total_withdrawn);
+    // Show gross withdrawals (before tax) - what users actually withdrew from accounts
+    const grossWithdrawn = result.summary.total_gross_withdrawn || result.summary.total_withdrawn;
+    document.getElementById('tax-total-withdrawn').textContent = formatCurrency(grossWithdrawn);
     document.getElementById('tax-final-balance').textContent = formatCurrency(result.summary.final_balance);
 
     // Update detail descriptions
@@ -5393,13 +5395,17 @@ function displayTaxProjectionResults(result) {
 
     const totalDetail = document.getElementById('tax-total-detail');
     if (totalDetail) {
-        const taxAsPercent = ((result.summary.total_tax / result.summary.total_withdrawn) * 100).toFixed(1);
+        // Use gross withdrawals for accurate percentage (tax / gross, not tax / net)
+        const grossWithdrawn = result.summary.total_gross_withdrawn || result.summary.total_withdrawn;
+        const taxAsPercent = grossWithdrawn > 0 ? ((result.summary.total_tax / grossWithdrawn) * 100).toFixed(1) : '0.0';
         totalDetail.textContent = `${taxAsPercent}% of gross withdrawals over ${withdrawalYears} years`;
     }
 
     const withdrawnDetail = document.getElementById('tax-withdrawn-detail');
     if (withdrawnDetail) {
-        const avgAnnualWithdrawal = result.summary.total_withdrawn / withdrawalYears;
+        // Show gross withdrawals (before tax) in detail
+        const grossWithdrawn = result.summary.total_gross_withdrawn || result.summary.total_withdrawn;
+        const avgAnnualWithdrawal = grossWithdrawn / withdrawalYears;
         withdrawnDetail.textContent = `~${formatCurrency(avgAnnualWithdrawal)}/yr from all account types`;
     }
 
