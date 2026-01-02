@@ -12,10 +12,11 @@ from pathlib import Path
 
 import yaml
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api import (
     portfolio_router,
@@ -156,6 +157,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Add no-cache middleware for API routes (prevents browser caching)
+class NoCacheMiddleware(BaseHTTPMiddleware):
+    """Add no-cache headers to API responses to prevent stale data on demo mode toggle."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        # Only add no-cache to API routes, not static files
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+
+app.add_middleware(NoCacheMiddleware)
 
 # Include API routers
 app.include_router(portfolio_router)

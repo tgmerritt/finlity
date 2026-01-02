@@ -255,8 +255,11 @@ async function toggleDemoMode(enabled) {
             const data = await response.json();
             showToast(enabled ? 'Demo mode enabled' : 'Restored personal portfolio', 'success');
 
-            // Auto-reload to pick up database change
-            window.location.reload();
+            // Hard reload with cache busting to ensure fresh data from new database
+            // Add timestamp to URL to bypass browser cache
+            const url = new URL(window.location.href);
+            url.searchParams.set('_t', Date.now());
+            window.location.href = url.toString();
         } else {
             hideLoading();
             showToast('Failed to update demo mode', 'error');
