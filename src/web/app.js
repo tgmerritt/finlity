@@ -283,6 +283,11 @@ async function toggleDemoMode(enabled) {
             const data = await response.json();
             showToast(enabled ? 'Demo mode enabled' : 'Restored personal portfolio', 'success');
 
+            // CRITICAL: Clear view ID from localStorage when switching databases
+            // Views are stored per-database, so old view IDs become invalid
+            localStorage.removeItem('portfolioViewId');
+            currentViewId = null;
+
             // Hard reload with cache busting to ensure fresh data from new database
             // Add timestamp to URL to bypass browser cache
             const url = new URL(window.location.href);

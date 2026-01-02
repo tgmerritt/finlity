@@ -537,10 +537,7 @@ def get_demo_mode() -> dict:
 
 
 @router.put("/demo-mode")
-def set_demo_mode(
-    settings: DemoModeSettings,
-    db: Database = Depends(get_db),
-) -> dict:
+def set_demo_mode(settings: DemoModeSettings) -> dict:
     """Toggle demo mode on/off dynamically (no server restart needed).
 
     When enabled:
