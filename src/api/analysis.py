@@ -234,7 +234,6 @@ def get_performance(
         portfolio_dict = {
             "accounts": [
                 {
-                    "id": a.id,
                     "name": a.name,
                     "account_type": a.account_type.value,
                     "brokerage": a.brokerage.value if a.brokerage else None,
@@ -340,7 +339,6 @@ def get_risk(
         portfolio_dict = {
             "accounts": [
                 {
-                    "id": a.id,
                     "name": a.name,
                     "account_type": a.account_type.value,
                     "brokerage": a.brokerage.value if a.brokerage else None,
