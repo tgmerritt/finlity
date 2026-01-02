@@ -33,8 +33,10 @@ RUN useradd --create-home --shell /bin/bash appuser
 # Copy application code
 COPY src/ ./src/
 COPY scripts/ ./scripts/
+COPY tests/ ./tests/
 COPY config.yaml .
 COPY funds.yaml .
+COPY pytest.ini .
 
 # Create data directories with proper permissions
 RUN mkdir -p data/imports data/demo data/cache data/logs \
