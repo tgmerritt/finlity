@@ -214,8 +214,13 @@ elif result.needs_recovery:
 - `profiles.py`: Multi-profile management
 
 **Services** (`src/services/`):
+- `ai_config.py`: Centralized Claude model configuration (ANTHROPIC_MODEL env var)
 - `secrets.py`: Encrypted API key storage (env var / .env / database)
 - `fund_data.py`: Fund metadata via yfinance + Claude API fallback
+- `advisor_analysis.py`: AI-powered portfolio analysis and chat advisor
+- `commentary_service.py`: AI commentary generation with caching
+- `commentary_registry.py`: Dashboard element definitions for AI commentary
+- `commentary_prompts.py`: Prompt templates for commentary generation
 - `triggers.py`: Trigger evaluation engine
 - `demo_mode.py`: Dynamic demo mode switching
 
@@ -417,4 +422,37 @@ data/databases/
 
 - `config.yaml`: Target allocations, Monte Carlo parameters
 - `funds.yaml`: Fund metadata cache (populated by Claude API)
-- `.env`: Optional API keys (ANTHROPIC_API_KEY)
+- `.env`: Optional API keys and settings
+
+## Claude API Configuration
+
+AI features (fund analysis, portfolio insights, chat advisor, AI commentary) use the Anthropic Claude API.
+
+**Environment Variables:**
+```bash
+# Required for AI features
+ANTHROPIC_API_KEY=your-api-key
+
+# Optional: Select Claude model (default: sonnet)
+ANTHROPIC_MODEL=sonnet
+```
+
+**Available Models:**
+| Alias | Model ID | Use Case |
+|-------|----------|----------|
+| `opus` | `claude-opus-4-5-20251101` | Complex analysis, highest quality |
+| `sonnet` | `claude-sonnet-4-20250514` | Balanced performance/cost (default) |
+| `haiku` | `claude-3-5-haiku-20241022` | Fast, simple tasks, lowest cost |
+
+**Model Configuration in Code:**
+```python
+from src.services.ai_config import get_claude_model, CLAUDE_MODEL_HAIKU
+
+# Get configured model (from ANTHROPIC_MODEL env var or default)
+model = get_claude_model()
+
+# Use specific model for lightweight tasks
+model = CLAUDE_MODEL_HAIKU
+```
+
+The centralized config is in `src/services/ai_config.py`.

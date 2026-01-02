@@ -8,6 +8,8 @@ from typing import Optional
 import yaml
 from pathlib import Path
 
+from src.services.ai_config import get_claude_model
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,23 +34,27 @@ class FundDataService:
 
     Data sources are tried in this order:
     1. Local cache (funds.yaml)
-    2. yfinance for basic data
-    3. Claude API for enrichment/analysis (if API key available)
+    2. Financial Modeling Prep API (if API key available)
+    3. yfinance for basic data
+    4. Claude API for enrichment/analysis (if API key available)
     """
 
     def __init__(
         self,
         cache_path: str = "funds.yaml",
         claude_api_key: Optional[str] = None,
+        fmp_api_key: Optional[str] = None,
     ):
         """Initialize fund data service.
 
         Args:
             cache_path: Path to the local fund cache file
             claude_api_key: Optional Anthropic API key for Claude queries
+            fmp_api_key: Optional Financial Modeling Prep API key
         """
         self.cache_path = Path(cache_path)
         self.claude_api_key = claude_api_key
+        self.fmp_api_key = fmp_api_key
         self._client = None
         self._cache: dict = {}
         self._load_cache()
@@ -150,6 +156,94 @@ class FundDataService:
             logger.warning(f"Could not fetch yfinance data for {ticker}: {e}")
             return None
 
+    def get_from_fmp(self, ticker: str) -> Optional[FundComposition]:
+        """Get fund sector data from Financial Modeling Prep API.
+
+        FMP provides detailed ETF sector weightings via their API.
+        Requires an API key (free tier: 250 calls/day, limited symbols).
+
+        Args:
+            ticker: Fund ticker symbol
+
+        Returns:
+            FundComposition with sector data or None
+        """
+        if not self.fmp_api_key:
+            return None
+
+        try:
+            import requests
+
+            ticker = ticker.upper()
+
+            # Get ETF sector weightings
+            sector_url = f"https://financialmodelingprep.com/stable/etf/sector-weightings?symbol={ticker}&apikey={self.fmp_api_key}"
+            sector_response = requests.get(sector_url, timeout=10)
+
+            if sector_response.status_code != 200:
+                logger.debug(f"FMP sector API returned {sector_response.status_code} for {ticker}")
+                return None
+
+            sector_data = sector_response.json()
+
+            # Get ETF info for name and other details
+            info_url = f"https://financialmodelingprep.com/stable/etf/info?symbol={ticker}&apikey={self.fmp_api_key}"
+            info_response = requests.get(info_url, timeout=10)
+            info_data = info_response.json() if info_response.status_code == 200 else []
+
+            # Parse sector weightings
+            sector_breakdown = {}
+            if sector_data and isinstance(sector_data, list):
+                for item in sector_data:
+                    sector = item.get("sector", "")
+                    weight = item.get("weightPercentage", 0)
+                    if sector and weight:
+                        # Normalize sector names to Morningstar style
+                        sector_map = {
+                            "Technology": "Technology",
+                            "Information Technology": "Technology",
+                            "Healthcare": "Healthcare",
+                            "Health Care": "Healthcare",
+                            "Financial Services": "Financial Services",
+                            "Financials": "Financial Services",
+                            "Consumer Cyclical": "Consumer Cyclical",
+                            "Consumer Discretionary": "Consumer Cyclical",
+                            "Consumer Defensive": "Consumer Defensive",
+                            "Consumer Staples": "Consumer Defensive",
+                            "Industrials": "Industrials",
+                            "Energy": "Energy",
+                            "Materials": "Materials",
+                            "Basic Materials": "Materials",
+                            "Real Estate": "Real Estate",
+                            "Utilities": "Utilities",
+                            "Communication Services": "Communication Services",
+                            "Telecommunication Services": "Communication Services",
+                        }
+                        normalized = sector_map.get(sector, sector)
+                        sector_breakdown[normalized] = float(weight)
+
+            if not sector_breakdown:
+                return None
+
+            # Extract name from info
+            name = ""
+            if info_data and isinstance(info_data, list) and len(info_data) > 0:
+                name = info_data[0].get("name", "")
+
+            return FundComposition(
+                ticker=ticker,
+                name=name,
+                sector_breakdown=sector_breakdown,
+                data_source="fmp",
+            )
+
+        except ImportError:
+            logger.warning("requests package not installed for FMP API")
+            return None
+        except Exception as e:
+            logger.warning(f"Could not fetch FMP data for {ticker}: {e}")
+            return None
+
     def enrich_with_claude(
         self, ticker: str, basic_data: Optional[FundComposition] = None
     ) -> Optional[FundComposition]:
@@ -184,7 +278,7 @@ Only include fields you are confident about. Use standard Morningstar category n
 
         try:
             message = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=get_claude_model(),
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -230,6 +324,12 @@ Only include fields you are confident about. Use standard Morningstar category n
     ) -> Optional[FundComposition]:
         """Get fund composition from all available sources.
 
+        Data sources are tried in order:
+        1. Local cache (funds.yaml) - instant, no API calls
+        2. Financial Modeling Prep API - accurate sector data if key configured
+        3. yfinance - basic fund info (sector data often missing for funds)
+        4. Claude API - enrichment with Morningstar-style data
+
         Args:
             ticker: Fund ticker symbol
             use_claude: Whether to use Claude API for enrichment
@@ -241,14 +341,26 @@ Only include fields you are confident about. Use standard Morningstar category n
 
         # 1. Check local cache first
         cached = self.get_from_cache(ticker)
-        if cached and cached.morningstar_category:
+        if cached and (cached.morningstar_category or cached.sector_breakdown):
             logger.debug(f"Using cached data for {ticker}")
             return cached
 
-        # 2. Try yfinance for basic data
+        # 2. Try Financial Modeling Prep API (good sector data)
+        fmp_data = self.get_from_fmp(ticker)
+        if fmp_data and fmp_data.sector_breakdown:
+            # Cache the FMP data
+            self._cache[ticker] = {
+                "name": fmp_data.name,
+                "sector_breakdown": fmp_data.sector_breakdown,
+            }
+            self._save_cache()
+            logger.debug(f"Using FMP data for {ticker}")
+            return fmp_data
+
+        # 3. Try yfinance for basic data
         yf_data = self.get_from_yfinance(ticker)
 
-        # 3. Enrich with Claude if available
+        # 4. Enrich with Claude if available
         if use_claude and self.claude_api_key:
             enriched = self.enrich_with_claude(ticker, yf_data)
             if enriched:

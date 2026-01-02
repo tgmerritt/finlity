@@ -6975,6 +6975,325 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// =========================================================================
+// AI COMMENTARY FUNCTIONS
+// =========================================================================
+
+let commentaryCache = {};
+let activePopover = null;
+
+function createPopoverElement(elementId) {
+    const popover = document.createElement('div');
+    popover.className = 'ai-commentary-popover';
+    popover.id = 'ai-popover-' + elementId.replace(/\./g, '-');
+
+    const header = document.createElement('div');
+    header.className = 'commentary-header';
+
+    const badge = document.createElement('span');
+    badge.className = 'ai-badge';
+    badge.textContent = 'AI Insight';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'commentary-close';
+    closeBtn.textContent = '×';
+    closeBtn.onclick = closeAICommentary;
+
+    header.appendChild(badge);
+    header.appendChild(closeBtn);
+
+    const body = document.createElement('div');
+    body.className = 'commentary-body';
+
+    const loading = document.createElement('div');
+    loading.className = 'commentary-loading';
+
+    const spinner = document.createElement('div');
+    spinner.className = 'loading-spinner';
+
+    const loadingText = document.createElement('span');
+    loadingText.textContent = 'Generating insight...';
+
+    loading.appendChild(spinner);
+    loading.appendChild(loadingText);
+    body.appendChild(loading);
+
+    popover.appendChild(header);
+    popover.appendChild(body);
+
+    return popover;
+}
+
+async function showAICommentary(button) {
+    const elementId = button.dataset.elementId;
+
+    // Close any existing popover
+    closeAICommentary();
+
+    // Create popover using safe DOM methods
+    const popover = createPopoverElement(elementId);
+    document.body.appendChild(popover);
+    activePopover = popover;
+
+    // Position the popover
+    positionPopover(popover, button);
+
+    // Check cache first
+    if (commentaryCache[elementId] && !commentaryCache[elementId].error) {
+        renderCommentaryContent(popover, commentaryCache[elementId]);
+        return;
+    }
+
+    // Fetch from API
+    try {
+        const response = await fetch(`/api/commentary/${elementId}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        commentaryCache[elementId] = data;
+        renderCommentaryContent(popover, data);
+    } catch (error) {
+        console.error('Failed to fetch commentary:', error);
+        renderCommentaryError(popover, error.message);
+    }
+}
+
+function closeAICommentary() {
+    if (activePopover) {
+        activePopover.remove();
+        activePopover = null;
+    }
+    // Also close any orphaned popovers
+    document.querySelectorAll('.ai-commentary-popover').forEach(p => p.remove());
+}
+
+function positionPopover(popover, button) {
+    const rect = button.getBoundingClientRect();
+
+    // Default position: below and to the right
+    let top = rect.bottom + 8;
+    let left = rect.left;
+
+    // Adjust if would go off right edge
+    if (left + 350 > window.innerWidth) {
+        left = window.innerWidth - 360;
+    }
+
+    // Adjust if would go off bottom edge
+    if (top + 300 > window.innerHeight) {
+        top = rect.top - 308;
+    }
+
+    // Ensure doesn't go off left edge
+    if (left < 10) {
+        left = 10;
+    }
+
+    popover.style.top = top + 'px';
+    popover.style.left = left + 'px';
+}
+
+function renderCommentaryContent(popover, data) {
+    const body = popover.querySelector('.commentary-body');
+    body.textContent = ''; // Clear loading
+
+    let ageText = '';
+    if (data.age_hours !== undefined) {
+        if (data.age_hours < 1) {
+            ageText = 'Generated just now';
+        } else if (data.age_hours < 24) {
+            ageText = `Generated ${Math.round(data.age_hours)} hours ago`;
+        } else {
+            ageText = `Generated ${Math.round(data.age_hours / 24)} days ago`;
+        }
+    }
+
+    // Content div
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'commentary-content';
+    contentDiv.textContent = data.commentary || 'No commentary available.';
+    body.appendChild(contentDiv);
+
+    // Action items (if any)
+    if (data.action_items && data.action_items.length > 0) {
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'commentary-actions';
+
+        const actionsTitle = document.createElement('strong');
+        actionsTitle.textContent = 'Suggested Actions:';
+        actionsDiv.appendChild(actionsTitle);
+
+        const actionsList = document.createElement('ul');
+        data.action_items.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = item;
+            actionsList.appendChild(li);
+        });
+        actionsDiv.appendChild(actionsList);
+        body.appendChild(actionsDiv);
+    }
+
+    // Footer
+    const footer = document.createElement('div');
+    footer.className = 'commentary-footer';
+
+    const ageSpan = document.createElement('span');
+    ageSpan.className = 'commentary-age';
+    ageSpan.textContent = ageText + (data.is_cached ? ' (cached)' : '');
+    footer.appendChild(ageSpan);
+
+    const refreshBtn = document.createElement('button');
+    refreshBtn.className = 'btn btn-sm btn-link';
+    refreshBtn.textContent = 'Refresh';
+    refreshBtn.onclick = () => refreshCommentary(data.element_id);
+    footer.appendChild(refreshBtn);
+
+    body.appendChild(footer);
+}
+
+function renderCommentaryError(popover, message) {
+    const body = popover.querySelector('.commentary-body');
+    body.textContent = ''; // Clear loading
+
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'commentary-error';
+
+    const errorIcon = document.createElement('span');
+    errorIcon.className = 'error-icon';
+    errorIcon.textContent = '⚠️';
+
+    const errorText = document.createElement('span');
+    errorText.textContent = 'Unable to generate insight';
+
+    const errorDetail = document.createElement('small');
+    errorDetail.textContent = message;
+
+    errorDiv.appendChild(errorIcon);
+    errorDiv.appendChild(errorText);
+    errorDiv.appendChild(errorDetail);
+    body.appendChild(errorDiv);
+}
+
+async function refreshCommentary(elementId) {
+    // Clear from cache
+    delete commentaryCache[elementId];
+
+    // Find the button and re-trigger
+    const button = document.querySelector(`[data-element-id="${elementId}"]`);
+    if (button) {
+        // Close current popover
+        closeAICommentary();
+
+        // Re-fetch with force refresh
+        try {
+            const response = await fetch(`/api/commentary/${elementId}?force_refresh=true`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            commentaryCache[elementId] = data;
+
+            // Re-show the popover
+            showAICommentary(button);
+        } catch (error) {
+            console.error('Failed to refresh commentary:', error);
+            showToast('Failed to refresh insight', 'error');
+        }
+    }
+}
+
+async function refreshAllAIInsights() {
+    try {
+        showToast('Refreshing AI insights...', 'info');
+        const response = await fetch('/api/commentary/refresh', { method: 'POST' });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const result = await response.json();
+        commentaryCache = {};
+        showToast(`Refreshed ${result.refreshed_count} insights`, 'success');
+    } catch (error) {
+        console.error('Failed to refresh all insights:', error);
+        showToast('Failed to refresh insights', 'error');
+    }
+}
+
+function createInfoButton(elementId) {
+    const btn = document.createElement('button');
+    btn.className = 'ai-info-btn';
+    btn.dataset.elementId = elementId;
+    btn.title = 'Get AI insight';
+    btn.onclick = function(e) {
+        e.stopPropagation();
+        showAICommentary(this);
+    };
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'info-icon');
+    svg.setAttribute('viewBox', '0 0 20 20');
+    svg.setAttribute('fill', 'currentColor');
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('fill-rule', 'evenodd');
+    path.setAttribute('d', 'M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z');
+    path.setAttribute('clip-rule', 'evenodd');
+
+    svg.appendChild(path);
+    btn.appendChild(svg);
+
+    return btn;
+}
+
+function initAICommentaryButtons() {
+    // Map value element IDs to commentary element IDs
+    const elementMappings = {
+        'total-value': 'dashboard.total_value',
+        'gain-loss': 'dashboard.total_gain_loss',
+        'retirement-value': 'dashboard.retirement_value',
+        'taxable-value': 'dashboard.taxable_value',
+        'monthly-retirement-income': 'dashboard.monthly_retirement_income',
+        'success-probability': 'dashboard.success_probability',
+    };
+
+    // Find stat cards by the value element IDs they contain
+    Object.entries(elementMappings).forEach(([valueId, commentaryId]) => {
+        const valueElement = document.getElementById(valueId);
+        if (!valueElement) return;
+
+        // Find the parent stat-card
+        const card = valueElement.closest('.stat-card');
+        if (!card) return;
+
+        // Check if button already exists
+        if (card.querySelector('.ai-info-btn')) return;
+
+        const label = card.querySelector('.stat-label');
+        if (label) {
+            const btn = createInfoButton(commentaryId);
+            label.appendChild(btn);
+        }
+    });
+
+    // Close popover when clicking outside
+    document.addEventListener('click', (e) => {
+        if (activePopover && !activePopover.contains(e.target) && !e.target.closest('.ai-info-btn')) {
+            closeAICommentary();
+        }
+    });
+
+    // Close popover on escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeAICommentary();
+        }
+    });
+}
+
+// =========================================================================
+// END AI COMMENTARY FUNCTIONS
+// =========================================================================
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
@@ -6985,4 +7304,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     await updatePriceStatus();  // Show price freshness status
     await checkDemoModeStatus();  // Check demo mode status
     refreshData();
+    initAICommentaryButtons();  // Add AI commentary info icons
 });

@@ -399,6 +399,7 @@ def get_detailed_allocation(db: Database = Depends(get_db)) -> DetailedAllocatio
     - Position Type (Stocks, Funds, Cash, CDs, Bonds)
     """
     from src.services.fund_data import FundDataService
+    from src.services.secrets import SecretsManager
 
     positions = db.get_all_positions()
     total_value = sum(
@@ -419,8 +420,10 @@ def get_detailed_allocation(db: Database = Depends(get_db)) -> DetailedAllocatio
             invested_allocation=0,
         )
 
-    # Initialize fund data service
-    fund_service = FundDataService(cache_path="funds.yaml")
+    # Initialize fund data service with optional API keys for data enrichment
+    secrets = SecretsManager(db)
+    fmp_key = secrets.get_api_key(secrets.FMP_API_KEY)
+    fund_service = FundDataService(cache_path="funds.yaml", fmp_api_key=fmp_key)
 
     # Build position list for weighted allocation calculation
     position_list = []
@@ -763,14 +766,16 @@ def analyze_fund(request: FundAnalysisRequest, db: Database = Depends(get_db)):
     from src.services.secrets import SecretsManager
     from src.services.fund_data import FundDataService
 
-    # Get Claude API key if available
+    # Get API keys if available
     secrets = SecretsManager(db)
     claude_key = secrets.get_api_key(secrets.ANTHROPIC_API_KEY) if request.use_claude else None
+    fmp_key = secrets.get_api_key(secrets.FMP_API_KEY)
 
     # Create fund data service
     fund_service = FundDataService(
         cache_path="funds.yaml",
         claude_api_key=claude_key,
+        fmp_api_key=fmp_key,
     )
 
     # Get fund composition
@@ -824,14 +829,16 @@ def analyze_portfolio_funds(db: Database = Depends(get_db)):
     if not fund_tickers:
         return {"analyzed": [], "message": "No funds found in portfolio"}
 
-    # Get Claude API key
+    # Get API keys
     secrets = SecretsManager(db)
     claude_key = secrets.get_api_key(secrets.ANTHROPIC_API_KEY)
+    fmp_key = secrets.get_api_key(secrets.FMP_API_KEY)
 
     # Create fund data service
     fund_service = FundDataService(
         cache_path="funds.yaml",
         claude_api_key=claude_key,
+        fmp_api_key=fmp_key,
     )
 
     # Analyze each fund and update positions with sector data

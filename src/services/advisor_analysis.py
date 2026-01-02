@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 from datetime import datetime
 
+from src.services.ai_config import get_claude_model
+
 logger = logging.getLogger(__name__)
 
 
@@ -213,7 +215,7 @@ Return ONLY valid JSON, no markdown or explanation."""
 
         try:
             message = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=get_claude_model(),
                 max_tokens=2048,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -315,7 +317,7 @@ Return ONLY valid JSON, no markdown or explanation."""
 
         try:
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=get_claude_model(),
                 max_tokens=1024,
                 system=system_prompt,
                 messages=messages,
@@ -366,7 +368,7 @@ Return ONLY valid JSON, no markdown or explanation."""
 
         try:
             with client.messages.stream(
-                model="claude-sonnet-4-20250514",
+                model=get_claude_model(),
                 max_tokens=1024,
                 system=system_prompt,
                 messages=messages,
@@ -586,7 +588,7 @@ Return ONLY valid JSON, no markdown or explanation."""
             try:
                 # Make streaming request with tools
                 with client.messages.stream(
-                    model="claude-sonnet-4-20250514",
+                    model=get_claude_model(),
                     max_tokens=2048,
                     system=system_prompt,
                     messages=messages,

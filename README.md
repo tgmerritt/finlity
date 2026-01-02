@@ -331,11 +331,12 @@ funds:
       Financials: 12.8
 ```
 
-### Claude API Key (optional)
+### Claude API Configuration (optional)
 
-For fund metadata enrichment via Claude AI:
+For AI-powered fund analysis, portfolio insights, and chat advisor:
 
 ```bash
+# API Key (required for AI features)
 # Option 1: Environment variable
 export ANTHROPIC_API_KEY=your-key-here
 
@@ -347,6 +348,25 @@ curl -X POST http://localhost:8000/api/settings/api-key \
   -H "Content-Type: application/json" \
   -d '{"key": "anthropic_api_key", "value": "your-key-here"}'
 ```
+
+**Model Selection** (optional - defaults to `sonnet`):
+
+```bash
+# Set via environment variable
+export ANTHROPIC_MODEL=sonnet
+
+# Or in .env file
+ANTHROPIC_MODEL=sonnet
+```
+
+Available models:
+| Alias | Full Model ID | Best For |
+|-------|---------------|----------|
+| `opus` | `claude-opus-4-5-20251101` | Complex analysis, highest quality |
+| `sonnet` | `claude-sonnet-4-20250514` | Balanced performance/cost (default) |
+| `haiku` | `claude-3-5-haiku-20241022` | Fast, simple tasks, lowest cost |
+
+You can use either aliases (`opus`, `sonnet`, `haiku`) or full model IDs.
 
 ## API Endpoints
 

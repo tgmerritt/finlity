@@ -225,21 +225,206 @@ funds:
     communication_pct: 8.0
     us_pct: 100.0
   SCHG:
-    name: ''
+    name: Schwab U.S. Large-Cap Growth ETF
     morningstar_category: Large Growth
     style: growth
     market_cap: large
     region: us
-    expense_ratio: null
-    sector_breakdown:
-      Technology: 45.8
-      Consumer Cyclical: 13.2
-      Communication Services: 9.1
-      Healthcare: 8.9
-      Industrials: 7.8
-      Consumer Defensive: 5.2
-      Financial Services: 4.1
-      Real Estate: 2.8
-      Materials: 1.9
-      Energy: 0.8
-      Utilities: 0.4
+    us_stock_pct: 99.85
+    foreign_stock_pct: 0.12
+    bonds_pct: 0.0
+    other_pct: 0.0
+    cash_pct: 0.03
+    giant_pct: 63.06
+    large_pct: 24.47
+    medium_pct: 11.42
+    small_pct: 0.96
+    micro_pct: 0.0
+    technology_pct: 45.8
+    consumer_cyclical_pct: 13.2
+    communication_pct: 9.1
+    healthcare_pct: 8.9
+    industrials_pct: 7.8
+    consumer_defensive_pct: 5.2
+    financial_pct: 4.1
+    real_estate_pct: 2.8
+    materials_pct: 1.9
+    energy_pct: 0.8
+    utilities_pct: 0.4
+    us_pct: 100.0
+  VUG:
+    name: Vanguard Growth ETF
+    morningstar_category: Large Growth
+    style: growth
+    market_cap: large
+    region: us
+    us_stock_pct: 99.71
+    foreign_stock_pct: 0.17
+    bonds_pct: 0.0
+    other_pct: 0.0
+    cash_pct: 0.12
+    giant_pct: 65.12
+    large_pct: 22.56
+    medium_pct: 11.89
+    small_pct: 0.08
+    micro_pct: 0.0
+    technology_pct: 58.0
+    consumer_cyclical_pct: 14.2
+    communication_pct: 7.5
+    healthcare_pct: 6.0
+    industrials_pct: 5.0
+    consumer_defensive_pct: 4.0
+    financial_pct: 2.5
+    real_estate_pct: 1.4
+    materials_pct: 0.8
+    energy_pct: 0.4
+    utilities_pct: 0.2
+    us_pct: 100.0
+  VFH:
+    name: Vanguard Financials ETF
+    morningstar_category: Financial
+    style: blend
+    market_cap: large
+    region: us
+    us_stock_pct: 97.46
+    foreign_stock_pct: 2.54
+    bonds_pct: 0.0
+    other_pct: 0.0
+    cash_pct: 0.0
+    giant_pct: 25.54
+    large_pct: 38.41
+    medium_pct: 22.90
+    small_pct: 9.59
+    micro_pct: 3.57
+    financial_pct: 96.10
+    technology_pct: 2.5
+    real_estate_pct: 0.68
+    industrials_pct: 0.26
+    healthcare_pct: 0.04
+    consumer_cyclical_pct: 0.01
+    communication_pct: 0.01
+    consumer_defensive_pct: 0.0
+    materials_pct: 0.0
+    energy_pct: 0.0
+    utilities_pct: 0.0
+    us_pct: 100.0
+  SCHF:
+    name: Schwab International Equity ETF
+    morningstar_category: Foreign Large Blend
+    style: blend
+    market_cap: large
+    region: foreign_developed
+    us_stock_pct: 0.0
+    foreign_stock_pct: 99.33
+    bonds_pct: 0.29
+    other_pct: 0.22
+    cash_pct: 0.15
+    giant_pct: 50.03
+    large_pct: 33.42
+    medium_pct: 12.88
+    small_pct: 0.21
+    micro_pct: 0.03
+    financial_pct: 24.16
+    industrials_pct: 18.30
+    technology_pct: 11.67
+    healthcare_pct: 9.56
+    consumer_cyclical_pct: 8.87
+    consumer_defensive_pct: 6.75
+    materials_pct: 6.67
+    energy_pct: 4.38
+    communication_pct: 3.98
+    utilities_pct: 3.30
+    real_estate_pct: 2.37
+    us_pct: 0.0
+    developed_ex_us_pct: 99.0
+    emerging_markets_pct: 1.0
+  VSS:
+    name: Vanguard FTSE All-World ex-US Small-Cap ETF
+    morningstar_category: Foreign Small/Mid Value
+    style: value
+    market_cap: small
+    region: foreign_developed
+    us_stock_pct: 0.45
+    foreign_stock_pct: 99.23
+    bonds_pct: 0.0
+    other_pct: 0.0
+    cash_pct: 0.30
+    giant_pct: 0.0
+    large_pct: 3.27
+    medium_pct: 58.21
+    small_pct: 35.24
+    micro_pct: 2.66
+    industrials_pct: 20.0
+    financial_pct: 11.71
+    consumer_cyclical_pct: 12.11
+    real_estate_pct: 9.93
+    materials_pct: 11.39
+    technology_pct: 8.5
+    healthcare_pct: 7.0
+    consumer_defensive_pct: 6.0
+    energy_pct: 4.27
+    communication_pct: 3.20
+    utilities_pct: 5.5
+    us_pct: 0.45
+    developed_ex_us_pct: 75.0
+    emerging_markets_pct: 24.55
+  VFIAX:
+    name: Vanguard 500 Index Fund Admiral Shares
+    morningstar_category: Large Blend
+    style: blend
+    market_cap: large
+    region: us
+    us_stock_pct: 99.0
+    foreign_stock_pct: 0.43
+    bonds_pct: 0.0
+    other_pct: 0.0
+    cash_pct: 0.58
+    giant_pct: 46.58
+    large_pct: 33.80
+    medium_pct: 17.02
+    small_pct: 1.02
+    micro_pct: 0.0
+    technology_pct: 32.0
+    healthcare_pct: 12.0
+    financial_pct: 13.13
+    consumer_cyclical_pct: 10.79
+    consumer_defensive_pct: 6.0
+    industrials_pct: 9.0
+    energy_pct: 4.0
+    materials_pct: 2.60
+    real_estate_pct: 1.95
+    utilities_pct: 2.5
+    communication_pct: 10.60
+    us_pct: 99.0
+    developed_ex_us_pct: 0.5
+    emerging_markets_pct: 0.5
+  VWIGX:
+    name: Vanguard International Growth Fund
+    morningstar_category: Foreign Large Growth
+    style: growth
+    market_cap: large
+    region: global
+    us_stock_pct: 11.49
+    foreign_stock_pct: 86.73
+    bonds_pct: 0.30
+    other_pct: 0.0
+    cash_pct: 1.48
+    giant_pct: 64.21
+    large_pct: 25.09
+    medium_pct: 8.51
+    small_pct: 0.11
+    micro_pct: 0.15
+    consumer_cyclical_pct: 25.81
+    technology_pct: 22.0
+    financial_pct: 10.51
+    healthcare_pct: 10.0
+    communication_pct: 7.53
+    industrials_pct: 8.0
+    consumer_defensive_pct: 6.0
+    materials_pct: 0.79
+    energy_pct: 1.58
+    real_estate_pct: 0.0
+    utilities_pct: 0.0
+    us_pct: 11.49
+    developed_ex_us_pct: 65.0
+    emerging_markets_pct: 23.51

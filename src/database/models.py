@@ -350,3 +350,69 @@ class BudgetPretaxDeduction(Base):
 
     # Relationships
     income_source = relationship("BudgetIncomeSource", back_populates="deductions")
+
+
+# =============================================================================
+# AI Commentary Table
+# =============================================================================
+
+
+class AICommentary(Base):
+    """Cached AI-generated commentary for dashboard elements."""
+
+    __tablename__ = "ai_commentary"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+
+    # Element identification
+    element_id = Column(String, nullable=False, unique=True, index=True)
+    # e.g., "dashboard.total_value", "analysis.risk.sharpe_ratio"
+    element_type = Column(String, nullable=False)  # stat_card, chart, table, metric
+    element_tab = Column(String, nullable=False)  # dashboard, holdings, analysis, etc.
+
+    # Commentary content
+    commentary = Column(Text, nullable=False)  # Main AI-generated text (markdown)
+    comparison_data = Column(Text, nullable=True)  # JSON: web search enrichment data
+    action_items = Column(Text, nullable=True)  # JSON array: actionable suggestions
+
+    # Change detection
+    data_hash = Column(String, nullable=False)  # SHA256 hash for staleness detection
+    data_snapshot = Column(Text, nullable=True)  # JSON: cached data values at generation
+
+    # Metadata
+    generated_at = Column(DateTime, default=datetime.utcnow)
+    # Note: model_version is set explicitly when saving; default is fallback only
+    # See src/services/ai_config.py for centralized model configuration
+    model_version = Column(String, default="claude-sonnet-4-20250514")
+    generation_time_ms = Column(Float, nullable=True)
+    token_count = Column(Float, nullable=True)
+    web_search_used = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def is_stale(self, current_hash: str, max_age_hours: int = 168) -> bool:
+        """Check if commentary needs refresh.
+
+        Args:
+            current_hash: Hash of current data
+            max_age_hours: Maximum age before forced refresh (default 7 days)
+
+        Returns:
+            True if commentary should be regenerated
+        """
+        # Hash mismatch = data changed
+        if self.data_hash != current_hash:
+            return True
+        # Age check
+        if not self.generated_at:
+            return True
+        age = datetime.utcnow() - self.generated_at
+        return age.total_seconds() > (max_age_hours * 3600)
+
+    def age_hours(self) -> float:
+        """Return age of commentary in hours."""
+        if not self.generated_at:
+            return float('inf')
+        age = datetime.utcnow() - self.generated_at
+        return age.total_seconds() / 3600

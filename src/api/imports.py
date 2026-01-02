@@ -11,6 +11,7 @@ import logging
 
 from src.database import Database
 from src.importers import FolderScanner
+from src.services.ai_config import CLAUDE_MODEL_HAIKU
 
 router = APIRouter(prefix="/api/imports", tags=["imports"])
 import_router = APIRouter(prefix="/api/import", tags=["import"])
@@ -453,7 +454,7 @@ def _suggest_account_with_ai(
 
             client = anthropic.Anthropic(api_key=api_key)
             message = client.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model=CLAUDE_MODEL_HAIKU,  # Use fast model for simple parsing tasks
                 max_tokens=200,
                 messages=[{
                     "role": "user",

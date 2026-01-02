@@ -25,6 +25,7 @@ class SecretsManager:
 
     # Common API key names
     ANTHROPIC_API_KEY = "anthropic_api_key"
+    FMP_API_KEY = "fmp_api_key"  # Financial Modeling Prep
 
     def __init__(self, db: Database):
         """Initialize secrets manager with database connection."""
