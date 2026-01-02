@@ -100,6 +100,8 @@ jobs:
           tags: registry.heroku.com/${{ secrets.HEROKU_APP_NAME }}/web
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
 
       - name: Install Heroku CLI
         run: curl https://cli-assets.heroku.com/install.sh | sh
