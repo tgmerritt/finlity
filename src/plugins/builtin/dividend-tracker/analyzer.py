@@ -5,9 +5,8 @@ Tracks dividend income and yield across the portfolio.
 """
 
 import logging
-from typing import Any, Optional
 
-from src.plugins.base import AnalysisPlugin, AnalysisResult, PluginManifest
+from src.plugins.base import AnalysisPlugin, AnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +87,6 @@ class DividendTracker(AnalysisPlugin):
         """
         try:
             include_etfs = self.get_setting("include_etf_dividends", True)
-            annualize = self.get_setting("annualize_yield", True)
 
             total_portfolio_value = 0.0
             total_weighted_yield = 0.0

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from src.database import Database
-from src.models.account_types import PREDEFINED_ACCOUNT_TYPES, get_all_predefined_types
+from src.models.account_types import get_all_predefined_types
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 

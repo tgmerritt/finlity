@@ -9,8 +9,6 @@ from src.analysis import (
     AllocationBreakdown,
     AllocationDeviation,
     CorrelationMatrix,
-    DiversificationScore,
-    PortfolioPerformance,
     PortfolioRisk,
 )
 from src.models import Portfolio

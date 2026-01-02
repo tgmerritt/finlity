@@ -1,7 +1,6 @@
 """Data models for portfolio positions and accounts."""
 
 from datetime import date, datetime
-from decimal import Decimal
 from enum import Enum
 from typing import Optional
 

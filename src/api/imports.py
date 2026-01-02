@@ -4,8 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional
 from pathlib import Path
-import shutil
-import tempfile
 import re
 import logging
 
@@ -408,7 +406,6 @@ def _suggest_account_with_ai(
 
     # Look for exact brokerage + account type match
     for account in accounts:
-        acc_name_lower = account.name.lower()
         acc_brokerage = account.brokerage.lower() if account.brokerage else ""
 
         # Exact match: filename contains account name

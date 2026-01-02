@@ -34,7 +34,7 @@ from .base import (
     ProviderPlugin,
     ExportPlugin,
 )
-from .events import EventBus, Event, EventType, get_event_bus
+from .events import Event, EventType, get_event_bus
 from .security import get_security_manager, SecurityManager
 
 logger = logging.getLogger(__name__)

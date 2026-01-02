@@ -4,9 +4,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
-import numpy as np
 
-from src.data import PriceHistory, PriceService
+from src.data import PriceService
 from src.models import Portfolio
 
 

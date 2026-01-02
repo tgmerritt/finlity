@@ -30,7 +30,7 @@ from src.api import (
 )
 from src.api.budget import router as budget_router
 from src.api.commentary import router as commentary_router
-from src.database import Database, get_profile_manager, get_database
+from src.database import get_profile_manager, get_database
 from src.importers import FolderScanner
 
 
@@ -88,7 +88,6 @@ def get_db_path():
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     from src.database import (
-        DatabaseManager,
         check_database,
         create_seed_callback,
     )
@@ -430,9 +429,8 @@ def check_cd_maturities_command():
     # Show upcoming maturities
     upcoming = db.get_upcoming_cd_maturities(days=90)
     if upcoming:
-        print(f"\nUpcoming maturities in the next 90 days:")
+        print("\nUpcoming maturities in the next 90 days:")
         for cd in upcoming:
-            days_left = (cd.maturity_date.date() - db.get_session().query(cd).first().maturity_date.date()).days if cd.maturity_date else "?"
             print(f"  - {cd.name}: ${cd.current_price:,.2f} (matures {cd.maturity_date.date() if cd.maturity_date else 'Unknown'})")
     print()
 
@@ -524,16 +522,16 @@ Examples:
     url = f"http://{args.host}:{args.port}"
     print(f"\n{'='*50}")
     if demo_mode:
-        print(f"Investment Portfolio Dashboard [DEMO MODE]")
+        print("Investment Portfolio Dashboard [DEMO MODE]")
     else:
-        print(f"Investment Portfolio Dashboard")
+        print("Investment Portfolio Dashboard")
     print(f"{'='*50}")
     print(f"\nStarting server at: {url}")
     print(f"API documentation: {url}/docs")
     if demo_mode:
-        print(f"\n*** DEMO MODE: Using fake portfolio data ***")
+        print("\n*** DEMO MODE: Using fake portfolio data ***")
         print(f"    Database: {get_db_path()}")
-    print(f"\nPress Ctrl+C to stop")
+    print("\nPress Ctrl+C to stop")
     print(f"{'='*50}\n")
 
     # Open browser

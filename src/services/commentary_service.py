@@ -19,10 +19,6 @@ from typing import Optional
 from src.database import Database
 from src.database.models import AICommentary
 from src.services.ai_config import get_claude_model
-
-# Constants
-MAX_CACHE_AGE_HOURS = 168  # 7 days
-MAX_WEB_SEARCHES_PER_ELEMENT = 2
 from src.services.commentary_registry import (
     ELEMENT_REGISTRY,
     get_element_config,
@@ -30,6 +26,10 @@ from src.services.commentary_registry import (
     get_elements_by_trigger,
 )
 from src.services.commentary_prompts import SYSTEM_PROMPT, format_prompt
+
+# Constants
+MAX_CACHE_AGE_HOURS = 168  # 7 days
+MAX_WEB_SEARCHES_PER_ELEMENT = 2
 
 logger = logging.getLogger(__name__)
 
@@ -827,7 +827,6 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
         # Try to use web search
         try:
             # Import here to avoid circular imports
-            from anthropic import Anthropic
 
             client = self._get_client()
             if not client:

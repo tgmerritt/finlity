@@ -9,7 +9,6 @@ This module provides:
 - Permission approval management
 """
 
-import functools
 import json
 import logging
 import threading

@@ -6,7 +6,6 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
 
 from src.data import PriceService
 from src.models import Portfolio

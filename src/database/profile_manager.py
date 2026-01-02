@@ -19,7 +19,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Callable
 import re
-import os
 
 from .operations import Database
 from .database_manager import DatabaseManager, DatabaseStatus, DatabaseCheckResult
@@ -146,7 +145,6 @@ class ProfileManager:
         """Migrate existing portfolio.db to the new profile structure."""
         old_db_path = Path("data/portfolio.db")
         old_funds_path = Path("funds.yaml")
-        old_imports_path = Path("data/imports")
 
         # Create default profile
         default_profile = Profile(

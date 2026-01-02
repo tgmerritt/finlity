@@ -1,7 +1,6 @@
 """Allocation target models with age-based adjustments."""
 
 from datetime import date
-from typing import Optional
 
 import yaml
 from pydantic import BaseModel, Field

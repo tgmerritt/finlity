@@ -6,19 +6,14 @@ from the retirement_planner_analyzer project.
 """
 
 from dataclasses import dataclass
-from datetime import date
 from typing import Optional
 
 import numpy as np
-import yaml
 from scipy.stats import t as t_dist
 
 # Import tax calculator for pre-retirement tax calculations
 from src.budget.tax_calculator import (
     PayrollTaxCalculator,
-    STANDARD_DEDUCTION,
-    FEDERAL_BRACKETS_2024,
-    FEDERAL_BRACKETS_2025,
 )
 
 
@@ -936,8 +931,6 @@ class MonteCarloEngine:
         end_age: int = 95,
     ) -> SensitivityResult:
         """Run sensitivity analysis on key parameters."""
-        base_result = self.run_projection(params, end_age)
-
         # Test different contribution levels
         contribution_impacts = {}
         for mult in [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]:

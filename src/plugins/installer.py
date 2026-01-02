@@ -19,11 +19,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
 
 import yaml
 
-from .base import PluginManifest, PluginType
 
 logger = logging.getLogger(__name__)
 

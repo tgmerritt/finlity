@@ -456,7 +456,6 @@ Only include fields you are confident about. Use standard Morningstar category n
             Dict mapping category to total dollar value
         """
         allocation = {}
-        total_value = sum(p[1] for p in positions)
 
         # Define mapping from allocation type to fund data keys
         allocation_keys = {

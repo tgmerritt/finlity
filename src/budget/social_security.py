@@ -233,7 +233,6 @@ def estimate_social_security_benefit(
     # Estimate AIME from current income
     # SSA averages highest 35 years of indexed earnings
     # We use current income as a simplified proxy
-    monthly_income = annual_income / 12
 
     # Cap at Social Security taxable maximum
     ss_max = MAX_TAXABLE_EARNINGS.get(2024, 168600)

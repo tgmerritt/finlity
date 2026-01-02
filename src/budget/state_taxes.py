@@ -5,7 +5,6 @@ Supports progressive brackets for major states and flat rates for others.
 States without income tax return 0.
 """
 
-from typing import Optional
 
 # State tax brackets for 2024
 # Format: [(bracket_max, rate), ...] where rate is applied to income in that bracket

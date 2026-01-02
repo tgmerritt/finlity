@@ -6,10 +6,10 @@ config.yaml provides initial defaults for first-time setup.
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from src.database import get_database, Database

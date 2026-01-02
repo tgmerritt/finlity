@@ -429,7 +429,7 @@ Return ONLY valid JSON, no markdown or explanation."""
         # Add page-specific context
         if page_context:
             active_tab = page_context.get("active_tab", "unknown")
-            parts.append(f"\n## Current Context")
+            parts.append("\n## Current Context")
             parts.append(f"User is viewing: **{active_tab.upper()}** tab")
 
             visible_data = page_context.get("visible_data", {})
@@ -440,7 +440,7 @@ Return ONLY valid JSON, no markdown or explanation."""
                 total = portfolio_summary.get("total_value", 0)
                 retirement = portfolio_summary.get("retirement_value", 0)
                 taxable = portfolio_summary.get("taxable_value", 0)
-                parts.append(f"\n**Portfolio Overview:**")
+                parts.append("\n**Portfolio Overview:**")
                 parts.append(f"- Total Value: ${total:,.0f}")
                 if retirement:
                     parts.append(f"- Retirement Accounts: ${retirement:,.0f}")
@@ -453,7 +453,7 @@ Return ONLY valid JSON, no markdown or explanation."""
                 if allocation:
                     cash = allocation.get("cash_allocation", 0)
                     top5 = allocation.get("concentration_top5", 0)
-                    parts.append(f"\n**Allocation Summary:**")
+                    parts.append("\n**Allocation Summary:**")
                     parts.append(f"- Cash: {cash:.1f}%")
                     if top5:
                         parts.append(f"- Top 5 Concentration: {top5:.1f}%")
@@ -468,14 +468,14 @@ Return ONLY valid JSON, no markdown or explanation."""
                     ytd = performance.get("ytd_return")
                     alpha = performance.get("alpha_ytd")
                     if ytd is not None:
-                        parts.append(f"\n**Performance:**")
+                        parts.append("\n**Performance:**")
                         parts.append(f"- YTD Return: {ytd:+.2f}%")
                         if alpha is not None:
                             parts.append(f"- Alpha vs S&P: {alpha:+.2f}%")
 
                 risk = visible_data.get("risk")
                 if risk:
-                    parts.append(f"\n**Risk Metrics:**")
+                    parts.append("\n**Risk Metrics:**")
                     if risk.get("volatility") is not None:
                         parts.append(f"- Volatility: {risk['volatility']:.1f}%")
                     if risk.get("sharpe_ratio") is not None:
@@ -486,7 +486,7 @@ Return ONLY valid JSON, no markdown or explanation."""
             elif active_tab == "projections":
                 mc_results = visible_data.get("monte_carlo_results")
                 if mc_results:
-                    parts.append(f"\n**Retirement Projection:**")
+                    parts.append("\n**Retirement Projection:**")
                     success_rate = mc_results.get("success_rate")
                     if success_rate is not None:
                         parts.append(f"- Success Rate: {success_rate:.0f}%")
@@ -496,7 +496,7 @@ Return ONLY valid JSON, no markdown or explanation."""
 
                 mc_params = visible_data.get("monte_carlo_params")
                 if mc_params:
-                    parts.append(f"\n**Projection Parameters:**")
+                    parts.append("\n**Projection Parameters:**")
                     if mc_params.get("current_age"):
                         parts.append(f"- Current Age: {mc_params['current_age']}")
                     if mc_params.get("retirement_age"):
@@ -507,7 +507,7 @@ Return ONLY valid JSON, no markdown or explanation."""
             elif active_tab == "taxes":
                 tax_projection = visible_data.get("tax_projection")
                 if tax_projection:
-                    parts.append(f"\n**Tax Projection:**")
+                    parts.append("\n**Tax Projection:**")
                     if tax_projection.get("average_effective_rate") is not None:
                         parts.append(f"- Avg Effective Rate: {tax_projection['average_effective_rate']:.1f}%")
                     if tax_projection.get("total_tax") is not None:
@@ -596,7 +596,6 @@ Return ONLY valid JSON, no markdown or explanation."""
                 ) as stream:
                     current_tool_use = None
                     tool_input_json = ""
-                    has_tool_use = False
 
                     for event in stream:
                         if event.type == "content_block_start":
@@ -606,7 +605,6 @@ Return ONLY valid JSON, no markdown or explanation."""
                                     "name": event.content_block.name,
                                 }
                                 tool_input_json = ""
-                                has_tool_use = True
                                 yield {"type": "tool_start", "name": current_tool_use["name"], "id": current_tool_use["id"]}
 
                         elif event.type == "content_block_delta":

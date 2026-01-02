@@ -10,11 +10,10 @@ Provides endpoints for:
 - Income transition projections
 """
 
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from src.database import get_database
 from src.database.models import (
@@ -25,7 +24,7 @@ from src.database.models import (
     BudgetPretaxDeduction,
 )
 from src.budget.tax_calculator import PayrollTaxCalculator, PAY_FREQUENCIES
-from src.budget.state_taxes import get_all_states, get_state_marginal_rate
+from src.budget.state_taxes import get_all_states
 from src.budget.social_security import (
     estimate_social_security_benefit,
     get_claiming_age_comparison,
@@ -156,7 +155,7 @@ async def list_income_sources():
     session = db.get_session()
     try:
         sources = session.query(BudgetIncomeSource).filter(
-            BudgetIncomeSource.is_active == True
+            BudgetIncomeSource.is_active.is_(True)
         ).order_by(BudgetIncomeSource.name).all()
 
         return [
@@ -404,7 +403,7 @@ async def list_expenses():
     session = db.get_session()
     try:
         expenses = session.query(BudgetExpense).filter(
-            BudgetExpense.is_active == True
+            BudgetExpense.is_active.is_(True)
         ).all()
 
         # Frequency to annual multiplier
@@ -690,7 +689,7 @@ async def calculate_annual_summary(data: AnnualSummaryRequest):
     try:
         # Get all active income sources
         income_sources = session.query(BudgetIncomeSource).filter(
-            BudgetIncomeSource.is_active == True
+            BudgetIncomeSource.is_active.is_(True)
         ).all()
 
         if not income_sources:
@@ -706,7 +705,7 @@ async def calculate_annual_summary(data: AnnualSummaryRequest):
 
         # Get all active expenses
         expenses = session.query(BudgetExpense).filter(
-            BudgetExpense.is_active == True
+            BudgetExpense.is_active.is_(True)
         ).all()
 
         # Get deductions
@@ -836,7 +835,7 @@ async def get_paycheck_chart_data():
 
         # Get income sources
         sources = session.query(BudgetIncomeSource).filter(
-            BudgetIncomeSource.is_active == True
+            BudgetIncomeSource.is_active.is_(True)
         ).all()
 
         if not sources:
@@ -861,8 +860,8 @@ async def get_paycheck_chart_data():
 
         # Get expenses and convert to per-period
         expenses = session.query(BudgetExpense).filter(
-            BudgetExpense.is_active == True,
-            BudgetExpense.is_pretax == False,
+            BudgetExpense.is_active.is_(True),
+            BudgetExpense.is_pretax.is_(False),
         ).all()
 
         freq_to_annual = {"weekly": 52, "biweekly": 26, "monthly": 12, "quarterly": 4, "annual": 1}

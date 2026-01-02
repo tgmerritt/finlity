@@ -140,7 +140,7 @@ class FolderScanner:
             return True
 
         try:
-            from src.plugins import get_plugin_registry, get_import_pipeline
+            from src.plugins import get_plugin_registry
 
             registry = get_plugin_registry()
             registry.discover_plugins(auto_enable_builtin=True)
@@ -337,13 +337,13 @@ class FolderScanner:
         detected = {}
         columns_lower = {col: col.lower().strip() for col in df.columns}
 
-        for field, patterns in COLUMN_PATTERNS.items():
+        for field_name, patterns in COLUMN_PATTERNS.items():
             for col, col_lower in columns_lower.items():
-                if field in detected:
+                if field_name in detected:
                     break
                 for pattern in patterns:
                     if re.search(pattern, col_lower, re.IGNORECASE):
-                        detected[field] = col
+                        detected[field_name] = col
                         break
 
         return detected
@@ -388,7 +388,6 @@ class FolderScanner:
                 )
 
             # Execute plugin import
-            from src.plugins import ImportResult as PluginImportResult
             plugin_result = pipeline.import_file(
                 pending.path,
                 pending.account_type,

@@ -16,8 +16,6 @@ import pandas as pd
 from src.plugins.base import (
     ImporterPlugin,
     ImportResult,
-    PluginManifest,
-    FileFormat,
 )
 
 logger = logging.getLogger(__name__)

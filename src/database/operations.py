@@ -1005,7 +1005,7 @@ class Database:
             # If setting as default, unset other defaults
             if is_default:
                 session.query(PortfolioView).filter(
-                    PortfolioView.is_default == True
+                    PortfolioView.is_default.is_(True)
                 ).update({PortfolioView.is_default: False})
 
             view = PortfolioView(
@@ -1031,7 +1031,7 @@ class Database:
     def get_default_view(self) -> Optional[PortfolioView]:
         """Get the default portfolio view."""
         with self.get_session() as session:
-            return session.query(PortfolioView).filter(PortfolioView.is_default == True).first()
+            return session.query(PortfolioView).filter(PortfolioView.is_default.is_(True)).first()
 
     def update_view(
         self,
@@ -1054,7 +1054,7 @@ class Database:
                 if is_default:
                     # Unset other defaults first
                     session.query(PortfolioView).filter(
-                        PortfolioView.is_default == True,
+                        PortfolioView.is_default.is_(True),
                         PortfolioView.id != view_id
                     ).update({PortfolioView.is_default: False})
                 view.is_default = is_default
@@ -1091,7 +1091,7 @@ class Database:
             if not all_view:
                 # Check if any view is default
                 has_default = session.query(PortfolioView).filter(
-                    PortfolioView.is_default == True
+                    PortfolioView.is_default.is_(True)
                 ).first() is not None
 
                 all_view = PortfolioView(

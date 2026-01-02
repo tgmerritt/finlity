@@ -5,9 +5,8 @@ Displays an interactive treemap visualization showing portfolio allocation
 by sector with individual holdings.
 """
 
-from typing import Any
 
-from src.plugins.base import WidgetPlugin, WidgetContent, PluginManifest
+from src.plugins.base import WidgetPlugin, WidgetContent
 
 
 # Sector colors (darker shades for better dark mode compatibility)

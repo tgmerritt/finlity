@@ -13,9 +13,6 @@ from src.projections.engine import (
     WithdrawalProjection,
     AccountBalances,
     TaxAwareWithdrawalStrategy,
-    TaxYearProjection,
-    TaxProjectionResult,
-    TaxProjectionSummary,
 )
 
 router = APIRouter(prefix="/api/projections", tags=["projections"])
@@ -895,7 +892,7 @@ def run_tax_projection(
         # Fetch income sources from database
         with db.session() as session:
             income_sources = session.query(BudgetIncomeSource).filter(
-                BudgetIncomeSource.is_active == True
+                BudgetIncomeSource.is_active.is_(True)
             ).all()
 
             # Sum up all active income sources

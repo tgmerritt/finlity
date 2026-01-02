@@ -4,9 +4,7 @@ This module provides tools that Claude can call during chat conversations
 to query the portfolio database for detailed information.
 """
 
-import json
 import logging
-from typing import Any
 
 logger = logging.getLogger(__name__)
 

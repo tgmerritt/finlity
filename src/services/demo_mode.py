@@ -78,7 +78,7 @@ class DemoModeManager:
                     file_state = json.load(f)
                     # Only update if file has different enabled state
                     if file_state.get("enabled") != self._state.get("enabled"):
-                        logger.info(f"Demo mode state changed on disk, reloading")
+                        logger.info("Demo mode state changed on disk, reloading")
                         self._state = file_state
             except Exception as e:
                 logger.warning(f"Failed to refresh demo state: {e}")

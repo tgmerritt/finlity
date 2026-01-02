@@ -2,9 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
-from jinja2 import Environment, FileSystemLoader
 
 from src.analysis import (
     AllocationAnalyzer,
@@ -13,7 +11,7 @@ from src.analysis import (
     RiskAnalyzer,
 )
 from src.data import FundLookupService, PriceService
-from src.models import AllocationTargets, Portfolio
+from src.models import Portfolio
 
 from .charts import (
     create_account_breakdown,

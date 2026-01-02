@@ -12,7 +12,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .base import AnalysisPlugin, AnalysisResult, PluginMetric
+from .base import AnalysisPlugin, AnalysisResult
 from .registry import get_plugin_registry
 
 logger = logging.getLogger(__name__)

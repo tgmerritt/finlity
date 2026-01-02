@@ -3,13 +3,16 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from src.services.advisor_analysis import AdvisorAnalysisService
 
 from src.database import Database
 from src.models import Portfolio, Account as PydanticAccount, Position as PydanticPosition
 from src.models import AccountType, Brokerage
-from src.analysis.performance import PerformanceAnalyzer, PortfolioPerformance
-from src.analysis.risk import RiskAnalyzer, PortfolioRisk
+from src.analysis.performance import PerformanceAnalyzer
+from src.analysis.risk import RiskAnalyzer
 from src.analysis.allocation import AllocationAnalyzer
 from src.analysis.correlation import CorrelationAnalyzer
 
@@ -236,8 +239,6 @@ def get_allocation(db: Database = Depends(get_db)) -> AllocationResponse:
             concentration_top5=0,
             concentration_top10=0,
         )
-
-    analyzer = AllocationAnalyzer()
 
     # Get allocations
     by_asset_class = {k.value: v * 100 for k, v in portfolio.get_allocation_by_asset_class().items()}
@@ -959,7 +960,7 @@ def _get_sector_from_finnhub(ticker: str, api_key: str) -> Optional[str]:
     """Try to get sector from Finnhub company profile."""
     import requests
     try:
-        url = f"https://finnhub.io/api/v1/stock/profile2"
+        url = "https://finnhub.io/api/v1/stock/profile2"
         params = {"symbol": ticker, "token": api_key}
         resp = requests.get(url, params=params, timeout=10)
 

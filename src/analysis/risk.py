@@ -4,9 +4,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
-import yaml
 
-from src.data import PriceHistory, PriceService
+from src.data import PriceService
 from src.models import Portfolio
 
 

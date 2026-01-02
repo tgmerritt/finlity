@@ -107,7 +107,6 @@ class CorrelationHeatmapWidget(WidgetPlugin):
     def _calculate_price_correlations(self, tickers: list[str]) -> Optional[list[list[float]]]:
         """Calculate actual correlations from price history using yfinance."""
         import pandas as pd
-        import numpy as np
 
         # Filter out non-tradeable tickers (CDs, cash, etc.)
         tradeable_tickers = [
@@ -155,11 +154,7 @@ class CorrelationHeatmapWidget(WidgetPlugin):
             corr_df = returns.corr()
 
             # Build matrix for all requested tickers (including non-tradeable)
-            n = len(tickers)
             matrix = []
-
-            # Create reverse mapping from normalized to original
-            norm_to_orig = {v: k for k, v in normalized.items()}
 
             for i, ticker1 in enumerate(tickers):
                 row = []
@@ -211,7 +206,6 @@ class CorrelationHeatmapWidget(WidgetPlugin):
 
         corr_df = df.corr()
 
-        n = len(tickers)
         matrix = []
 
         for i, ticker1 in enumerate(tickers):
@@ -295,7 +289,6 @@ class CorrelationHeatmapWidget(WidgetPlugin):
                 return 0.55
             return SECTOR_CORRELATIONS.get(key1, SECTOR_CORRELATIONS.get(key2, 0.55))
 
-        n = len(tickers)
         matrix = []
 
         for i, ticker1 in enumerate(tickers):

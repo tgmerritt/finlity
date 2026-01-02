@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, String, Text, Boolean, create_engine
+from sqlalchemy import Column, DateTime, Float, ForeignKey, String, Text, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()

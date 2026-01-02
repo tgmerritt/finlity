@@ -6,9 +6,9 @@ to offset capital gains and reduce tax liability.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Optional
 
-from src.plugins.base import AnalysisPlugin, AnalysisResult, PluginManifest
+from src.plugins.base import AnalysisPlugin, AnalysisResult
 
 logger = logging.getLogger(__name__)
 
