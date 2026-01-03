@@ -101,6 +101,7 @@ return {"task_id": task_id, "status": "running"}
 ### Frontend Patterns
 - **Vanilla JS + Plotly.js** - No framework, direct DOM manipulation
 - **Dark mode**: Check `document.documentElement.getAttribute('data-theme') === 'dark'`
+- **CSS CONTRAST RULE**: All UI elements MUST have proper contrast in both light and dark modes. Test hover states, tooltips, and chart elements in both themes.
 - **API field mapping**: Some API responses use different field names than frontend expects (e.g., `gross` vs `gross_pay`)
 
 ## Budget/Paycheck System

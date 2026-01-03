@@ -5878,7 +5878,12 @@ function renderTaxBurdenChart(chartData) {
         margin: { t: 20, r: 60, b: 60, l: 60 },
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        font: { color: isDark ? '#e5e5e5' : '#1a1a1a' }
+        font: { color: isDark ? '#e5e5e5' : '#1a1a1a' },
+        hoverlabel: {
+            bgcolor: isDark ? '#1e1e1e' : '#ffffff',
+            font: { color: isDark ? '#e0e0e0' : '#1e1e1e' },
+            bordercolor: isDark ? '#404040' : '#e0e0e0'
+        }
     };
 
     Plotly.newPlot('tax-burden-chart', traces, layout, {
@@ -5950,7 +5955,12 @@ function renderAccountBalanceChart(chartData) {
         margin: { t: 20, r: 20, b: 60, l: 60 },
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        font: { color: isDark ? '#e5e5e5' : '#1a1a1a' }
+        font: { color: isDark ? '#e5e5e5' : '#1a1a1a' },
+        hoverlabel: {
+            bgcolor: isDark ? '#1e1e1e' : '#ffffff',
+            font: { color: isDark ? '#e0e0e0' : '#1e1e1e' },
+            bordercolor: isDark ? '#404040' : '#e0e0e0'
+        }
     };
 
     Plotly.newPlot('tax-balance-chart', traces, layout, {
@@ -6522,7 +6532,12 @@ async function loadPaycheckChart() {
             paper_bgcolor: 'transparent',
             plot_bgcolor: 'transparent',
             font: { color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)' },
-            hovermode: 'x unified'
+            hovermode: 'x unified',
+            hoverlabel: {
+                bgcolor: isDark ? '#1e1e1e' : '#ffffff',
+                font: { color: isDark ? '#e0e0e0' : '#1e1e1e' },
+                bordercolor: isDark ? '#404040' : '#e0e0e0'
+            }
         };
 
         Plotly.newPlot('paycheck-chart', traces, layout, { responsive: true });
@@ -6567,7 +6582,12 @@ function renderCashFlowWaterfall(summary) {
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
         font: { color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)' },
-        showlegend: false
+        showlegend: false,
+        hoverlabel: {
+            bgcolor: isDark ? '#1e1e1e' : '#ffffff',
+            font: { color: isDark ? '#e0e0e0' : '#1e1e1e' },
+            bordercolor: isDark ? '#404040' : '#e0e0e0'
+        }
     };
 
     Plotly.newPlot('cashflow-waterfall-chart', [trace], layout, { responsive: true });
@@ -6608,7 +6628,12 @@ function updateExpensesCategoryChart(expenses) {
         margin: { t: 20, r: 20, b: 20, l: 20 },
         paper_bgcolor: 'transparent',
         font: { color: textColor },
-        showlegend: false
+        showlegend: false,
+        hoverlabel: {
+            bgcolor: isDark ? '#1e1e1e' : '#ffffff',
+            font: { color: isDark ? '#e0e0e0' : '#1e1e1e' },
+            bordercolor: isDark ? '#404040' : '#e0e0e0'
+        }
     };
 
     Plotly.newPlot('expenses-category-chart', [trace], layout, { responsive: true });
@@ -6715,7 +6740,12 @@ function renderTransitionChart(years) {
         margin: { t: 20, r: 20, b: 80, l: 80 },
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        font: { color: textColor }
+        font: { color: textColor },
+        hoverlabel: {
+            bgcolor: isDark ? '#1e1e1e' : '#ffffff',
+            font: { color: isDark ? '#e0e0e0' : '#1e1e1e' },
+            bordercolor: isDark ? '#404040' : '#e0e0e0'
+        }
     };
 
     Plotly.newPlot('transition-chart', traces, layout, { responsive: true });
