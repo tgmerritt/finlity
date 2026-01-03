@@ -3,18 +3,22 @@ Monte Carlo projection engine for retirement planning.
 
 Incorporates black swan/golden swan modeling and t-distribution returns
 from the retirement_planner_analyzer project.
+
+Features multi-core parallelization for faster simulations.
 """
 
+import logging
+import os
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
 from scipy.stats import t as t_dist
 
-# Import tax calculator for pre-retirement tax calculations
-from src.budget.tax_calculator import (
-    PayrollTaxCalculator,
-)
+from src.budget.tax_calculator import PayrollTaxCalculator
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -701,6 +705,158 @@ class TaxAwareWithdrawalStrategy:
         return TaxProjectionResult(years=years, summary=summary)
 
 
+# =============================================================================
+# Multi-core Monte Carlo Worker Function
+# =============================================================================
+# This must be a module-level function (not a method) to work with
+# multiprocessing. Each worker runs a batch of simulations independently.
+
+
+def _run_simulation_batch(
+    batch_size: int,
+    years: int,
+    current_age: int,
+    retirement_age: int,
+    current_balance: float,
+    monthly_contribution: float,
+    monthly_withdrawal: float,
+    stock_allocation: float,
+    bond_allocation: float,
+    cash_allocation: float,
+    # Monte Carlo parameters
+    stock_mean: float,
+    stock_std: float,
+    bond_mean: float,
+    bond_std: float,
+    inflation: float,
+    black_swan_prob: float,
+    black_swan_impact: float,
+    golden_swan_prob: float,
+    golden_swan_impact: float,
+    t_df: int,
+    # Tax-aware parameters (optional)
+    use_tax_aware: bool = False,
+    initial_taxable: float = 0.0,
+    initial_traditional: float = 0.0,
+    initial_roth: float = 0.0,
+    tax_rate_ordinary: float = 0.22,
+    tax_rate_capital_gains: float = 0.15,
+    tax_rate_state: float = 0.05,
+    cost_basis_ratio: float = 0.60,
+    contribution_traditional_pct: float = 0.60,
+    contribution_roth_pct: float = 0.25,
+    contribution_taxable_pct: float = 0.15,
+    # Random seed for reproducibility (each worker gets different seed)
+    random_seed: int = None,
+) -> np.ndarray:
+    """
+    Run a batch of Monte Carlo simulations.
+
+    This is a standalone function that can run in separate processes.
+    Each worker gets its own random seed to ensure independent random streams.
+
+    Returns:
+        np.ndarray of shape (batch_size, years) with portfolio values
+    """
+    # Set random seed for this worker (ensures reproducibility and independence)
+    if random_seed is not None:
+        np.random.seed(random_seed)
+
+    portfolio_sims = np.zeros((batch_size, years))
+
+    # Helper to generate annual return (inlined for performance)
+    def generate_return():
+        rand_value = np.random.rand()
+        if rand_value < black_swan_prob:
+            return black_swan_impact
+        elif rand_value < black_swan_prob + golden_swan_prob:
+            return golden_swan_impact
+        else:
+            expected_return = (
+                stock_allocation * stock_mean
+                + bond_allocation * bond_mean
+                + cash_allocation * 0.03
+            )
+            annual_return = t_dist.rvs(
+                t_df,
+                loc=expected_return,
+                scale=stock_std * stock_allocation + bond_std * bond_allocation,
+            )
+            return max(min(annual_return, 1.0), -0.80)
+
+    if use_tax_aware:
+        # Tax-aware mode with separate account tracking
+        withdrawal_strategy = TaxAwareWithdrawalStrategy(
+            tax_rate_ordinary=tax_rate_ordinary,
+            tax_rate_capital_gains=tax_rate_capital_gains,
+            tax_rate_state=tax_rate_state,
+            cost_basis_ratio=cost_basis_ratio,
+        )
+
+        for sim in range(batch_size):
+            balances = AccountBalances(
+                taxable=initial_taxable,
+                traditional=initial_traditional,
+                roth=initial_roth,
+            )
+            portfolio_sims[sim, 0] = balances.total
+
+            for year in range(1, years):
+                age = current_age + year
+                annual_return = generate_return()
+
+                # Apply return to each account
+                balances.taxable *= (1 + annual_return)
+                balances.traditional *= (1 + annual_return)
+                balances.roth *= (1 + annual_return)
+
+                # Add contributions if pre-retirement
+                if age < retirement_age:
+                    annual_contrib = monthly_contribution * 12
+                    balances.traditional += annual_contrib * contribution_traditional_pct
+                    balances.roth += annual_contrib * contribution_roth_pct
+                    balances.taxable += annual_contrib * contribution_taxable_pct
+
+                # Withdraw if in retirement
+                if age >= retirement_age:
+                    years_retired = age - retirement_age
+                    spending = monthly_withdrawal * 12 * (1 + inflation) ** years_retired
+                    _, balances = withdrawal_strategy.execute_withdrawal(
+                        spending_needed=spending,
+                        balances=balances,
+                        age=age,
+                    )
+
+                portfolio_sims[sim, year] = balances.total
+    else:
+        # Simple mode - single pool of money (faster)
+        for sim in range(batch_size):
+            portfolio_value = current_balance
+            portfolio_sims[sim, 0] = portfolio_value
+
+            for year in range(1, years):
+                age = current_age + year
+                annual_return = generate_return()
+
+                portfolio_value *= (1 + annual_return)
+
+                # Add contribution if pre-retirement
+                if age < retirement_age:
+                    portfolio_value += monthly_contribution * 12
+
+                # Subtract withdrawal if in retirement
+                if age >= retirement_age:
+                    years_retired = age - retirement_age
+                    inflation_adj_withdrawal = (
+                        monthly_withdrawal * 12 * (1 + inflation) ** years_retired
+                    )
+                    portfolio_value = max(0, portfolio_value - inflation_adj_withdrawal)
+
+                portfolio_sims[sim, year] = portfolio_value
+
+    return portfolio_sims
+
+
 class MonteCarloEngine:
     """
     Monte Carlo simulation engine with black swan modeling.
@@ -807,6 +963,9 @@ class MonteCarloEngine:
         """
         Run Monte Carlo simulation for retirement projection.
 
+        Uses multi-core parallelization for faster performance on multi-core CPUs.
+        Simulations are split across available CPU cores.
+
         Supports two modes:
         - Simple mode (use_tax_aware_withdrawals=False): Single pool of money
         - Tax-aware mode (use_tax_aware_withdrawals=True): Tracks taxable, traditional, and Roth
@@ -815,94 +974,92 @@ class MonteCarloEngine:
         Returns percentile bands for portfolio value at each age.
         """
         years = end_age - params.current_age + 1
-        portfolio_sims = np.zeros((self.num_simulations, years))
 
-        # Initialize based on mode
+        # Determine if tax-aware mode
         use_tax_aware = params.use_tax_aware_withdrawals and params.account_balances is not None
 
+        # Get account balances for tax-aware mode
         if use_tax_aware:
-            # Tax-aware mode: use provided account balances
-            initial_balances = params.account_balances
-            portfolio_sims[:, 0] = initial_balances.total
-
-            # Create withdrawal strategy
-            withdrawal_strategy = TaxAwareWithdrawalStrategy(
-                tax_rate_ordinary=params.tax_rate_ordinary,
-                tax_rate_capital_gains=params.tax_rate_capital_gains,
-                tax_rate_state=params.tax_rate_state,
-                cost_basis_ratio=params.cost_basis_ratio,
-            )
+            initial_taxable = params.account_balances.taxable
+            initial_traditional = params.account_balances.traditional
+            initial_roth = params.account_balances.roth
         else:
-            # Simple mode: single pool
-            portfolio_sims[:, 0] = params.current_balance
+            initial_taxable = 0.0
+            initial_traditional = 0.0
+            initial_roth = 0.0
 
-        for sim in range(self.num_simulations):
-            if use_tax_aware:
-                # Track separate account balances
-                balances = AccountBalances(
-                    taxable=initial_balances.taxable,
-                    traditional=initial_balances.traditional,
-                    roth=initial_balances.roth,
-                )
-            else:
-                portfolio_value = params.current_balance
+        # Determine number of workers (use all available cores, max 16)
+        num_workers = min(os.cpu_count() or 4, 16)
 
-            for year in range(1, years):
-                current_age = params.current_age + year
+        # Split simulations across workers
+        base_batch_size = self.num_simulations // num_workers
+        remainder = self.num_simulations % num_workers
 
-                # Generate return
-                annual_return = self.generate_annual_return(
-                    params.stock_allocation,
-                    params.bond_allocation,
-                    params.cash_allocation,
-                )
+        # Generate unique seeds for each worker (for reproducibility)
+        base_seed = np.random.randint(0, 2**31)
 
-                if use_tax_aware:
-                    # Apply return to each account type
-                    balances.taxable *= (1 + annual_return)
-                    balances.traditional *= (1 + annual_return)
-                    balances.roth *= (1 + annual_return)
+        # Build batch arguments
+        batch_args = []
+        for i in range(num_workers):
+            # Distribute remainder across first few workers
+            batch_size = base_batch_size + (1 if i < remainder else 0)
+            if batch_size == 0:
+                continue
 
-                    # Add contributions if pre-retirement (split by allocation)
-                    if current_age < params.retirement_age:
-                        annual_contribution = params.monthly_contribution * 12
-                        balances.traditional += annual_contribution * params.contribution_traditional_pct
-                        balances.roth += annual_contribution * params.contribution_roth_pct
-                        balances.taxable += annual_contribution * params.contribution_taxable_pct
+            batch_args.append((
+                batch_size,
+                years,
+                params.current_age,
+                params.retirement_age,
+                params.current_balance,
+                params.monthly_contribution,
+                params.monthly_withdrawal,
+                params.stock_allocation,
+                params.bond_allocation,
+                params.cash_allocation,
+                # Monte Carlo parameters
+                self.stock_mean,
+                self.stock_std,
+                self.bond_mean,
+                self.bond_std,
+                self.inflation,
+                self.black_swan_prob,
+                self.black_swan_impact,
+                self.golden_swan_prob,
+                self.golden_swan_impact,
+                self.t_df,
+                # Tax-aware parameters
+                use_tax_aware,
+                initial_taxable,
+                initial_traditional,
+                initial_roth,
+                params.tax_rate_ordinary,
+                params.tax_rate_capital_gains,
+                params.tax_rate_state,
+                params.cost_basis_ratio,
+                params.contribution_traditional_pct,
+                params.contribution_roth_pct,
+                params.contribution_taxable_pct,
+                # Unique seed for this worker
+                base_seed + i,
+            ))
 
-                    # Withdraw if in retirement using tax-efficient ordering
-                    if current_age >= params.retirement_age:
-                        years_retired = current_age - params.retirement_age
-                        spending_needed = (
-                            params.monthly_withdrawal * 12 * (1 + self.inflation) ** years_retired
-                        )
+        # Run simulations in parallel
+        logger.info(f"Running {self.num_simulations} Monte Carlo simulations across {len(batch_args)} workers")
 
-                        # Execute tax-efficient withdrawal
-                        _, balances = withdrawal_strategy.execute_withdrawal(
-                            spending_needed=spending_needed,
-                            balances=balances,
-                            age=current_age,
-                        )
+        results = []
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            # Submit all batches
+            futures = [executor.submit(_run_simulation_batch, *args) for args in batch_args]
 
-                    portfolio_sims[sim, year] = balances.total
+            # Collect results
+            for future in futures:
+                results.append(future.result())
 
-                else:
-                    # Simple mode: single pool
-                    portfolio_value *= (1 + annual_return)
+        # Combine results from all workers
+        portfolio_sims = np.vstack(results)
 
-                    # Add contribution if pre-retirement
-                    if current_age < params.retirement_age:
-                        portfolio_value += params.monthly_contribution * 12
-
-                    # Subtract withdrawal if in retirement
-                    if current_age >= params.retirement_age:
-                        years_retired = current_age - params.retirement_age
-                        inflation_adjusted_withdrawal = (
-                            params.monthly_withdrawal * 12 * (1 + self.inflation) ** years_retired
-                        )
-                        portfolio_value = max(0, portfolio_value - inflation_adjusted_withdrawal)
-
-                    portfolio_sims[sim, year] = portfolio_value
+        logger.info(f"Completed {portfolio_sims.shape[0]} simulations")
 
         # Calculate percentiles
         ages = list(range(params.current_age, end_age + 1))
