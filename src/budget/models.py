@@ -179,6 +179,7 @@ class PretaxDeduction:
 
     id: Optional[int] = None
     income_source_id: Optional[int] = None
+    label: Optional[str] = None  # User-friendly label (e.g., "John's 401k")
     deduction_type: str = "401k"  # "401k", "hsa", "fsa", "dental", "vision", "other"
     amount_per_period: float = 0.0
     employer_match: float = 0.0  # Employer contribution
@@ -196,6 +197,7 @@ class PretaxDeduction:
         return {
             "id": self.id,
             "income_source_id": self.income_source_id,
+            "label": self.label,
             "deduction_type": self.deduction_type,
             "amount_per_period": round(self.amount_per_period, 2),
             "employer_match": round(self.employer_match, 2),

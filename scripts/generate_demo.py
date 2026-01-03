@@ -14,7 +14,6 @@ Usage:
 Can also be triggered via API: POST /api/demo/generate
 """
 
-import os
 import random
 import sys
 from datetime import datetime, timedelta
@@ -27,7 +26,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import yaml
 
 from src.database import Database
-from src.database.models import Account, Position
+from src.database.models import (
+    Account,
+    Position,
+    BudgetIncomeSource,
+    BudgetPretaxDeduction,
+    BudgetExpense,
+    BudgetExpenseCategory,
+)
 
 
 # Demo portfolio structure
@@ -150,6 +156,41 @@ DEMO_CDS = [
 DEMO_CASH = [
     ("Settlement Cash", 5000, 0.0425),  # name, amount, APY
     ("HYSA Cash Reserve", 12000, 0.0485),
+]
+
+# Demo budget data - income sources
+DEMO_INCOME_SOURCES = [
+    {"name": "John's Primary Job", "income_type": "employment", "gross_annual": 145000, "pay_frequency": "biweekly", "state": "CA"},
+    {"name": "Jane's Primary Job", "income_type": "employment", "gross_annual": 115000, "pay_frequency": "biweekly", "state": "CA"},
+]
+
+# Demo budget data - pre-tax deductions with labels
+DEMO_DEDUCTIONS = [
+    {"label": "John's 401k", "deduction_type": "401k", "amount_per_period": 750, "employer_match": 300},
+    {"label": "Jane's 401k", "deduction_type": "401k", "amount_per_period": 500, "employer_match": 200},
+    {"label": "Family HSA", "deduction_type": "hsa", "amount_per_period": 150, "employer_match": 0},
+    {"label": "John's Dental", "deduction_type": "dental", "amount_per_period": 25, "employer_match": 0},
+    {"label": "Jane's Dental", "deduction_type": "dental", "amount_per_period": 25, "employer_match": 0},
+]
+
+# Demo budget data - expenses (category_id matches default categories)
+DEMO_EXPENSES = [
+    {"category_id": 1, "name": "Mortgage", "amount": 3200, "frequency": "monthly"},
+    {"category_id": 1, "name": "Property Tax", "amount": 850, "frequency": "monthly"},
+    {"category_id": 1, "name": "Home Insurance", "amount": 180, "frequency": "monthly"},
+    {"category_id": 2, "name": "Electric", "amount": 200, "frequency": "monthly"},
+    {"category_id": 2, "name": "Gas", "amount": 80, "frequency": "monthly"},
+    {"category_id": 2, "name": "Water/Sewer", "amount": 75, "frequency": "monthly"},
+    {"category_id": 2, "name": "Internet", "amount": 85, "frequency": "monthly"},
+    {"category_id": 3, "name": "Car Payment #1", "amount": 450, "frequency": "monthly"},
+    {"category_id": 3, "name": "Car Insurance", "amount": 180, "frequency": "monthly"},
+    {"category_id": 3, "name": "Gas/Fuel", "amount": 250, "frequency": "monthly"},
+    {"category_id": 4, "name": "Life Insurance", "amount": 85, "frequency": "monthly"},
+    {"category_id": 4, "name": "Umbrella Policy", "amount": 35, "frequency": "monthly"},
+    {"category_id": 7, "name": "Groceries", "amount": 800, "frequency": "monthly"},
+    {"category_id": 7, "name": "Dining Out", "amount": 400, "frequency": "monthly"},
+    {"category_id": 8, "name": "Streaming Services", "amount": 65, "frequency": "monthly"},
+    {"category_id": 10, "name": "Cell Phones", "amount": 140, "frequency": "monthly"},
 ]
 
 # Fallback prices (approximate recent prices as of late 2024)
@@ -374,9 +415,73 @@ def generate_demo_data(db_path: Optional[str] = None) -> dict:
         total_value += amount
         print(f"  {cash_name}: ${amount:,.0f}" + (f" @ {apy*100:.2f}% APY" if apy else ""))
 
+    # Add budget data - expense categories first
+    print("\nAdding expense categories...")
+    from src.budget.models import DEFAULT_EXPENSE_CATEGORIES
+    category_map = {}
+    for cat in DEFAULT_EXPENSE_CATEGORIES:
+        db_cat = BudgetExpenseCategory(
+            name=cat.name,
+            icon=cat.icon,
+            color=cat.color,
+            sort_order=cat.sort_order,
+        )
+        with db.get_session() as session:
+            session.add(db_cat)
+            session.commit()
+            session.refresh(db_cat)
+            category_map[cat.id] = db_cat.id
+        print(f"  Category: {cat.name}")
+
+    # Add income sources
+    print("\nAdding income sources...")
+    for income_data in DEMO_INCOME_SOURCES:
+        income = BudgetIncomeSource(
+            name=income_data["name"],
+            income_type=income_data["income_type"],
+            gross_annual=income_data["gross_annual"],
+            pay_frequency=income_data["pay_frequency"],
+            state=income_data["state"],
+        )
+        with db.get_session() as session:
+            session.add(income)
+            session.commit()
+        print(f"  {income_data['name']}: ${income_data['gross_annual']:,}/yr")
+
+    # Add pre-tax deductions with labels
+    print("\nAdding pre-tax deductions...")
+    for ded_data in DEMO_DEDUCTIONS:
+        deduction = BudgetPretaxDeduction(
+            label=ded_data["label"],
+            deduction_type=ded_data["deduction_type"],
+            amount_per_period=ded_data["amount_per_period"],
+            employer_match=ded_data["employer_match"],
+        )
+        with db.get_session() as session:
+            session.add(deduction)
+            session.commit()
+        match_str = f" + ${ded_data['employer_match']} match" if ded_data["employer_match"] > 0 else ""
+        print(f"  {ded_data['label']}: ${ded_data['amount_per_period']}/period{match_str}")
+
+    # Add expenses
+    print("\nAdding expenses...")
+    for exp_data in DEMO_EXPENSES:
+        # Map the default category ID to the actual database ID
+        actual_category_id = category_map.get(exp_data["category_id"])
+        expense = BudgetExpense(
+            category_id=actual_category_id,
+            name=exp_data["name"],
+            amount=exp_data["amount"],
+            frequency=exp_data["frequency"],
+        )
+        with db.get_session() as session:
+            session.add(expense)
+            session.commit()
+        print(f"  {exp_data['name']}: ${exp_data['amount']}/{exp_data['frequency']}")
+
     # Take a snapshot
     print("\nTaking portfolio snapshot...")
-    snapshot = db.take_snapshot()
+    db.take_snapshot()
 
     result = {
         "success": True,

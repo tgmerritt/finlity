@@ -14,6 +14,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import joinedload
 
 from src.database import get_database
 from src.database.models import (
@@ -98,6 +99,7 @@ class ExpenseUpdate(BaseModel):
 class DeductionCreate(BaseModel):
     """Request model for creating a pre-tax deduction."""
     income_source_id: Optional[str] = None
+    label: Optional[str] = None  # User-friendly label (e.g., "John's 401k")
     deduction_type: str = "401k"
     amount_per_period: float
     employer_match: float = 0
@@ -108,6 +110,7 @@ class DeductionCreate(BaseModel):
 class DeductionUpdate(BaseModel):
     """Request model for updating a pre-tax deduction."""
     income_source_id: Optional[str] = None
+    label: Optional[str] = None
     deduction_type: Optional[str] = None
     amount_per_period: Optional[float] = None
     employer_match: Optional[float] = None
@@ -402,7 +405,10 @@ async def list_expenses():
     db = get_database()
     session = db.get_session()
     try:
-        expenses = session.query(BudgetExpense).filter(
+        # Eagerly load category relationship to avoid lazy loading issues
+        expenses = session.query(BudgetExpense).options(
+            joinedload(BudgetExpense.category)
+        ).filter(
             BudgetExpense.is_active.is_(True)
         ).all()
 
@@ -549,6 +555,7 @@ async def list_deductions():
             {
                 "id": d.id,
                 "income_source_id": d.income_source_id,
+                "label": d.label,
                 "deduction_type": d.deduction_type,
                 "amount_per_period": d.amount_per_period,
                 "employer_match": d.employer_match,
@@ -569,6 +576,7 @@ async def create_deduction(data: DeductionCreate):
     try:
         deduction = BudgetPretaxDeduction(
             income_source_id=data.income_source_id,
+            label=data.label,
             deduction_type=data.deduction_type,
             amount_per_period=data.amount_per_period,
             employer_match=data.employer_match,
@@ -580,6 +588,7 @@ async def create_deduction(data: DeductionCreate):
 
         return {
             "id": deduction.id,
+            "label": deduction.label,
             "deduction_type": deduction.deduction_type,
             "amount_per_period": deduction.amount_per_period,
         }
@@ -603,6 +612,8 @@ async def update_deduction(deduction_id: str, data: DeductionUpdate):
         # Update fields if provided
         if data.income_source_id is not None:
             deduction.income_source_id = data.income_source_id
+        if data.label is not None:
+            deduction.label = data.label
         if data.deduction_type is not None:
             deduction.deduction_type = data.deduction_type
         if data.amount_per_period is not None:
@@ -619,6 +630,7 @@ async def update_deduction(deduction_id: str, data: DeductionUpdate):
         return {
             "id": deduction.id,
             "income_source_id": deduction.income_source_id,
+            "label": deduction.label,
             "deduction_type": deduction.deduction_type,
             "amount_per_period": deduction.amount_per_period,
             "employer_match": deduction.employer_match,

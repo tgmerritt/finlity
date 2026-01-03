@@ -6181,10 +6181,15 @@ async function loadDeductions() {
             return;
         }
 
-        container.innerHTML = data.map(ded => `
+        container.innerHTML = data.map(ded => {
+            // Show label prominently if it exists, otherwise show deduction type
+            const displayName = ded.label
+                ? `${escapeHtml(ded.label)} (${formatDeductionType(ded.deduction_type)})`
+                : formatDeductionType(ded.deduction_type);
+            return `
             <div class="deduction-item">
                 <div class="deduction-item-info">
-                    <div class="deduction-item-name">${formatDeductionType(ded.deduction_type)}</div>
+                    <div class="deduction-item-name">${displayName}</div>
                     <div class="deduction-item-details">
                         ${ded.is_percentage ? ded.amount_per_period + '% of gross' : formatCurrency(ded.amount_per_period) + '/period'}
                         ${ded.employer_match > 0 ? ' + ' + formatCurrency(ded.employer_match) + ' employer match' : ''}
@@ -6196,7 +6201,8 @@ async function loadDeductions() {
                     <button class="btn btn-sm btn-danger" onclick="deleteDeduction('${ded.id}')">Delete</button>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
     } catch (error) {
         console.error('Error loading deductions:', error);
     }
@@ -6777,7 +6783,21 @@ function renderSSComparison(ssData) {
 }
 
 // Modal functions for adding income/expenses/deductions
-function showAddIncomeModal() {
+async function showAddIncomeModal() {
+    // Load states from API
+    let stateOptions = '<option value="CA">California</option>';
+    try {
+        const states = await apiCall('/api/budget/states');
+        if (states && states.length > 0) {
+            stateOptions = states.map(s => {
+                const taxInfo = s.type === 'none' ? ' (No income tax)' : '';
+                return `<option value="${s.code}">${s.name}${taxInfo}</option>`;
+            }).join('');
+        }
+    } catch (e) {
+        console.warn('Could not load states, using default');
+    }
+
     const modal = createModal('Add Income Source', `
         <div class="form-group">
             <label for="income-name">Name</label>
@@ -6809,11 +6829,7 @@ function showAddIncomeModal() {
         <div class="form-group">
             <label for="income-state">State</label>
             <select id="income-state">
-                <option value="CA">California</option>
-                <option value="NY">New York</option>
-                <option value="TX">Texas</option>
-                <option value="FL">Florida</option>
-                <option value="WA">Washington</option>
+                ${stateOptions}
             </select>
         </div>
     `, async () => {
@@ -6897,6 +6913,11 @@ function showAddExpenseModal() {
 function showAddDeductionModal() {
     const modal = createModal('Add Pre-tax Deduction', `
         <div class="form-group">
+            <label for="deduction-label">Label (optional)</label>
+            <input type="text" id="deduction-label" placeholder="e.g., John's 401k, Jane's HSA">
+            <small style="color: var(--text-secondary); font-size: 0.85em;">Helpful for tracking multiple people's deductions</small>
+        </div>
+        <div class="form-group">
             <label for="deduction-type">Deduction Type</label>
             <select id="deduction-type">
                 <option value="401k">401(k) Contribution</option>
@@ -6917,6 +6938,7 @@ function showAddDeductionModal() {
         </div>
     `, async () => {
         const data = {
+            label: document.getElementById('deduction-label').value || null,
             deduction_type: document.getElementById('deduction-type').value,
             amount_per_period: parseFloat(document.getElementById('deduction-amount').value) || 0,
             employer_match: parseFloat(document.getElementById('deduction-match').value) || 0

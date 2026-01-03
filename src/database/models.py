@@ -340,6 +340,7 @@ class BudgetPretaxDeduction(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
     income_source_id = Column(String, ForeignKey("budget_income_sources.id"), nullable=True)
+    label = Column(String, nullable=True)  # User-friendly label (e.g., "John's 401k", "Jane's HSA")
     deduction_type = Column(String, nullable=False, default="401k")  # 401k, hsa, fsa, dental, vision, other
     amount_per_period = Column(Float, nullable=False)  # Per paycheck amount
     employer_match = Column(Float, default=0)  # Employer contribution per period
