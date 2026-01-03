@@ -881,7 +881,7 @@ async def get_income_transition(data: IncomeTransitionRequest):
         )
 
         # Use override if provided
-        monthly_ss = data.ss_benefit_override if data.ss_benefit_override else ss_estimate.monthly_benefit
+        monthly_ss = data.ss_benefit_override if data.ss_benefit_override else ss_estimate.monthly_benefit_at_claiming
         annual_ss = monthly_ss * 12
 
         # Generate year-by-year projection
