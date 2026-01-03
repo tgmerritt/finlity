@@ -6290,46 +6290,61 @@ async function updatePaycheckPreview() {
         });
 
         if (paycheck) {
+            // Map API field names to expected names
+            const grossPay = paycheck.gross || 0;
+            const socialSecurity = paycheck.social_security || 0;
+            const medicare = paycheck.medicare + (paycheck.additional_medicare || 0);
+            const pretaxDeductions = paycheck.total_pretax_deductions || 0;
+            const totalTaxes = paycheck.total_taxes || 0;
+
+            // Calculate effective tax rate (total taxes / gross)
+            const effectiveTaxRate = grossPay > 0 ? (totalTaxes / grossPay) * 100 : 0;
+            // Marginal federal rate approximation based on income (simplified)
+            const annualGross = grossPay * (periodsPerYear[primaryIncome.pay_frequency] || 26);
+            const marginalRate = annualGross > 578125 ? 37 : annualGross > 231250 ? 35 :
+                                 annualGross > 182100 ? 32 : annualGross > 95375 ? 24 :
+                                 annualGross > 44725 ? 22 : annualGross > 11000 ? 12 : 10;
+
             container.innerHTML = `
                 <div class="paycheck-breakdown-grid">
                     <div class="paycheck-section">
                         <h4>Earnings</h4>
                         <div class="paycheck-line">
                             <span class="label">Gross Pay</span>
-                            <span class="amount">${formatCurrency(paycheck.gross_pay)}</span>
+                            <span class="amount">${formatCurrency(grossPay)}</span>
                         </div>
                     </div>
                     <div class="paycheck-section">
                         <h4>Deductions</h4>
                         <div class="paycheck-line">
                             <span class="label">Federal Income Tax</span>
-                            <span class="amount negative">-${formatCurrency(paycheck.federal_income_tax)}</span>
+                            <span class="amount negative">-${formatCurrency(paycheck.federal_income_tax || 0)}</span>
                         </div>
                         <div class="paycheck-line">
                             <span class="label">State Income Tax</span>
-                            <span class="amount negative">-${formatCurrency(paycheck.state_income_tax)}</span>
+                            <span class="amount negative">-${formatCurrency(paycheck.state_income_tax || 0)}</span>
                         </div>
                         <div class="paycheck-line">
                             <span class="label">Social Security</span>
-                            <span class="amount negative">-${formatCurrency(paycheck.social_security_tax)}</span>
+                            <span class="amount negative">-${formatCurrency(socialSecurity)}</span>
                         </div>
                         <div class="paycheck-line">
                             <span class="label">Medicare</span>
-                            <span class="amount negative">-${formatCurrency(paycheck.medicare_tax)}</span>
+                            <span class="amount negative">-${formatCurrency(medicare)}</span>
                         </div>
                         <div class="paycheck-line">
                             <span class="label">Pre-tax Deductions</span>
-                            <span class="amount negative">-${formatCurrency(paycheck.pretax_deductions || 0)}</span>
+                            <span class="amount negative">-${formatCurrency(pretaxDeductions)}</span>
                         </div>
                         <div class="paycheck-line total">
                             <span class="label">Net Pay</span>
-                            <span class="amount positive">${formatCurrency(paycheck.net_pay)}</span>
+                            <span class="amount positive">${formatCurrency(paycheck.net_pay || 0)}</span>
                         </div>
                     </div>
                 </div>
                 <div style="margin-top: 16px; font-size: 13px; color: var(--color-text-secondary);">
-                    Effective Tax Rate: ${(paycheck.effective_tax_rate * 100).toFixed(1)}% •
-                    Marginal Federal Rate: ${(paycheck.marginal_federal_rate * 100).toFixed(1)}%
+                    Effective Tax Rate: ${effectiveTaxRate.toFixed(1)}% •
+                    Marginal Federal Rate: ${marginalRate}%
                 </div>
             `;
         }
