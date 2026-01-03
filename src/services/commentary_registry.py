@@ -186,7 +186,47 @@ ELEMENT_REGISTRY: dict[str, ElementConfig] = {
     },
 
     # =========================================================================
-    # ANALYSIS TAB - Performance Metrics
+    # ANALYSIS TAB - Card Headers (Summary for each card)
+    # =========================================================================
+    "analysis.performance_metrics": {
+        "type": "card_header",
+        "tab": "analysis",
+        "title": "Performance Metrics Overview",
+        "data_dependencies": ["performance.ytd_return", "performance.alpha"],
+        "web_search_queries": [
+            "S&P 500 YTD return {current_year}",
+            "average portfolio performance {current_year}",
+        ],
+        "refresh_triggers": ["price_update", "daily"],
+        "prompt_key": "performance_overview",
+    },
+    "analysis.risk_metrics": {
+        "type": "card_header",
+        "tab": "analysis",
+        "title": "Risk Metrics Overview",
+        "data_dependencies": ["risk.volatility", "risk.sharpe_ratio", "risk.max_drawdown"],
+        "web_search_queries": [
+            "what is a good sharpe ratio",
+            "average portfolio volatility",
+        ],
+        "refresh_triggers": ["price_update", "daily"],
+        "prompt_key": "risk_overview",
+    },
+    "analysis.concentration": {
+        "type": "card_header",
+        "tab": "analysis",
+        "title": "Portfolio Concentration",
+        "data_dependencies": ["concentration.top_5_pct", "concentration.top_10_pct"],
+        "web_search_queries": [
+            "recommended portfolio diversification",
+            "portfolio concentration risk",
+        ],
+        "refresh_triggers": ["position_change", "price_update"],
+        "prompt_key": "concentration_overview",
+    },
+
+    # =========================================================================
+    # ANALYSIS TAB - Performance Metrics (Individual)
     # =========================================================================
     "analysis.performance.ytd_return": {
         "type": "metric",
