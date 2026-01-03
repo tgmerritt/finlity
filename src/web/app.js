@@ -7278,6 +7278,77 @@ function clearCommentaryCache() {
     console.debug('AI Commentary: Cache and buttons cleared');
 }
 
+/**
+ * Parse basic markdown to HTML
+ * Supports: **bold**, *italic*, bullet lists, numbered lists, line breaks
+ */
+function parseMarkdown(text) {
+    if (!text) return '';
+
+    // Escape HTML entities first
+    let html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    // Bold: **text** or __text__
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+
+    // Italic: *text* or _text_ (but not if already part of bold)
+    html = html.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, '<em>$1</em>');
+    html = html.replace(/(?<!_)_([^_]+?)_(?!_)/g, '<em>$1</em>');
+
+    // Split into lines for list processing
+    const lines = html.split('\n');
+    let result = [];
+    let inBulletList = false;
+    let inNumberedList = false;
+
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
+
+        // Bullet list: - item or * item
+        const bulletMatch = line.match(/^[-*]\s+(.+)$/);
+        if (bulletMatch) {
+            if (!inBulletList) {
+                if (inNumberedList) { result.push('</ol>'); inNumberedList = false; }
+                result.push('<ul>');
+                inBulletList = true;
+            }
+            result.push(`<li>${bulletMatch[1]}</li>`);
+            continue;
+        }
+
+        // Numbered list: 1. item
+        const numberedMatch = line.match(/^\d+\.\s+(.+)$/);
+        if (numberedMatch) {
+            if (!inNumberedList) {
+                if (inBulletList) { result.push('</ul>'); inBulletList = false; }
+                result.push('<ol>');
+                inNumberedList = true;
+            }
+            result.push(`<li>${numberedMatch[1]}</li>`);
+            continue;
+        }
+
+        // End lists if we hit a non-list line
+        if (inBulletList) { result.push('</ul>'); inBulletList = false; }
+        if (inNumberedList) { result.push('</ol>'); inNumberedList = false; }
+
+        // Regular line - wrap in paragraph if not empty
+        if (line) {
+            result.push(`<p>${line}</p>`);
+        }
+    }
+
+    // Close any open lists
+    if (inBulletList) result.push('</ul>');
+    if (inNumberedList) result.push('</ol>');
+
+    return result.join('');
+}
+
 function createPopoverElement(elementId) {
     const popover = document.createElement('div');
     popover.className = 'ai-commentary-popover';
@@ -7305,9 +7376,10 @@ function createPopoverElement(elementId) {
     loading.className = 'commentary-loading';
 
     const spinner = document.createElement('div');
-    spinner.className = 'loading-spinner';
+    spinner.className = 'commentary-loading-spinner';
 
     const loadingText = document.createElement('span');
+    loadingText.className = 'commentary-loading-text';
     loadingText.textContent = 'Generating insight...';
 
     loading.appendChild(spinner);
@@ -7349,17 +7421,107 @@ async function showAICommentary(button) {
         return;
     }
 
-    // Fetch from API
+    // Use streaming API for real-time text generation
     try {
-        const response = await fetch(`/api/commentary/${elementId}`);
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        const data = await response.json();
-        commentaryCache[elementId] = data;
-        renderCommentaryContent(popover, data);
+        const eventSource = new EventSource(`/api/commentary/${elementId}/stream`);
+        let fullText = '';
+        let ageHours = 0;
+        let isCached = false;
+
+        // Get content area and prepare for streaming
+        const body = popover.querySelector('.commentary-body');
+        const loading = body.querySelector('.commentary-loading');
+
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.error) {
+                eventSource.close();
+                renderCommentaryError(popover, data.error);
+                return;
+            }
+
+            if (data.type === 'cached') {
+                // Cached response - show immediately
+                isCached = true;
+                fullText = data.commentary;
+                ageHours = data.age_hours || 0;
+                eventSource.close();
+                commentaryCache[elementId] = {
+                    commentary: fullText,
+                    age_hours: ageHours,
+                    is_cached: true,
+                    element_id: elementId
+                };
+                renderCommentaryContent(popover, commentaryCache[elementId]);
+                return;
+            }
+
+            if (data.type === 'chunk') {
+                // First chunk - switch from loading to content
+                if (!fullText) {
+                    if (loading) loading.remove();
+                    const contentDiv = document.createElement('div');
+                    contentDiv.className = 'commentary-content streaming';
+                    body.appendChild(contentDiv);
+                }
+
+                fullText += data.text;
+
+                // Update content with parsed markdown
+                const contentDiv = body.querySelector('.commentary-content');
+                if (contentDiv) {
+                    contentDiv.innerHTML = parseMarkdown(fullText);
+                }
+            }
+
+            if (data.type === 'complete') {
+                eventSource.close();
+                ageHours = data.age_hours || 0;
+
+                // Cache the result
+                commentaryCache[elementId] = {
+                    commentary: fullText,
+                    age_hours: ageHours,
+                    is_cached: false,
+                    element_id: elementId
+                };
+
+                // Remove streaming class and add footer
+                const contentDiv = body.querySelector('.commentary-content');
+                if (contentDiv) {
+                    contentDiv.classList.remove('streaming');
+                }
+
+                // Add footer
+                const footer = document.createElement('div');
+                footer.className = 'commentary-footer';
+
+                const ageSpan = document.createElement('span');
+                ageSpan.className = 'commentary-age';
+                ageSpan.textContent = 'Generated just now';
+                footer.appendChild(ageSpan);
+
+                const refreshBtn = document.createElement('button');
+                refreshBtn.className = 'btn btn-sm btn-link';
+                refreshBtn.textContent = 'Refresh';
+                refreshBtn.onclick = () => refreshCommentary(elementId);
+                footer.appendChild(refreshBtn);
+
+                body.appendChild(footer);
+            }
+        };
+
+        eventSource.onerror = (error) => {
+            console.error('SSE error:', error);
+            eventSource.close();
+            if (!fullText) {
+                renderCommentaryError(popover, 'Connection error. Please try again.');
+            }
+        };
+
     } catch (error) {
-        console.error('Failed to fetch commentary:', error);
+        console.error('Failed to start streaming:', error);
         renderCommentaryError(popover, error.message);
     }
 }
@@ -7402,7 +7564,7 @@ function positionPopover(popover, button) {
 
 function renderCommentaryContent(popover, data) {
     const body = popover.querySelector('.commentary-body');
-    body.textContent = ''; // Clear loading
+    body.innerHTML = ''; // Clear loading
 
     let ageText = '';
     if (data.age_hours !== undefined) {
@@ -7415,10 +7577,10 @@ function renderCommentaryContent(popover, data) {
         }
     }
 
-    // Content div
+    // Content div - render markdown as HTML
     const contentDiv = document.createElement('div');
     contentDiv.className = 'commentary-content';
-    contentDiv.textContent = data.commentary || 'No commentary available.';
+    contentDiv.innerHTML = parseMarkdown(data.commentary) || '<p>No commentary available.</p>';
     body.appendChild(contentDiv);
 
     // Action items (if any)

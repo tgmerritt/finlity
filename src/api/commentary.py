@@ -1,6 +1,7 @@
 """Commentary API endpoints for AI-generated dashboard insights."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
@@ -342,6 +343,45 @@ def invalidate_commentary(
         "trigger": request.trigger,
         "invalidated_count": count,
     }
+
+
+@router.get("/{element_id}/stream")
+def stream_element_commentary(
+    element_id: str,
+    force_refresh: bool = Query(False, description="Force regeneration even if cached"),
+    service: CommentaryService = Depends(get_commentary_service),
+):
+    """Stream AI commentary for a specific dashboard element using SSE.
+
+    This endpoint streams the commentary as it's generated, allowing
+    the frontend to display text progressively.
+
+    Args:
+        element_id: The element identifier (e.g., "dashboard.total_value")
+        force_refresh: If True, regenerate commentary even if cached
+
+    Returns:
+        Server-Sent Events stream with commentary chunks
+    """
+    config = get_element_config(element_id)
+    if not config:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown element: {element_id}. Use GET /api/commentary/elements to see available elements."
+        )
+
+    def event_generator():
+        yield from service.generate_commentary_streaming(element_id, force_refresh=force_refresh)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        }
+    )
 
 
 # NOTE: This route MUST be last because it matches any path segment

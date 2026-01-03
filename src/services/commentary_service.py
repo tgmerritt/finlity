@@ -14,7 +14,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Generator, Optional
 
 from src.database import Database
 from src.database.models import AICommentary
@@ -466,6 +466,139 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
                 commentary="",
                 error=str(e),
             )
+
+    def generate_commentary_streaming(
+        self,
+        element_id: str,
+        force_refresh: bool = False,
+        current_data: Optional[dict] = None,
+    ) -> Generator[str, None, CommentaryResult]:
+        """Generate commentary using streaming, yielding text chunks.
+
+        This method streams the response and yields chunks as they arrive,
+        then returns the final CommentaryResult.
+
+        Args:
+            element_id: The element identifier
+            force_refresh: If True, regenerate even if cached
+            current_data: Optional pre-fetched data
+
+        Yields:
+            Text chunks as they are generated
+
+        Returns:
+            Final CommentaryResult after streaming completes
+        """
+        config = get_element_config(element_id)
+        if not config:
+            yield f"data: {json.dumps({'error': f'Unknown element: {element_id}'})}\n\n"
+            return
+
+        # Get current data if not provided
+        if current_data is None:
+            current_data = self._collect_element_data(element_id)
+
+        # Compute hash for change detection
+        current_hash = self._compute_data_hash(element_id, current_data)
+
+        # Check cache unless forced refresh
+        if not force_refresh:
+            cached = self._get_cached_commentary(element_id)
+            if cached and not self._is_cache_stale(cached, current_hash):
+                # Return cached result immediately
+                comparison_data = None
+                action_items = None
+                try:
+                    if cached["comparison_data"]:
+                        comparison_data = json.loads(cached["comparison_data"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                try:
+                    if cached["action_items"]:
+                        action_items = json.loads(cached["action_items"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+                # Send complete event with cached data
+                yield f"data: {json.dumps({'type': 'cached', 'commentary': cached['commentary'], 'age_hours': cached['age_hours']})}\n\n"
+                return
+
+        # Generate new commentary with streaming
+        client = self._get_client()
+        if not client:
+            yield f"data: {json.dumps({'error': 'No API client available. Please configure your Anthropic API key.'})}\n\n"
+            return
+
+        start_time = time.time()
+
+        # Get web search comparison data (non-streaming)
+        comparison_data = {}
+        web_search_used = False
+        web_search_queries = config.get("web_search_queries", [])
+
+        if web_search_queries:
+            user_context = self._get_user_context()
+            comparison_data = self._perform_web_searches(web_search_queries, user_context)
+            web_search_used = bool(comparison_data)
+
+        # Format the prompt
+        prompt_key = config.get("prompt_key", element_id.split(".")[-1])
+        prompt_data = {
+            **current_data,
+            **self._get_user_context(),
+            "comparison_context": self._format_comparison_context(comparison_data),
+            "current_year": datetime.now().year,
+        }
+
+        prompt = format_prompt(prompt_key, **prompt_data)
+        if not prompt:
+            prompt = f"""The user is viewing the "{config.get('title', element_id)}" element.
+
+Current data: {json.dumps(current_data, indent=2, default=str)}
+
+{self._format_comparison_context(comparison_data)}
+
+Provide a brief 2-3 sentence explanation of what this data shows and any relevant context."""
+
+        # Stream the response
+        try:
+            full_text = ""
+            with client.messages.stream(
+                model=get_claude_model(),
+                max_tokens=512,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": prompt}],
+            ) as stream:
+                for text in stream.text_stream:
+                    full_text += text
+                    yield f"data: {json.dumps({'type': 'chunk', 'text': text})}\n\n"
+
+            # Get final message for token counts
+            final_message = stream.get_final_message()
+            token_count = final_message.usage.input_tokens + final_message.usage.output_tokens
+            generation_time_ms = (time.time() - start_time) * 1000
+
+            # Cache the result
+            self._save_commentary(
+                element_id=element_id,
+                element_type=config.get("type", "unknown"),
+                element_tab=config.get("tab", "unknown"),
+                commentary=full_text,
+                comparison_data=comparison_data,
+                data_hash=current_hash,
+                data_snapshot=current_data,
+                model_version=get_claude_model(),
+                generation_time_ms=generation_time_ms,
+                token_count=token_count,
+                web_search_used=web_search_used,
+            )
+
+            # Send completion event
+            yield f"data: {json.dumps({'type': 'complete', 'age_hours': 0})}\n\n"
+
+        except Exception as e:
+            logger.error(f"Error streaming commentary for {element_id}: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     def _save_commentary(
         self,
