@@ -622,6 +622,119 @@ Income replacement ratio: {replacement_ratio:.0f}%
 
 Explain the transition from earned income to retirement income and whether they're on track.
 """,
+
+    # =========================================================================
+    # SETTINGS
+    # =========================================================================
+    "settings_data_storage": """
+The user is viewing **Data Storage Settings** which controls where portfolio data is stored.
+
+Options available:
+- **Server Mode**: Data stored on the server (allows access from multiple devices)
+- **Local Mode**: Data stays only on the user's device (maximum privacy)
+
+Explain the privacy and accessibility trade-offs between these modes. For a personal finance app:
+- Server mode is convenient for multi-device access but requires trusting the server
+- Local mode is more private but data won't sync across devices
+""",
+
+    "settings_personal": """
+The user is configuring their **Personal Settings** for retirement planning.
+
+Current settings:
+- Date of Birth: {dob}
+- Current Age: {user_age}
+- Target Retirement Age: {retirement_age}
+- Withdrawal Rate: {withdrawal_rate}%
+- Target Monthly Income: ${target_income:,.0f}
+
+{comparison_context}
+
+Explain how these settings affect retirement projections:
+- **Withdrawal rate**: The 4% rule is a common guideline, but 3-3.5% may be safer for early retirees
+- **Retirement age**: Earlier retirement means more years to fund and lower Social Security benefits
+- **Target income**: Setting this calculates a FIRE number (Financial Independence target)
+""",
+
+    "settings_asset_targets": """
+The user is setting their **Asset Class Target Allocation**.
+
+Current targets:
+- Equities: {target_equities}%
+- Bonds: {target_bonds}%
+- Alternatives: {target_alternatives}%
+- Cash: {target_cash}%
+
+User age: {user_age}
+
+{comparison_context}
+
+Explain asset allocation concepts:
+- **Glide path**: Many advisors suggest reducing equity exposure as you age (e.g., "110 minus your age" in stocks)
+- **Risk tolerance**: Younger investors can typically handle more volatility
+- **Bonds**: Provide stability but lower expected returns
+- **Cash**: Useful for emergencies but may lag inflation long-term
+
+For someone age {user_age}, a typical allocation might be {typical_equity}% stocks / {typical_bond}% bonds.
+""",
+
+    "settings_market_assumptions": """
+The user is configuring **Market Assumptions** used for retirement projections.
+
+Current settings:
+- Stock Mean Return: {stock_return}%
+- Stock Std Dev: {stock_std}%
+- Bond Mean Return: {bond_return}%
+- Bond Std Dev: {bond_std}%
+- Inflation Rate: {inflation}%
+- Risk-Free Rate: {risk_free}%
+
+{comparison_context}
+
+Explain what these parameters mean:
+- **Mean return**: Expected average annual return (historically ~10% nominal for stocks, ~5% for bonds)
+- **Standard deviation**: How much returns vary year-to-year (volatility)
+- **Inflation**: Reduces purchasing power over time (historically ~3%)
+- **Risk-free rate**: Return on "safe" assets like T-bills (used in Sharpe ratio calculation)
+
+These assumptions significantly impact retirement projections - conservative assumptions lead to safer planning.
+""",
+
+    "settings_monte_carlo": """
+The user is configuring **Monte Carlo Simulation** parameters.
+
+Current settings:
+- Number of Simulations: {num_simulations}
+- Black Swan Probability: {black_swan_prob}%
+- Black Swan Impact: {black_swan_impact}%
+- Golden Swan Probability: {golden_swan_prob}%
+- Golden Swan Impact: {golden_swan_impact}%
+
+{comparison_context}
+
+Explain Monte Carlo simulation and these settings:
+- **Simulations**: More simulations = more accurate results (10,000 is typically sufficient)
+- **Black Swan**: Rare negative events (like 2008 crisis). {black_swan_prob}% chance of a {black_swan_impact}% drop
+- **Golden Swan**: Rare positive events. {golden_swan_prob}% chance of a {golden_swan_impact}% gain
+
+Monte Carlo randomly simulates thousands of possible market scenarios to estimate retirement success probability. Including tail events (black/golden swans) makes projections more realistic.
+""",
+
+    "settings_portfolio_views": """
+The user is viewing **Portfolio Views** settings.
+
+Portfolio Views allow you to:
+- Create filtered views of your portfolio (e.g., "Retirement Only", "Taxable Only")
+- Focus analysis on specific account subsets
+- Compare different segments of your portfolio
+
+Use cases:
+- Analyze just retirement accounts separately from taxable
+- Track a specific goal (e.g., "Kids College Fund")
+- Exclude certain accounts from projections temporarily
+
+Views don't change your actual data - they just filter what's displayed in the dashboard, analysis, and projections.
+""",
 }
 
 

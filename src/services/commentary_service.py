@@ -755,9 +755,80 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             elif element_id.startswith("analysis.risk"):
                 element_data.update(risk)
 
+            # Settings elements
+            elif element_id.startswith("settings."):
+                settings = self._get_settings_data()
+                element_data.update(settings)
+
             data[element_id] = element_data
 
         return data
+
+    def _get_settings_data(self) -> dict:
+        """Get current settings data for commentary generation."""
+        try:
+
+            # Get user context (age, retirement age, etc.)
+            user_context = self._get_user_context()
+
+            # Get config settings if available
+            config = {}
+            try:
+                config_setting = self.db.get_setting("config")
+                if config_setting:
+                    import json
+                    config = json.loads(config_setting.value) if config_setting.value else {}
+            except Exception:
+                pass
+
+            # Monte Carlo settings
+            monte_carlo = config.get("monte_carlo", {})
+
+            # Market assumptions
+            market = config.get("market", {})
+
+            # Asset targets
+            targets = config.get("targets", {})
+
+            # Calculate typical allocation based on age
+            user_age = user_context.get("user_age", 35)
+            typical_equity = max(20, 110 - user_age)
+            typical_bond = 100 - typical_equity
+
+            return {
+                # User context
+                "user_age": user_age,
+                "dob": user_context.get("dob", "Not set"),
+                "retirement_age": user_context.get("retirement_age", 65),
+                "withdrawal_rate": config.get("withdrawal_rate", 4),
+                "target_income": config.get("target_monthly_income", 0),
+
+                # Asset targets
+                "target_equities": targets.get("equities", 90),
+                "target_bonds": targets.get("bonds", 5),
+                "target_alternatives": targets.get("alternatives", 3),
+                "target_cash": targets.get("cash", 2),
+                "typical_equity": typical_equity,
+                "typical_bond": typical_bond,
+
+                # Market assumptions
+                "stock_return": market.get("stock_return", 9),
+                "stock_std": market.get("stock_std", 15),
+                "bond_return": market.get("bond_return", 4),
+                "bond_std": market.get("bond_std", 6),
+                "inflation": market.get("inflation", 3),
+                "risk_free": market.get("risk_free", 4),
+
+                # Monte Carlo settings
+                "num_simulations": monte_carlo.get("simulations", 10000),
+                "black_swan_prob": monte_carlo.get("black_swan_prob", 2),
+                "black_swan_impact": monte_carlo.get("black_swan_impact", -40),
+                "golden_swan_prob": monte_carlo.get("golden_swan_prob", 2),
+                "golden_swan_impact": monte_carlo.get("golden_swan_impact", 27),
+            }
+        except Exception as e:
+            logger.error(f"Error getting settings data: {e}")
+            return {}
 
     def _get_portfolio_summary(self) -> dict:
         """Get portfolio summary data."""

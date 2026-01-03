@@ -604,6 +604,77 @@ ELEMENT_REGISTRY: dict[str, ElementConfig] = {
         "refresh_triggers": ["budget_change", "settings_change"],
         "prompt_key": "transition_chart",
     },
+
+    # =========================================================================
+    # SETTINGS TAB
+    # =========================================================================
+    "settings.data_storage": {
+        "type": "settings_card",
+        "tab": "settings",
+        "title": "Data Storage Settings",
+        "data_dependencies": [],
+        "web_search_queries": [],
+        "refresh_triggers": [],
+        "prompt_key": "settings_data_storage",
+    },
+    "settings.personal": {
+        "type": "settings_card",
+        "tab": "settings",
+        "title": "Personal Settings",
+        "data_dependencies": ["settings.dob", "settings.retirement_age", "settings.withdrawal_rate"],
+        "web_search_queries": [
+            "4 percent rule retirement withdrawal",
+            "safe withdrawal rate retirement {current_year}",
+        ],
+        "refresh_triggers": ["settings_change"],
+        "prompt_key": "settings_personal",
+    },
+    "settings.asset_targets": {
+        "type": "settings_card",
+        "tab": "settings",
+        "title": "Asset Class Targets",
+        "data_dependencies": ["settings.target_equities", "settings.target_bonds"],
+        "web_search_queries": [
+            "recommended stock bond allocation by age",
+            "glide path asset allocation retirement",
+        ],
+        "refresh_triggers": ["settings_change"],
+        "prompt_key": "settings_asset_targets",
+    },
+    "settings.market_assumptions": {
+        "type": "settings_card",
+        "tab": "settings",
+        "title": "Market Assumptions",
+        "data_dependencies": ["settings.stock_return", "settings.stock_std", "settings.inflation"],
+        "web_search_queries": [
+            "historical stock market average return",
+            "historical S&P 500 volatility",
+            "long term inflation rate forecast",
+        ],
+        "refresh_triggers": [],
+        "prompt_key": "settings_market_assumptions",
+    },
+    "settings.monte_carlo": {
+        "type": "settings_card",
+        "tab": "settings",
+        "title": "Monte Carlo Settings",
+        "data_dependencies": ["settings.mc_simulations", "settings.black_swan_prob"],
+        "web_search_queries": [
+            "Monte Carlo simulation retirement planning",
+            "black swan event probability finance",
+        ],
+        "refresh_triggers": [],
+        "prompt_key": "settings_monte_carlo",
+    },
+    "settings.portfolio_views": {
+        "type": "settings_card",
+        "tab": "settings",
+        "title": "Portfolio Views",
+        "data_dependencies": [],
+        "web_search_queries": [],
+        "refresh_triggers": [],
+        "prompt_key": "settings_portfolio_views",
+    },
 }
 
 
