@@ -824,7 +824,12 @@ async def calculate_social_security(data: SocialSecurityRequest):
 
 @router.get("/paycheck-chart-data")
 async def get_paycheck_chart_data():
-    """Get data for paycheck stacked bar chart (all pay periods in a year)."""
+    """Get cumulative YTD data for paycheck stacked bar chart.
+
+    Returns cumulative (running total) amounts for each pay period,
+    with proper FICA wage cap handling - Social Security stops
+    accumulating once the wage base is reached.
+    """
     db = get_database()
     session = db.get_session()
     try:
@@ -851,12 +856,13 @@ async def get_paycheck_chart_data():
             BudgetPretaxDeduction.income_source_id == source.id
         ).all()
 
-        pretax = {
+        pretax_per_period = {
             "401k": sum(d.amount_per_period for d in deductions if d.deduction_type == "401k"),
             "hsa": sum(d.amount_per_period for d in deductions if d.deduction_type == "hsa"),
             "fsa": sum(d.amount_per_period for d in deductions if d.deduction_type == "fsa"),
             "other": sum(d.amount_per_period for d in deductions if d.deduction_type == "other"),
         }
+        total_pretax_per_period = sum(pretax_per_period.values())
 
         # Get expenses and convert to per-period
         expenses = session.query(BudgetExpense).filter(
@@ -877,47 +883,157 @@ async def get_paycheck_chart_data():
             tax_year=2024,
         )
 
-        # Calculate for each pay period
+        # Tax rates and limits for manual per-period calculation
+        ss_rate = 0.062  # 6.2%
+        medicare_rate = 0.0145  # 1.45%
+        additional_medicare_rate = 0.009  # 0.9%
+        ss_wage_base = 168600  # 2024
+        medicare_threshold = 250000 if "married" in filing_status else 200000
+
+        # Annual contribution limits (2024)
+        limit_401k = 23000
+        limit_hsa = 4150 if filing_status == "single" else 8300
+        limit_fsa = 3200
+
+        # Per-period calculation with YTD tracking
         periods = []
+
+        # Cumulative totals (YTD)
+        ytd_gross = 0.0
+        ytd_federal_tax = 0.0
+        ytd_state_tax = 0.0
+        ytd_ss_tax = 0.0
+        ytd_medicare_tax = 0.0
+        ytd_pretax = 0.0
+        ytd_takehome = 0.0
+        ytd_expenses = 0.0
+        ytd_savings = 0.0
+
+        # Track YTD contributions for limits
+        ytd_401k = 0.0
+        ytd_hsa = 0.0
+        ytd_fsa = 0.0
+
+        # Arrays for cumulative chart data
+        gross_amounts = []
         federal_taxes = []
         state_taxes = []
-        fica_taxes = []
+        ss_taxes = []
+        medicare_taxes = []
         pretax_deductions = []
+        takehome_amounts = []
         expense_amounts = []
         savings_amounts = []
 
-        takehome_amounts = []
-
         for period in range(1, periods_per_year + 1):
-            breakdown = calculator.calculate_paycheck(
-                gross_per_period=gross_per_period,
-                pay_frequency=source.pay_frequency,
-                pretax_deductions=pretax,
+            periods.append(period)
+
+            # Add gross for this period
+            ytd_gross += gross_per_period
+
+            # Calculate pre-tax deductions with annual limits
+            period_401k = min(pretax_per_period["401k"], max(0, limit_401k - ytd_401k))
+            period_hsa = min(pretax_per_period["hsa"], max(0, limit_hsa - ytd_hsa))
+            period_fsa = min(pretax_per_period["fsa"], max(0, limit_fsa - ytd_fsa))
+            period_other = pretax_per_period["other"]
+            period_pretax = period_401k + period_hsa + period_fsa + period_other
+
+            ytd_401k += period_401k
+            ytd_hsa += period_hsa
+            ytd_fsa += period_fsa
+            ytd_pretax += period_pretax
+
+            # Calculate Social Security with wage cap
+            prev_ytd_gross = ytd_gross - gross_per_period
+            if prev_ytd_gross >= ss_wage_base:
+                # Already at cap, no more SS tax
+                period_ss = 0
+            elif ytd_gross > ss_wage_base:
+                # Partial period hits cap
+                taxable_ss = ss_wage_base - prev_ytd_gross
+                period_ss = taxable_ss * ss_rate
+            else:
+                # Full period taxable
+                period_ss = gross_per_period * ss_rate
+            ytd_ss_tax += period_ss
+
+            # Calculate Medicare (no cap, but additional Medicare over threshold)
+            period_medicare = gross_per_period * medicare_rate
+            if ytd_gross > medicare_threshold:
+                # Additional Medicare on income over threshold
+                if prev_ytd_gross >= medicare_threshold:
+                    # All of this period is over threshold
+                    period_medicare += gross_per_period * additional_medicare_rate
+                else:
+                    # Partial period over threshold
+                    excess = ytd_gross - medicare_threshold
+                    period_medicare += excess * additional_medicare_rate
+            ytd_medicare_tax += period_medicare
+
+            # Calculate federal and state taxes (use calculator for brackets)
+            # Approximate per-period by calculating annual and dividing
+            taxable_income = ytd_gross - ytd_pretax
+            annual_federal = calculator.calculate_federal_income_tax(
+                source.gross_annual,
+                pretax_deductions=total_pretax_per_period * periods_per_year
+            )
+            annual_state = calculator.calculate_state_tax(
+                source.gross_annual,
+                total_pretax_per_period * periods_per_year
             )
 
-            periods.append(period)
-            federal_taxes.append(round(breakdown.federal_income_tax, 2))
-            state_taxes.append(round(breakdown.state_income_tax, 2))
-            fica_taxes.append(round(breakdown.total_fica, 2))
-            pretax_deductions.append(round(breakdown.total_pretax_deductions, 2))
-            takehome_amounts.append(round(breakdown.net_pay, 2))
-            expense_amounts.append(round(expenses_per_period, 2))
+            # Prorate to this point in year
+            ytd_federal_tax = (annual_federal / periods_per_year) * period
+            ytd_state_tax = (annual_state / periods_per_year) * period
 
-            remaining = breakdown.net_pay - expenses_per_period
-            savings_amounts.append(round(max(0, remaining), 2))
+            # Calculate take-home
+            period_takehome = (gross_per_period -
+                              (annual_federal / periods_per_year) -
+                              (annual_state / periods_per_year) -
+                              period_ss - period_medicare - period_pretax)
+            ytd_takehome += period_takehome
 
-        # Return flat structure matching frontend expectations
+            # Expenses and savings
+            ytd_expenses += expenses_per_period
+            remaining = period_takehome - expenses_per_period
+            ytd_savings += max(0, remaining)
+
+            # Store cumulative values
+            gross_amounts.append(round(ytd_gross, 2))
+            federal_taxes.append(round(ytd_federal_tax, 2))
+            state_taxes.append(round(ytd_state_tax, 2))
+            ss_taxes.append(round(ytd_ss_tax, 2))
+            medicare_taxes.append(round(ytd_medicare_tax, 2))
+            pretax_deductions.append(round(ytd_pretax, 2))
+            takehome_amounts.append(round(ytd_takehome, 2))
+            expense_amounts.append(round(ytd_expenses, 2))
+            savings_amounts.append(round(ytd_savings, 2))
+
+        # Combined FICA for backwards compatibility
+        fica_taxes = [round(ss + med, 2) for ss, med in zip(ss_taxes, medicare_taxes)]
+
         return {
             "periods": periods,
             "pay_frequency": source.pay_frequency,
             "gross_per_period": round(gross_per_period, 2),
+            "cumulative": True,  # Flag indicating cumulative data
+            "gross": gross_amounts,
             "federal_tax": federal_taxes,
             "state_tax": state_taxes,
+            "social_security": ss_taxes,
+            "medicare": medicare_taxes,
             "fica": fica_taxes,
             "pretax": pretax_deductions,
             "takehome": takehome_amounts,
             "expenses": expense_amounts,
             "savings": savings_amounts,
+            # Limits info for display
+            "limits": {
+                "ss_wage_base": ss_wage_base,
+                "limit_401k": limit_401k,
+                "limit_hsa": limit_hsa,
+                "limit_fsa": limit_fsa,
+            }
         }
     finally:
         session.close()

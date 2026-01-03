@@ -6396,7 +6396,7 @@ async function loadCashFlowData() {
     }
 }
 
-// Load paycheck chart (stacked bar for all pay periods)
+// Load paycheck chart (cumulative YTD line chart)
 async function loadPaycheckChart() {
     try {
         const chartData = await apiCall('/api/budget/paycheck-chart-data');
@@ -6409,54 +6409,106 @@ async function loadPaycheckChart() {
 
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
+        // Use line chart to show cumulative growth with visible cap plateaus
         const traces = [
             {
-                name: 'Federal Tax',
+                name: 'Gross Income',
                 x: chartData.periods,
-                y: chartData.federal_tax,
-                type: 'bar',
-                marker: { color: '#ef4444' }
-            },
-            {
-                name: 'State Tax',
-                x: chartData.periods,
-                y: chartData.state_tax,
-                type: 'bar',
-                marker: { color: '#f97316' }
-            },
-            {
-                name: 'FICA',
-                x: chartData.periods,
-                y: chartData.fica,
-                type: 'bar',
-                marker: { color: '#eab308' }
-            },
-            {
-                name: 'Pre-tax Deductions',
-                x: chartData.periods,
-                y: chartData.pretax,
-                type: 'bar',
-                marker: { color: '#8b5cf6' }
+                y: chartData.gross,
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: '#3b82f6', width: 2 },
+                fill: 'tozeroy',
+                fillcolor: 'rgba(59, 130, 246, 0.1)'
             },
             {
                 name: 'Take-home',
                 x: chartData.periods,
                 y: chartData.takehome,
-                type: 'bar',
-                marker: { color: '#22c55e' }
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: '#22c55e', width: 2 }
+            },
+            {
+                name: 'Federal Tax',
+                x: chartData.periods,
+                y: chartData.federal_tax,
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: '#ef4444', width: 2 }
+            },
+            {
+                name: 'State Tax',
+                x: chartData.periods,
+                y: chartData.state_tax,
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: '#f97316', width: 2 }
+            },
+            {
+                name: 'Social Security',
+                x: chartData.periods,
+                y: chartData.social_security || chartData.fica,
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: '#eab308', width: 2 },
+                hovertemplate: chartData.limits ?
+                    `Period %{x}<br>YTD SS: $%{y:,.0f}<br>Cap: $${chartData.limits.ss_wage_base.toLocaleString()} wage base<extra></extra>` :
+                    undefined
+            },
+            {
+                name: 'Medicare',
+                x: chartData.periods,
+                y: chartData.medicare || [],
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: '#a855f7', width: 2 },
+                visible: chartData.medicare ? true : 'legendonly'
+            },
+            {
+                name: 'Pre-tax (401k/HSA)',
+                x: chartData.periods,
+                y: chartData.pretax,
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: '#8b5cf6', width: 2, dash: 'dot' },
+                hovertemplate: chartData.limits ?
+                    `Period %{x}<br>YTD Pre-tax: $%{y:,.0f}<br>401k limit: $${chartData.limits.limit_401k.toLocaleString()}<extra></extra>` :
+                    undefined
             }
         ];
 
+        // Add annotation for SS wage cap if applicable
+        const annotations = [];
+        if (chartData.limits && chartData.gross) {
+            const finalGross = chartData.gross[chartData.gross.length - 1];
+            if (finalGross > chartData.limits.ss_wage_base) {
+                // Find period where SS caps out
+                const capPeriod = chartData.gross.findIndex(g => g >= chartData.limits.ss_wage_base) + 1;
+                if (capPeriod > 0) {
+                    annotations.push({
+                        x: capPeriod,
+                        y: chartData.social_security ? chartData.social_security[capPeriod - 1] : 0,
+                        text: 'SS Cap Reached',
+                        showarrow: true,
+                        arrowhead: 2,
+                        ax: 40,
+                        ay: -30,
+                        font: { size: 10, color: isDark ? '#fbbf24' : '#92400e' }
+                    });
+                }
+            }
+        }
+
         const layout = {
-            barmode: 'stack',
             xaxis: {
                 title: 'Pay Period',
                 tickmode: 'linear',
-                dtick: 2,
+                dtick: Math.ceil(chartData.periods.length / 13),
                 gridcolor: isDark ? '#303030' : '#f0f0f0'
             },
             yaxis: {
-                title: 'Amount ($)',
+                title: 'Cumulative YTD ($)',
                 tickformat: '$,.0f',
                 gridcolor: isDark ? '#303030' : '#f0f0f0'
             },
@@ -6465,10 +6517,12 @@ async function loadPaycheckChart() {
                 y: -0.2,
                 font: { color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)' }
             },
-            margin: { t: 20, r: 20, b: 80, l: 60 },
+            annotations: annotations,
+            margin: { t: 20, r: 20, b: 80, l: 70 },
             paper_bgcolor: 'transparent',
             plot_bgcolor: 'transparent',
-            font: { color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)' }
+            font: { color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)' },
+            hovermode: 'x unified'
         };
 
         Plotly.newPlot('paycheck-chart', traces, layout, { responsive: true });
