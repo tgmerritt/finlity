@@ -6,9 +6,17 @@
     --color-bg-base: #141414;
     --color-bg-elevated: #1f1f1f;
     --color-bg-container: #262626;
+    --color-bg-secondary: #1a1a1a;
     --color-bg-spotlight: #303030;
     --color-border: #424242;
     --color-border-secondary: #303030;
+    --color-border-primary: #424242;
+
+    /* Scrollbar colors */
+    --scrollbar-track: #1a1a1a;
+    --scrollbar-thumb: #3a3a3a;
+    --scrollbar-thumb-hover: #4a4a4a;
+    --scrollbar-width: 8px;
     --color-text-primary: rgba(255, 255, 255, 0.85);
     --color-text-secondary: rgba(255, 255, 255, 0.65);
     --color-text-tertiary: rgba(255, 255, 255, 0.45);
@@ -63,9 +71,16 @@
     --color-bg-base: #f5f5f5;
     --color-bg-elevated: #ffffff;
     --color-bg-container: #ffffff;
+    --color-bg-secondary: #fafafa;
     --color-bg-spotlight: #fafafa;
     --color-border: #d9d9d9;
     --color-border-secondary: #f0f0f0;
+    --color-border-primary: #d9d9d9;
+
+    /* Scrollbar colors - Light theme */
+    --scrollbar-track: #f0f0f0;
+    --scrollbar-thumb: #c1c1c1;
+    --scrollbar-thumb-hover: #a1a1a1;
     --color-text-primary: rgba(0, 0, 0, 0.88);
     --color-text-secondary: rgba(0, 0, 0, 0.65);
     --color-text-tertiary: rgba(0, 0, 0, 0.45);
@@ -103,6 +118,44 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+}
+
+/* ========================================================================= */
+/* Custom Scrollbar - Global Styling                                         */
+/* ========================================================================= */
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+    border: 2px solid var(--scrollbar-track);
+    background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    border: 2px solid var(--scrollbar-track);
+    background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+    background: var(--scrollbar-track);
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 html {
@@ -1657,11 +1710,13 @@ tr:hover td {
     overflow-y: auto;
     overflow-x: auto;
     position: relative;
+    border-radius: var(--border-radius-sm);
 }
 
 .table-container-sticky table {
     border-collapse: separate;
     border-spacing: 0;
+    width: 100%;
 }
 
 .table-container-sticky thead {
@@ -1670,18 +1725,45 @@ tr:hover td {
     z-index: 10;
 }
 
+.table-container-sticky thead::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: var(--color-border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
 .table-container-sticky th {
-    background: var(--color-bg-secondary);
-    border-bottom: 2px solid var(--color-border-primary);
+    background: var(--color-bg-container);
+    border-bottom: 2px solid var(--color-border);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    color: var(--color-text-secondary);
+    padding: 12px 16px;
+    text-align: left;
+    white-space: nowrap;
 }
 
 /* Ensure sticky header doesn't have gaps */
 .table-container-sticky th:first-child {
     border-left: none;
+    padding-left: 16px;
 }
 
 .table-container-sticky th:last-child {
     border-right: none;
+    padding-right: 16px;
+}
+
+/* Table body cells for sticky tables */
+.table-container-sticky td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--color-border-secondary);
 }
 
 .text-right {
@@ -3631,24 +3713,6 @@ th.sortable.sort-desc .sort-icon::after {
 .typing-indicator {
     color: var(--color-text-tertiary);
     font-style: italic;
-}
-
-/* Scrollbar styling for chat */
-.chat-messages::-webkit-scrollbar {
-    width: 6px;
-}
-
-.chat-messages::-webkit-scrollbar-track {
-    background: var(--color-bg-base);
-}
-
-.chat-messages::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 3px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover {
-    background: var(--color-text-tertiary);
 }
 
 /* Custom Multi-Select Dropdown */

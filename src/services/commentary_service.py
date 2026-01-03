@@ -760,6 +760,11 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
                 settings = self._get_settings_data()
                 element_data.update(settings)
 
+            # Tax projection elements
+            elif element_id.startswith("taxes."):
+                tax_data = self._get_tax_projection_data()
+                element_data.update(tax_data)
+
             data[element_id] = element_data
 
         return data
@@ -828,6 +833,78 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             }
         except Exception as e:
             logger.error(f"Error getting settings data: {e}")
+            return {}
+
+    def _get_tax_projection_data(self) -> dict:
+        """Get tax projection data for commentary generation."""
+        try:
+            # Get user context
+            user_context = self._get_user_context()
+            user_age = user_context.get("user_age", 35)
+            retirement_age = user_context.get("retirement_age", 65)
+
+            # Get account balances by type
+            accounts = self.db.get_all_accounts()
+            taxable_balance = 0
+            traditional_balance = 0
+            roth_balance = 0
+
+            for account in accounts:
+                positions = self.db.get_positions_by_account(account.id)
+                account_value = sum(
+                    (p.current_price or 0) * (p.shares or 0)
+                    for p in positions
+                )
+
+                account_type = account.account_type.lower()
+                if account_type in ["traditional_ira", "traditional_401k"]:
+                    traditional_balance += account_value
+                elif account_type in ["roth_ira", "roth_401k"]:
+                    roth_balance += account_value
+                elif account_type == "taxable":
+                    taxable_balance += account_value
+
+            total_balance = taxable_balance + traditional_balance + roth_balance
+            years_to_retirement = max(0, retirement_age - user_age)
+            years_in_retirement = 95 - retirement_age  # Assume 95 as default end age
+
+            # Calculate approximate annual spending (using 4% rule as estimate)
+            withdrawal_rate = user_context.get("withdrawal_rate", 4) / 100
+            annual_spending = total_balance * withdrawal_rate if total_balance > 0 else 60000
+
+            return {
+                # Account balances
+                "taxable_balance": taxable_balance,
+                "traditional_balance": traditional_balance,
+                "roth_balance": roth_balance,
+                "total_balance": total_balance,
+
+                # User context
+                "user_age": user_age,
+                "retirement_age": retirement_age,
+                "years_to_retirement": years_to_retirement,
+                "years_in_retirement": years_in_retirement,
+
+                # Withdrawal info
+                "annual_spending": annual_spending,
+                "withdrawal_rate": withdrawal_rate * 100,
+
+                # Tax rate context (defaults)
+                "federal_rate": 22,
+                "state_rate": 5,
+                "cap_gains_rate": 15,
+
+                # Account type percentages
+                "taxable_pct": (taxable_balance / total_balance * 100) if total_balance > 0 else 0,
+                "traditional_pct": (traditional_balance / total_balance * 100) if total_balance > 0 else 0,
+                "roth_pct": (roth_balance / total_balance * 100) if total_balance > 0 else 0,
+
+                # RMD context (starts at 73)
+                "rmd_start_age": 73,
+                "years_until_rmd": max(0, 73 - user_age),
+            }
+        except Exception as e:
+            logger.error(f"Error getting tax projection data: {e}")
             return {}
 
     def _get_portfolio_summary(self) -> dict:

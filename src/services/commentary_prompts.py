@@ -532,40 +532,71 @@ Comment on whether this tax burden is reasonable and any obvious optimization op
 """,
 
     "withdrawal_table": """
-The user is viewing a **Year-by-Year Withdrawal Table** for {years} years of retirement.
+The user is viewing a **Year-by-Year Withdrawal Table** showing tax-efficient retirement withdrawals.
 
-Summary:
-- Starting balance: ${starting_balance:,.0f}
-- Annual withdrawal: ${annual_withdrawal:,.0f}
-- Ending balance: ${ending_balance:,.0f}
+**Current Portfolio:**
+- Total balance: ${total_balance:,.0f}
+- Taxable accounts: ${taxable_balance:,.0f} ({taxable_pct:.1f}%)
+- Traditional (pre-tax): ${traditional_balance:,.0f} ({traditional_pct:.1f}%)
+- Roth (post-tax): ${roth_balance:,.0f} ({roth_pct:.1f}%)
+
+**Projection Parameters:**
+- User age: {user_age}, Retirement age: {retirement_age}
+- Years to retirement: {years_to_retirement}
+- Estimated annual spending: ${annual_spending:,.0f}
+- RMD starts at age {rmd_start_age} ({years_until_rmd} years away)
 
 {comparison_context}
 
-Explain what this table shows - the sequence of withdrawals from different account types over time.
+Explain:
+1. How the withdrawal sequence works (Taxable → Traditional → Roth)
+2. Why RMDs (Required Minimum Distributions) start at 73 and force traditional withdrawals
+3. How this tax-efficient ordering minimizes lifetime taxes
 """,
 
     "tax_burden_chart": """
-The user is viewing a **Tax Burden by Year** chart showing annual taxes throughout retirement.
+The user is viewing a **Tax Burden Over Time** chart showing projected taxes throughout their retirement.
 
-The stacked bars show:
-- Federal income tax (from traditional account withdrawals)
-- State income tax
-- Capital gains tax (from taxable account sales)
+**Current Portfolio by Account Type:**
+- Taxable: ${taxable_balance:,.0f} ({taxable_pct:.1f}%) - taxed at capital gains rate (~{cap_gains_rate}%)
+- Traditional: ${traditional_balance:,.0f} ({traditional_pct:.1f}%) - taxed as ordinary income (~{federal_rate}%)
+- Roth: ${roth_balance:,.0f} ({roth_pct:.1f}%) - TAX FREE withdrawals
+
+**Chart Shows:**
+- Stacked bars: Federal tax (blue) + State tax (orange)
+- Line overlay: Effective tax rate percentage
+
+**Key Tax Events:**
+- Age 73: RMDs begin, forcing traditional withdrawals and potentially higher taxes
+- As traditional depletes: tax burden decreases (Roth withdrawals are tax-free)
 
 {comparison_context}
 
-Explain why taxes vary year to year (RMDs increasing, account depletion, etc.).
+Explain why the tax burden pattern makes sense given their account mix, and any strategies to optimize.
 """,
 
     "tax_balance_chart": """
-The user is viewing an **Account Balance Over Time** chart.
+The user is viewing an **Account Balances Over Time** chart showing how each account depletes through retirement.
 
-This shows how each account type (Taxable, Traditional, Roth) depletes during retirement.
-Withdrawal order typically: Taxable first, then Traditional, then Roth last.
+**Current Balances:**
+- Taxable: ${taxable_balance:,.0f} ({taxable_pct:.1f}%)
+- Traditional (IRA/401k): ${traditional_balance:,.0f} ({traditional_pct:.1f}%)
+- Roth: ${roth_balance:,.0f} ({roth_pct:.1f}%)
+- Total: ${total_balance:,.0f}
+
+**Withdrawal Sequence:**
+1. **First: Taxable accounts** - Only gains taxed at lower capital gains rates
+2. **Second: Traditional accounts** - Fully taxed as ordinary income (plus RMDs at 73)
+3. **Last: Roth accounts** - Tax-free, let it grow as long as possible
+
+**User Context:**
+- Current age: {user_age}
+- Retirement age: {retirement_age}
+- Years in retirement: ~{years_in_retirement}
 
 {comparison_context}
 
-Explain the tax-efficient withdrawal sequencing strategy shown in the chart.
+Explain the withdrawal sequence logic and what the user's balance trajectory means for their retirement security.
 """,
 
     # =========================================================================

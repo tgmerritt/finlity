@@ -3993,14 +3993,16 @@ async function loadApiKeysStatus() {
             'alpha_vantage': 'Alpha Vantage',
             'massive': 'Massive',
             'finnhub': 'Finnhub',
-            'anthropic_api_key': 'Anthropic (Claude)'
+            'anthropic_api_key': 'Anthropic (Claude)',
+            'fmp_api_key': 'Financial Modeling Prep'
         };
 
         const keyDescriptions = {
             'alpha_vantage': 'Stock prices & fundamentals',
             'massive': 'Price data backup',
             'finnhub': 'Real-time stock prices',
-            'anthropic_api_key': 'AI fund analysis'
+            'anthropic_api_key': 'AI fund analysis & insights',
+            'fmp_api_key': 'ETF sector weightings & fund data'
         };
 
         container.innerHTML = Object.entries(data.api_keys).map(([key, status]) => `
@@ -6693,7 +6695,7 @@ function renderTransitionChart(years) {
         {
             name: 'Portfolio Withdrawals',
             x: ages,
-            y: years.map(y => y.portfolio_withdrawals),
+            y: years.map(y => y.withdrawal_needed),
             type: 'scatter',
             mode: 'none',
             fill: 'tonexty',
@@ -6703,7 +6705,7 @@ function renderTransitionChart(years) {
         {
             name: 'Social Security',
             x: ages,
-            y: years.map(y => y.social_security_income),
+            y: years.map(y => y.ss_income),
             type: 'scatter',
             mode: 'none',
             fill: 'tonexty',
@@ -6713,7 +6715,7 @@ function renderTransitionChart(years) {
         {
             name: 'Expenses',
             x: ages,
-            y: years.map(y => y.total_expenses),
+            y: years.map(y => y.total_income),
             type: 'scatter',
             mode: 'lines',
             line: { color: '#ef4444', width: 2, dash: 'dash' }

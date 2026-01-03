@@ -5,9 +5,46 @@ UI testing script using Playwright to test all pages and functionality.
 
 import asyncio
 import sys
+import time
+import urllib.request
+import urllib.error
 from playwright.async_api import async_playwright, Page
 
 BASE_URL = "http://localhost:8000"
+
+
+def wait_for_server(url: str, timeout: int = 60, interval: float = 1.0) -> bool:
+    """Wait for the server to be ready by polling the health endpoint.
+
+    Args:
+        url: Base URL of the server
+        timeout: Maximum seconds to wait
+        interval: Seconds between retries
+
+    Returns:
+        True if server is ready, False if timeout
+    """
+    start_time = time.time()
+    health_url = f"{url}/api/portfolio"  # Use a simple API endpoint
+
+    print(f"Waiting for server at {url}...")
+
+    while time.time() - start_time < timeout:
+        try:
+            req = urllib.request.Request(health_url, method='GET')
+            with urllib.request.urlopen(req, timeout=5) as response:
+                if response.status == 200:
+                    print(f"Server is ready! (took {time.time() - start_time:.1f}s)")
+                    return True
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ConnectionRefusedError):
+            pass
+
+        elapsed = time.time() - start_time
+        print(f"  Waiting... ({elapsed:.0f}s/{timeout}s)")
+        time.sleep(interval)
+
+    print(f"Server did not become ready within {timeout}s")
+    return False
 
 
 async def close_any_modals(page: Page):
@@ -30,7 +67,7 @@ async def close_any_modals(page: Page):
             if await btn.count() > 0:
                 await btn.first.click(force=True)
                 await page.wait_for_timeout(200)
-    except:
+    except Exception:
         pass
 
 
@@ -87,7 +124,7 @@ async def test_analysis(page: Page):
     # Check allocation data loaded
     total_val = page.locator('.allocation-total, #allocation-total-value')
     if await total_val.count() > 0:
-        print(f"  Allocation data present")
+        print("  Allocation data present")
 
     # Check for charts
     charts = await page.locator('canvas, .plotly-graph-div, svg.main-svg').count()
@@ -270,6 +307,11 @@ async def main():
     print("=" * 60)
     print("PORTFOLIO ANALYZER UI TESTS")
     print("=" * 60)
+
+    # Wait for server to be ready before starting tests
+    if not wait_for_server(BASE_URL, timeout=60):
+        print("\nERROR: Server failed to start. Aborting tests.")
+        return 1
 
     console_errors = []
     network_errors = []
