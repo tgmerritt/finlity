@@ -5250,6 +5250,7 @@ th.sortable.sort-desc .sort-icon::after {
 .commentary-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
     margin-bottom: 12px;
     padding-bottom: 10px;
@@ -5265,6 +5266,26 @@ th.sortable.sort-desc .sort-icon::after {
     font-weight: 600;
     letter-spacing: 0.3px;
     text-transform: uppercase;
+}
+
+/* Close button for popover */
+.commentary-close {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: var(--border-radius-sm);
+    color: var(--color-text-tertiary);
+    font-size: 20px;
+    font-weight: 300;
+    line-height: 1;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    margin-left: auto;
+}
+
+.commentary-close:hover {
+    background: var(--color-error-bg);
+    color: var(--color-error);
 }
 
 .commentary-title {

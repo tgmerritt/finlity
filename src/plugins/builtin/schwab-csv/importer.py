@@ -39,6 +39,9 @@ SCHWAB_COLUMN_ALIASES = {
     "price": ["Price", "Last Price", "Price ($)"],
     "market_value": ["Market Value", "Mkt Val", "Mkt Val (Market Value)"],
     "cost_basis": ["Cost Basis", "Cost Basis Total"],
+    "cost_per_share": ["Cost/Share", "Cost Per Share", "Avg Cost"],
+    "gain_loss": ["Gain/Loss $", "Gain $ (Gain/Loss $)", "Gain/Loss"],
+    "gain_loss_pct": ["Gain/Loss %", "Gain % (Gain/Loss %)", "Gain/Loss Percent"],
 }
 
 # Symbols to skip
@@ -233,8 +236,17 @@ class SchwabCSVImporter(ImporterPlugin):
         price_col = column_map.get("price")
         price = self._parse_number(row.get(price_col)) if price_col else None
 
+        # Try to get cost basis - first check for total cost basis column
         cost_basis_col = column_map.get("cost_basis")
         cost_basis = self._parse_number(row.get(cost_basis_col)) if cost_basis_col else None
+
+        # If no total cost basis, calculate from cost per share
+        if cost_basis is None:
+            cost_per_share_col = column_map.get("cost_per_share")
+            if cost_per_share_col:
+                cost_per_share = self._parse_number(row.get(cost_per_share_col))
+                if cost_per_share is not None and shares is not None:
+                    cost_basis = cost_per_share * shares
 
         # Determine if fund
         is_fund = self._is_fund(ticker, name)
