@@ -505,20 +505,6 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
         if not force_refresh:
             cached = self._get_cached_commentary(element_id)
             if cached and not self._is_cache_stale(cached, current_hash):
-                # Return cached result immediately
-                comparison_data = None
-                action_items = None
-                try:
-                    if cached["comparison_data"]:
-                        comparison_data = json.loads(cached["comparison_data"])
-                except (json.JSONDecodeError, TypeError):
-                    pass
-                try:
-                    if cached["action_items"]:
-                        action_items = json.loads(cached["action_items"])
-                except (json.JSONDecodeError, TypeError):
-                    pass
-
                 # Send complete event with cached data
                 yield f"data: {json.dumps({'type': 'cached', 'commentary': cached['commentary'], 'age_hours': cached['age_hours']})}\n\n"
                 return
