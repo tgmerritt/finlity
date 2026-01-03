@@ -2659,6 +2659,10 @@ async function loadAnalysisData() {
         // Check Claude API status
         checkClaudeStatus();
 
+        // Auto-load plugin insights and widgets
+        loadPluginAnalysis();
+        loadWidgets();
+
     } catch (error) {
         console.error('Error loading analysis data:', error);
     } finally {
@@ -5630,6 +5634,36 @@ function updateMonteCarloConfigSummary() {
 async function runTaxProjection(event) {
     event.preventDefault();
 
+    // Validate required fields before running
+    const requiredFields = [
+        { id: 'tax-current-age', name: 'Current Age' },
+        { id: 'tax-retirement-age', name: 'Retirement Age' },
+        { id: 'tax-end-age', name: 'End Age' },
+        { id: 'tax-annual-spending', name: 'Annual Spending' },
+        { id: 'tax-expected-return', name: 'Expected Return' },
+        { id: 'tax-inflation-rate', name: 'Inflation Rate' },
+        { id: 'tax-contrib-traditional', name: 'Traditional %' },
+        { id: 'tax-contrib-roth', name: 'Roth %' },
+        { id: 'tax-contrib-taxable', name: 'Taxable %' },
+        { id: 'tax-federal-rate', name: 'Federal Tax Rate' },
+        { id: 'tax-state-rate', name: 'State Tax Rate' },
+        { id: 'tax-capgains-rate', name: 'Capital Gains Rate' },
+        { id: 'tax-cost-basis', name: 'Cost Basis %' }
+    ];
+
+    const missingFields = [];
+    for (const field of requiredFields) {
+        const el = document.getElementById(field.id);
+        if (!el || el.value === '' || el.value === null || isNaN(parseFloat(el.value))) {
+            missingFields.push(field.name);
+        }
+    }
+
+    if (missingFields.length > 0) {
+        showToast(`Please fill in all required fields: ${missingFields.slice(0, 3).join(', ')}${missingFields.length > 3 ? '...' : ''}`, 'error');
+        return;
+    }
+
     showLoading('Running tax projection...', true);
     const form = event.target;
     form.classList.add('loading');
@@ -5688,6 +5722,13 @@ async function runTaxProjection(event) {
 }
 
 function displayTaxProjectionResults(result) {
+    // Validate result has required data
+    if (!result || !result.summary) {
+        showToast('Tax projection returned invalid data', 'error');
+        console.error('Invalid tax projection result:', result);
+        return;
+    }
+
     // Get input parameters for context
     const currentAge = parseInt(document.getElementById('tax-current-age').value);
     const retirementAge = parseInt(document.getElementById('tax-retirement-age').value);
