@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Security
+
+Always scan code and REMOVE any PII from files checked in to git - WARN the user about any other security issues during your scan.
+
 ## Project Identity
 
 | Item | Value |
@@ -186,4 +190,4 @@ docker exec portfolio-analyzer python -m pytest tests/ -v
 docker exec portfolio-analyzer python -m pytest tests/test_api_budget.py -v
 ```
 
-All 58 tests should pass before committing.
+All tests should pass before committing

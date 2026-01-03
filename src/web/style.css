@@ -5136,20 +5136,20 @@ th.sortable.sort-desc .sort-icon::after {
    ============================================================================= */
 
 .ai-info-btn {
-    background: transparent;
+    background: var(--color-primary-bg);
     border: none;
     cursor: pointer;
     padding: 2px;
-    margin-left: 6px;
-    opacity: 0.4;
-    transition: opacity var(--transition-fast), transform var(--transition-fast);
+    margin-left: 8px;
+    opacity: 0.7;
+    transition: opacity var(--transition-fast), transform var(--transition-fast), background var(--transition-fast);
     vertical-align: middle;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
 }
 
 .ai-info-btn:hover {
@@ -5163,8 +5163,8 @@ th.sortable.sort-desc .sort-icon::after {
 }
 
 .ai-info-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     color: var(--color-primary);
 }
 
@@ -5198,7 +5198,7 @@ th.sortable.sort-desc .sort-icon::after {
 
 /* Popover */
 .ai-commentary-popover {
-    position: absolute;
+    position: fixed;
     background: var(--color-bg-elevated);
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius-lg);

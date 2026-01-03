@@ -7326,13 +7326,22 @@ async function showAICommentary(button) {
     // Close any existing popover
     closeAICommentary();
 
-    // Create popover using safe DOM methods
-    const popover = createPopoverElement(elementId);
-    document.body.appendChild(popover);
-    activePopover = popover;
+    // Create container and popover
+    const container = document.createElement('div');
+    container.className = 'ai-popover-container';
 
-    // Position the popover
+    const popover = createPopoverElement(elementId);
+    container.appendChild(popover);
+    document.body.appendChild(container);
+    activePopover = container;
+
+    // Position the popover (use fixed positioning)
     positionPopover(popover, button);
+
+    // Trigger animation by adding visible class after append
+    requestAnimationFrame(() => {
+        container.classList.add('visible');
+    });
 
     // Check cache first
     if (commentaryCache[elementId] && !commentaryCache[elementId].error) {
@@ -7360,7 +7369,8 @@ function closeAICommentary() {
         activePopover.remove();
         activePopover = null;
     }
-    // Also close any orphaned popovers
+    // Also close any orphaned containers and popovers
+    document.querySelectorAll('.ai-popover-container').forEach(c => c.remove());
     document.querySelectorAll('.ai-commentary-popover').forEach(p => p.remove());
 }
 
