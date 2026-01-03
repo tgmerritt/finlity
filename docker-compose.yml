@@ -12,13 +12,9 @@ services:
       - ./config.yaml:/app/config.yaml
     env_file:
       # Load API keys from .env file (create from .env.example)
+      # Note: All API keys should be defined in .env file
       - path: .env
         required: false
-    environment:
-      # API keys can also be set directly here (override .env)
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
-      - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -48,10 +44,6 @@ services:
       # Load API keys from .env file
       - path: .env
         required: false
-    environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
-      - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
     # Use --reload for auto-restart on code changes
     command: ["python", "-m", "src.main", "--host", "0.0.0.0", "--no-browser", "--reload"]
     restart: unless-stopped
