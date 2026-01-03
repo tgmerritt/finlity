@@ -86,6 +86,17 @@ class Database:
                         conn.execute(text(f"ALTER TABLE monte_carlo_results ADD COLUMN {col_name} {col_type}"))
                         conn.commit()
 
+            # Check and add missing columns to budget_pretax_deductions table
+            if "budget_pretax_deductions" in inspector.get_table_names():
+                existing_cols = {col["name"] for col in inspector.get_columns("budget_pretax_deductions")}
+                deduction_migrations = [
+                    ("label", "TEXT"),  # User-friendly label (e.g., "John's 401k")
+                ]
+                for col_name, col_type in deduction_migrations:
+                    if col_name not in existing_cols:
+                        conn.execute(text(f"ALTER TABLE budget_pretax_deductions ADD COLUMN {col_name} {col_type}"))
+                        conn.commit()
+
     def get_session(self) -> Session:
         """Get a new database session."""
         return self.SessionLocal()
