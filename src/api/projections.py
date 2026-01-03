@@ -430,8 +430,10 @@ def _find_earliest_retirement_age(
     """Find the earliest age where retirement with target success rate is achievable.
 
     Binary search to find the youngest retirement age where success rate >= target.
+    The result is always >= current_age (cannot retire in the past).
     """
-    min_age = current_age + 1
+    # Start search from current age (allowing immediate retirement if viable)
+    min_age = current_age
     max_age = end_age - 5  # Need at least 5 years of retirement
 
     best_age = None
@@ -457,6 +459,10 @@ def _find_earliest_retirement_age(
             max_age = test_age - 1  # Try to find earlier age
         else:
             min_age = test_age + 1  # Need later retirement
+
+    # Ensure result is never less than current age
+    if best_age is not None and best_age < current_age:
+        best_age = current_age
 
     return best_age
 

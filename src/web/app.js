@@ -637,6 +637,9 @@ async function switchProfile(profileId) {
 
             showToast('Switched to profile: ' + profile.name, 'success');
 
+            // Clear AI commentary cache when switching databases
+            clearCommentaryCache();
+
             // Reload all data for new profile
             await refreshData();
             await loadViews();
@@ -7263,6 +7266,18 @@ function escapeHtml(text) {
 let commentaryCache = {};
 let activePopover = null;
 
+/**
+ * Clear the AI commentary cache - call this when switching databases/profiles
+ */
+function clearCommentaryCache() {
+    commentaryCache = {};
+    // Also remove any existing AI buttons so they can be re-initialized
+    document.querySelectorAll('.ai-info-btn').forEach(btn => btn.remove());
+    // Close any open popovers
+    closeAICommentary();
+    console.debug('AI Commentary: Cache and buttons cleared');
+}
+
 function createPopoverElement(elementId) {
     const popover = document.createElement('div');
     popover.className = 'ai-commentary-popover';
@@ -7526,6 +7541,9 @@ function createInfoButton(elementId) {
     return btn;
 }
 
+// Track if event listeners have been initialized
+let commentaryListenersInitialized = false;
+
 function initAICommentaryButtons() {
     // Map value element IDs to commentary element IDs
     const elementMappings = {
@@ -7537,38 +7555,58 @@ function initAICommentaryButtons() {
         'success-probability': 'dashboard.success_probability',
     };
 
+    let buttonsAdded = 0;
+
     // Find stat cards by the value element IDs they contain
     Object.entries(elementMappings).forEach(([valueId, commentaryId]) => {
         const valueElement = document.getElementById(valueId);
-        if (!valueElement) return;
+        if (!valueElement) {
+            console.debug(`AI Commentary: Element '${valueId}' not found`);
+            return;
+        }
 
         // Find the parent stat-card
         const card = valueElement.closest('.stat-card');
-        if (!card) return;
+        if (!card) {
+            console.debug(`AI Commentary: stat-card not found for '${valueId}'`);
+            return;
+        }
 
         // Check if button already exists
-        if (card.querySelector('.ai-info-btn')) return;
+        if (card.querySelector('.ai-info-btn')) {
+            return;
+        }
 
         const label = card.querySelector('.stat-label');
         if (label) {
             const btn = createInfoButton(commentaryId);
             label.appendChild(btn);
+            buttonsAdded++;
         }
     });
 
-    // Close popover when clicking outside
-    document.addEventListener('click', (e) => {
-        if (activePopover && !activePopover.contains(e.target) && !e.target.closest('.ai-info-btn')) {
-            closeAICommentary();
-        }
-    });
+    if (buttonsAdded > 0) {
+        console.debug(`AI Commentary: Added ${buttonsAdded} insight buttons`);
+    }
 
-    // Close popover on escape key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            closeAICommentary();
-        }
-    });
+    // Only add event listeners once
+    if (!commentaryListenersInitialized) {
+        // Close popover when clicking outside
+        document.addEventListener('click', (e) => {
+            if (activePopover && !activePopover.contains(e.target) && !e.target.closest('.ai-info-btn')) {
+                closeAICommentary();
+            }
+        });
+
+        // Close popover on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeAICommentary();
+            }
+        });
+
+        commentaryListenersInitialized = true;
+    }
 }
 
 // =========================================================================

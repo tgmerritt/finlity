@@ -146,6 +146,15 @@ class SocialSecurityRequest(BaseModel):
     birth_year: Optional[int] = None
 
 
+class IncomeTransitionRequest(BaseModel):
+    """Request model for retirement income transition projection."""
+    current_age: int
+    retirement_age: int
+    ss_claiming_age: int = 67
+    end_age: int = 95
+    ss_benefit_override: Optional[float] = None
+
+
 # =============================================================================
 # Income Source Endpoints
 # =============================================================================
@@ -832,6 +841,107 @@ async def calculate_social_security(data: SocialSecurityRequest):
         "estimate": estimate.to_dict(),
         "comparison_by_age": comparison,
     }
+
+
+@router.post("/income-transition")
+async def get_income_transition(data: IncomeTransitionRequest):
+    """Project income transition from working to retirement.
+
+    Shows year-by-year income from:
+    - Employment income (pre-retirement)
+    - Social Security benefits (post-SS claiming age)
+    - Required portfolio withdrawals to maintain lifestyle
+    """
+    db = get_database()
+    session = db.get_session()
+    try:
+        # Get current income sources
+        sources = session.query(BudgetIncomeSource).filter(
+            BudgetIncomeSource.is_active.is_(True)
+        ).all()
+
+        total_annual_income = sum(s.gross_annual for s in sources)
+
+        # Get expenses for retirement spending target
+        expenses = session.query(BudgetExpense).filter(
+            BudgetExpense.is_active.is_(True)
+        ).all()
+
+        freq_to_annual = {"weekly": 52, "biweekly": 26, "monthly": 12, "quarterly": 4, "annual": 1}
+        annual_expenses = sum(
+            e.amount * freq_to_annual.get(e.frequency, 12)
+            for e in expenses
+        )
+
+        # Estimate Social Security benefit
+        ss_estimate = estimate_social_security_benefit(
+            annual_income=total_annual_income,
+            current_age=data.current_age,
+            claiming_age=data.ss_claiming_age,
+        )
+
+        # Use override if provided
+        monthly_ss = data.ss_benefit_override if data.ss_benefit_override else ss_estimate.monthly_benefit
+        annual_ss = monthly_ss * 12
+
+        # Generate year-by-year projection
+        years = []
+        inflation_rate = 0.025  # 2.5% annual inflation
+
+        for age in range(data.current_age, data.end_age + 1):
+            years_from_now = age - data.current_age
+            inflation_factor = (1 + inflation_rate) ** years_from_now
+
+            # Determine income sources based on age
+            if age < data.retirement_age:
+                # Still working
+                employment_income = total_annual_income * inflation_factor
+                ss_income = 0
+                withdrawal_needed = 0
+            else:
+                # Retired
+                employment_income = 0
+
+                if age >= data.ss_claiming_age:
+                    # Receiving Social Security (with COLA adjustments)
+                    ss_income = annual_ss * inflation_factor
+                else:
+                    ss_income = 0
+
+                # Calculate withdrawal needed to cover inflation-adjusted expenses
+                target_spending = annual_expenses * inflation_factor
+                withdrawal_needed = max(0, target_spending - ss_income)
+
+            total_income = employment_income + ss_income + withdrawal_needed
+
+            years.append({
+                "age": age,
+                "employment_income": round(employment_income, 2),
+                "ss_income": round(ss_income, 2),
+                "withdrawal_needed": round(withdrawal_needed, 2),
+                "total_income": round(total_income, 2),
+                "is_retired": age >= data.retirement_age,
+                "receiving_ss": age >= data.ss_claiming_age,
+            })
+
+        # Get SS claiming age comparison
+        ss_comparison = get_claiming_age_comparison(
+            annual_income=total_annual_income,
+            current_age=data.current_age,
+        )
+
+        return {
+            "years": years,
+            "ss_comparison": ss_comparison,
+            "assumptions": {
+                "current_income": round(total_annual_income, 2),
+                "annual_expenses": round(annual_expenses, 2),
+                "estimated_ss_monthly": round(monthly_ss, 2),
+                "inflation_rate": inflation_rate,
+            }
+        }
+    finally:
+        session.close()
 
 
 @router.get("/paycheck-chart-data")
