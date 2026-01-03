@@ -7530,23 +7530,11 @@ function createInfoButton(elementId) {
     btn.className = 'ai-info-btn';
     btn.dataset.elementId = elementId;
     btn.title = 'Get AI insight';
+    btn.textContent = '?';
     btn.onclick = function(e) {
         e.stopPropagation();
         showAICommentary(this);
     };
-
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('class', 'info-icon');
-    svg.setAttribute('viewBox', '0 0 20 20');
-    svg.setAttribute('fill', 'currentColor');
-
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('fill-rule', 'evenodd');
-    path.setAttribute('d', 'M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z');
-    path.setAttribute('clip-rule', 'evenodd');
-
-    svg.appendChild(path);
-    btn.appendChild(svg);
 
     return btn;
 }

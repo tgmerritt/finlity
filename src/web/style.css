@@ -5136,26 +5136,31 @@ th.sortable.sort-desc .sort-icon::after {
    ============================================================================= */
 
 .ai-info-btn {
-    background: var(--color-primary-bg);
-    border: none;
+    background: var(--color-primary);
+    border: 2px solid var(--color-primary);
     cursor: pointer;
-    padding: 2px;
+    padding: 0;
     margin-left: 8px;
-    opacity: 0.7;
+    opacity: 0.85;
     transition: opacity var(--transition-fast), transform var(--transition-fast), background var(--transition-fast);
     vertical-align: middle;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
+    font-size: 14px;
+    font-weight: 700;
+    color: white;
+    line-height: 1;
 }
 
 .ai-info-btn:hover {
     opacity: 1;
-    transform: scale(1.1);
-    background: var(--color-primary-bg);
+    transform: scale(1.15);
+    background: var(--color-primary-hover, var(--color-primary));
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
 }
 
 .ai-info-btn:active {
@@ -5163,9 +5168,9 @@ th.sortable.sort-desc .sort-icon::after {
 }
 
 .ai-info-btn svg {
-    width: 16px;
-    height: 16px;
-    color: var(--color-primary);
+    width: 14px;
+    height: 14px;
+    color: white;
 }
 
 .ai-info-btn.loading svg {
