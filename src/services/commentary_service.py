@@ -83,9 +83,13 @@ class CommentaryService:
                     logger.warning("No Anthropic API key configured")
                     return None
 
+                logger.info(f"Initializing Anthropic client with key: {self._api_key[:8]}...")
                 self._client = Anthropic(api_key=self._api_key)
-            except ImportError:
-                logger.warning("anthropic package not installed")
+            except ImportError as e:
+                logger.warning(f"anthropic package not installed: {e}")
+                return None
+            except Exception as e:
+                logger.error(f"Failed to initialize Anthropic client: {e}")
                 return None
 
         return self._client
