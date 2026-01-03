@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project Identity
+
+| Item | Value |
+|------|-------|
+| **GitHub Repo** | `tgmerritt/investment_dashboard` |
+| **Docker Container (dev)** | `portfolio-analyzer-dev` |
+| **Heroku App** | `investment-dashboard-app` |
+| **Author** | Tyler Merritt (tgmerritt@gmail.com) |
+
 ## Quick Reference
 
 ```bash
@@ -11,8 +20,9 @@ docker compose --profile dev up portfolio-dev
 # Production (rebuild required for changes)
 docker compose down && docker compose build && docker compose up -d
 
-# Run tests
-docker exec portfolio-analyzer python -m pytest tests/ -v
+# Run commands in container (use portfolio-analyzer-dev for dev mode)
+docker exec -it portfolio-analyzer-dev python -m pytest tests/ -v
+docker exec -it portfolio-analyzer-dev python scripts/generate_demo.py
 
 # View logs
 docker compose logs -f
@@ -21,11 +31,12 @@ docker compose logs -f
 ## Important Workflows
 
 ### GitHub Actions
+- **Repo**: `tgmerritt/investment_dashboard`
 - **Cancel running workflows before pushing** if making frequent changes
-- Use: `gh run list --status in_progress` then `gh run cancel <run_id>`
+- Use: `gh run list --repo tgmerritt/investment_dashboard --status in_progress` then `gh run cancel <run_id>`
 
 ### Heroku Deployment
-- App deployed at: `investment-dashboard-app-e0832c614c7f.herokuapp.com`
+- App URL: `investment-dashboard-app-e0832c614c7f.herokuapp.com`
 - Build for AMD64: `docker build --platform linux/amd64 -t registry.heroku.com/investment-dashboard-app/web .`
 - Push: `docker push registry.heroku.com/investment-dashboard-app/web`
 - Release: `heroku container:release web --app investment-dashboard-app`
