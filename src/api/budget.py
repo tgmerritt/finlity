@@ -972,7 +972,6 @@ async def get_paycheck_chart_data():
 
             # Calculate federal and state taxes (use calculator for brackets)
             # Approximate per-period by calculating annual and dividing
-            taxable_income = ytd_gross - ytd_pretax
             annual_federal = calculator.calculate_federal_income_tax(
                 source.gross_annual,
                 pretax_deductions=total_pretax_per_period * periods_per_year

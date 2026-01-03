@@ -35,6 +35,13 @@ docker compose logs -f
 - **Cancel running workflows before pushing** if making frequent changes
 - Use: `gh run list --repo tgmerritt/investment_dashboard --status in_progress` then `gh run cancel <run_id>`
 
+### Pre-commit Checks (REQUIRED before pushing)
+```bash
+# ALWAYS run these before git push:
+ruff check src/                    # Linter - must pass with no errors
+python -m pytest tests/ -x -q      # Tests - must pass
+```
+
 ### Heroku Deployment
 - App URL: `investment-dashboard-app-e0832c614c7f.herokuapp.com`
 - Build for AMD64: `docker build --platform linux/amd64 -t registry.heroku.com/investment-dashboard-app/web .`
