@@ -22,6 +22,7 @@ class ProfileCreate(BaseModel):
     description: str = Field("", max_length=500, description="Optional description")
     icon: str = Field("user", description="Icon identifier")
     color: Optional[str] = Field(None, pattern=r'^#[0-9A-Fa-f]{6}$', description="Hex color code")
+    db_guid: Optional[str] = Field(None, description="Optional database GUID (auto-generated if not provided)")
 
 
 class ProfileUpdate(BaseModel):
@@ -41,6 +42,7 @@ class ProfileResponse(BaseModel):
     last_accessed: str
     icon: str
     color: str
+    db_guid: str
     is_active: bool = False
 
 
@@ -62,6 +64,7 @@ def _profile_to_response(profile: Profile, active_id: str) -> ProfileResponse:
         last_accessed=profile.last_accessed,
         icon=profile.icon,
         color=profile.color,
+        db_guid=profile.db_guid,
         is_active=profile.id == active_id,
     )
 
@@ -113,6 +116,7 @@ def create_profile(request: ProfileCreate):
             description=request.description,
             icon=request.icon,
             color=request.color,
+            db_guid=request.db_guid,
         )
         return _profile_to_response(profile, manager.get_active_profile_id())
 

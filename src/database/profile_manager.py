@@ -13,6 +13,7 @@ Uses DatabaseManager for proper database lifecycle:
 import json
 import logging
 import shutil
+import uuid
 import zipfile
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -36,6 +37,7 @@ class Profile:
     last_accessed: str = field(default_factory=lambda: datetime.now().isoformat())
     icon: str = "user"
     color: str = "#4A90D9"
+    db_guid: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -44,6 +46,10 @@ class Profile:
     @classmethod
     def from_dict(cls, data: dict) -> "Profile":
         """Create Profile from dictionary."""
+        # Ensure db_guid exists for profiles created before this field was added
+        if 'db_guid' not in data:
+            data = data.copy()
+            data['db_guid'] = str(uuid.uuid4())
         return cls(**data)
 
 
@@ -153,6 +159,7 @@ class ProfileManager:
             description="Default portfolio (migrated)",
             icon="user",
             color=self.PROFILE_COLORS[0],
+            db_guid=str(uuid.uuid4()),
         )
 
         self._config = ProfilesConfig(
@@ -256,6 +263,7 @@ class ProfileManager:
         description: str = "",
         icon: str = "user",
         color: Optional[str] = None,
+        db_guid: Optional[str] = None,
     ) -> Profile:
         """Create a new profile.
 
@@ -264,12 +272,14 @@ class ProfileManager:
             description: Optional description
             icon: Icon identifier
             color: Hex color code (auto-assigned if not provided)
+            db_guid: Optional database GUID (auto-generated if not provided)
 
         Returns:
             The created Profile
         """
         profile_id = self._generate_id(name)
         profile_color = color or self._get_next_color()
+        profile_db_guid = db_guid or str(uuid.uuid4())
 
         profile = Profile(
             id=profile_id,
@@ -277,6 +287,7 @@ class ProfileManager:
             description=description,
             icon=icon,
             color=profile_color,
+            db_guid=profile_db_guid,
         )
 
         # Create profile directory structure

@@ -325,7 +325,8 @@ async def get_dashboard_data(view_id: str = None):
     }
 
     # Get recent snapshots for charts (these are not filtered by view)
-    snapshots = db.get_snapshots(limit=90)
+    # Fetch 365 days to support full year time range selector
+    snapshots = db.get_snapshots(limit=365)
     history = [
         {
             "date": s.snapshot_date.isoformat() if s.snapshot_date else "",
