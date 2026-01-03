@@ -31,6 +31,7 @@ class Database:
         # Ensure data directory exists
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
+        self.db_path = db_path
         self.engine = create_engine(f"sqlite:///{db_path}", echo=False)
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine)
