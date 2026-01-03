@@ -1295,25 +1295,6 @@ body {
     flex-direction: column;
 }
 
-/* Page Header */
-.page-header {
-    background: var(--color-bg-elevated);
-    border-bottom: 1px solid var(--color-border);
-    padding: 16px 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    position: sticky;
-    top: 0;
-    z-index: 50;
-}
-
-.page-header h1 {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--color-text-primary);
-}
-
 .header-actions {
     display: flex;
     align-items: center;
@@ -2728,12 +2709,6 @@ tr:hover td {
 
     .stats-row {
         grid-template-columns: repeat(2, 1fr);
-    }
-
-    .page-header {
-        flex-direction: column;
-        gap: 12px;
-        align-items: flex-start;
     }
 
     /* Stack inline form on mobile */

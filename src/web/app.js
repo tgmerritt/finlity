@@ -451,18 +451,6 @@ function showTab(tabName) {
         navItem.classList.add('active');
     }
 
-    // Update page title
-    const titles = {
-        'dashboard': 'Dashboard',
-        'holdings': 'Holdings',
-        'analysis': 'Analysis',
-        'projections': 'Projections',
-        'taxes': 'Taxes',
-        'budget': 'Expenses & Income',
-        'settings': 'Settings'
-    };
-    document.getElementById('page-title').textContent = titles[tabName] || tabName;
-
     // Load tab-specific data - always refresh to ensure current data
     if (tabName === 'dashboard') {
         refreshData();
@@ -1797,6 +1785,9 @@ async function refreshData() {
 
         // Load retirement metrics for dashboard row 2
         await loadRetirementMetrics();
+
+        // Re-initialize AI commentary buttons after data loads
+        initAICommentaryButtons();
 
     } catch (error) {
         console.error('Error loading data:', error);
@@ -7571,6 +7562,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadViews();  // Load views first to set up view selector
     await updatePriceStatus();  // Show price freshness status
     await checkDemoModeStatus();  // Check demo mode status
-    refreshData();
-    initAICommentaryButtons();  // Add AI commentary info icons
+    await refreshData();
+    initAICommentaryButtons();  // Add AI commentary info icons AFTER data loads
 });

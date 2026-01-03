@@ -170,38 +170,6 @@
                 <button onclick="window.location.href='#settings'" class="demo-settings-link">Settings</button>
             </div>
 
-            <!-- Header -->
-            <header class="page-header">
-                <div class="header-left">
-                    <h1 id="page-title">Dashboard</h1>
-                </div>
-                <div class="header-actions">
-                    <span id="price-status" class="price-status" title="Price data freshness"></span>
-                    <button onclick="refreshData()" class="btn btn-default" title="Reload data from database">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="23 4 23 10 17 10"></polyline>
-                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                        </svg>
-                        Reload
-                    </button>
-                    <button id="update-prices-btn" onclick="refreshPrices(true)" class="btn btn-default" title="Force refresh ALL prices from APIs">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="8" x2="12" y2="12"></line>
-                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                        </svg>
-                        Update Prices
-                    </button>
-                    <button onclick="showAddPositionModal()" class="btn btn-primary">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        Add Position
-                    </button>
-                </div>
-            </header>
-
             <!-- Dashboard Tab -->
             <div id="tab-dashboard" class="tab-content active">
                 <!-- Duplicate Warning Banner -->
@@ -414,6 +382,22 @@
                                 </div>
                             </div>
                             <input type="text" id="holdings-search" placeholder="Search holdings..." class="search-input" oninput="filterHoldings()">
+                            <span id="price-status" class="price-status" title="Price data freshness"></span>
+                            <button id="update-prices-btn" onclick="refreshPrices(true)" class="btn btn-default btn-sm" title="Force refresh ALL prices from APIs">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                </svg>
+                                Update Prices
+                            </button>
+                            <button onclick="showAddPositionModal()" class="btn btn-primary btn-sm">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                Add Position
+                            </button>
                         </div>
                     </div>
                     <div class="card-body">
