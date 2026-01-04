@@ -35,6 +35,7 @@ class Task:
     id: str
     status: TaskStatus
     created_at: datetime
+    session_id: Optional[str] = None  # Session that owns this task (for isolation)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     result: Any = None
@@ -53,7 +54,7 @@ class BackgroundTaskManager:
 
     def __init__(self, max_completed_tasks: int = 100):
         self._tasks: Dict[str, Task] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._max_completed = max_completed_tasks
 
     def submit(
@@ -61,6 +62,7 @@ class BackgroundTaskManager:
         func: Callable,
         *args,
         task_id: Optional[str] = None,
+        session_id: Optional[str] = None,
         **kwargs
     ) -> str:
         """
@@ -70,6 +72,7 @@ class BackgroundTaskManager:
             func: The function to run
             *args: Positional arguments for the function
             task_id: Optional custom task ID (auto-generated if not provided)
+            session_id: Optional session ID for task isolation (multi-user mode)
             **kwargs: Keyword arguments for the function
 
         Returns:
@@ -81,7 +84,8 @@ class BackgroundTaskManager:
         task = Task(
             id=task_id,
             status=TaskStatus.PENDING,
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
+            session_id=session_id,
         )
 
         with self._lock:
@@ -144,14 +148,42 @@ class BackgroundTaskManager:
                 if message:
                     task.progress_message = message
 
-    def get_task(self, task_id: str) -> Optional[Task]:
-        """Get task status and result."""
-        with self._lock:
-            return self._tasks.get(task_id)
+    def get_task(
+        self, task_id: str, session_id: Optional[str] = None
+    ) -> Optional[Task]:
+        """
+        Get task status and result.
 
-    def get_task_dict(self, task_id: str) -> Optional[Dict[str, Any]]:
-        """Get task as a dictionary (for JSON response)."""
-        task = self.get_task(task_id)
+        Args:
+            task_id: The task ID to retrieve
+            session_id: If provided, only return task if it belongs to this session.
+                        This provides isolation in multi-user mode.
+
+        Returns:
+            Task if found (and session matches if provided), None otherwise
+        """
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task and session_id:
+                # Only return if session matches or task has no session
+                if task.session_id and task.session_id != session_id:
+                    return None
+            return task
+
+    def get_task_dict(
+        self, task_id: str, session_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get task as a dictionary (for JSON response).
+
+        Args:
+            task_id: The task ID to retrieve
+            session_id: If provided, only return task if it belongs to this session
+
+        Returns:
+            Task dict if found (and session matches), None otherwise
+        """
+        task = self.get_task(task_id, session_id=session_id)
         if not task:
             return None
 
@@ -187,15 +219,33 @@ class BackgroundTaskManager:
             for _, tid in to_remove:
                 del self._tasks[tid]
 
-    def list_tasks(self, limit: int = 20) -> list:
-        """List recent tasks."""
+    def list_tasks(
+        self, limit: int = 20, session_id: Optional[str] = None
+    ) -> list:
+        """
+        List recent tasks.
+
+        Args:
+            limit: Maximum number of tasks to return
+            session_id: If provided, only return tasks belonging to this session
+
+        Returns:
+            List of task dicts, filtered by session if provided
+        """
         with self._lock:
-            tasks = sorted(
-                self._tasks.values(),
-                key=lambda t: t.created_at,
-                reverse=True
-            )[:limit]
-            return [self.get_task_dict(t.id) for t in tasks]
+            # Filter by session if provided
+            if session_id:
+                filtered_tasks = [
+                    t for t in self._tasks.values()
+                    if not t.session_id or t.session_id == session_id
+                ]
+            else:
+                filtered_tasks = list(self._tasks.values())
+
+            tasks = sorted(filtered_tasks, key=lambda t: t.created_at, reverse=True)[
+                :limit
+            ]
+            return [self.get_task_dict(t.id, session_id=session_id) for t in tasks]
 
 
 # Global instance

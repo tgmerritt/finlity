@@ -9,6 +9,10 @@ let availableViews = [];
 let fullHistoryData = [];
 let currentHistoryDays = 30;
 
+// Session management for multi-user mode
+let sessionHmacKey = null;
+let sessionSigningRequired = false;
+
 // Utility functions
 function formatCurrency(value) {
   if (value === null || value === undefined) return '-';
@@ -49,6 +53,69 @@ function formatPercent(value) {
 function formatNumber(value, decimals = 2) {
   if (value === null || value === undefined) return '-';
   return value.toFixed(decimals);
+}
+
+// =========================================================================
+// SESSION MANAGEMENT FUNCTIONS
+// =========================================================================
+
+/**
+ * Initialize session for multi-user mode.
+ * Gets HMAC key for request signing if required by server.
+ */
+async function initSession() {
+  try {
+    const response = await fetch(`${API_BASE}/api/session/init`, {
+      credentials: 'include',
+    });
+    if (response.ok) {
+      const data = await response.json();
+      sessionHmacKey = data.hmac_key;
+      sessionSigningRequired = data.signing_required || false;
+      console.log(
+        `Session initialized: signing ${sessionSigningRequired ? 'required' : 'not required'}`
+      );
+    }
+  } catch (error) {
+    // Session init is optional - local mode doesn't require it
+    console.log('Session init skipped (local mode)');
+  }
+}
+
+/**
+ * Compute HMAC-SHA256 signature using Web Crypto API.
+ */
+async function computeHmac(key, message) {
+  const encoder = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message));
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Generate signature headers for mutating requests.
+ */
+async function generateSignatureHeaders(method, endpoint) {
+  if (!sessionHmacKey) return {};
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const nonce = crypto.randomUUID();
+  const message = `${timestamp}:${nonce}:${method}:${endpoint}`;
+  const signature = await computeHmac(sessionHmacKey, message);
+
+  return {
+    'X-Request-Timestamp': timestamp.toString(),
+    'X-Request-Nonce': nonce,
+    'X-Request-Signature': signature,
+  };
 }
 
 // Welcome page functions
@@ -419,8 +486,20 @@ async function createProfile() {
 // Generic API call helper
 async function apiCall(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
+  const method = options.method || 'GET';
+
+  // Generate signing headers for mutating requests in multi-user mode
+  let sigHeaders = {};
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && sessionHmacKey) {
+    sigHeaders = await generateSignatureHeaders(method, endpoint);
+  }
+
   const config = {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...sigHeaders,
+    },
+    credentials: 'include', // Send session cookie
     ...options,
   };
 
@@ -455,7 +534,9 @@ async function pollForTaskResult(taskId, options = {}) {
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitMs) {
-    const response = await fetch(`${API_BASE}/api/tasks/${taskId}`);
+    const response = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+      credentials: 'include', // Send session cookie for task isolation
+    });
     if (!response.ok) {
       throw new Error(`Failed to check task status: ${response.status}`);
     }
@@ -484,8 +565,20 @@ async function pollForTaskResult(taskId, options = {}) {
 
 // Helper to run API call that may return async task
 async function runAsyncApiCall(endpoint, options = {}, taskOptions = {}) {
+  const method = options.method || 'GET';
+
+  // Generate signing headers for mutating requests in multi-user mode
+  let sigHeaders = {};
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && sessionHmacKey) {
+    sigHeaders = await generateSignatureHeaders(method, endpoint);
+  }
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...sigHeaders,
+    },
+    credentials: 'include', // Send session cookie
     ...options,
   });
 
@@ -640,6 +733,25 @@ function setTheme(theme, save = true) {
 function toggleTheme() {
   const current = document.documentElement.getAttribute('data-theme');
   setTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+// Sidebar collapse toggle
+function toggleSidebarCollapse() {
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar) {
+    sidebar.classList.toggle('collapsed');
+    const isCollapsed = sidebar.classList.contains('collapsed');
+    localStorage.setItem('sidebarCollapsed', isCollapsed ? 'true' : 'false');
+  }
+}
+
+// Initialize sidebar state from localStorage
+function initSidebarState() {
+  const sidebar = document.querySelector('.sidebar');
+  const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+  if (sidebar && isCollapsed) {
+    sidebar.classList.add('collapsed');
+  }
 }
 
 function updateChartTheme(theme) {
@@ -6597,18 +6709,22 @@ async function runTaxProjection(event) {
   if (rothBalance) params.roth_balance = parseFloat(rothBalance);
 
   try {
-    const response = await fetch(`${API_BASE}/api/projections/tax-projection`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    });
+    // Use runAsyncApiCall to handle both sync and async (Heroku) responses
+    const result = await runAsyncApiCall(
+      '/api/projections/tax-projection',
+      {
+        method: 'POST',
+        body: JSON.stringify(params),
+      },
+      {
+        onProgress: (task) => {
+          if (task.progress_message) {
+            showToast(task.progress_message, 'info');
+          }
+        },
+      }
+    );
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to run projection');
-    }
-
-    const result = await response.json();
     displayTaxProjectionResults(result);
     showToast('Tax projection complete', 'success');
   } catch (error) {
@@ -7164,8 +7280,11 @@ async function loadExpenses() {
   }
 }
 
+// Track selected income source for paycheck preview
+let selectedPaycheckIncomeIndex = 0;
+
 // Update paycheck preview
-async function updatePaycheckPreview() {
+async function updatePaycheckPreview(incomeIndex = null) {
   try {
     const incomeData = await apiCall('/api/budget/income');
     const container = document.getElementById('paycheck-breakdown');
@@ -7175,8 +7294,28 @@ async function updatePaycheckPreview() {
       return;
     }
 
-    // Calculate paycheck for first/primary income source
-    const primaryIncome = incomeData[0];
+    // Use provided index or default to selected
+    if (incomeIndex !== null) {
+      selectedPaycheckIncomeIndex = incomeIndex;
+    }
+    // Ensure index is valid
+    if (selectedPaycheckIncomeIndex >= incomeData.length) {
+      selectedPaycheckIncomeIndex = 0;
+    }
+
+    // Build income switcher if multiple sources (data is user's own input from their database)
+    let switcherHtml = '';
+    if (incomeData.length > 1) {
+      const buttons = incomeData.map((inc, idx) => {
+        const activeClass = idx === selectedPaycheckIncomeIndex ? 'active' : '';
+        const safeName = String(inc.name || 'Income ' + (idx + 1)).replace(/[<>&"']/g, '');
+        return `<button class="paycheck-income-btn ${activeClass}" onclick="updatePaycheckPreview(${idx})">${safeName}</button>`;
+      }).join('');
+      switcherHtml = `<div class="paycheck-income-switcher">${buttons}</div>`;
+    }
+
+    // Calculate paycheck for selected income source
+    const primaryIncome = incomeData[selectedPaycheckIncomeIndex];
     const filingStatus = document.getElementById('filing-status')?.value || 'single';
     const state = document.getElementById('tax-state')?.value || primaryIncome.state || 'CA';
 
@@ -7248,6 +7387,17 @@ async function updatePaycheckPreview() {
           : 10;
 
       container.innerHTML = `
+                ${switcherHtml}
+                <div class="paycheck-tax-rates-callout">
+                    <div class="tax-rate-item">
+                        <span class="tax-rate-label">Effective Tax Rate</span>
+                        <span class="tax-rate-value">${effectiveTaxRate.toFixed(1)}%</span>
+                    </div>
+                    <div class="tax-rate-item">
+                        <span class="tax-rate-label">Marginal Federal Rate</span>
+                        <span class="tax-rate-value">${marginalRate}%</span>
+                    </div>
+                </div>
                 <div class="paycheck-breakdown-grid">
                     <div class="paycheck-section">
                         <h4>Earnings</h4>
@@ -7283,10 +7433,6 @@ async function updatePaycheckPreview() {
                             <span class="amount positive">${formatCurrency(paycheck.net_pay || 0)}</span>
                         </div>
                     </div>
-                </div>
-                <div style="margin-top: 16px; font-size: 13px; color: var(--color-text-secondary);">
-                    Effective Tax Rate: ${effectiveTaxRate.toFixed(1)}% •
-                    Marginal Federal Rate: ${marginalRate}%
                 </div>
             `;
     }
@@ -8812,7 +8958,9 @@ function initAICommentaryButtons() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
+  await initSession(); // Initialize session for multi-user mode (must be first)
   initTheme();
+  initSidebarState(); // Initialize sidebar collapsed state
   initStorageMode(); // Initialize storage mode preference
   initConfigPanels(); // Initialize collapsible config panels
   await loadProfiles(); // Load profiles for multi-database support

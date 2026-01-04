@@ -190,6 +190,8 @@ async def list_income_sources():
 @router.post("/income")
 async def create_income_source(data: IncomeSourceCreate):
     """Create a new income source."""
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
     db = get_database()
     session = db.get_session()
     try:
@@ -220,6 +222,8 @@ async def create_income_source(data: IncomeSourceCreate):
 @router.put("/income/{income_id}")
 async def update_income_source(income_id: str, data: IncomeSourceUpdate):
     """Update an income source."""
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
     db = get_database()
     session = db.get_session()
     try:
@@ -253,6 +257,8 @@ async def update_income_source(income_id: str, data: IncomeSourceUpdate):
 @router.delete("/income/{income_id}")
 async def delete_income_source(income_id: str):
     """Delete an income source."""
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
     db = get_database()
     session = db.get_session()
     try:
@@ -314,6 +320,8 @@ async def get_tax_config():
 @router.put("/tax-config")
 async def update_tax_config(data: TaxConfigUpdate):
     """Update tax configuration."""
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
     db = get_database()
     session = db.get_session()
     try:
@@ -460,6 +468,8 @@ async def list_expenses():
 @router.post("/expenses")
 async def create_expense(data: ExpenseCreate):
     """Create a new expense."""
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
     db = get_database()
     session = db.get_session()
     try:
@@ -490,6 +500,8 @@ async def create_expense(data: ExpenseCreate):
 @router.put("/expenses/{expense_id}")
 async def update_expense(expense_id: str, data: ExpenseUpdate):
     """Update an expense."""
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
     db = get_database()
     session = db.get_session()
     try:
@@ -529,6 +541,8 @@ async def update_expense(expense_id: str, data: ExpenseUpdate):
 @router.delete("/expenses/{expense_id}")
 async def delete_expense(expense_id: str):
     """Delete an expense."""
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
     db = get_database()
     session = db.get_session()
     try:
@@ -580,6 +594,8 @@ async def list_deductions():
 @router.post("/deductions")
 async def create_deduction(data: DeductionCreate):
     """Create a new pre-tax deduction."""
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
     db = get_database()
     session = db.get_session()
     try:
@@ -608,6 +624,8 @@ async def create_deduction(data: DeductionCreate):
 @router.put("/deductions/{deduction_id}")
 async def update_deduction(deduction_id: str, data: DeductionUpdate):
     """Update a pre-tax deduction."""
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
     db = get_database()
     session = db.get_session()
     try:
@@ -653,6 +671,8 @@ async def update_deduction(deduction_id: str, data: DeductionUpdate):
 @router.delete("/deductions/{deduction_id}")
 async def delete_deduction(deduction_id: str):
     """Delete a pre-tax deduction."""
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
     db = get_database()
     session = db.get_session()
     try:

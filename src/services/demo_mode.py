@@ -264,3 +264,47 @@ def get_demo_manager() -> DemoModeManager:
 def is_demo_mode() -> bool:
     """Check if demo mode is enabled."""
     return get_demo_manager().is_enabled
+
+
+def is_demo_data_protected() -> bool:
+    """Check if demo data modifications are protected.
+
+    Returns True when BOTH:
+    1. Demo mode is enabled
+    2. PROTECT_DEMO_DATA environment variable is set to true
+
+    This allows local development to modify demo data while protecting
+    hosted demo sites from unauthorized modifications.
+    """
+    import os
+
+    if not is_demo_mode():
+        return False
+
+    protect_demo = os.environ.get("PROTECT_DEMO_DATA", "").lower()
+    return protect_demo in ("true", "1", "yes")
+
+
+def check_demo_data_protection():
+    """Raise HTTPException if demo data is protected.
+
+    Use this in API endpoints that modify data (create, update, delete).
+    Only blocks modifications when BOTH demo mode AND PROTECT_DEMO_DATA are enabled.
+
+    Test mode (PORTFOLIO_TEST_MODE=true) bypasses this check.
+
+    Raises:
+        HTTPException: 403 error if demo data is protected
+    """
+    import os
+    from fastapi import HTTPException
+
+    # Allow writes in test mode
+    if os.environ.get("PORTFOLIO_TEST_MODE", "").lower() == "true":
+        return
+
+    if is_demo_data_protected():
+        raise HTTPException(
+            status_code=403,
+            detail="Demo data is protected on the hosted site. Modifications are disabled."
+        )

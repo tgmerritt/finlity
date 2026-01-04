@@ -161,6 +161,9 @@ def delete_profile(profile_id: str):
 
     Cannot delete the active profile or the default profile.
     """
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
+
     manager = get_profile_manager()
 
     try:

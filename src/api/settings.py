@@ -345,6 +345,8 @@ def get_api_key_status(key_name: str) -> dict:
 def delete_api_key(key_name: str) -> dict:
     """Delete an API key from the database."""
     from src.services import SecretsManager
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
 
     db = get_database()
     secrets = SecretsManager(db)
@@ -479,6 +481,9 @@ def update_view(view_id: str, request: ViewUpdateRequest) -> ViewResponse:
 @router.delete("/views/{view_id}")
 def delete_view(view_id: str) -> dict:
     """Delete a portfolio view."""
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
+
     db = get_database()
 
     # Don't allow deleting "All Accounts" view
@@ -537,9 +542,17 @@ class DemoModeSettings(BaseModel):
 
 @router.get("/demo-mode")
 def get_demo_mode() -> dict:
-    """Get current demo mode status (dynamic, no restart needed)."""
-    from src.services.demo_mode import get_demo_manager
-    return get_demo_manager().get_status()
+    """Get current demo mode status (dynamic, no restart needed).
+
+    Returns:
+        enabled: Whether demo mode is currently enabled
+        demo_initialized: Whether demo data exists
+        protected: Whether demo data modifications are blocked (hosted site)
+    """
+    from src.services.demo_mode import get_demo_manager, is_demo_data_protected
+    status = get_demo_manager().get_status()
+    status["protected"] = is_demo_data_protected()
+    return status
 
 
 @router.put("/demo-mode")
@@ -554,9 +567,18 @@ def set_demo_mode(settings: DemoModeSettings) -> dict:
     When disabled:
     - Restores the previous profile
     - Returns to personal portfolio data
+
+    Note: When PROTECT_DEMO_DATA is enabled, turning off demo mode is blocked.
     """
-    from src.services.demo_mode import get_demo_manager
+    from src.services.demo_mode import get_demo_manager, is_demo_data_protected
     from src.database import get_profile_manager, reset_database_caches
+
+    # Block turning OFF demo mode when protection is enabled
+    if not settings.enabled and is_demo_data_protected():
+        raise HTTPException(
+            status_code=403,
+            detail="Demo mode cannot be disabled on the hosted demo site."
+        )
 
     demo_manager = get_demo_manager()
     profile_manager = get_profile_manager()
@@ -598,12 +620,14 @@ def generate_demo_data() -> dict:
 
     Returns status and summary of generated data.
     """
-    from src.services.demo_mode import get_demo_manager
+    from src.services.demo_mode import get_demo_manager, check_demo_data_protection
+    check_demo_data_protection()
     return get_demo_manager().generate_demo_data()
 
 
 @router.post("/demo/reset")
 def reset_demo_data() -> dict:
     """Reset demo database (delete all demo data)."""
-    from src.services.demo_mode import get_demo_manager
+    from src.services.demo_mode import get_demo_manager, check_demo_data_protection
+    check_demo_data_protection()
     return get_demo_manager().reset_demo_data()

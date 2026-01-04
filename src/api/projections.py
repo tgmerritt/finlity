@@ -1,7 +1,7 @@
 """Monte Carlo projections API endpoints."""
 
 import os
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -24,6 +24,11 @@ def is_hosted_environment() -> bool:
     """Check if running on Heroku or similar platform with request timeouts."""
     # DYNO is set on Heroku, PORT is set but may also be set locally
     return bool(os.environ.get("DYNO"))
+
+
+def get_session_id(request: Request) -> str | None:
+    """Get session ID from request state (set by SessionMiddleware)."""
+    return getattr(request.state, "session_id", None)
 
 
 def get_db() -> Database:
@@ -276,6 +281,7 @@ def _run_monte_carlo_task(
 @router.post("/monte-carlo")
 def run_monte_carlo(
     request: ProjectionRequest,
+    http_request: Request,
     async_mode: bool = Query(
         default=None,
         description="Run in background and return task_id. Defaults to True on Heroku, False locally."
@@ -312,11 +318,15 @@ def run_monte_carlo(
         # Get database path for background thread
         db_path = db.db_path
 
+        # Get session ID for task isolation (multi-user mode)
+        session_id = get_session_id(http_request)
+
         # Submit to background task manager
         task_id = task_manager.submit(
             _run_monte_carlo_task,
             request_dict,
             db_path,
+            session_id=session_id,
         )
 
         return {
@@ -654,6 +664,7 @@ def _run_sensitivity_task(request_dict: dict, current_balance: float) -> dict:
 @router.post("/sensitivity")
 def run_sensitivity_analysis(
     request: ProjectionRequest,
+    http_request: Request,
     async_mode: bool = Query(
         default=None,
         description="Run in background. Defaults to True on Heroku, False locally."
@@ -677,10 +688,12 @@ def run_sensitivity_analysis(
 
     if use_async:
         request_dict = request.model_dump()
+        session_id = get_session_id(http_request)
         task_id = task_manager.submit(
             _run_sensitivity_task,
             request_dict,
             current_balance,
+            session_id=session_id,
         )
         return {
             "task_id": task_id,
@@ -1183,6 +1196,7 @@ def _run_tax_projection_task(params: dict) -> dict:
 @router.post("/tax-projection")
 def run_tax_projection(
     request: TaxProjectionRequest,
+    http_request: Request,
     async_mode: bool = Query(
         default=None,
         description="Run in background. Defaults to True on Heroku, False locally."
@@ -1299,7 +1313,10 @@ def run_tax_projection(
     }
 
     if use_async:
-        task_id = task_manager.submit(_run_tax_projection_task, task_params)
+        session_id = get_session_id(http_request)
+        task_id = task_manager.submit(
+            _run_tax_projection_task, task_params, session_id=session_id
+        )
         return {
             "task_id": task_id,
             "status": "pending",

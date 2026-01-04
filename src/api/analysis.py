@@ -1,7 +1,7 @@
 """Analysis API endpoints."""
 
 import os
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import TYPE_CHECKING, Optional
@@ -26,6 +26,11 @@ def is_hosted_environment() -> bool:
     return bool(os.environ.get("DYNO"))
 
 
+def get_session_id(request: Request) -> str | None:
+    """Get session ID from request state (set by SessionMiddleware)."""
+    return getattr(request.state, "session_id", None)
+
+
 def get_db() -> Database:
     """Dependency to get database instance (profile-aware)."""
     from src.database import get_database
@@ -33,25 +38,13 @@ def get_db() -> Database:
 
 
 def check_demo_mode_write():
-    """Raise error if demo mode is enabled (prevents data pollution).
+    """Check if demo data modifications are protected.
 
-    Demo mode should use pre-generated data only.
-    User modifications would pollute the demo database with real data.
-    Test mode bypasses this check to allow testing write operations.
+    Uses centralized check from demo_mode service.
+    Only blocks when BOTH demo mode AND PROTECT_DEMO_DATA env var are enabled.
     """
-    import os
-    from fastapi import HTTPException
-    from src.services.demo_mode import is_demo_mode
-
-    # Allow writes in test mode even if demo mode is enabled
-    if os.environ.get("PORTFOLIO_TEST_MODE", "").lower() == "true":
-        return
-
-    if is_demo_mode():
-        raise HTTPException(
-            status_code=403,
-            detail="Modifications are disabled in demo mode. Disable demo mode to modify your portfolio."
-        )
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
 
 
 def db_to_portfolio(db: Database) -> Portfolio:
@@ -202,6 +195,7 @@ def _run_performance_task(portfolio_dict: dict, benchmark: str) -> dict:
 
 @router.get("/performance")
 def get_performance(
+    request: Request,
     benchmark: str = "SPY",
     async_mode: bool = Query(
         default=None,
@@ -242,7 +236,10 @@ def get_performance(
                 for a in portfolio.accounts
             ]
         }
-        task_id = task_manager.submit(_run_performance_task, portfolio_dict, benchmark)
+        session_id = get_session_id(request)
+        task_id = task_manager.submit(
+            _run_performance_task, portfolio_dict, benchmark, session_id=session_id
+        )
         return {
             "task_id": task_id,
             "status": "pending",
@@ -309,6 +306,7 @@ def _run_risk_task(portfolio_dict: dict, benchmark: str) -> dict:
 
 @router.get("/risk")
 def get_risk(
+    request: Request,
     benchmark: str = "SPY",
     async_mode: bool = Query(
         default=None,
@@ -347,7 +345,10 @@ def get_risk(
                 for a in portfolio.accounts
             ]
         }
-        task_id = task_manager.submit(_run_risk_task, portfolio_dict, benchmark)
+        session_id = get_session_id(request)
+        task_id = task_manager.submit(
+            _run_risk_task, portfolio_dict, benchmark, session_id=session_id
+        )
         return {
             "task_id": task_id,
             "status": "pending",

@@ -33,8 +33,43 @@ from src.api.budget import router as budget_router
 from src.api.commentary import router as commentary_router
 from src.api.inference import router as inference_router
 from src.api.tasks import router as tasks_router
+from src.api.session import router as session_router
 from src.database import get_profile_manager, get_database
 from src.importers import FolderScanner
+from src.services.session import is_multi_user_mode
+
+
+def get_allowed_origins() -> list[str]:
+    """
+    Get allowed CORS origins based on environment.
+
+    - In production (Heroku): finlity.net domains + localhost
+    - In development: localhost only
+    - Can be overridden via CORS_ALLOWED_ORIGINS env var
+    """
+    # Check for explicit configuration
+    explicit_origins = os.environ.get("CORS_ALLOWED_ORIGINS")
+    if explicit_origins:
+        return [o.strip() for o in explicit_origins.split(",")]
+
+    # Always allow localhost for development ease
+    origins = [
+        "http://localhost:8000",
+        "http://localhost:8080",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8080",
+        "http://localhost:3000",
+    ]
+
+    # Add production origins if hosted (Heroku or PRODUCTION env var)
+    if os.environ.get("DYNO") or os.environ.get("PRODUCTION"):
+        origins.extend([
+            "https://app.finlity.net",
+            "https://finlity.net",
+            "https://www.finlity.net",
+        ])
+
+    return origins
 
 
 def load_config():
@@ -154,12 +189,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Add CORS middleware
+# Add CORS middleware with environment-based origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -184,6 +219,13 @@ app.add_middleware(NoCacheMiddleware)
 # Only active when RATE_LIMIT_ENABLED=true and valid RATE_LIMIT_SECRET_KEY is set
 app.add_middleware(RateLimitMiddleware)
 
+# Add session middleware for multi-user deployments
+# Only active when running on Heroku (DYNO), MULTI_USER_MODE=true, or PROTECT_DEMO_DATA=true
+if is_multi_user_mode():
+    from src.middleware.session import SessionMiddleware
+    app.add_middleware(SessionMiddleware)
+    print("*** MULTI-USER MODE: Session isolation and request signing enabled ***")
+
 # Include API routers
 app.include_router(portfolio_router)
 app.include_router(imports_router)
@@ -197,6 +239,7 @@ app.include_router(budget_router)
 app.include_router(commentary_router)
 app.include_router(inference_router)
 app.include_router(tasks_router)
+app.include_router(session_router)
 
 # Serve static files (web dashboard)
 web_dir = Path(__file__).parent / "web"

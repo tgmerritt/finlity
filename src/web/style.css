@@ -1312,11 +1312,6 @@ body {
     color: #E67E22;
 }
 
-.sidebar-footer {
-    padding: 16px;
-    border-top: 1px solid var(--color-border-secondary);
-}
-
 .theme-toggle {
     display: flex;
     align-items: center;
@@ -1342,6 +1337,67 @@ body {
 [data-theme="light"] .sun-icon { display: none; }
 [data-theme="light"] .moon-icon { display: block; }
 
+/* Sidebar Collapse Toggle */
+.sidebar-footer {
+    display: flex;
+    gap: 8px;
+    padding: 16px;
+    border-top: 1px solid var(--color-border-secondary);
+}
+
+.sidebar-collapse-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-container);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    transition: all var(--transition-fast);
+}
+
+.sidebar-collapse-toggle:hover {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+/* Show collapse icon, hide expand icon by default */
+.sidebar .expand-icon { display: none; }
+.sidebar .collapse-icon { display: block; }
+
+/* Collapsed Sidebar State */
+.sidebar.collapsed {
+    width: 72px;
+}
+
+.sidebar.collapsed .logo span,
+.sidebar.collapsed .nav-item span:not(.nav-item svg),
+.sidebar.collapsed .view-selector-wrapper {
+    display: none;
+}
+
+.sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 12px;
+}
+
+.sidebar.collapsed .sidebar-footer {
+    flex-direction: column;
+    padding: 12px;
+}
+
+/* Swap icons when collapsed */
+.sidebar.collapsed .expand-icon { display: block; }
+.sidebar.collapsed .collapse-icon { display: none; }
+
+/* Main content adjusts when sidebar is collapsed */
+.sidebar.collapsed + .main-content {
+    margin-left: 72px;
+}
+
 /* Main Content */
 .main-content {
     flex: 1;
@@ -1350,6 +1406,7 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow-x: hidden;
 }
 
 .header-actions {
@@ -1472,6 +1529,8 @@ body {
     display: none;
     padding: 24px;
     flex: 1;
+    overflow-x: hidden;
+    max-width: 100%;
 }
 
 .tab-content.active {
@@ -2693,6 +2752,80 @@ tr:hover td {
 
 .paycheck-line .amount.positive {
     color: var(--color-positive);
+}
+
+/* Paycheck Income Switcher */
+.paycheck-income-switcher {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.paycheck-income-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    background: var(--color-bg);
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.paycheck-income-btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-text);
+}
+
+.paycheck-income-btn.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: white;
+    font-weight: 500;
+}
+
+/* Tax Rate Callout */
+.paycheck-tax-rates-callout {
+    display: flex;
+    gap: 24px;
+    background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.tax-rate-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tax-rate-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.85);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+.tax-rate-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: white;
+}
+
+@media (max-width: 600px) {
+    .paycheck-tax-rates-callout {
+        flex-direction: column;
+        gap: 16px;
+        padding: 16px;
+    }
+
+    .tax-rate-value {
+        font-size: 24px;
+    }
 }
 
 /* Empty state styling */
@@ -4255,6 +4388,8 @@ th.sortable.sort-desc .sort-icon::after {
     border-radius: var(--border-radius);
     border: 1px solid var(--color-border);
     transition: all var(--transition-fast);
+    min-width: 0;
+    overflow: hidden;
 }
 
 .tax-stat-card:hover {
