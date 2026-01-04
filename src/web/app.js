@@ -2201,9 +2201,10 @@ async function installFromGit(event) {
   btnLoading.style.display = 'inline-flex';
 
   try {
+    const signatureHeaders = await generateSignatureHeaders('POST', '/api/plugins/install/git');
     const response = await fetch(API_BASE + '/api/plugins/install/git', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...signatureHeaders },
       body: JSON.stringify({ source: source }),
     });
 
@@ -2261,8 +2262,10 @@ async function installFromUpload(event) {
     const formData = new FormData();
     formData.append('file', file);
 
+    const signatureHeaders = await generateSignatureHeaders('POST', '/api/plugins/install/upload');
     const response = await fetch(API_BASE + '/api/plugins/install/upload', {
       method: 'POST',
+      headers: signatureHeaders,
       body: formData,
     });
 
@@ -2291,8 +2294,10 @@ async function uninstallPlugin(pluginId) {
   }
 
   try {
+    const signatureHeaders = await generateSignatureHeaders('DELETE', '/api/plugins/installed/' + pluginId);
     const response = await fetch(API_BASE + '/api/plugins/installed/' + pluginId, {
       method: 'DELETE',
+      headers: signatureHeaders,
     });
 
     const data = await response.json();
@@ -2332,8 +2337,10 @@ async function checkPluginUpdate(pluginId) {
 
 async function updatePlugin(pluginId) {
   try {
+    const signatureHeaders = await generateSignatureHeaders('POST', '/api/plugins/installed/' + pluginId + '/update');
     const response = await fetch(API_BASE + '/api/plugins/installed/' + pluginId + '/update', {
       method: 'POST',
+      headers: signatureHeaders,
     });
 
     const data = await response.json();
@@ -2358,8 +2365,10 @@ async function checkPluginUpdates() {
   try {
     showToast('Checking for updates...', 'info');
 
+    const signatureHeaders = await generateSignatureHeaders('POST', '/api/plugins/installed/check-updates');
     const response = await fetch(API_BASE + '/api/plugins/installed/check-updates', {
       method: 'POST',
+      headers: signatureHeaders,
     });
 
     if (!response.ok) throw new Error('Failed to check for updates');
