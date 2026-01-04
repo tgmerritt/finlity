@@ -6,6 +6,7 @@ requiring a server restart.
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -25,8 +26,23 @@ class DemoModeManager:
     """
 
     def __init__(self, state_file: str = "data/demo_state.json"):
-        self.state_file = Path(state_file)
-        self.demo_db_path = Path("data/demo/demo.db")
+        # Check for data dir override (used in tests)
+        data_dir = os.environ.get("PORTFOLIO_DATA_DIR")
+        
+        if data_dir:
+            data_path = Path(data_dir)
+            # If using temp dir, ensure paths are relative to it
+            self.demo_db_path = data_path / "demo" / "demo.db"
+            
+            # Also redirect state file if it matches default
+            if state_file == "data/demo_state.json":
+                self.state_file = data_path / "demo_state.json"
+            else:
+                self.state_file = Path(state_file)
+        else:
+            self.state_file = Path(state_file)
+            self.demo_db_path = Path("data/demo/demo.db")
+
         self._demo_db: Optional[Database] = None
         self._state: Optional[dict] = None
 

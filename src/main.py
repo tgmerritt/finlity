@@ -106,9 +106,13 @@ def is_demo_mode():
 def get_db_path():
     """Get the database path based on demo mode or active profile."""
     if is_demo_mode():
-        config = load_config()
-        demo_db = config.get("demo", {}).get("database", "data/demo/demo.db")
-        return demo_db
+        try:
+            from src.services.demo_mode import get_demo_manager
+            return str(get_demo_manager().demo_db_path)
+        except Exception:
+            # Fallback (should normally be handled by demo manager)
+            config = load_config()
+            return config.get("demo", {}).get("database", "data/demo/demo.db")
 
     # Check for active profile
     try:

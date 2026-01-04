@@ -16,6 +16,7 @@ from src.services.providers import (
 )
 from src.services.providers.cerebras_provider import CerebrasProvider
 from src.services.providers.claude_provider import ClaudeProvider
+from src.services.providers.gemini_provider import GeminiProvider
 from src.services.providers.openai_provider import OpenAIProvider
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ def init_providers(db=None) -> ProviderRegistry:
         # Register built-in providers
         registry.register(ClaudeProvider(db))
         registry.register(CerebrasProvider(db))
+        registry.register(GeminiProvider(db))
         registry.register(OpenAIProvider(db))
 
         # Register providers from plugins
