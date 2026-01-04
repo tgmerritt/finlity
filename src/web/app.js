@@ -752,6 +752,12 @@ function initSidebarState() {
   if (sidebar && isCollapsed) {
     sidebar.classList.add('collapsed');
   }
+
+  // Bind sidebar collapse toggle button (more reliable than inline onclick)
+  const collapseBtn = document.querySelector('.sidebar-collapse-toggle');
+  if (collapseBtn) {
+    collapseBtn.addEventListener('click', toggleSidebarCollapse);
+  }
 }
 
 function updateChartTheme(theme) {
