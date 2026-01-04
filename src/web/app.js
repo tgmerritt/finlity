@@ -4787,6 +4787,8 @@ async function loadApiKeysStatus() {
       massive: 'Massive',
       finnhub: 'Finnhub',
       anthropic_api_key: 'Anthropic (Claude)',
+      openai_api_key: 'OpenAI',
+      cerebras_api_key: 'Cerebras',
       fmp_api_key: 'Financial Modeling Prep',
     };
 
@@ -4795,6 +4797,8 @@ async function loadApiKeysStatus() {
       massive: 'Price data backup',
       finnhub: 'Real-time stock prices',
       anthropic_api_key: 'AI fund analysis & insights',
+      openai_api_key: 'AI fund analysis & insights',
+      cerebras_api_key: 'AI fund analysis & insights',
       fmp_api_key: 'ETF sector weightings & fund data',
     };
 

@@ -514,7 +514,7 @@ def get_all_api_keys_status() -> dict:
     secrets = SecretsManager(db)
 
     # Check each API key
-    keys = ["alpha_vantage", "massive", "finnhub", "anthropic_api_key", "fmp_api_key"]
+    keys = ["alpha_vantage", "massive", "finnhub", "anthropic_api_key", "openai_api_key", "cerebras_api_key", "fmp_api_key"]
     statuses = {}
 
     for key in keys:
