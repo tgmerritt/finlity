@@ -134,13 +134,25 @@ class SensitivityResponse(BaseModel):
 def _run_monte_carlo_task(
     request_dict: dict,
     db_path: str,
+    progress_callback=None,
 ) -> dict:
     """
     Background task function for Monte Carlo simulation.
 
     This is separated so it can be run in a background thread.
     Returns a dict that can be converted to ProjectionResponse.
+
+    Args:
+        request_dict: Simulation parameters
+        db_path: Path to database file
+        progress_callback: Optional callback(progress: float, message: str) for progress updates
     """
+    def report_progress(progress: float, message: str):
+        if progress_callback:
+            progress_callback(progress, message)
+
+    report_progress(0.05, "Loading portfolio data...")
+
     # Recreate database connection in background thread
     from src.database import Database
 
@@ -196,9 +208,13 @@ def _run_monte_carlo_task(
         contribution_taxable_pct=request_dict.get("contribution_taxable_pct", 0.15),
     )
 
+    report_progress(0.10, "Running Monte Carlo simulation...")
+
     engine = MonteCarloEngine()
     end_age = request_dict.get("end_age", 95)
     result = engine.run_projection(params, end_age=end_age)
+
+    report_progress(0.70, "Processing simulation results...")
 
     # Extract projected portfolio value at retirement age
     retirement_index = request_dict["retirement_age"] - request_dict["current_age"]
@@ -212,6 +228,7 @@ def _run_monte_carlo_task(
     # Calculate earliest retirement age
     earliest_retirement_age = None
     if request_dict["monthly_withdrawal"] > 0:
+        report_progress(0.75, "Calculating earliest retirement age...")
         earliest_retirement_age = _find_earliest_retirement_age(
             engine=engine,
             current_age=request_dict["current_age"],
@@ -223,6 +240,8 @@ def _run_monte_carlo_task(
             end_age=end_age,
             target_success_rate=0.80,
         )
+
+    report_progress(0.90, "Saving results...")
 
     # Save results to database
     db.save_monte_carlo_result(
