@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from src.middleware import RateLimitMiddleware
 from src.api import (
     portfolio_router,
     imports_router,
@@ -178,6 +179,10 @@ class NoCacheMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(NoCacheMiddleware)
+
+# Add rate limiting middleware for AI endpoints
+# Only active when RATE_LIMIT_ENABLED=true and valid RATE_LIMIT_SECRET_KEY is set
+app.add_middleware(RateLimitMiddleware)
 
 # Include API routers
 app.include_router(portfolio_router)
