@@ -1319,7 +1319,7 @@ body {
     width: 40px;
     height: 40px;
     border: 1px solid var(--color-border);
-    background: var(--color-bg-container);
+    background: var(--color-bg-secondary);
     border-radius: var(--border-radius);
     cursor: pointer;
     color: var(--color-text-secondary);
@@ -1329,6 +1329,7 @@ body {
 .theme-toggle:hover {
     color: var(--color-primary);
     border-color: var(--color-primary);
+    background: var(--color-bg-hover);
 }
 
 /* Show/hide sun/moon based on theme */
@@ -1352,7 +1353,7 @@ body {
     width: 40px;
     height: 40px;
     border: 1px solid var(--color-border);
-    background: var(--color-bg-container);
+    background: var(--color-bg-secondary);
     border-radius: var(--border-radius);
     cursor: pointer;
     color: var(--color-text-secondary);
@@ -1362,6 +1363,7 @@ body {
 .sidebar-collapse-toggle:hover {
     color: var(--color-primary);
     border-color: var(--color-primary);
+    background: var(--color-bg-hover);
 }
 
 /* Show collapse icon, hide expand icon by default */
@@ -1374,8 +1376,10 @@ body {
 }
 
 .sidebar.collapsed .logo span,
-.sidebar.collapsed .nav-item span:not(.nav-item svg),
-.sidebar.collapsed .view-selector-wrapper {
+.sidebar.collapsed .nav-item span,
+.sidebar.collapsed .view-selector-wrapper,
+.sidebar.collapsed .profile-selector,
+.sidebar.collapsed .view-selector {
     display: none;
 }
 
@@ -2926,7 +2930,9 @@ tr:hover td {
     }
 
     .logo span,
-    .nav-item span:not(.nav-item svg) {
+    .nav-item span,
+    .profile-selector,
+    .view-selector {
         display: none;
     }
 
