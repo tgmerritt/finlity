@@ -6195,6 +6195,21 @@ async function openLocalDatabase() {
 
     const result = await clientDB.openFile();
     if (result) {
+      // Disable demo mode if it's currently enabled
+      if (currentDemoMode) {
+        try {
+          await fetch(`${API_BASE}/api/settings/demo-mode`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: false }),
+          });
+          // Update UI without page reload
+          updateDemoModeUI(false);
+        } catch (e) {
+          console.log('Demo mode already off or error disabling:', e);
+        }
+      }
+
       initLocalAPI();
       updateLocalDbStatus(`Opened: ${result.name} (${formatBytes(result.size)})`, 'success');
       showToast(`Database opened: ${result.name}`, 'success');
@@ -6211,6 +6226,20 @@ async function openLocalDatabase() {
  */
 async function createNewLocalDatabase() {
   try {
+    // Disable demo mode if it's currently enabled
+    if (currentDemoMode) {
+      try {
+        await fetch(`${API_BASE}/api/settings/demo-mode`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: false }),
+        });
+        updateDemoModeUI(false);
+      } catch (e) {
+        console.log('Demo mode already off or error disabling:', e);
+      }
+    }
+
     const result = await clientDB.createNew();
     initLocalAPI();
     updateLocalDbStatus('New database created (in memory - save to persist)', 'success');
@@ -6261,6 +6290,20 @@ async function importLocalDatabase(event) {
   if (!file) return;
 
   try {
+    // Disable demo mode if it's currently enabled
+    if (currentDemoMode) {
+      try {
+        await fetch(`${API_BASE}/api/settings/demo-mode`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: false }),
+        });
+        updateDemoModeUI(false);
+      } catch (e) {
+        console.log('Demo mode already off or error disabling:', e);
+      }
+    }
+
     const result = await clientDB.importFromFile(file);
     initLocalAPI();
     updateLocalDbStatus(`Imported: ${result.name} (${formatBytes(result.size)})`, 'success');
@@ -6282,6 +6325,20 @@ async function loadFromBrowserStorage() {
   try {
     const result = await clientDB.loadFromIndexedDB();
     if (result.loaded) {
+      // Disable demo mode if it's currently enabled
+      if (currentDemoMode) {
+        try {
+          await fetch(`${API_BASE}/api/settings/demo-mode`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: false }),
+          });
+          updateDemoModeUI(false);
+        } catch (e) {
+          console.log('Demo mode already off or error disabling:', e);
+        }
+      }
+
       initLocalAPI();
       updateLocalDbStatus('Loaded from browser storage', 'success');
       showToast('Database loaded from browser', 'success');
