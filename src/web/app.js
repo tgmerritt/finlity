@@ -2205,6 +2205,7 @@ async function installFromGit(event) {
     const response = await fetch(API_BASE + '/api/plugins/install/git', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...signatureHeaders },
+      credentials: 'include',
       body: JSON.stringify({ source: source }),
     });
 
@@ -2266,6 +2267,7 @@ async function installFromUpload(event) {
     const response = await fetch(API_BASE + '/api/plugins/install/upload', {
       method: 'POST',
       headers: signatureHeaders,
+      credentials: 'include',
       body: formData,
     });
 
@@ -2298,6 +2300,7 @@ async function uninstallPlugin(pluginId) {
     const response = await fetch(API_BASE + '/api/plugins/installed/' + pluginId, {
       method: 'DELETE',
       headers: signatureHeaders,
+      credentials: 'include',
     });
 
     const data = await response.json();
@@ -2341,6 +2344,7 @@ async function updatePlugin(pluginId) {
     const response = await fetch(API_BASE + '/api/plugins/installed/' + pluginId + '/update', {
       method: 'POST',
       headers: signatureHeaders,
+      credentials: 'include',
     });
 
     const data = await response.json();
@@ -2369,6 +2373,7 @@ async function checkPluginUpdates() {
     const response = await fetch(API_BASE + '/api/plugins/installed/check-updates', {
       method: 'POST',
       headers: signatureHeaders,
+      credentials: 'include',
     });
 
     if (!response.ok) throw new Error('Failed to check for updates');
