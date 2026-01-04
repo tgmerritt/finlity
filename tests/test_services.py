@@ -2,8 +2,6 @@
 Tests for service layer modules.
 """
 
-import pytest
-
 
 class TestPayrollTaxCalculator:
     """Test payroll tax calculations."""
@@ -176,3 +174,181 @@ class TestMonteCarloEngine:
 
         # FIRE number = annual_spending / withdrawal_rate
         assert fire_number == 1250000
+
+    def test_gpu_availability_property(self):
+        """Test GPU availability property."""
+        from src.projections.engine import MonteCarloEngine
+
+        engine = MonteCarloEngine()
+
+        # Properties should exist
+        assert hasattr(engine, 'gpu_available')
+        assert hasattr(engine, 'using_gpu')
+        assert hasattr(engine, 'prefer_gpu')
+
+        # GPU available should be a boolean
+        assert isinstance(engine.gpu_available, bool)
+        assert isinstance(engine.using_gpu, bool)
+
+    def test_vectorized_batch_function(self):
+        """Test vectorized simulation batch function."""
+        from src.projections.engine import _run_simulation_batch_vectorized
+        import numpy as np
+
+        result = _run_simulation_batch_vectorized(
+            batch_size=100,
+            years=30,
+            current_age=35,
+            retirement_age=65,
+            current_balance=100000,
+            monthly_contribution=1000,
+            monthly_withdrawal=4000,
+            stock_allocation=0.7,
+            bond_allocation=0.25,
+            cash_allocation=0.05,
+            stock_mean=0.09,
+            stock_std=0.15,
+            bond_mean=0.04,
+            bond_std=0.06,
+            inflation=0.03,
+            black_swan_prob=0.02,
+            black_swan_impact=-0.40,
+            golden_swan_prob=0.02,
+            golden_swan_impact=0.27,
+            t_df=5,
+            random_seed=42,
+        )
+
+        # Result should be a 2D array with correct shape
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (100, 30)
+
+        # Initial values should all be current_balance
+        assert np.all(result[:, 0] == 100000)
+
+        # Values should not be negative (we enforce max(0, ...))
+        assert np.all(result >= 0)
+
+    def test_run_simulation_batch_simple_mode(self):
+        """Test batch simulation in simple mode uses vectorized version."""
+        from src.projections.engine import _run_simulation_batch
+        import numpy as np
+
+        result = _run_simulation_batch(
+            batch_size=50,
+            years=20,
+            current_age=40,
+            retirement_age=65,
+            current_balance=200000,
+            monthly_contribution=500,
+            monthly_withdrawal=3000,
+            stock_allocation=0.6,
+            bond_allocation=0.35,
+            cash_allocation=0.05,
+            stock_mean=0.08,
+            stock_std=0.12,
+            bond_mean=0.035,
+            bond_std=0.05,
+            inflation=0.025,
+            black_swan_prob=0.01,
+            black_swan_impact=-0.35,
+            golden_swan_prob=0.01,
+            golden_swan_impact=0.25,
+            t_df=6,
+            use_tax_aware=False,  # Simple mode
+            random_seed=123,
+        )
+
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (50, 20)
+        assert np.all(result[:, 0] == 200000)
+
+
+class TestSecretsManager:
+    """Test secrets manager with Fernet encryption."""
+
+    def test_secrets_manager_import(self):
+        """Test that SecretsManager can be imported."""
+        from src.services.secrets import SecretsManager
+        assert SecretsManager is not None
+
+    def test_fernet_encryption_roundtrip(self, test_env):
+        """Test that values are properly encrypted and decrypted."""
+        from src.services.secrets import SecretsManager
+        from src.database import get_database
+        import os
+
+        # Set a test SECRET_KEY
+        original_key = os.environ.get("SECRET_KEY")
+        os.environ["SECRET_KEY"] = "test_secret_key_for_testing_purposes_only"
+
+        try:
+            db = get_database()
+            manager = SecretsManager(db)
+
+            # Test encode/decode roundtrip
+            test_value = "sk-test-api-key-12345"
+            encoded = manager._encode(test_value)
+
+            # Encoded value should be prefixed with 'fernet:'
+            assert encoded.startswith("fernet:")
+
+            # Encoded value should not contain the original (not base64)
+            assert test_value not in encoded
+
+            # Decode should return original value
+            decoded = manager._decode(encoded)
+            assert decoded == test_value
+        finally:
+            # Restore original key
+            if original_key:
+                os.environ["SECRET_KEY"] = original_key
+            elif "SECRET_KEY" in os.environ:
+                del os.environ["SECRET_KEY"]
+
+    def test_legacy_base64_decoding(self, test_env):
+        """Test backward compatibility with legacy base64-encoded values."""
+        from src.services.secrets import SecretsManager
+        from src.database import get_database
+        import base64
+
+        db = get_database()
+        manager = SecretsManager(db)
+
+        # Simulate a legacy base64-encoded value (no 'fernet:' prefix)
+        original_value = "old-api-key-abc123"
+        legacy_encoded = base64.b64encode(original_value.encode()).decode()
+
+        # Should decode correctly (with a warning in logs)
+        decoded = manager._decode(legacy_encoded)
+        assert decoded == original_value
+
+    def test_get_or_create_encryption_key(self):
+        """Test encryption key generation."""
+        from src.services.secrets import _get_or_create_encryption_key
+
+        key = _get_or_create_encryption_key()
+
+        # Key should be bytes
+        assert isinstance(key, bytes)
+
+        # Fernet keys are 44 bytes (32 bytes base64-encoded)
+        assert len(key) == 44
+
+    def test_mask_key(self, test_env):
+        """Test API key masking."""
+        from src.services.secrets import SecretsManager
+        from src.database import get_database
+
+        db = get_database()
+        manager = SecretsManager(db)
+
+        # Test normal key masking
+        masked = manager.mask_key("sk-ant-api03-1234567890abcdefghij")
+        assert masked.startswith("sk-a")
+        assert masked.endswith("ghij")
+        assert "..." in masked
+
+        # Test short key
+        masked_short = manager.mask_key("short")
+        assert masked_short == "****"

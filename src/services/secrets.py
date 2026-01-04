@@ -1,13 +1,63 @@
 """Secure storage for API keys and sensitive data."""
 
 import base64
+import logging
 import os
 from pathlib import Path
 from typing import Optional
 
 import yaml
+from cryptography.fernet import Fernet, InvalidToken
 
 from src.database import Database
+
+logger = logging.getLogger(__name__)
+
+
+def _get_or_create_encryption_key() -> bytes:
+    """Get encryption key from environment or generate and store one.
+
+    The key is derived from the SECRET_KEY environment variable if set,
+    otherwise a new key is generated and stored in a local key file.
+
+    Returns:
+        32-byte URL-safe base64-encoded Fernet key
+    """
+    # Check environment variable first
+    env_key = os.environ.get("SECRET_KEY")
+    if env_key:
+        # If the env key is already a valid Fernet key (44 chars base64), use it
+        if len(env_key) == 44:
+            return env_key.encode()
+        # Otherwise, derive a Fernet key from it using PBKDF2
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        from cryptography.hazmat.primitives import hashes
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=b"investment_dashboard_salt",  # Static salt, key comes from env
+            iterations=100000,
+        )
+        return base64.urlsafe_b64encode(kdf.derive(env_key.encode()))
+
+    # Fall back to local key file
+    key_file = Path.home() / ".investment_dashboard_key"
+
+    if key_file.exists():
+        try:
+            return key_file.read_bytes().strip()
+        except Exception:
+            pass
+
+    # Generate new key
+    new_key = Fernet.generate_key()
+    try:
+        key_file.write_bytes(new_key)
+        key_file.chmod(0o600)  # Restrict permissions
+    except Exception as e:
+        logger.warning(f"Could not persist encryption key: {e}")
+
+    return new_key
 
 
 class SecretsManager:
@@ -17,10 +67,11 @@ class SecretsManager:
     1. Environment variables (e.g., ANTHROPIC_API_KEY)
     2. A .env file in the project root
     3. config.yaml under api_keys section
-    4. The database (encrypted with a machine-specific key)
+    4. The database (encrypted with Fernet symmetric encryption)
 
-    For simplicity, this implementation uses base64 encoding for database storage.
-    In production, consider using cryptography.fernet for stronger encryption.
+    Database storage uses Fernet encryption (AES-128-CBC with HMAC).
+    The encryption key is derived from the SECRET_KEY environment variable
+    or stored in a local key file (~/.investment_dashboard_key).
     """
 
     # Common API key names
@@ -32,6 +83,7 @@ class SecretsManager:
         self.db = db
         self._env_loaded = False
         self._config_cache = None
+        self._fernet: Optional[Fernet] = None
 
     def _load_env_file(self) -> None:
         """Load .env file if present."""
@@ -77,13 +129,45 @@ class SecretsManager:
         """Get environment variable name for a key."""
         return key.upper()
 
+    def _get_fernet(self) -> Fernet:
+        """Get or create the Fernet cipher instance."""
+        if self._fernet is None:
+            key = _get_or_create_encryption_key()
+            self._fernet = Fernet(key)
+        return self._fernet
+
     def _encode(self, value: str) -> str:
-        """Encode a value for database storage."""
-        return base64.b64encode(value.encode()).decode()
+        """Encrypt a value for database storage using Fernet.
+
+        The encrypted value is prefixed with 'fernet:' to distinguish
+        it from legacy base64-encoded values.
+        """
+        fernet = self._get_fernet()
+        encrypted = fernet.encrypt(value.encode())
+        return "fernet:" + encrypted.decode()
 
     def _decode(self, encoded: str) -> str:
-        """Decode a value from database storage."""
-        return base64.b64decode(encoded.encode()).decode()
+        """Decrypt a value from database storage.
+
+        Supports both new Fernet-encrypted values (prefixed with 'fernet:')
+        and legacy base64-encoded values for backward compatibility.
+        """
+        if encoded.startswith("fernet:"):
+            # New Fernet-encrypted value
+            fernet = self._get_fernet()
+            try:
+                encrypted_data = encoded[7:].encode()  # Remove 'fernet:' prefix
+                return fernet.decrypt(encrypted_data).decode()
+            except InvalidToken:
+                logger.error("Failed to decrypt value - invalid token or wrong key")
+                raise
+        else:
+            # Legacy base64-encoded value (for backward compatibility)
+            logger.warning(
+                "Decoding legacy base64-encoded secret. "
+                "Consider re-saving the API key to upgrade to Fernet encryption."
+            )
+            return base64.b64decode(encoded.encode()).decode()
 
     def get_api_key(self, name: str) -> Optional[str]:
         """Get an API key by name.
