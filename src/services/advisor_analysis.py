@@ -1,4 +1,4 @@
-"""Financial advisor-style analysis using Claude API."""
+"""Financial advisor-style analysis using AI providers."""
 
 import json
 import logging
@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 from datetime import datetime
 
-from src.services.ai_config import get_claude_model
+from src.services.inference_provider import get_provider, InferenceProviderError
+from src.services.providers import InferenceMessage, ProviderNotConfiguredError
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class ChatMessage:
 
 
 class AdvisorAnalysisService:
-    """Provides financial advisor-style analysis using Claude API.
+    """Provides financial advisor-style analysis using AI providers.
 
     This service analyzes funds and positions from the perspective of a
     financial advisor, considering:
@@ -48,20 +49,47 @@ class AdvisorAnalysisService:
     - Investor profile
     """
 
-    def __init__(self, claude_api_key: str, db=None):
+    def __init__(
+        self,
+        claude_api_key: str = None,
+        db=None,
+        provider_id: str = None,
+        model_id: str = None,
+    ):
         """Initialize advisor analysis service.
 
         Args:
-            claude_api_key: Anthropic API key
+            claude_api_key: Anthropic API key (deprecated, use provider_id)
             db: Database instance for accessing portfolio data
+            provider_id: Preferred AI provider ID (e.g., "claude", "cerebras", "openai")
+            model_id: Specific model to use (defaults to provider's default)
         """
         self.claude_api_key = claude_api_key
         self.db = db
-        self._client = None
+        self.provider_id = provider_id
+        self.model_id = model_id
+        self._provider = None
+        self._client = None  # Legacy client for backward compatibility
         self._chat_history: list[ChatMessage] = []
 
+    def _get_provider(self):
+        """Get or create inference provider."""
+        if self._provider is None:
+            try:
+                self._provider = get_provider(self.provider_id, self.db)
+            except ProviderNotConfiguredError:
+                logger.warning("No AI providers configured")
+                return None
+        return self._provider
+
     def _get_client(self):
-        """Get or create Anthropic client."""
+        """Get or create Anthropic client (legacy method for backward compatibility)."""
+        # If we have a provider, use that instead
+        provider = self._get_provider()
+        if provider:
+            return provider  # Return provider - caller must handle
+
+        # Fall back to legacy direct client creation if API key was passed directly
         if self._client is None and self.claude_api_key:
             try:
                 from anthropic import Anthropic
@@ -155,14 +183,14 @@ class AdvisorAnalysisService:
         Returns:
             AdvisorAnalysis with detailed commentary
         """
-        client = self._get_client()
-        if not client:
+        provider = self._get_provider()
+        if not provider:
             return None
 
         # Get portfolio context
         portfolio = self._get_portfolio_context()
 
-        # Build context for Claude
+        # Build context for the AI
         context_parts = []
 
         if portfolio:
@@ -214,13 +242,14 @@ Be specific, practical, and reference the client's actual holdings when discussi
 Return ONLY valid JSON, no markdown or explanation."""
 
         try:
-            message = client.messages.create(
-                model=get_claude_model(),
+            messages = [InferenceMessage(role="user", content=prompt)]
+            response = provider.complete(
+                messages=messages,
+                model=self.model_id,
                 max_tokens=2048,
-                messages=[{"role": "user", "content": prompt}],
             )
 
-            response_text = message.content[0].text.strip()
+            response_text = response.content.strip()
 
             # Clean up response
             if response_text.startswith("```"):
@@ -239,14 +268,17 @@ Return ONLY valid JSON, no markdown or explanation."""
                 tax_considerations=data.get("tax_considerations", ""),
                 risk_notes=data.get("risk_notes", ""),
                 recommendations=data.get("recommendations", []),
-                data_source="claude",
+                data_source=provider.info.id,
             )
 
         except json.JSONDecodeError as e:
-            logger.warning(f"Could not parse Claude response for {ticker}: {e}")
+            logger.warning(f"Could not parse AI response for {ticker}: {e}")
+            return None
+        except InferenceProviderError as e:
+            logger.warning(f"AI provider error for {ticker}: {e}")
             return None
         except Exception as e:
-            logger.warning(f"Claude API error for {ticker}: {e}")
+            logger.warning(f"AI API error for {ticker}: {e}")
             return None
 
     def _build_chat_context(
@@ -308,22 +340,26 @@ Return ONLY valid JSON, no markdown or explanation."""
         Returns:
             AI advisor's response
         """
-        client = self._get_client()
-        if not client:
-            return "Claude API is not available. Please configure your API key in Settings."
+        provider = self._get_provider()
+        if not provider:
+            return "AI is not available. Please configure your API key in Settings."
 
-        system_prompt, messages = self._build_chat_context(ticker, include_portfolio)
-        messages.append({"role": "user", "content": user_message})
+        system_prompt, chat_messages = self._build_chat_context(ticker, include_portfolio)
+        messages = [
+            InferenceMessage(role=m["role"], content=m["content"])
+            for m in chat_messages
+        ]
+        messages.append(InferenceMessage(role="user", content=user_message))
 
         try:
-            response = client.messages.create(
-                model=get_claude_model(),
+            response = provider.complete(
+                messages=messages,
+                model=self.model_id,
                 max_tokens=1024,
                 system=system_prompt,
-                messages=messages,
             )
 
-            assistant_message = response.content[0].text
+            assistant_message = response.content
 
             # Store in chat history
             self._chat_history.append(ChatMessage(role="user", content=user_message))
@@ -353,13 +389,17 @@ Return ONLY valid JSON, no markdown or explanation."""
         Yields:
             Text chunks as they arrive from the API
         """
-        client = self._get_client()
-        if not client:
-            yield "Claude API is not available. Please configure your API key in Settings."
+        provider = self._get_provider()
+        if not provider:
+            yield "AI is not available. Please configure your API key in Settings."
             return
 
-        system_prompt, messages = self._build_chat_context(ticker, include_portfolio)
-        messages.append({"role": "user", "content": user_message})
+        system_prompt, chat_messages = self._build_chat_context(ticker, include_portfolio)
+        messages = [
+            InferenceMessage(role=m["role"], content=m["content"])
+            for m in chat_messages
+        ]
+        messages.append(InferenceMessage(role="user", content=user_message))
 
         # Store user message immediately
         self._chat_history.append(ChatMessage(role="user", content=user_message))
@@ -367,15 +407,22 @@ Return ONLY valid JSON, no markdown or explanation."""
         full_response = ""
 
         try:
-            with client.messages.stream(
-                model=get_claude_model(),
+            for event in provider.stream(
+                messages=messages,
+                model=self.model_id,
                 max_tokens=1024,
                 system=system_prompt,
-                messages=messages,
-            ) as stream:
-                for text in stream.text_stream:
-                    full_response += text
-                    yield text
+            ):
+                if event.type == "text" and event.text:
+                    full_response += event.text
+                    yield event.text
+                elif event.type == "error" and event.error:
+                    error_msg = f"I encountered an error: {event.error}. Please try again."
+                    yield error_msg
+                    self._chat_history.append(
+                        ChatMessage(role="assistant", content=error_msg)
+                    )
+                    return
 
             # Store complete assistant message in history
             self._chat_history.append(
@@ -563,19 +610,26 @@ Return ONLY valid JSON, no markdown or explanation."""
         """
         from src.services.chat_tools import CHAT_TOOLS, ChatToolExecutor
 
-        client = self._get_client()
-        if not client:
-            yield {"type": "error", "message": "Claude API is not available. Please configure your API key in Settings."}
+        provider = self._get_provider()
+        if not provider:
+            yield {"type": "error", "message": "AI is not available. Please configure your API key in Settings."}
+            return
+
+        # Check if provider supports tools
+        if not provider.supports_tools(self.model_id):
+            # Fall back to streaming without tools
+            yield from self._chat_stream_without_tools(user_message, ticker, include_portfolio, page_context)
             return
 
         # Build enhanced system prompt
         system_prompt = self._build_enhanced_system_prompt(page_context, ticker)
 
         # Build messages from chat history
-        messages = []
-        for msg in self._chat_history[-10:]:
-            messages.append({"role": msg.role, "content": msg.content})
-        messages.append({"role": "user", "content": user_message})
+        messages = [
+            InferenceMessage(role=msg.role, content=msg.content)
+            for msg in self._chat_history[-10:]
+        ]
+        messages.append(InferenceMessage(role="user", content=user_message))
 
         # Store user message immediately
         self._chat_history.append(ChatMessage(role="user", content=user_message))
@@ -583,85 +637,54 @@ Return ONLY valid JSON, no markdown or explanation."""
         tool_executor = ChatToolExecutor(self.db)
         full_response = ""
         max_tool_iterations = 5  # Prevent infinite tool loops
+        pending_tool_calls = []
 
         for iteration in range(max_tool_iterations):
             try:
-                # Make streaming request with tools
-                with client.messages.stream(
-                    model=get_claude_model(),
+                # Stream with tools (tools are in Claude format, provider handles conversion)
+                for event in provider.stream(
+                    messages=messages,
+                    model=self.model_id,
                     max_tokens=2048,
                     system=system_prompt,
-                    messages=messages,
                     tools=CHAT_TOOLS,
-                ) as stream:
-                    current_tool_use = None
-                    tool_input_json = ""
+                ):
+                    if event.type == "text" and event.text:
+                        full_response += event.text
+                        yield {"type": "text", "content": event.text}
 
-                    for event in stream:
-                        if event.type == "content_block_start":
-                            if hasattr(event.content_block, "type") and event.content_block.type == "tool_use":
-                                current_tool_use = {
-                                    "id": event.content_block.id,
-                                    "name": event.content_block.name,
-                                }
-                                tool_input_json = ""
-                                yield {"type": "tool_start", "name": current_tool_use["name"], "id": current_tool_use["id"]}
+                    elif event.type == "tool_use" and event.tool_call:
+                        tool_call = event.tool_call
+                        yield {"type": "tool_start", "name": tool_call.get("name", ""), "id": tool_call.get("id", "")}
 
-                        elif event.type == "content_block_delta":
-                            if hasattr(event.delta, "type"):
-                                if event.delta.type == "text_delta":
-                                    full_response += event.delta.text
-                                    yield {"type": "text", "content": event.delta.text}
-                                elif event.delta.type == "input_json_delta":
-                                    tool_input_json += event.delta.partial_json
+                        # Execute tool
+                        result = tool_executor.execute_tool(
+                            tool_call.get("name", ""),
+                            tool_call.get("input", {})
+                        )
+                        yield {"type": "tool_result", "name": tool_call.get("name", ""), "result": result}
+                        pending_tool_calls.append((tool_call, result))
 
-                        elif event.type == "content_block_stop":
-                            if current_tool_use:
-                                # Parse and execute tool
-                                try:
-                                    tool_input = json.loads(tool_input_json) if tool_input_json else {}
-                                except json.JSONDecodeError:
-                                    tool_input = {}
+                    elif event.type == "error" and event.error:
+                        yield {"type": "error", "message": event.error}
+                        return
 
-                                result = tool_executor.execute_tool(current_tool_use["name"], tool_input)
-                                yield {"type": "tool_result", "name": current_tool_use["name"], "result": result}
-
-                                # Add tool use and result to messages for continuation
-                                messages.append({
-                                    "role": "assistant",
-                                    "content": [
-                                        {
-                                            "type": "tool_use",
-                                            "id": current_tool_use["id"],
-                                            "name": current_tool_use["name"],
-                                            "input": tool_input
-                                        }
-                                    ]
-                                })
-                                messages.append({
-                                    "role": "user",
-                                    "content": [
-                                        {
-                                            "type": "tool_result",
-                                            "tool_use_id": current_tool_use["id"],
-                                            "content": json.dumps(result)
-                                        }
-                                    ]
-                                })
-
-                                current_tool_use = None
-                                tool_input_json = ""
-
-                    # Get final message to check stop reason
-                    final_message = stream.get_final_message()
-
-                    if final_message.stop_reason == "end_turn":
-                        # No more tool calls, we're done
-                        break
-                    elif final_message.stop_reason != "tool_use":
-                        # Unexpected stop reason, but still done
-                        break
-                    # If stop_reason is "tool_use", continue the loop to process tool results
+                # If there were tool calls, add them to messages and continue
+                if pending_tool_calls:
+                    # Add assistant's tool use to messages (simplified for provider compatibility)
+                    if full_response:
+                        messages.append(InferenceMessage(role="assistant", content=full_response))
+                    # Add tool results as user messages
+                    for tool_call, result in pending_tool_calls:
+                        messages.append(InferenceMessage(
+                            role="user",
+                            content=f"Tool '{tool_call.get('name', '')}' returned: {json.dumps(result)}"
+                        ))
+                    pending_tool_calls = []
+                    full_response = ""
+                else:
+                    # No more tool calls, we're done
+                    break
 
             except Exception as e:
                 logger.error(f"Chat stream with tools error: {e}")
@@ -673,3 +696,49 @@ Return ONLY valid JSON, no markdown or explanation."""
             self._chat_history.append(ChatMessage(role="assistant", content=full_response))
 
         yield {"type": "done"}
+
+    def _chat_stream_without_tools(
+        self,
+        user_message: str,
+        ticker: str = None,
+        include_portfolio: bool = True,
+        page_context: dict = None,
+    ):
+        """Fallback streaming without tools when provider doesn't support them."""
+        provider = self._get_provider()
+        if not provider:
+            yield {"type": "error", "message": "AI is not available. Please configure your API key in Settings."}
+            return
+
+        system_prompt = self._build_enhanced_system_prompt(page_context, ticker)
+        messages = [
+            InferenceMessage(role=msg.role, content=msg.content)
+            for msg in self._chat_history[-10:]
+        ]
+        messages.append(InferenceMessage(role="user", content=user_message))
+
+        self._chat_history.append(ChatMessage(role="user", content=user_message))
+        full_response = ""
+
+        try:
+            for event in provider.stream(
+                messages=messages,
+                model=self.model_id,
+                max_tokens=2048,
+                system=system_prompt,
+            ):
+                if event.type == "text" and event.text:
+                    full_response += event.text
+                    yield {"type": "text", "content": event.text}
+                elif event.type == "error" and event.error:
+                    yield {"type": "error", "message": event.error}
+                    return
+
+            if full_response:
+                self._chat_history.append(ChatMessage(role="assistant", content=full_response))
+
+            yield {"type": "done"}
+
+        except Exception as e:
+            logger.error(f"Chat stream error: {e}")
+            yield {"type": "error", "message": str(e)}

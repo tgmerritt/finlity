@@ -33,6 +33,7 @@ from .base import (
     WidgetPlugin,
     ProviderPlugin,
     ExportPlugin,
+    InferenceProviderPlugin,
 )
 from .events import Event, EventType, get_event_bus
 from .security import get_security_manager, SecurityManager
@@ -553,6 +554,13 @@ class PluginRegistry:
         return [
             p for p in self._plugins.values()
             if isinstance(p, WidgetPlugin)
+        ]
+
+    def get_inference_providers(self) -> list[InferenceProviderPlugin]:
+        """Get all enabled inference provider plugins."""
+        return [
+            p for p in self._plugins.values()
+            if isinstance(p, InferenceProviderPlugin)
         ]
 
     def get_plugin_settings(self, plugin_id: str) -> dict[str, Any]:

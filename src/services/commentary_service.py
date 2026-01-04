@@ -1,7 +1,7 @@
 """AI Commentary Service for generating and managing dashboard element insights.
 
 This service:
-- Generates AI commentary using Claude API
+- Generates AI commentary using AI providers (Claude, Cerebras, OpenAI)
 - Caches results in the database with change detection
 - Enriches prompts with web search comparison data
 - Provides efficient batch operations
@@ -18,7 +18,8 @@ from typing import Generator, Optional
 
 from src.database import Database
 from src.database.models import AICommentary
-from src.services.ai_config import get_claude_model
+from src.services.inference_provider import get_provider, InferenceProviderError
+from src.services.providers import InferenceMessage, ProviderNotConfiguredError
 from src.services.commentary_registry import (
     ELEMENT_REGISTRY,
     get_element_config,
@@ -59,40 +60,40 @@ class RefreshResult:
 class CommentaryService:
     """Service for generating and managing AI commentary on dashboard elements."""
 
-    def __init__(self, db: Database):
+    def __init__(
+        self,
+        db: Database,
+        provider_id: str = None,
+        model_id: str = None,
+    ):
         """Initialize the commentary service.
 
         Args:
             db: Database instance for storing/retrieving commentary
+            provider_id: Preferred AI provider ID (e.g., "claude", "cerebras", "openai")
+            model_id: Specific model to use (defaults to provider's default)
         """
         self.db = db
-        self._client = None
+        self.provider_id = provider_id
+        self.model_id = model_id
+        self._provider = None
+        self._client = None  # Legacy client for backward compatibility
         self._api_key = None
 
-    def _get_client(self):
-        """Lazily initialize the Anthropic client."""
-        if self._client is None:
+    def _get_provider(self):
+        """Get or create inference provider."""
+        if self._provider is None:
             try:
-                from anthropic import Anthropic
-                from src.services.secrets import SecretsManager
-
-                secrets = SecretsManager(self.db)
-                self._api_key = secrets.get_api_key("anthropic_api_key")
-
-                if not self._api_key:
-                    logger.warning("No Anthropic API key configured")
-                    return None
-
-                logger.info(f"Initializing Anthropic client with key: {self._api_key[:8]}...")
-                self._client = Anthropic(api_key=self._api_key)
-            except ImportError as e:
-                logger.warning(f"anthropic package not installed: {e}")
+                self._provider = get_provider(self.provider_id, self.db)
+                logger.info(f"Using inference provider: {self._provider.info.display_name}")
+            except ProviderNotConfiguredError:
+                logger.warning("No AI providers configured")
                 return None
-            except Exception as e:
-                logger.error(f"Failed to initialize Anthropic client: {e}")
-                return None
+        return self._provider
 
-        return self._client
+    def _get_client(self):
+        """Get client - now returns the provider for backward compatibility."""
+        return self._get_provider()
 
     def get_commentary(
         self,
@@ -371,7 +372,7 @@ class CommentaryService:
         current_data: dict,
         current_hash: str,
     ) -> CommentaryResult:
-        """Generate commentary using Claude API and cache it.
+        """Generate commentary using AI provider and cache it.
 
         Args:
             element_id: Element identifier
@@ -382,12 +383,12 @@ class CommentaryService:
         Returns:
             CommentaryResult with generated commentary
         """
-        client = self._get_client()
-        if not client:
+        provider = self._get_provider()
+        if not provider:
             return CommentaryResult(
                 element_id=element_id,
-                commentary="AI commentary is not available. Please configure your Anthropic API key in Settings.",
-                error="No API client available",
+                commentary="AI commentary is not available. Please configure an API key in Settings.",
+                error="No API provider available",
             )
 
         start_time = time.time()
@@ -422,17 +423,18 @@ Current data: {json.dumps(current_data, indent=2, default=str)}
 
 Provide a brief 2-3 sentence explanation of what this data shows and any relevant context."""
 
-        # Call Claude API
+        # Call AI provider
         try:
-            response = client.messages.create(
-                model=get_claude_model(),
+            messages = [InferenceMessage(role="user", content=prompt)]
+            response = provider.complete(
+                messages=messages,
+                model=self.model_id,
                 max_tokens=512,
                 system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
             )
 
-            commentary = response.content[0].text
-            token_count = response.usage.input_tokens + response.usage.output_tokens
+            commentary = response.content
+            token_count = response.input_tokens + response.output_tokens
             generation_time_ms = (time.time() - start_time) * 1000
 
             # Cache the result
@@ -444,7 +446,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
                 comparison_data=comparison_data,
                 data_hash=current_hash,
                 data_snapshot=current_data,
-                model_version=get_claude_model(),
+                model_version=response.model,
                 generation_time_ms=generation_time_ms,
                 token_count=token_count,
                 web_search_used=web_search_used,
@@ -459,6 +461,13 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
                 age_hours=0,
             )
 
+        except InferenceProviderError as e:
+            logger.error(f"AI provider error for {element_id}: {e}")
+            return CommentaryResult(
+                element_id=element_id,
+                commentary="",
+                error=str(e),
+            )
         except Exception as e:
             logger.error(f"Error generating commentary for {element_id}: {e}")
             return CommentaryResult(
@@ -510,9 +519,9 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
                 return
 
         # Generate new commentary with streaming
-        client = self._get_client()
-        if not client:
-            yield f"data: {json.dumps({'error': 'No API client available. Please configure your Anthropic API key.'})}\n\n"
+        provider = self._get_provider()
+        if not provider:
+            yield f"data: {json.dumps({'error': 'No AI provider available. Please configure an API key in Settings.'})}\n\n"
             return
 
         start_time = time.time()
@@ -549,19 +558,29 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
         # Stream the response
         try:
             full_text = ""
-            with client.messages.stream(
-                model=get_claude_model(),
+            input_tokens = 0
+            output_tokens = 0
+            model_version = provider.info.id
+
+            messages = [InferenceMessage(role="user", content=prompt)]
+            for event in provider.stream(
+                messages=messages,
+                model=self.model_id,
                 max_tokens=512,
                 system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
-            ) as stream:
-                for text in stream.text_stream:
-                    full_text += text
-                    yield f"data: {json.dumps({'type': 'chunk', 'text': text})}\n\n"
+            ):
+                if event.type == "text" and event.text:
+                    full_text += event.text
+                    yield f"data: {json.dumps({'type': 'chunk', 'text': event.text})}\n\n"
+                elif event.type == "message_start" and event.input_tokens:
+                    input_tokens = event.input_tokens
+                elif event.type == "message_stop" and event.output_tokens:
+                    output_tokens = event.output_tokens
+                elif event.type == "error" and event.error:
+                    yield f"data: {json.dumps({'error': event.error})}\n\n"
+                    return
 
-            # Get final message for token counts
-            final_message = stream.get_final_message()
-            token_count = final_message.usage.input_tokens + final_message.usage.output_tokens
+            token_count = input_tokens + output_tokens
             generation_time_ms = (time.time() - start_time) * 1000
 
             # Cache the result
@@ -573,7 +592,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
                 comparison_data=comparison_data,
                 data_hash=current_hash,
                 data_snapshot=current_data,
-                model_version=get_claude_model(),
+                model_version=model_version,
                 generation_time_ms=generation_time_ms,
                 token_count=token_count,
                 web_search_used=web_search_used,
@@ -1097,26 +1116,25 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
 
         # Try to use web search
         try:
-            # Import here to avoid circular imports
-
-            client = self._get_client()
-            if not client:
+            provider = self._get_provider()
+            if not provider:
                 return results
 
             for query in formatted_queries:
                 try:
-                    # Use Claude to search and summarize
-                    response = client.messages.create(
-                        model=get_claude_model(),
-                        max_tokens=256,
-                        messages=[{
-                            "role": "user",
-                            "content": f"""Search for: {query}
+                    # Use AI provider to search and summarize
+                    messages = [InferenceMessage(
+                        role="user",
+                        content=f"""Search for: {query}
 
 Provide a brief factual summary (1-2 sentences) of the key statistic or data point. Include the source if known. If you don't have reliable data, say so."""
-                        }],
+                    )]
+                    response = provider.complete(
+                        messages=messages,
+                        model=self.model_id,
+                        max_tokens=256,
                     )
-                    results[query] = response.content[0].text
+                    results[query] = response.content
                 except Exception as e:
                     logger.warning(f"Web search failed for '{query}': {e}")
 

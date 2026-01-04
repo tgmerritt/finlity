@@ -19,6 +19,7 @@ class PluginType(str, Enum):
     WIDGET = "widget"          # Dashboard components
     PROVIDER = "provider"      # External data sources
     EXPORT = "export"          # Generate reports
+    INFERENCE_PROVIDER = "inference_provider"  # AI inference providers
 
 
 class DatabaseAccess(str, Enum):
@@ -444,3 +445,44 @@ class ExportResult:
     filename: str = ""
     message: str = ""
     errors: list[str] = field(default_factory=list)
+
+
+class InferenceProviderPlugin(PluginBase):
+    """Base class for AI inference provider plugins.
+
+    Allows third-party plugins to add new AI providers (LLMs) to the system.
+    The plugin should return an InferenceProvider instance that implements
+    the standard complete() and stream() methods.
+
+    Example:
+        class MyLLMPlugin(InferenceProviderPlugin):
+            def get_provider(self, db=None):
+                return MyCustomProvider(db)
+
+            def get_info(self):
+                return {
+                    "name": self.name,
+                    "version": self.version,
+                    "type": "inference_provider",
+                    "provider_id": "my_llm",
+                }
+    """
+
+    @abstractmethod
+    def get_provider(self, db=None):
+        """Get the InferenceProvider instance.
+
+        Args:
+            db: Optional database connection for API key lookup
+
+        Returns:
+            An InferenceProvider instance
+        """
+        pass
+
+    def get_info(self) -> dict:
+        return {
+            "name": self.name,
+            "version": self.version,
+            "type": "inference_provider",
+        }

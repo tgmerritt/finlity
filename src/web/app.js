@@ -4483,11 +4483,133 @@ async function loadSettings() {
       document.getElementById('mc-golden-swan-impact').value = (config.monte_carlo.golden_swan_impact || 0) * 100;
     }
 
-    // Load API keys status, views, and accounts management
-    await Promise.all([loadApiKeysStatus(), loadViewsList(), loadAccountsManagement()]);
+    // Load API keys status, views, accounts management, and AI providers
+    await Promise.all([loadApiKeysStatus(), loadViewsList(), loadAccountsManagement(), loadAIProviders()]);
   } catch (error) {
     console.error('Error loading settings:', error);
   }
+}
+
+// AI Provider Management
+let aiProvidersData = [];
+
+async function loadAIProviders() {
+  try {
+    const response = await fetch(`${API_BASE}/api/inference/providers`);
+    if (!response.ok) {
+      console.warn('Could not load AI providers:', response.status);
+      return;
+    }
+
+    const data = await response.json();
+    aiProvidersData = data.providers || [];
+
+    const providerSelect = document.getElementById('ai-provider-select');
+    const modelSelect = document.getElementById('ai-model-select');
+    const statusEl = document.getElementById('ai-provider-status');
+
+    if (!providerSelect || !modelSelect) return;
+
+    // Get saved preferences from localStorage
+    const savedProvider = localStorage.getItem('preferredAIProvider') || 'claude';
+    const savedModel = localStorage.getItem('preferredAIModel') || '';
+
+    // Populate provider dropdown
+    providerSelect.innerHTML = aiProvidersData.map(p => {
+      const availability = p.is_available ? '' : ' (not configured)';
+      return `<option value="${p.id}" ${p.id === savedProvider ? 'selected' : ''}>${p.display_name}${availability}</option>`;
+    }).join('');
+
+    // Update model dropdown based on selected provider
+    updateAIModelSelect(savedProvider, savedModel);
+
+    // Update status message
+    const currentProvider = aiProvidersData.find(p => p.id === savedProvider);
+    if (currentProvider && currentProvider.is_available) {
+      statusEl.textContent = `Connected to ${currentProvider.display_name}`;
+      statusEl.className = 'form-help text-success';
+    } else if (currentProvider) {
+      statusEl.textContent = `${currentProvider.display_name} requires an API key. Add it in Data Sources above.`;
+      statusEl.className = 'form-help text-warning';
+    }
+  } catch (error) {
+    console.error('Error loading AI providers:', error);
+    const statusEl = document.getElementById('ai-provider-status');
+    if (statusEl) {
+      statusEl.textContent = 'Could not load AI providers';
+      statusEl.className = 'form-help text-muted';
+    }
+  }
+}
+
+function updateAIModelSelect(providerId, selectedModelId) {
+  const modelSelect = document.getElementById('ai-model-select');
+  const modelInfo = document.getElementById('ai-model-info');
+  if (!modelSelect) return;
+
+  const provider = aiProvidersData.find(p => p.id === providerId);
+  if (!provider || !provider.models || provider.models.length === 0) {
+    modelSelect.innerHTML = '<option value="">No models available</option>';
+    if (modelInfo) modelInfo.textContent = '';
+    return;
+  }
+
+  // Populate models
+  modelSelect.innerHTML = provider.models.map(m => {
+    const isDefault = m.is_default ? ' (default)' : '';
+    const selected = (selectedModelId && m.id === selectedModelId) || (!selectedModelId && m.is_default);
+    return `<option value="${m.id}" ${selected ? 'selected' : ''}>${m.display_name}${isDefault}</option>`;
+  }).join('');
+
+  // Update model info
+  const currentModel = provider.models.find(m =>
+    (selectedModelId && m.id === selectedModelId) || (!selectedModelId && m.is_default)
+  );
+  if (currentModel && modelInfo) {
+    const capabilities = currentModel.capabilities.join(', ');
+    modelInfo.textContent = `Context: ${(currentModel.context_length / 1000).toFixed(0)}K tokens | Supports: ${capabilities}`;
+  }
+}
+
+function onAIProviderChange(providerId) {
+  localStorage.setItem('preferredAIProvider', providerId);
+  localStorage.removeItem('preferredAIModel'); // Reset model when provider changes
+
+  updateAIModelSelect(providerId, null);
+
+  const statusEl = document.getElementById('ai-provider-status');
+  const provider = aiProvidersData.find(p => p.id === providerId);
+  if (provider && provider.is_available) {
+    statusEl.textContent = `Connected to ${provider.display_name}`;
+    statusEl.className = 'form-help text-success';
+  } else if (provider) {
+    statusEl.textContent = `${provider.display_name} requires an API key. Add it in Data Sources above.`;
+    statusEl.className = 'form-help text-warning';
+  }
+}
+
+function onAIModelChange(modelId) {
+  localStorage.setItem('preferredAIModel', modelId);
+
+  const modelInfo = document.getElementById('ai-model-info');
+  const providerId = localStorage.getItem('preferredAIProvider') || 'claude';
+  const provider = aiProvidersData.find(p => p.id === providerId);
+
+  if (provider && modelInfo) {
+    const model = provider.models.find(m => m.id === modelId);
+    if (model) {
+      const capabilities = model.capabilities.join(', ');
+      modelInfo.textContent = `Context: ${(model.context_length / 1000).toFixed(0)}K tokens | Supports: ${capabilities}`;
+    }
+  }
+}
+
+// Helper to get current AI provider preferences for API calls
+function getAIPreferences() {
+  return {
+    provider_id: localStorage.getItem('preferredAIProvider') || null,
+    model_id: localStorage.getItem('preferredAIModel') || null,
+  };
 }
 
 // Account Management
