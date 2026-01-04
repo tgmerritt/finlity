@@ -324,3 +324,19 @@ def check_demo_data_protection():
             status_code=403,
             detail="Demo data is protected on the hosted site. Modifications are disabled."
         )
+
+
+def allow_env_api_keys() -> bool:
+    """Check if environment variable API keys should be allowed.
+
+    Environment variable API keys (e.g., ANTHROPIC_API_KEY) are only allowed
+    when demo mode is enabled. This prevents hosted deployments from paying
+    for API usage by non-demo users.
+
+    When demo mode is OFF, users must configure their own API keys in the
+    database (via Settings), and environment variable keys are ignored.
+
+    Returns:
+        True if environment API keys should be used, False otherwise.
+    """
+    return is_demo_mode()

@@ -83,13 +83,21 @@ class OpenAIProvider(InferenceProvider):
         return self._info
 
     def get_api_key(self) -> Optional[str]:
-        """Get API key from env or database."""
-        # Check environment first
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if api_key:
-            return api_key
+        """Get API key from env or database.
 
-        # Check database if available
+        Environment variable keys are only used in demo mode. This prevents
+        hosted deployments from paying for API usage by non-demo users.
+        When not in demo mode, users must configure their own API keys.
+        """
+        from src.services.demo_mode import allow_env_api_keys
+
+        # Check environment first, but only if demo mode is enabled
+        if allow_env_api_keys():
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if api_key:
+                return api_key
+
+        # Check database if available (user's personal keys)
         if self._db:
             from src.services.secrets import SecretsManager
 
