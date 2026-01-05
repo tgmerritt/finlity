@@ -172,7 +172,7 @@ export async function runProjection(event: Event): Promise<void> {
       '/api/projections/monte-carlo?async_mode=true',
       {
         method: 'POST',
-        body: JSON.stringify(params),
+        body: params,
       },
       {
         maxWaitMs: 300000, // 5 minutes max
@@ -250,7 +250,7 @@ export async function calculateFire(event: Event): Promise<void> {
   try {
     const result = await apiCall<FireResult>('/api/projections/fire', {
       method: 'POST',
-      body: JSON.stringify(params),
+      body: params,
     });
 
     // Show results
@@ -374,7 +374,7 @@ export async function runTaxProjection(event: Event): Promise<void> {
       '/api/projections/tax-projection',
       {
         method: 'POST',
-        body: JSON.stringify(params),
+        body: params,
       },
       {
         onProgress: (task) => {
