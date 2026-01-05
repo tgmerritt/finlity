@@ -145,12 +145,13 @@ class SessionManager:
         method: str,
         path: str,
         signature: str,
+        body_hash: str = "",
     ) -> bool:
         """
         Validate HMAC signature on a request.
 
         The signature is computed as:
-            HMAC-SHA256(key, "{timestamp}:{nonce}:{method}:{path}")
+            HMAC-SHA256(key, "{timestamp}:{nonce}:{method}:{path}:{body_hash}")
 
         Args:
             session: The session containing the HMAC key
@@ -159,6 +160,7 @@ class SessionManager:
             method: HTTP method (GET, POST, etc.)
             path: Request path (e.g., /api/portfolio/accounts)
             signature: Hex-encoded signature from X-Request-Signature header
+            body_hash: Optional hex-encoded SHA-256 hash of the request body
 
         Returns:
             True if signature is valid, False otherwise
@@ -181,7 +183,7 @@ class SessionManager:
             session.used_nonces.add(nonce_key)
 
         # Compute expected signature
-        message = f"{timestamp}:{nonce}:{method}:{path}"
+        message = f"{timestamp}:{nonce}:{method}:{path}:{body_hash}"
         expected = hmac.new(
             session.hmac_key.encode(), message.encode(), hashlib.sha256
         ).hexdigest()

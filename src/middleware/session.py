@@ -116,6 +116,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
         signature = request.headers.get("X-Request-Signature")
         timestamp = request.headers.get("X-Request-Timestamp")
         nonce = request.headers.get("X-Request-Nonce")
+        body_hash = request.headers.get("X-Request-Body-Hash", "")
 
         # All three headers required
         if not all([signature, timestamp, nonce]):
@@ -138,6 +139,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
             method=request.method,
             path=request.url.path,
             signature=signature,
+            body_hash=body_hash,
         ):
             logger.warning(
                 f"Invalid signature for {request.method} {request.url.path}"
