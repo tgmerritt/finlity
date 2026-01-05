@@ -1,6 +1,20 @@
 # Investment Portfolio Analyzer
 # Multi-stage build for optimized image size
 
+# Stage 1: Build frontend with Node.js
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/src/web
+
+# Copy package files and install dependencies
+COPY src/web/package*.json ./
+RUN npm ci
+
+# Copy frontend source and build
+COPY src/web/ ./
+RUN npm run build
+
+# Stage 2: Python builder
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
@@ -45,6 +59,9 @@ COPY tests/ ./tests/
 COPY config.yaml .
 COPY funds.yaml .
 COPY pytest.ini .
+
+# Copy built frontend assets from Node.js build stage
+COPY --from=frontend-builder /app/src/web/dist/ ./src/web/dist/
 
 # Create data directories with proper permissions
 RUN mkdir -p data/imports data/demo data/cache data/logs \
