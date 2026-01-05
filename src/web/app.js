@@ -760,6 +760,44 @@ function initSidebarState() {
   }
 }
 
+// Mobile navigation toggle
+function toggleMobileNav() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.querySelector('.mobile-nav-overlay');
+
+  if (sidebar && overlay) {
+    sidebar.classList.toggle('mobile-open');
+    overlay.classList.toggle('active');
+
+    // Prevent body scroll when menu is open
+    if (sidebar.classList.contains('mobile-open')) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+  }
+}
+
+// Close mobile nav when a nav item is clicked
+function closeMobileNav() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.querySelector('.mobile-nav-overlay');
+
+  if (sidebar && overlay) {
+    sidebar.classList.remove('mobile-open');
+    overlay.classList.remove('active');
+    document.body.style.overflow = '';
+  }
+}
+
+// Initialize mobile nav - close on nav item click
+function initMobileNav() {
+  const navItems = document.querySelectorAll('.sidebar .nav-item');
+  navItems.forEach(item => {
+    item.addEventListener('click', closeMobileNav);
+  });
+}
+
 function updateChartTheme(theme) {
   const isDark = theme === 'dark';
   const layout = {
@@ -8983,6 +9021,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await initSession(); // Initialize session for multi-user mode (must be first)
   initTheme();
   initSidebarState(); // Initialize sidebar collapsed state
+  initMobileNav(); // Initialize mobile navigation
   initStorageMode(); // Initialize storage mode preference
   initConfigPanels(); // Initialize collapsible config panels
   await loadProfiles(); // Load profiles for multi-database support
