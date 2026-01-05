@@ -2,7 +2,8 @@
  * Local API layer - mirrors server endpoints using client-side SQLite
  *
  * This allows the app to work entirely offline with a local database.
- * All methods return data in the same format as the server API.
+ * Methods return data in formats compatible with the local database schema,
+ * which may differ slightly from server API responses (e.g., numeric IDs vs UUIDs).
  */
 
 import type { ClientDatabase } from './client-database';
@@ -205,8 +206,12 @@ export class LocalAPI {
       ]
     );
 
+    if (result.lastId === undefined) {
+      throw new Error('Failed to get inserted account ID');
+    }
+
     return {
-      id: result.lastId!,
+      id: result.lastId,
       name: data.name,
       account_type: data.account_type,
       brokerage: data.brokerage ?? null,
@@ -286,8 +291,12 @@ export class LocalAPI {
       ]
     );
 
+    if (result.lastId === undefined) {
+      throw new Error('Failed to get inserted position ID');
+    }
+
     return {
-      id: result.lastId!,
+      id: result.lastId,
       account_id: data.account_id,
       account_name: '',
       account_type: '',
@@ -307,6 +316,8 @@ export class LocalAPI {
 
   /**
    * PUT /api/portfolio/positions/{id} - Update position
+   * Note: Column names are hardcoded in the switch below to prevent SQL injection.
+   * Only the properties defined in UpdatePositionInput are supported.
    */
   updatePosition(positionId: number, data: UpdatePositionInput): { updated: boolean; id?: number } {
     const updates: string[] = [];
@@ -480,6 +491,7 @@ export class LocalAPI {
 
   /**
    * GET /api/settings/config - Get config
+   * Values stored as JSON are parsed; non-JSON values are returned as strings.
    */
   getConfig(): Record<string, unknown> {
     const settings = this.db.query<SettingRow>('SELECT * FROM app_settings');
@@ -487,7 +499,10 @@ export class LocalAPI {
     settings.forEach((s) => {
       try {
         config[s.key] = JSON.parse(s.value);
-      } catch {
+      } catch (e) {
+        // Value is not valid JSON - use as string
+        // This can happen for legacy string values or simple primitives
+        console.debug(`Config key '${s.key}' is not JSON, using as string:`, e);
         config[s.key] = s.value;
       }
     });

@@ -248,16 +248,16 @@ declare namespace marked {
   function setOptions(options: MarkedOptions): void;
 }
 
-// sql.js types
+// sql.js types (https://sql.js.org/documentation/Database.html)
 declare interface SqlJsStatic {
   Database: new (data?: ArrayLike<number>) => SqlJsDatabase;
 }
 
 declare interface SqlJsDatabase {
   run(sql: string, params?: SqlJsBindParams): void;
-  getQueryResults(sql: string, params?: SqlJsBindParams): SqlJsQueryResult[];
+  exec(sql: string, params?: SqlJsBindParams): SqlJsQueryResult[];
   prepare(sql: string): SqlJsStatement;
-  exportData(): Uint8Array;
+  export(): Uint8Array;
   close(): void;
   getRowsModified(): number;
 }

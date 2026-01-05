@@ -7,7 +7,7 @@ import { initSession } from '@/state/session';
 import { initTheme } from '@/state/theme';
 import { store } from '@/state/store';
 import { initTabs, initMobileNav, showTab } from '@/ui/tabs';
-import { showError } from '@/ui/toast';
+import { showError, showWarning } from '@/ui/toast';
 import { hideLoading, showLoading } from '@/ui/loading';
 import { apiCall } from '@/api/client';
 import type { DashboardData, Profile, PortfolioView } from '@/types/api';
@@ -36,6 +36,7 @@ function isFirstVisit(): boolean {
 
 /**
  * Load profiles from the API.
+ * Failures are logged and shown to user - app continues with limited functionality.
  */
 async function loadProfiles(): Promise<void> {
   try {
@@ -48,11 +49,13 @@ async function loadProfiles(): Promise<void> {
     }
   } catch (error) {
     console.error('Failed to load profiles:', error);
+    showWarning('Unable to load profiles. Some features may be limited.');
   }
 }
 
 /**
  * Load portfolio views from the API.
+ * Failures are logged and shown to user - app continues with limited functionality.
  */
 async function loadViews(): Promise<void> {
   try {
@@ -60,6 +63,7 @@ async function loadViews(): Promise<void> {
     store.set('availableViews', views);
   } catch (error) {
     console.error('Failed to load views:', error);
+    showWarning('Unable to load portfolio views.');
   }
 }
 
@@ -110,6 +114,7 @@ function initSidebarState(): void {
 
 /**
  * Check and display demo mode status.
+ * Failures are logged - users should know if data mode is uncertain.
  */
 async function checkDemoModeStatus(): Promise<void> {
   try {
@@ -122,6 +127,8 @@ async function checkDemoModeStatus(): Promise<void> {
     }
   } catch (error) {
     console.error('Failed to check demo mode:', error);
+    // Show warning since user should know if demo mode status is unknown
+    showWarning('Unable to verify data mode. Status unknown.');
   }
 }
 
@@ -167,10 +174,16 @@ async function init(): Promise<void> {
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    init().catch(console.error);
+    init().catch((error) => {
+      console.error('Fatal initialization error:', error);
+      showError('Application failed to initialize. Please refresh the page.');
+    });
   });
 } else {
-  init().catch(console.error);
+  init().catch((error) => {
+    console.error('Fatal initialization error:', error);
+    showError('Application failed to initialize. Please refresh the page.');
+  });
 }
 
 // Expose key functions to window for HTML onclick handlers during transition

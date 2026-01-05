@@ -18,6 +18,27 @@ export type TabName =
   | 'settings';
 
 /**
+ * Valid tab names for runtime validation.
+ */
+const VALID_TABS: readonly TabName[] = [
+  'welcome',
+  'dashboard',
+  'holdings',
+  'analysis',
+  'projections',
+  'budget',
+  'taxes',
+  'settings',
+];
+
+/**
+ * Check if a string is a valid tab name.
+ */
+function isValidTab(tab: string | null): tab is TabName {
+  return tab !== null && VALID_TABS.includes(tab as TabName);
+}
+
+/**
  * Current active tab.
  */
 let currentTab: TabName = 'dashboard';
@@ -97,9 +118,12 @@ export function initTabs(): void {
   const navItems = querySelectorAll<HTMLElement>('.nav-item[data-tab]');
   navItems.forEach((item) => {
     item.addEventListener('click', () => {
-      const tabName = item.getAttribute('data-tab') as TabName;
-      if (tabName) {
+      const tabName = item.getAttribute('data-tab');
+      // Validate tab name at runtime to prevent invalid navigation
+      if (isValidTab(tabName)) {
         showTab(tabName);
+      } else {
+        console.warn(`Invalid tab name in data-tab attribute: ${tabName}`);
       }
     });
   });

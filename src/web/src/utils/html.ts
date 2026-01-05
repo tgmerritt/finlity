@@ -132,23 +132,8 @@ export function addEventHandler<K extends keyof HTMLElementEventMap>(
   return () => element.removeEventListener(event, handler);
 }
 
-/**
- * Check if the current theme is dark mode.
- * @returns True if dark mode is active
- */
-export function isDarkMode(): boolean {
-  return document.documentElement.getAttribute('data-theme') === 'dark';
-}
-
-/**
- * Toggle dark/light theme.
- * @param dark - Force dark mode (optional)
- */
-export function setTheme(dark?: boolean): void {
-  const newTheme = dark ?? !isDarkMode() ? 'dark' : 'light';
-  document.documentElement.setAttribute('data-theme', newTheme);
-  localStorage.setItem('theme', newTheme);
-}
+// Note: Theme functions (isDarkMode, setTheme, toggleTheme) are in @/state/theme.ts
+// Use that module for theme management to avoid duplication.
 
 /**
  * Show/hide an element by setting display style.

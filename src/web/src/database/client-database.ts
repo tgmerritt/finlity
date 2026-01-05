@@ -62,12 +62,15 @@ export interface DatabaseOpenResult {
   mode: StorageMode;
 }
 
-export interface DatabaseSaveResult {
-  saved: boolean;
-  name?: string;
-  cancelled?: boolean;
-  downloaded?: boolean;
-}
+/**
+ * Result of a database save operation.
+ * Uses discriminated union to prevent invalid state combinations.
+ */
+export type DatabaseSaveResult =
+  | { status: 'saved'; name: string }
+  | { status: 'downloaded'; name: string }
+  | { status: 'cancelled' }
+  | { status: 'failed'; error: string };
 
 export interface StorageInfo {
   isOpen: boolean;
@@ -83,6 +86,11 @@ export interface QueryResult {
 }
 
 /**
+ * Callback type for auto-save failure notifications.
+ */
+export type AutoSaveFailureCallback = (failCount: number) => void;
+
+/**
  * Client-side SQLite database manager.
  */
 export class ClientDatabase {
@@ -93,6 +101,8 @@ export class ClientDatabase {
   private storageMode: StorageMode = null;
   private isDirty = false;
   private autoSaveInterval: ReturnType<typeof setInterval> | null = null;
+  private autoSaveFailCount = 0;
+  private onAutoSaveFailure: AutoSaveFailureCallback | null = null;
 
   /**
    * Initialize sql.js WebAssembly module.
@@ -186,6 +196,7 @@ export class ClientDatabase {
 
   /**
    * Save current database to file.
+   * @throws Error if no database is open or save fails
    */
   async saveToFile(): Promise<DatabaseSaveResult> {
     if (!this.db) {
@@ -205,10 +216,10 @@ export class ClientDatabase {
         await writable.write(blob);
         await writable.close();
         this.isDirty = false;
-        return { saved: true, name: this.fileHandle.name };
+        return { status: 'saved', name: this.fileHandle.name };
       } catch (error) {
         console.error('Failed to save to file:', error);
-        throw error;
+        return { status: 'failed', error: error instanceof Error ? error.message : 'Unknown error' };
       }
     } else if (this.hasFileSystemAccess()) {
       // Save As - pick new location
@@ -231,12 +242,12 @@ export class ClientDatabase {
         this.storageMode = 'file';
         this.isDirty = false;
 
-        return { saved: true, name: handle.name };
+        return { status: 'saved', name: handle.name };
       } catch (error) {
         if ((error as Error).name === 'AbortError') {
-          return { saved: false, cancelled: true };
+          return { status: 'cancelled' };
         }
-        throw error;
+        return { status: 'failed', error: error instanceof Error ? error.message : 'Unknown error' };
       }
     } else {
       // Fallback: download file
@@ -246,6 +257,7 @@ export class ClientDatabase {
 
   /**
    * Download database as file (fallback for browsers without File System Access).
+   * @param filename - Name for the downloaded file (default: 'portfolio.db')
    */
   downloadDatabase(filename = 'portfolio.db'): DatabaseSaveResult {
     if (!this.db) {
@@ -265,7 +277,7 @@ export class ClientDatabase {
     a.click();
 
     URL.revokeObjectURL(url);
-    return { saved: true, downloaded: true, name: filename };
+    return { status: 'downloaded', name: filename };
   }
 
   /**
@@ -512,15 +524,36 @@ export class ClientDatabase {
   }
 
   /**
-   * Start auto-save interval (for IndexedDB mode).
+   * Set callback for auto-save failure notifications.
+   * @param callback - Function called when auto-save fails repeatedly
+   */
+  setAutoSaveFailureCallback(callback: AutoSaveFailureCallback | null): void {
+    this.onAutoSaveFailure = callback;
+  }
+
+  /**
+   * Start auto-save interval.
+   * Auto-save only persists data when in IndexedDB mode.
+   * @param intervalMs - Interval between save attempts (default: 30000ms)
    */
   startAutoSave(intervalMs = 30000): void {
     this.stopAutoSave();
+    this.autoSaveFailCount = 0;
     this.autoSaveInterval = setInterval(() => {
       if (this.isDirty && this.storageMode === 'indexeddb') {
         this.saveToIndexedDB()
-          .then(() => console.log('Auto-saved to IndexedDB'))
-          .catch(console.error);
+          .then(() => {
+            console.log('Auto-saved to IndexedDB');
+            this.autoSaveFailCount = 0;
+          })
+          .catch((error) => {
+            console.error('Auto-save failed:', error);
+            this.autoSaveFailCount++;
+            // Notify callback after 3 consecutive failures
+            if (this.autoSaveFailCount >= 3 && this.onAutoSaveFailure) {
+              this.onAutoSaveFailure(this.autoSaveFailCount);
+            }
+          });
       }
     }, intervalMs);
   }

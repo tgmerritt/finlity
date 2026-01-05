@@ -24,10 +24,19 @@ export async function initSession(): Promise<void> {
       console.log(
         `Session initialized: signing ${data.signing_required ? 'required' : 'not required'}`
       );
+    } else {
+      // Server returned an error status - log it for debugging
+      console.warn(`Session init failed with status ${response.status}`);
     }
   } catch (error) {
-    // Session init is optional - local mode doesn't require it
-    console.log('Session init skipped (local mode)');
+    // Differentiate between expected failures (no server) and unexpected failures
+    if (error instanceof TypeError && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+      // Network unavailable - expected in local-only mode
+      console.log('Session init skipped (server not available - local mode)');
+    } else {
+      // Unexpected error - log for debugging
+      console.error('Session initialization failed:', error);
+    }
   }
 }
 
@@ -53,27 +62,52 @@ export async function computeHmac(key: string, message: string): Promise<string>
 }
 
 /**
+ * Compute SHA-256 hash of a string for body hashing.
+ * @param data - String to hash
+ * @returns Hex-encoded hash
+ */
+async function hashBody(data: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(data));
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
  * Generate signature headers for mutating requests.
+ * Includes body hash to prevent tampering with request payload.
  * @param method - HTTP method
  * @param endpoint - API endpoint path
+ * @param body - Request body (will be hashed and included in signature)
  * @returns Headers object with signature
  */
 export async function generateSignatureHeaders(
   method: string,
-  endpoint: string
+  endpoint: string,
+  body?: unknown
 ): Promise<Record<string, string>> {
   const hmacKey = store.get('sessionHmacKey');
-  if (!hmacKey) return {};
+  if (!hmacKey) {
+    // Log warning if signing is required but key is missing
+    if (store.get('sessionSigningRequired')) {
+      console.warn(`HMAC signing required but key missing for ${method} ${endpoint}`);
+    }
+    return {};
+  }
 
   const timestamp = Math.floor(Date.now() / 1000);
   const nonce = crypto.randomUUID();
-  const message = `${timestamp}:${nonce}:${method}:${endpoint}`;
+  // Include body hash in signature to prevent tampering
+  const bodyHash = body ? await hashBody(JSON.stringify(body)) : '';
+  const message = `${timestamp}:${nonce}:${method}:${endpoint}:${bodyHash}`;
   const signature = await computeHmac(hmacKey, message);
 
   return {
     'X-Request-Timestamp': timestamp.toString(),
     'X-Request-Nonce': nonce,
     'X-Request-Signature': signature,
+    ...(bodyHash && { 'X-Request-Body-Hash': bodyHash }),
   };
 }
 

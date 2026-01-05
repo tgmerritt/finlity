@@ -28,9 +28,9 @@ export interface ApiCallOptions {
  */
 export class ApiError extends Error {
   constructor(
-    public status: number,
+    public readonly status: number,
     message: string,
-    public data?: unknown
+    public readonly data?: unknown
   ) {
     super(message);
     this.name = 'ApiError';
@@ -54,8 +54,9 @@ export async function apiCall<T>(endpoint: string, options: ApiCallOptions = {})
   };
 
   // Add HMAC signature for mutating requests in multi-user mode
+  // Body is included in signature to prevent tampering
   if (SIGNING_METHODS.includes(method) && isSigningRequired()) {
-    const signatureHeaders = await generateSignatureHeaders(method, endpoint);
+    const signatureHeaders = await generateSignatureHeaders(method, endpoint, body);
     Object.assign(requestHeaders, signatureHeaders);
   }
 
@@ -173,45 +174,72 @@ export async function runAsyncApiCall<T>(
 }
 
 /**
- * Upload a file to the API.
+ * Upload a file to the API via multipart/form-data.
+ * Content-Type header is intentionally omitted to let the browser set the multipart boundary.
  * @param endpoint - API endpoint
  * @param file - File to upload
  * @param fieldName - Form field name (default: 'file')
+ * @param timeout - Request timeout in ms (default: 120000 for large files)
  * @returns Response data
+ * @throws ApiError on upload failure or timeout
  */
 export async function uploadFile<T>(
   endpoint: string,
   file: File,
-  fieldName = 'file'
+  fieldName = 'file',
+  timeout = 120000 // 2 minutes default for file uploads
 ): Promise<T> {
   const formData = new FormData();
   formData.append(fieldName, file);
 
-  // Get signature headers if needed
+  // Get signature headers if needed (file content not included in signature)
   let signatureHeaders: Record<string, string> = {};
   if (isSigningRequired()) {
     signatureHeaders = await generateSignatureHeaders('POST', endpoint);
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    method: 'POST',
-    body: formData,
-    headers: signatureHeaders,
-    credentials: 'include',
-  });
+  // Create abort controller for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-  if (!response.ok) {
-    let errorMessage = `HTTP ${response.status}`;
-    try {
-      const errorData = await response.json();
-      if (typeof errorData === 'object' && errorData !== null && 'detail' in errorData) {
-        errorMessage = String((errorData as { detail: unknown }).detail);
+  try {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      body: formData,
+      headers: signatureHeaders,
+      credentials: 'include',
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (typeof errorData === 'object' && errorData !== null && 'detail' in errorData) {
+          errorMessage = String((errorData as { detail: unknown }).detail);
+        }
+      } catch (parseError) {
+        // Error response is not JSON - log for debugging
+        console.debug(`Upload error response is not JSON for ${endpoint}:`, parseError);
+        errorMessage = response.statusText || errorMessage;
       }
-    } catch {
-      // Ignore JSON parse errors
+      throw new ApiError(response.status, errorMessage);
     }
-    throw new ApiError(response.status, errorMessage);
-  }
 
-  return (await response.json()) as T;
+    return (await response.json()) as T;
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiError(0, 'Upload timeout');
+    }
+
+    throw new ApiError(0, error instanceof Error ? error.message : 'Upload failed');
+  }
 }
