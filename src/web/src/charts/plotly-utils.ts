@@ -8,8 +8,18 @@ import { getChartColors, onThemeChange } from '@/state/theme';
 // We use 'any' here because the full Plotly types are complex
 // and the CDN-loaded library doesn't have type definitions
 declare const Plotly: {
-  newPlot: (el: string | HTMLElement, data: PlotlyData[], layout?: PlotlyLayout, config?: PlotlyConfig) => Promise<void>;
-  react: (el: string | HTMLElement, data: PlotlyData[], layout?: PlotlyLayout, config?: PlotlyConfig) => Promise<void>;
+  newPlot: (
+    el: string | HTMLElement,
+    data: PlotlyData[],
+    layout?: PlotlyLayout,
+    config?: PlotlyConfig
+  ) => Promise<void>;
+  react: (
+    el: string | HTMLElement,
+    data: PlotlyData[],
+    layout?: PlotlyLayout,
+    config?: PlotlyConfig
+  ) => Promise<void>;
   relayout: (el: string | HTMLElement, update: Partial<PlotlyLayout>) => Promise<void>;
   purge: (el: string | HTMLElement) => void;
 };
@@ -30,7 +40,7 @@ interface PlotlyLayout {
 }
 
 interface PlotlyAxis {
-  title?: string | { text: string; font?: { color?: string } };
+  title?: string | { text: string; font?: { color?: string }; standoff?: number };
   gridcolor?: string;
   zerolinecolor?: string;
   tickcolor?: string;
@@ -47,13 +57,19 @@ interface PlotlyData {
   labels?: string[];
   name?: string;
   mode?: string;
-  marker?: { color?: string | string[]; colors?: string[] };
-  line?: { color?: string; width?: number };
+  marker?: {
+    color?: string | string[];
+    colors?: string[];
+    size?: number | number[];
+    line?: { color?: string; width?: number; dash?: string };
+  };
+  line?: { color?: string; width?: number; dash?: string; shape?: string };
   fill?: string;
   fillcolor?: string;
   hole?: number;
   textinfo?: string;
-  hovertemplate?: string;
+  hovertemplate?: string | undefined;
+  connector?: { line?: { color?: string; width?: number; dash?: string } };
   [key: string]: unknown;
 }
 

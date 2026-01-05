@@ -26,7 +26,7 @@ declare namespace Plotly {
   }
 
   interface LayoutAxis {
-    title?: string | { text: string; font?: Partial<Font> };
+    title?: string | { text: string; font?: Partial<Font>; standoff?: number };
     type?: 'linear' | 'log' | 'date' | 'category';
     range?: [number | string, number | string];
     tickformat?: string;
@@ -150,7 +150,7 @@ declare namespace Plotly {
     measure?: ('relative' | 'total' | 'absolute')[];
     orientation?: 'v' | 'h';
     base?: number | number[];
-    connector?: { line?: { color?: string; width?: number } };
+    connector?: { line?: { color?: string; width?: number; dash?: string } };
     increasing?: { marker?: { color?: string } };
     decreasing?: { marker?: { color?: string } };
     totals?: { marker?: { color?: string } };
@@ -162,7 +162,7 @@ declare namespace Plotly {
       threshold?: { line?: { color: string; width: number }; thickness: number; value: number };
     };
     number?: { suffix?: string; prefix?: string; font?: Partial<Font> };
-    title?: { text?: string; font?: Partial<Font> };
+    title?: { text?: string; font?: Partial<Font>; standoff?: number };
   }
 
   interface PlotlyMarker {
@@ -170,7 +170,7 @@ declare namespace Plotly {
     colors?: string[];
     size?: number | number[];
     symbol?: string | string[];
-    line?: { color?: string; width?: number };
+    line?: { color?: string; width?: number; dash?: string };
     opacity?: number | number[];
     colorscale?: string | [number, string][];
     showscale?: boolean;

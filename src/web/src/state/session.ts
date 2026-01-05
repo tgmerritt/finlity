@@ -18,7 +18,10 @@ export async function initSession(): Promise<void> {
     });
 
     if (response.ok) {
-      const data = (await response.json()) as { hmac_key: string | null; signing_required: boolean };
+      const data = (await response.json()) as {
+        hmac_key: string | null;
+        signing_required: boolean;
+      };
       store.set('sessionHmacKey', data.hmac_key);
       store.set('sessionSigningRequired', data.signing_required || false);
       console.log(
@@ -30,7 +33,10 @@ export async function initSession(): Promise<void> {
     }
   } catch (error) {
     // Differentiate between expected failures (no server) and unexpected failures
-    if (error instanceof TypeError && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+    if (
+      error instanceof TypeError &&
+      (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))
+    ) {
       // Network unavailable - expected in local-only mode
       console.log('Session init skipped (server not available - local mode)');
     } else {

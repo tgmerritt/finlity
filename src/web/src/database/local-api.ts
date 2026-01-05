@@ -397,7 +397,9 @@ export class LocalAPI {
     });
 
     // Convert to percentages
-    const toPercent = (obj: Record<string, number>): Record<string, { value: number; percent: number }> => {
+    const toPercent = (
+      obj: Record<string, number>
+    ): Record<string, { value: number; percent: number }> => {
       const result: Record<string, { value: number; percent: number }> = {};
       for (const [key, value] of Object.entries(obj)) {
         result[key] = {
@@ -448,7 +450,10 @@ export class LocalAPI {
     };
 
     const totals = { taxable: 0, traditional: 0, roth: 0 };
-    const accountTotals = new Map<number, { name: string; type: string; tax_category: string; value: number }>();
+    const accountTotals = new Map<
+      number,
+      { name: string; type: string; tax_category: string; value: number }
+    >();
 
     positions.forEach((pos) => {
       const value = pos.value || 0;
@@ -514,7 +519,10 @@ export class LocalAPI {
    */
   updateConfig(key: string, value: unknown): { updated: boolean } {
     const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
-    this.db.execute(`INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)`, [key, valueStr]);
+    this.db.execute(`INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)`, [
+      key,
+      valueStr,
+    ]);
     return { updated: true };
   }
 

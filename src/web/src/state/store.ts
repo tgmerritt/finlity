@@ -9,6 +9,15 @@ import type {
   Profile,
   PortfolioView,
   AccountResponse,
+  Plugin,
+  IncomeSource,
+  Expense,
+  Deduction,
+  AIProvider,
+  DuplicateGroup,
+  ImportParseResult,
+  CommentaryEntry,
+  Trigger,
 } from '@/types/api';
 
 /**
@@ -20,13 +29,25 @@ export interface SortConfig {
 }
 
 /**
+ * Storage mode for data persistence.
+ */
+export type StorageMode = 'server' | 'local' | 'indexeddb';
+
+/**
+ * Allocation tab options.
+ */
+export type AllocationTab = 'asset-class' | 'sector' | 'account-type';
+
+/**
  * Application state interface.
  */
 export interface AppState {
   // Portfolio data
   currentPositions: DashboardPosition[];
   portfolioHistory: SnapshotHistory[];
+  fullHistoryData: SnapshotHistory[];
   accounts: AccountResponse[];
+  duplicates: DuplicateGroup[];
 
   // UI state
   currentSort: SortConfig;
@@ -34,6 +55,7 @@ export interface AppState {
   currentViewId: string | null;
   availableViews: PortfolioView[];
   currentHistoryDays: number;
+  currentAllocationTab: AllocationTab;
 
   // Profile state
   profiles: Profile[];
@@ -47,6 +69,30 @@ export interface AppState {
   demoMode: boolean;
   isLoading: boolean;
   loadingMessage: string;
+  storageMode: StorageMode;
+
+  // Plugin state
+  plugins: Plugin[];
+
+  // Budget state
+  incomeSources: IncomeSource[];
+  expenses: Expense[];
+  deductions: Deduction[];
+  selectedPaycheckIncomeIndex: number;
+
+  // Analysis state
+  currentAnalysisTicker: string | null;
+  aiProviders: AIProvider[];
+  triggers: Trigger[];
+
+  // Import state
+  pendingImportData: ImportParseResult | null;
+
+  // Commentary state
+  commentaryCache: Record<string, CommentaryEntry>;
+
+  // Tour state
+  currentTourStep: number;
 }
 
 /**
@@ -56,7 +102,9 @@ const initialState: AppState = {
   // Portfolio data
   currentPositions: [],
   portfolioHistory: [],
+  fullHistoryData: [],
   accounts: [],
+  duplicates: [],
 
   // UI state
   currentSort: { field: 'value', direction: 'desc' },
@@ -64,6 +112,7 @@ const initialState: AppState = {
   currentViewId: localStorage.getItem('portfolioViewId'),
   availableViews: [],
   currentHistoryDays: 30,
+  currentAllocationTab: 'asset-class',
 
   // Profile state
   profiles: [],
@@ -77,6 +126,30 @@ const initialState: AppState = {
   demoMode: false,
   isLoading: false,
   loadingMessage: 'Loading...',
+  storageMode: 'server',
+
+  // Plugin state
+  plugins: [],
+
+  // Budget state
+  incomeSources: [],
+  expenses: [],
+  deductions: [],
+  selectedPaycheckIncomeIndex: 0,
+
+  // Analysis state
+  currentAnalysisTicker: null,
+  aiProviders: [],
+  triggers: [],
+
+  // Import state
+  pendingImportData: null,
+
+  // Commentary state
+  commentaryCache: {},
+
+  // Tour state
+  currentTourStep: 0,
 };
 
 /**
@@ -157,12 +230,16 @@ export function subscribe<K extends keyof AppState>(
 
 /**
  * Reset state to initial values.
+ * Preserves localStorage-based values and creates fresh Set/object instances.
  */
 export function resetState(): void {
   state = {
     ...initialState,
     // Preserve localStorage-based values
     currentViewId: localStorage.getItem('portfolioViewId'),
+    // Create fresh instances for mutable types
+    selectedAccounts: new Set(),
+    commentaryCache: {},
   };
 }
 

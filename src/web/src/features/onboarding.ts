@@ -1,0 +1,458 @@
+/**
+ * Onboarding Feature
+ * Handles first-visit welcome flow, demo mode, and guided tour.
+ */
+
+import { apiCall } from '@/api/client';
+import { showToast } from '@/ui/toast';
+import { showLoading, hideLoading } from '@/ui/loading';
+import { getElementById, createSvgElement } from '@/utils/html';
+import { showTab } from '@/ui/tabs';
+
+/**
+ * Demo mode status.
+ */
+let currentDemoMode = false;
+
+/**
+ * Current tour step index.
+ */
+let currentTourStep = 0;
+
+/**
+ * Tour step definition.
+ */
+interface TourStep {
+  target: string;
+  icon: string;
+  title: string;
+  content: string;
+}
+
+/**
+ * Tour steps configuration.
+ */
+const tourSteps: TourStep[] = [
+  {
+    target: '[data-tab="holdings"]',
+    icon: '📊',
+    title: 'Import Your Data',
+    content:
+      'You might hold investments at different institutions (brokerage, company 401k, bank, etc.) and you need to see everything in one place. Import your portfolio data from CSV exports or add positions manually.',
+  },
+  {
+    target: '[data-tab="settings"]',
+    icon: '⚙️',
+    title: 'Configure Your Profile',
+    content:
+      'Set up your age and retirement target so the simulation is more accurate. Configure your tax filing status and state to get precise projections.',
+  },
+  {
+    target: '[data-tab="projections"]',
+    icon: '🎯',
+    title: 'Run Monte Carlo Simulations',
+    content:
+      'A Monte Carlo simulation evaluates future growth accounting for events like Black Swan events (market crashes) thousands of times, giving you a statistical view of the likelihood that your money will serve you for the rest of your life.',
+  },
+];
+
+/**
+ * Check if this is the user's first visit.
+ */
+export function isFirstVisit(): boolean {
+  return !localStorage.getItem('hasVisitedBefore');
+}
+
+/**
+ * Mark welcome as complete and show dashboard.
+ */
+export function completeWelcome(): void {
+  localStorage.setItem('hasVisitedBefore', 'true');
+  showTab('dashboard');
+}
+
+/**
+ * Start demo mode.
+ */
+export async function startDemoMode(): Promise<void> {
+  try {
+    await apiCall('/api/settings/demo-mode', {
+      method: 'PUT',
+      body: { enabled: true },
+    });
+
+    localStorage.setItem('hasVisitedBefore', 'true');
+    showTab('dashboard');
+
+    // Show demo mode banner
+    const banner = getElementById<HTMLElement>('demo-mode-banner');
+    if (banner) banner.style.display = 'flex';
+
+    showToast('Demo mode enabled! Explore with sample data.', 'success');
+  } catch (error) {
+    console.error('Failed to enable demo mode:', error);
+    showToast('Failed to enable demo mode', 'error');
+  }
+}
+
+/**
+ * Check demo mode status from server.
+ */
+export async function checkDemoModeStatus(): Promise<boolean> {
+  try {
+    const data = await apiCall<{ enabled: boolean }>('/api/settings/demo-mode');
+    updateDemoModeUI(data.enabled);
+    return data.enabled;
+  } catch (error) {
+    console.error('Error checking demo mode:', error);
+  }
+  return false;
+}
+
+/**
+ * Update demo mode UI elements.
+ */
+export function updateDemoModeUI(isEnabled: boolean): void {
+  currentDemoMode = isEnabled;
+
+  // Update toggle checkbox
+  const toggle = getElementById<HTMLInputElement>('demo-mode-toggle');
+  if (toggle) toggle.checked = isEnabled;
+
+  // Update status badge
+  const statusBadge = getElementById<HTMLElement>('demo-mode-status');
+  if (statusBadge) {
+    statusBadge.textContent = isEnabled ? 'Active' : 'Off';
+    statusBadge.className = `status-badge ${isEnabled ? 'active' : 'inactive'}`;
+  }
+
+  // Show/hide demo mode banner
+  const banner = getElementById<HTMLElement>('demo-mode-banner');
+  if (banner) banner.style.display = isEnabled ? 'flex' : 'none';
+}
+
+/**
+ * Toggle demo mode on/off.
+ */
+export async function toggleDemoMode(enabled: boolean): Promise<void> {
+  try {
+    showLoading(enabled ? 'Switching to demo mode...' : 'Switching to personal portfolio...');
+
+    await apiCall('/api/settings/demo-mode', {
+      method: 'PUT',
+      body: { enabled },
+    });
+
+    showToast(enabled ? 'Demo mode enabled' : 'Restored personal portfolio', 'success');
+
+    // CRITICAL: Clear view ID from localStorage when switching databases
+    // Views are stored per-database, so old view IDs become invalid
+    localStorage.removeItem('portfolioViewId');
+
+    // Hard reload with cache busting to ensure fresh data from new database
+    const url = new URL(window.location.href);
+    url.searchParams.set('_t', String(Date.now()));
+    window.location.href = url.toString();
+  } catch (error) {
+    hideLoading();
+    console.error('Error toggling demo mode:', error);
+    showToast('Failed to update demo mode', 'error');
+
+    // Revert toggle on error
+    const toggle = getElementById<HTMLInputElement>('demo-mode-toggle');
+    if (toggle) toggle.checked = !enabled;
+  }
+}
+
+/**
+ * Get current demo mode status.
+ */
+export function isDemoMode(): boolean {
+  return currentDemoMode;
+}
+
+/**
+ * Start the guided tour.
+ */
+export function startTour(): void {
+  currentTourStep = 0;
+  const overlay = getElementById<HTMLElement>('tour-overlay');
+  if (overlay) overlay.style.display = 'block';
+
+  showTourStep(0);
+
+  // Add resize handler to reposition card on window resize
+  window.addEventListener('resize', handleTourResize);
+}
+
+/**
+ * Handle window resize during tour.
+ */
+function handleTourResize(): void {
+  const overlay = getElementById<HTMLElement>('tour-overlay');
+  if (overlay && overlay.style.display !== 'none') {
+    const step = tourSteps[currentTourStep];
+    if (step) {
+      const targetEl = document.querySelector(step.target);
+      if (targetEl instanceof HTMLElement) {
+        positionTourElements(targetEl);
+      }
+    }
+  }
+}
+
+/**
+ * Show a specific tour step.
+ */
+export function showTourStep(stepIndex: number): void {
+  const step = tourSteps[stepIndex];
+  if (!step) return;
+
+  // Update step indicator
+  const indicator = getElementById<HTMLElement>('tour-step-indicator');
+  if (indicator) {
+    indicator.textContent = `Step ${stepIndex + 1} of ${tourSteps.length}`;
+  }
+
+  // Update content
+  const iconEl = getElementById<HTMLElement>('tour-icon');
+  const titleEl = getElementById<HTMLElement>('tour-title');
+  const contentEl = getElementById<HTMLElement>('tour-content');
+
+  if (iconEl) iconEl.textContent = step.icon;
+  if (titleEl) titleEl.textContent = step.title;
+  if (contentEl) contentEl.textContent = step.content;
+
+  // Update button text for last step
+  const nextBtn = getElementById<HTMLButtonElement>('tour-next-btn');
+  if (nextBtn) {
+    // Clear existing content
+    while (nextBtn.firstChild) {
+      nextBtn.removeChild(nextBtn.firstChild);
+    }
+
+    if (stepIndex === tourSteps.length - 1) {
+      nextBtn.appendChild(document.createTextNode('Get Started '));
+
+      // Create check icon
+      const checkIcon = createSvgElement('svg');
+      checkIcon.setAttribute('viewBox', '0 0 24 24');
+      checkIcon.setAttribute('width', '16');
+      checkIcon.setAttribute('height', '16');
+      checkIcon.setAttribute('fill', 'none');
+      checkIcon.setAttribute('stroke', 'currentColor');
+      checkIcon.setAttribute('stroke-width', '2');
+
+      const polyline = createSvgElement('polyline');
+      polyline.setAttribute('points', '20 6 9 17 4 12');
+      checkIcon.appendChild(polyline);
+      nextBtn.appendChild(checkIcon);
+    } else {
+      nextBtn.appendChild(document.createTextNode('Next '));
+
+      // Create arrow icon
+      const arrowIcon = createSvgElement('svg');
+      arrowIcon.setAttribute('viewBox', '0 0 24 24');
+      arrowIcon.setAttribute('width', '16');
+      arrowIcon.setAttribute('height', '16');
+      arrowIcon.setAttribute('fill', 'none');
+      arrowIcon.setAttribute('stroke', 'currentColor');
+      arrowIcon.setAttribute('stroke-width', '2');
+
+      const polyline = createSvgElement('polyline');
+      polyline.setAttribute('points', '9 18 15 12 9 6');
+      arrowIcon.appendChild(polyline);
+      nextBtn.appendChild(arrowIcon);
+    }
+  }
+
+  // Position spotlight and card
+  const targetEl = document.querySelector(step.target);
+  if (targetEl instanceof HTMLElement) {
+    positionTourElements(targetEl);
+  }
+
+  // Re-trigger animation
+  const card = getElementById<HTMLElement>('tour-card');
+  if (card) {
+    card.style.animation = 'none';
+    // Trigger reflow
+    void card.offsetHeight;
+    card.style.animation = 'tourBounceIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
+  }
+}
+
+/**
+ * Position tour elements relative to target.
+ */
+function positionTourElements(targetEl: HTMLElement): void {
+  const rect = targetEl.getBoundingClientRect();
+  const spotlight = getElementById<HTMLElement>('tour-spotlight');
+  const card = getElementById<HTMLElement>('tour-card');
+
+  if (!spotlight || !card) return;
+
+  // Position spotlight over target
+  const padding = 6;
+  spotlight.style.left = rect.left - padding + 'px';
+  spotlight.style.top = rect.top - padding + 'px';
+  spotlight.style.width = rect.width + padding * 2 + 'px';
+  spotlight.style.height = rect.height + padding * 2 + 'px';
+
+  // Get viewport dimensions
+  const viewportHeight = window.innerHeight;
+  const viewportWidth = window.innerWidth;
+
+  // Get card dimensions (need to make it visible briefly to measure)
+  card.style.visibility = 'hidden';
+  card.style.display = 'block';
+  const cardRect = card.getBoundingClientRect();
+  const cardHeight = cardRect.height;
+  const cardWidth = cardRect.width;
+  card.style.visibility = 'visible';
+
+  // Check if we're on mobile (sidebar is hidden or narrow viewport)
+  const isMobile = viewportWidth < 768;
+  const sidebarWidth = isMobile ? 0 : 240; // var(--sidebar-width)
+
+  if (isMobile) {
+    // On mobile: center card horizontally, position in safe area
+    const cardLeft = Math.max(16, (viewportWidth - cardWidth) / 2);
+    card.style.left = cardLeft + 'px';
+
+    // Position card in upper portion of screen with padding
+    const topPosition = Math.min(100, viewportHeight * 0.15);
+    card.style.top = topPosition + 'px';
+
+    // Hide spotlight on mobile (sidebar not visible)
+    spotlight.style.display = 'none';
+  } else {
+    // On desktop: position card to the right of sidebar
+    spotlight.style.display = 'block';
+
+    // Calculate ideal top position (aligned with target, slightly above)
+    const idealTop = rect.top - 30;
+
+    // Ensure card doesn't go above viewport (min 20px from top)
+    const minTop = 20;
+
+    // Ensure card doesn't go below viewport (20px padding from bottom)
+    const maxTop = viewportHeight - cardHeight - 20;
+
+    // Clamp the position within bounds
+    const finalTop = Math.max(minTop, Math.min(idealTop, maxTop));
+
+    // Position the card
+    card.style.left = sidebarWidth + 30 + 'px';
+    card.style.top = finalTop + 'px';
+  }
+}
+
+/**
+ * Advance to next tour step.
+ */
+export function nextTourStep(): void {
+  currentTourStep++;
+  if (currentTourStep >= tourSteps.length) {
+    endTour();
+    showProfileSetup();
+  } else {
+    showTourStep(currentTourStep);
+  }
+}
+
+/**
+ * End the guided tour.
+ */
+export function endTour(): void {
+  const overlay = getElementById<HTMLElement>('tour-overlay');
+  if (overlay) overlay.style.display = 'none';
+
+  localStorage.setItem('tourCompleted', 'true');
+
+  // Remove resize handler
+  window.removeEventListener('resize', handleTourResize);
+}
+
+/**
+ * Skip tour and go directly to profile setup.
+ */
+export function skipTour(): void {
+  endTour();
+  showProfileSetup();
+}
+
+/**
+ * Show profile setup modal.
+ */
+export function showProfileSetup(): void {
+  const modal = getElementById<HTMLElement>('profile-setup-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+/**
+ * Close profile setup modal.
+ */
+export function closeProfileSetup(): void {
+  const modal = getElementById<HTMLElement>('profile-setup-modal');
+  if (modal) modal.style.display = 'none';
+
+  // If user cancels, still mark welcome as seen and go to dashboard
+  localStorage.setItem('hasVisitedBefore', 'true');
+  showTab('dashboard');
+}
+
+/**
+ * Select storage mode option.
+ */
+export function selectStorageMode(mode: 'server' | 'local'): void {
+  // Update visual selection
+  document.querySelectorAll('.radio-option').forEach((opt) => {
+    opt.classList.remove('selected');
+    const input = opt.querySelector<HTMLInputElement>(`input[value="${mode}"]`);
+    if (input) {
+      opt.classList.add('selected');
+      input.checked = true;
+    }
+  });
+}
+
+/**
+ * Check if tour has been completed.
+ */
+export function isTourCompleted(): boolean {
+  return localStorage.getItem('tourCompleted') === 'true';
+}
+
+/**
+ * Initialize onboarding features.
+ */
+export function initOnboarding(): void {
+  // Set up tour button handlers
+  const nextBtn = getElementById<HTMLButtonElement>('tour-next-btn');
+  if (nextBtn) {
+    nextBtn.addEventListener('click', nextTourStep);
+  }
+
+  const skipBtn = getElementById<HTMLButtonElement>('tour-skip-btn');
+  if (skipBtn) {
+    skipBtn.addEventListener('click', skipTour);
+  }
+
+  // Set up demo mode toggle
+  const demoToggle = getElementById<HTMLInputElement>('demo-mode-toggle');
+  if (demoToggle) {
+    demoToggle.addEventListener('change', () => {
+      toggleDemoMode(demoToggle.checked);
+    });
+  }
+
+  // Set up storage mode radio buttons
+  document.querySelectorAll<HTMLInputElement>('input[name="storage-mode"]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+      selectStorageMode(radio.value as 'server' | 'local');
+    });
+  });
+
+  console.debug('Onboarding initialized');
+}

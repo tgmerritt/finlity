@@ -9,6 +9,14 @@ import type { TaskStatus } from '@/types/api';
 const API_BASE = '';
 
 /**
+ * Get the API base URL.
+ * Returns empty string for same-origin requests.
+ */
+export function getBaseUrl(): string {
+  return API_BASE;
+}
+
+/**
  * HTTP methods that require HMAC signing in multi-user mode.
  */
 const SIGNING_METHODS = ['POST', 'PUT', 'DELETE', 'PATCH'];
@@ -117,22 +125,39 @@ export async function apiCall<T>(endpoint: string, options: ApiCallOptions = {})
 }
 
 /**
+ * Options for task polling.
+ */
+export interface TaskPollingOptions {
+  /** Polling interval in ms (default: 2000) */
+  interval?: number;
+  /** Maximum wait time in ms (default: 300000 = 5 minutes) */
+  maxWaitMs?: number;
+  /** Progress callback called on each poll */
+  onProgress?: (task: TaskStatus) => void;
+}
+
+/**
  * Poll for async task completion.
  * @param taskId - Task ID to poll
- * @param interval - Polling interval in ms (default: 1000)
- * @param maxAttempts - Maximum polling attempts (default: 300)
+ * @param options - Polling options
  * @returns Task result
  * @throws ApiError if task fails or times out
  */
 export async function pollForTaskResult<T>(
   taskId: string,
-  interval = 1000,
-  maxAttempts = 300
+  options: TaskPollingOptions = {}
 ): Promise<T> {
-  let attempts = 0;
+  const { interval = 2000, maxWaitMs = 300000, onProgress } = options;
 
-  while (attempts < maxAttempts) {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWaitMs) {
     const status = await apiCall<TaskStatus>(`/api/tasks/${taskId}`);
+
+    // Call progress callback if provided
+    if (onProgress) {
+      onProgress(status);
+    }
 
     if (status.status === 'completed') {
       return status.result as T;
@@ -144,7 +169,6 @@ export async function pollForTaskResult<T>(
 
     // Wait before next poll
     await new Promise((resolve) => setTimeout(resolve, interval));
-    attempts++;
   }
 
   throw new ApiError(0, 'Task polling timeout');
@@ -155,18 +179,19 @@ export async function pollForTaskResult<T>(
  * Used for long-running operations on Heroku (30s timeout).
  * @param endpoint - API endpoint
  * @param options - Request options
- * @param pollingInterval - Polling interval in ms
+ * @param taskOptions - Task polling options
  * @returns Task result
  */
 export async function runAsyncApiCall<T>(
   endpoint: string,
   options: ApiCallOptions = {},
-  pollingInterval = 1000
+  taskOptions: TaskPollingOptions = {}
 ): Promise<T> {
   const response = await apiCall<{ task_id: string; status: string }>(endpoint, options);
 
-  if (response.status === 'running' && response.task_id) {
-    return pollForTaskResult<T>(response.task_id, pollingInterval);
+  // Check for async task response (backend may return 'running' or 'pending')
+  if ((response.status === 'running' || response.status === 'pending') && response.task_id) {
+    return pollForTaskResult<T>(response.task_id, taskOptions);
   }
 
   // If not async, return the response directly

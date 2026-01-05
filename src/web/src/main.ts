@@ -3,21 +3,114 @@
  * Initializes all modules and sets up the application.
  */
 
+// Core state and session
 import { initSession } from '@/state/session';
-import { initTheme } from '@/state/theme';
+import { initTheme, toggleTheme } from '@/state/theme';
 import { store } from '@/state/store';
+
+// UI components
 import { initTabs, initMobileNav, showTab } from '@/ui/tabs';
-import { showError, showWarning } from '@/ui/toast';
+import { showToast, showError, showWarning } from '@/ui/toast';
 import { hideLoading, showLoading } from '@/ui/loading';
+import { showModal, closeModal, initModal } from '@/ui/modal';
+
+// API client
 import { apiCall } from '@/api/client';
-import type { DashboardData, Profile, PortfolioView } from '@/types/api';
+
+// Types
+import type { PortfolioView } from '@/types/api';
+
+// Charts
+import {
+  updateAllocationCharts,
+  updateHistoryChart,
+  setHistoryTimeRange,
+} from '@/charts/allocation';
+
+// Pages
+import {
+  initDashboard,
+  refreshData as refreshDashboardData,
+  loadRetirementMetrics,
+  checkForDuplicates,
+} from '@/pages/dashboard';
+import { initHoldings, updateHoldings, sortPositions } from '@/pages/holdings';
+import {
+  initAnalysis,
+  analyzeFund,
+  sendStreamingChatMessage,
+  showGlobalChat,
+  hideGlobalChat,
+} from '@/pages/analysis';
+import {
+  initProjections,
+  runProjection,
+  calculateFire,
+  loadTaxesTab,
+  runTaxProjection,
+} from '@/pages/projections';
+import { initBudget, showBudgetTab, loadBudgetTab } from '@/pages/budget';
+import {
+  initSettings,
+  loadAIProviders,
+  loadApiKeysStatus,
+  loadViewsList,
+  loadAccountsManagement,
+} from '@/pages/settings';
+
+// Features
+import {
+  initProfiles,
+  loadProfiles,
+  updateProfileDisplay,
+  switchProfile,
+} from '@/features/profiles';
+import { initCommentary, initAICommentaryButtons } from '@/features/commentary';
+import {
+  initPlugins,
+  loadPlugins,
+  loadInstalledPlugins,
+  loadPluginSecurity,
+  loadWidgets,
+  loadPluginAnalysis,
+} from '@/features/plugins';
+import {
+  initImportExport,
+  exportToCSV,
+  exportAllToCSV,
+  confirmImport,
+  hideImportModal,
+} from '@/features/import-export';
+import {
+  initOnboarding,
+  isFirstVisit,
+  startDemoMode,
+  checkDemoModeStatus,
+  toggleDemoMode,
+  startTour,
+  nextTourStep,
+  endTour,
+  showProfileSetup,
+  closeProfileSetup,
+} from '@/features/onboarding';
+
+// Utilities
+import { formatCurrency, formatPercent, formatNumber } from '@/utils/format';
+import { escapeHtml } from '@/utils/html';
 
 // Re-export commonly used functions for global access during transition
-export { formatCurrency, formatPercent, formatShares, formatPrice } from '@/utils/format';
+export {
+  formatCurrency,
+  formatPercent,
+  formatShares,
+  formatPrice,
+  formatNumber,
+} from '@/utils/format';
 export { showToast, showSuccess, showError, showWarning, showInfo } from '@/ui/toast';
 export { showLoading, hideLoading, withLoading } from '@/ui/loading';
 export { showTab, getCurrentTab } from '@/ui/tabs';
-export { apiCall, runAsyncApiCall } from '@/api/client';
+export { showModal, closeModal } from '@/ui/modal';
+export { apiCall, runAsyncApiCall, getBaseUrl } from '@/api/client';
 export { store, get, set } from '@/state/store';
 export { isDarkMode, toggleTheme, getChartColors } from '@/state/theme';
 export {
@@ -28,34 +121,7 @@ export {
 } from '@/charts/plotly-utils';
 
 /**
- * Check if this is the user's first visit.
- */
-function isFirstVisit(): boolean {
-  return !localStorage.getItem('hasVisitedBefore');
-}
-
-/**
- * Load profiles from the API.
- * Failures are logged and shown to user - app continues with limited functionality.
- */
-async function loadProfiles(): Promise<void> {
-  try {
-    const profiles = await apiCall<Profile[]>('/api/profiles');
-    store.set('profiles', profiles);
-
-    const activeProfile = profiles.find((p) => p.is_active);
-    if (activeProfile) {
-      store.set('activeProfileId', activeProfile.id);
-    }
-  } catch (error) {
-    console.error('Failed to load profiles:', error);
-    showWarning('Unable to load profiles. Some features may be limited.');
-  }
-}
-
-/**
  * Load portfolio views from the API.
- * Failures are logged and shown to user - app continues with limited functionality.
  */
 async function loadViews(): Promise<void> {
   try {
@@ -68,34 +134,36 @@ async function loadViews(): Promise<void> {
 }
 
 /**
- * Load dashboard data from the API.
+ * Update price status display.
  */
-async function loadDashboardData(): Promise<void> {
+async function updatePriceStatus(): Promise<void> {
   try {
-    const viewId = store.get('currentViewId');
-    const endpoint = viewId ? `/api/dashboard/data?view_id=${viewId}` : '/api/dashboard/data';
-
-    const data = await apiCall<DashboardData>(endpoint);
-
-    store.update({
-      currentPositions: data.positions,
-      portfolioHistory: data.history,
-      accounts: data.summary.accounts,
-      demoMode: data.demo_mode,
-    });
+    const data = await apiCall<{ last_update: string | null; prices_stale: boolean }>(
+      '/api/portfolio/price-status'
+    );
+    const statusEl = document.getElementById('price-status');
+    if (statusEl && data.last_update) {
+      const lastUpdate = new Date(data.last_update);
+      const timeStr = lastUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      statusEl.textContent = data.prices_stale
+        ? `Prices from ${timeStr} (stale)`
+        : `Prices as of ${timeStr}`;
+      statusEl.className = data.prices_stale ? 'price-status stale' : 'price-status';
+    }
   } catch (error) {
-    console.error('Failed to load dashboard data:', error);
-    showError('Failed to load portfolio data');
+    console.error('Failed to check price status:', error);
   }
 }
 
 /**
- * Refresh all data.
+ * Refresh all portfolio data.
  */
 export async function refreshData(): Promise<void> {
   showLoading('Refreshing data...');
   try {
-    await Promise.all([loadDashboardData(), loadProfiles(), loadViews()]);
+    await refreshDashboardData();
+    await loadRetirementMetrics();
+    initAICommentaryButtons();
   } finally {
     hideLoading();
   }
@@ -110,26 +178,44 @@ function initSidebarState(): void {
   if (sidebar && collapsed) {
     sidebar.classList.add('collapsed');
   }
+
+  // Set up toggle button
+  const toggleBtn = document.getElementById('sidebar-toggle');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      const sidebar = document.querySelector('.sidebar');
+      if (sidebar) {
+        sidebar.classList.toggle('collapsed');
+        localStorage.setItem('sidebarCollapsed', String(sidebar.classList.contains('collapsed')));
+      }
+    });
+  }
 }
 
 /**
- * Check and display demo mode status.
- * Failures are logged - users should know if data mode is uncertain.
+ * Initialize storage mode preference.
  */
-async function checkDemoModeStatus(): Promise<void> {
-  try {
-    const response = await apiCall<{ demo_mode: boolean }>('/api/settings/demo-mode');
-    store.set('demoMode', response.demo_mode);
-
-    const banner = document.getElementById('demo-mode-banner');
-    if (banner) {
-      banner.style.display = response.demo_mode ? 'flex' : 'none';
-    }
-  } catch (error) {
-    console.error('Failed to check demo mode:', error);
-    // Show warning since user should know if demo mode status is unknown
-    showWarning('Unable to verify data mode. Status unknown.');
+function initStorageMode(): void {
+  const mode = localStorage.getItem('storageMode') || 'server';
+  const badge = document.getElementById('storage-mode-badge');
+  if (badge) {
+    badge.textContent = mode === 'server' ? 'Server' : 'Local';
+    badge.className = `badge ${mode}`;
   }
+}
+
+/**
+ * Initialize collapsible config panels.
+ */
+function initConfigPanels(): void {
+  document.querySelectorAll('.config-header').forEach((header) => {
+    header.addEventListener('click', () => {
+      const panel = header.closest('.config-panel');
+      if (panel) {
+        panel.classList.toggle('expanded');
+      }
+    });
+  });
 }
 
 /**
@@ -144,22 +230,43 @@ async function init(): Promise<void> {
   // Initialize UI components
   initTabs();
   initMobileNav();
+  initModal();
   initSidebarState();
+  initStorageMode();
+  initConfigPanels();
 
   // Initialize session (for multi-user mode)
   await initSession();
 
+  // Initialize features
+  initProfiles();
+  initCommentary();
+  initPlugins();
+  initImportExport();
+  initOnboarding();
+
+  // Initialize pages
+  initDashboard();
+  initHoldings();
+  initAnalysis();
+  initProjections();
+  initBudget();
+  initSettings();
+
   // Load initial data
   showLoading('Loading portfolio...');
   try {
-    await Promise.all([loadProfiles(), loadViews(), checkDemoModeStatus()]);
+    await loadProfiles();
+    await loadViews();
+    await updatePriceStatus();
+    await checkDemoModeStatus();
 
     // Show welcome tab for first-time visitors
     if (isFirstVisit()) {
       showTab('welcome');
     } else {
       showTab('dashboard');
-      await loadDashboardData();
+      await refreshData();
     }
   } catch (error) {
     console.error('Initialization error:', error);
@@ -191,18 +298,162 @@ if (document.readyState === 'loading') {
 declare global {
   interface Window {
     finlity: {
+      // Navigation
       showTab: typeof showTab;
       refreshData: typeof refreshData;
-      toggleTheme: typeof import('@/state/theme').toggleTheme;
+      toggleTheme: typeof toggleTheme;
+
+      // UI
+      showModal: typeof showModal;
+      closeModal: typeof closeModal;
+      showToast: typeof showToast;
+
+      // Dashboard
+      checkForDuplicates: typeof checkForDuplicates;
+
+      // Holdings
+      updateHoldings: typeof updateHoldings;
+      sortPositions: typeof sortPositions;
+
+      // Analysis
+      analyzeFund: typeof analyzeFund;
+      sendStreamingChatMessage: typeof sendStreamingChatMessage;
+      showGlobalChat: typeof showGlobalChat;
+      hideGlobalChat: typeof hideGlobalChat;
+
+      // Projections
+      runProjection: typeof runProjection;
+      calculateFire: typeof calculateFire;
+      loadTaxesTab: typeof loadTaxesTab;
+      runTaxProjection: typeof runTaxProjection;
+
+      // Budget
+      showBudgetTab: typeof showBudgetTab;
+      loadBudgetTab: typeof loadBudgetTab;
+
+      // Settings
+      loadAIProviders: typeof loadAIProviders;
+      loadApiKeysStatus: typeof loadApiKeysStatus;
+      loadViewsList: typeof loadViewsList;
+      loadAccountsManagement: typeof loadAccountsManagement;
+
+      // Profiles
+      loadProfiles: typeof loadProfiles;
+      switchProfile: typeof switchProfile;
+      updateProfileDisplay: typeof updateProfileDisplay;
+
+      // Plugins
+      loadPlugins: typeof loadPlugins;
+      loadInstalledPlugins: typeof loadInstalledPlugins;
+      loadPluginSecurity: typeof loadPluginSecurity;
+      loadWidgets: typeof loadWidgets;
+      loadPluginAnalysis: typeof loadPluginAnalysis;
+
+      // Import/Export
+      exportToCSV: typeof exportToCSV;
+      exportAllToCSV: typeof exportAllToCSV;
+      confirmImport: typeof confirmImport;
+      hideImportModal: typeof hideImportModal;
+
+      // Onboarding
+      startDemoMode: typeof startDemoMode;
+      toggleDemoMode: typeof toggleDemoMode;
+      startTour: typeof startTour;
+      nextTourStep: typeof nextTourStep;
+      endTour: typeof endTour;
+      showProfileSetup: typeof showProfileSetup;
+      closeProfileSetup: typeof closeProfileSetup;
+
+      // Charts
+      updateAllocationCharts: typeof updateAllocationCharts;
+      updateHistoryChart: typeof updateHistoryChart;
+      setHistoryTimeRange: typeof setHistoryTimeRange;
+
+      // Utilities
+      formatCurrency: typeof formatCurrency;
+      formatPercent: typeof formatPercent;
+      formatNumber: typeof formatNumber;
+      escapeHtml: typeof escapeHtml;
     };
   }
 }
 
-// Set up global access
-import { toggleTheme } from '@/state/theme';
-
+// Set up global access for HTML onclick handlers
 window.finlity = {
+  // Navigation
   showTab,
   refreshData,
   toggleTheme,
+
+  // UI
+  showModal,
+  closeModal,
+  showToast,
+
+  // Dashboard
+  checkForDuplicates,
+
+  // Holdings
+  updateHoldings,
+  sortPositions,
+
+  // Analysis
+  analyzeFund,
+  sendStreamingChatMessage,
+  showGlobalChat,
+  hideGlobalChat,
+
+  // Projections
+  runProjection,
+  calculateFire,
+  loadTaxesTab,
+  runTaxProjection,
+
+  // Budget
+  showBudgetTab,
+  loadBudgetTab,
+
+  // Settings
+  loadAIProviders,
+  loadApiKeysStatus,
+  loadViewsList,
+  loadAccountsManagement,
+
+  // Profiles
+  loadProfiles,
+  switchProfile,
+  updateProfileDisplay,
+
+  // Plugins
+  loadPlugins,
+  loadInstalledPlugins,
+  loadPluginSecurity,
+  loadWidgets,
+  loadPluginAnalysis,
+
+  // Import/Export
+  exportToCSV,
+  exportAllToCSV,
+  confirmImport,
+  hideImportModal,
+
+  // Onboarding
+  startDemoMode,
+  toggleDemoMode,
+  startTour,
+  nextTourStep,
+  endTour,
+  showProfileSetup,
+  closeProfileSetup,
+
+  // Charts
+  updateAllocationCharts,
+  updateHistoryChart,
+  setHistoryTimeRange,
+
+  // Utilities
+  formatCurrency,
+  formatPercent,
+  formatNumber,
+  escapeHtml,
 };

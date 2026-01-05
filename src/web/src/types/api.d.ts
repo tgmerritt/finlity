@@ -15,9 +15,9 @@ export type AccountType =
   | '529'
   | 'hysa'
   | 'real_estate'
-  | string; // Allow custom types
+  | (string & {}); // Allow custom types
 
-export type Brokerage = 'schwab' | 'fidelity' | 'vanguard' | 'other' | string;
+export type Brokerage = 'schwab' | 'fidelity' | 'vanguard' | 'other' | (string & {});
 
 export type AssetClass = 'equity' | 'fixed_income' | 'alternative' | 'cash';
 
@@ -188,22 +188,24 @@ export interface PerformanceMetrics {
 export interface IncomeSource {
   id: string;
   name: string;
-  amount: number;
-  frequency: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly' | 'annual';
-  type: 'salary' | 'bonus' | 'investment' | 'rental' | 'social_security' | 'pension' | 'other';
-  is_active: boolean;
-  pretax_deductions?: number;
+  income_type: string;
+  gross_annual: number;
+  pay_frequency: string;
+  state?: string;
+  is_active?: boolean;
   notes?: string | null;
 }
 
 export interface Expense {
   id: string;
   name: string;
+  category_id?: string;
+  category_name?: string;
   amount: number;
-  frequency: 'weekly' | 'biweekly' | 'semimonthly' | 'monthly' | 'annual';
-  category: string;
-  is_essential: boolean;
-  is_active: boolean;
+  monthly_amount: number;
+  frequency: string;
+  is_essential?: boolean;
+  is_active?: boolean;
   notes?: string | null;
 }
 
@@ -264,17 +266,21 @@ export interface SettingsResponse {
 export interface Profile {
   id: string;
   name: string;
+  description?: string;
   color: string;
+  icon?: string;
   is_active: boolean;
-  created_at: string;
+  created_at?: string;
+  last_accessed?: string;
 }
 
 // View types
 export interface PortfolioView {
   id: string;
   name: string;
-  account_ids: string;
-  created_at: string;
+  account_ids: string | string[];
+  created_at?: string;
+  is_default?: boolean;
 }
 
 // Trigger types
@@ -292,9 +298,11 @@ export interface Trigger {
 // Task types (for async operations)
 export interface TaskStatus {
   task_id: string;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'failed' | 'pending';
   result?: unknown;
   error?: string;
+  progress?: number;
+  progress_message?: string;
 }
 
 // Generic API response wrapper
@@ -302,4 +310,103 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
   status: number;
+}
+
+// Plugin types
+export interface Plugin {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  plugin_type: 'importer' | 'analyzer' | 'widget' | 'provider' | 'exporter';
+  enabled: boolean;
+  has_settings: boolean;
+  requires_approval: boolean;
+  approved: boolean;
+  source_url?: string | null;
+  author?: string | null;
+}
+
+// Budget types - Deduction
+export interface Deduction {
+  id: string;
+  label?: string;
+  name?: string;
+  deduction_type: string;
+  amount_per_period: number;
+  employer_match?: number;
+  is_percentage?: boolean;
+  is_active?: boolean;
+  notes?: string | null;
+}
+
+// AI Provider types
+export interface AIProvider {
+  id: string;
+  name?: string;
+  display_name?: string;
+  models: AIModel[];
+  is_available?: boolean;
+  requires_api_key?: boolean;
+  api_key_configured?: boolean;
+}
+
+export interface AIModel {
+  id: string;
+  name?: string;
+  display_name?: string;
+  description?: string;
+  is_default?: boolean;
+  context_length?: number;
+  capabilities?: string[];
+}
+
+// Duplicate position detection
+export interface DuplicateGroup {
+  ticker: string;
+  positions: DashboardPosition[];
+  total_shares: number;
+  total_value: number;
+}
+
+// Import data types
+export interface ImportParseResult {
+  filename: string;
+  account_type?: string;
+  positions: ImportPosition[];
+  errors: string[];
+  warnings: string[];
+}
+
+export interface ImportPosition {
+  ticker: string;
+  name?: string;
+  shares: number;
+  price?: number;
+  cost_basis?: number;
+  selected: boolean;
+}
+
+// Commentary cache types
+export interface CommentaryEntry {
+  content: string;
+  timestamp: number;
+  isStatic: boolean;
+}
+
+// Retirement metrics
+export interface RetirementMetrics {
+  retirement_age: number | null;
+  years_to_retirement: number | null;
+  fire_number: number | null;
+  current_savings_rate: number | null;
+  safe_withdrawal_amount: number | null;
+  social_security_estimate: number | null;
+}
+
+// Price status
+export interface PriceStatus {
+  last_updated: string | null;
+  stale_count: number;
+  total_count: number;
 }

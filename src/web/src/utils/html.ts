@@ -141,11 +141,7 @@ export function addEventHandler<K extends keyof HTMLElementEventMap>(
  * @param visible - Whether to show the element
  * @param display - Display style when visible (default: 'block')
  */
-export function setVisible(
-  element: HTMLElement | null,
-  visible: boolean,
-  display = 'block'
-): void {
+export function setVisible(element: HTMLElement | null, visible: boolean, display = 'block'): void {
   if (element) {
     element.style.display = visible ? display : 'none';
   }

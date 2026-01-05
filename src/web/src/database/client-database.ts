@@ -112,7 +112,11 @@ export class ClientDatabase {
 
     try {
       // initSqlJs is a global function from the CDN script
-      const initSqlJs = (window as unknown as { initSqlJs: (config: { locateFile: (file: string) => string }) => Promise<SqlJsStatic> }).initSqlJs;
+      const initSqlJs = (
+        window as unknown as {
+          initSqlJs: (config: { locateFile: (file: string) => string }) => Promise<SqlJsStatic>;
+        }
+      ).initSqlJs;
       this.SQL = await initSqlJs({
         locateFile: (file: string) => `https://sql.js.org/dist/${file}`,
       });
@@ -219,7 +223,10 @@ export class ClientDatabase {
         return { status: 'saved', name: this.fileHandle.name };
       } catch (error) {
         console.error('Failed to save to file:', error);
-        return { status: 'failed', error: error instanceof Error ? error.message : 'Unknown error' };
+        return {
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
       }
     } else if (this.hasFileSystemAccess()) {
       // Save As - pick new location
@@ -247,7 +254,10 @@ export class ClientDatabase {
         if ((error as Error).name === 'AbortError') {
           return { status: 'cancelled' };
         }
-        return { status: 'failed', error: error instanceof Error ? error.message : 'Unknown error' };
+        return {
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
       }
     } else {
       // Fallback: download file
