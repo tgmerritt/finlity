@@ -17,6 +17,11 @@ env/
 dist/
 build/
 
+# ----- Node.js -----
+node_modules/
+.npm/
+.eslintcache
+
 # ----- Sensitive Data (contains financial info & PII) -----
 # Database files (contain account names, positions, API keys)
 # Note: data/demo/demo.db is explicitly tracked for deployments

@@ -47,3 +47,19 @@ services:
     # Use --reload for auto-restart on code changes
     command: ["python", "-m", "src.main", "--host", "0.0.0.0", "--no-browser", "--reload"]
     restart: unless-stopped
+
+  # Frontend development with Vite hot reload
+  # Use: docker-compose --profile frontend-dev up
+  frontend-dev:
+    image: node:20-alpine
+    container_name: finlity-frontend-dev
+    profiles:
+      - frontend-dev
+    working_dir: /app/src/web
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./src/web:/app/src/web
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    depends_on:
+      - portfolio-dev

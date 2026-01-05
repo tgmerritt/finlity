@@ -1,0 +1,785 @@
+/**
+ * AI Commentary System
+ * Provides AI-generated insights for dashboard elements with streaming support.
+ */
+
+import { showToast } from '@/ui/toast';
+import { getBaseUrl } from '@/api/client';
+
+/**
+ * Commentary data from API.
+ */
+export interface CommentaryData {
+  commentary: string;
+  age_hours?: number;
+  is_cached?: boolean;
+  is_static?: boolean;
+  element_id: string;
+  action_items?: string[];
+  error?: string;
+}
+
+/**
+ * Static explanation configuration.
+ */
+interface StaticExplanation {
+  title: string;
+  content: string;
+  is_static: true;
+}
+
+/**
+ * SSE message types for streaming commentary.
+ */
+interface CommentarySSEMessage {
+  type?: 'cached' | 'chunk' | 'complete';
+  error?: string;
+  commentary?: string;
+  text?: string;
+  age_hours?: number;
+}
+
+/**
+ * Static explanations for elements that don't need dynamic AI generation.
+ * These are pre-written, educational explanations that apply universally.
+ */
+const STATIC_EXPLANATIONS: Record<string, StaticExplanation> = {
+  'projections.monte_carlo_settings': {
+    title: 'What is a Monte Carlo Simulation?',
+    content: `**Monte Carlo simulation** is a way to understand how your retirement savings might grow over time, accounting for the uncertainty of the stock market.
+
+**How it works:**
+
+Instead of assuming the market returns exactly 7% every year (which never happens in real life), Monte Carlo runs **thousands of simulated futures**. Each simulation uses random market returns based on historical patterns—some years up 20%, others down 15%, just like reality.
+
+**What the results tell you:**
+
+- **Success Rate**: The percentage of simulations where you didn't run out of money. 80-90% is generally considered good.
+- **Percentile Bands**: The shaded areas show the range of possible outcomes. The median (50th percentile) is the "typical" case, while the 10th and 90th percentiles show pessimistic and optimistic scenarios.
+
+**The settings explained:**
+
+- **Current/Retirement Age**: Your timeline for saving vs. spending
+- **Monthly Contribution**: What you're adding during working years
+- **Monthly Withdrawal**: What you'll spend in retirement
+- **Stocks/Bonds %**: Higher stocks = more growth potential but more volatility
+
+**Key insight**: Monte Carlo doesn't predict the future—it shows the *range of possibilities* so you can plan for uncertainty rather than a single "best guess."`,
+    is_static: true,
+  },
+};
+
+/**
+ * Cache for commentary responses.
+ */
+let commentaryCache: Record<string, CommentaryData> = {};
+
+/**
+ * Currently active popover element.
+ */
+let activePopover: HTMLElement | null = null;
+
+/**
+ * Track if event listeners have been initialized.
+ */
+let commentaryListenersInitialized = false;
+
+/**
+ * Clear the AI commentary cache.
+ * Call this when switching databases/profiles.
+ */
+export function clearCommentaryCache(): void {
+  commentaryCache = {};
+  // Remove any existing AI buttons so they can be re-initialized
+  document.querySelectorAll('.ai-info-btn').forEach((btn) => btn.remove());
+  // Close any open popovers
+  closeAICommentary();
+  console.debug('AI Commentary: Cache and buttons cleared');
+}
+
+/**
+ * Parsed markdown token types.
+ */
+type MarkdownToken =
+  | { type: 'paragraph'; content: InlineToken[] }
+  | { type: 'bullet-list'; items: InlineToken[][] }
+  | { type: 'numbered-list'; items: InlineToken[][] };
+
+type InlineToken =
+  | { type: 'text'; content: string }
+  | { type: 'bold'; content: string }
+  | { type: 'italic'; content: string };
+
+/**
+ * Parse inline markdown (bold, italic) into tokens.
+ */
+function parseInlineMarkdown(text: string): InlineToken[] {
+  const tokens: InlineToken[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    // Check for bold: **text** or __text__
+    const boldMatch = remaining.match(/^(\*\*|__)(.+?)\1/);
+    if (boldMatch && boldMatch[2]) {
+      tokens.push({ type: 'bold', content: boldMatch[2] });
+      remaining = remaining.slice(boldMatch[0].length);
+      continue;
+    }
+
+    // Check for italic: *text* or _text_
+    const italicMatch = remaining.match(/^(\*|_)([^*_]+?)\1/);
+    if (italicMatch && italicMatch[2]) {
+      tokens.push({ type: 'italic', content: italicMatch[2] });
+      remaining = remaining.slice(italicMatch[0].length);
+      continue;
+    }
+
+    // Find next special character
+    const nextSpecial = remaining.search(/[*_]/);
+    if (nextSpecial === -1) {
+      // No more special characters
+      tokens.push({ type: 'text', content: remaining });
+      break;
+    } else if (nextSpecial === 0) {
+      // Special character at start but didn't match pattern - treat as text
+      tokens.push({ type: 'text', content: remaining.charAt(0) });
+      remaining = remaining.slice(1);
+    } else {
+      // Text before special character
+      tokens.push({ type: 'text', content: remaining.slice(0, nextSpecial) });
+      remaining = remaining.slice(nextSpecial);
+    }
+  }
+
+  return tokens;
+}
+
+/**
+ * Parse markdown text into tokens for safe DOM rendering.
+ */
+function parseMarkdownToTokens(text: string): MarkdownToken[] {
+  if (!text) return [];
+
+  const lines = text.split('\n');
+  const tokens: MarkdownToken[] = [];
+  let currentBulletItems: InlineToken[][] = [];
+  let currentNumberedItems: InlineToken[][] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    // Bullet list: - item or * item
+    const bulletMatch = line.match(/^[-*]\s+(.+)$/);
+    if (bulletMatch) {
+      // Flush numbered list if any
+      if (currentNumberedItems.length > 0) {
+        tokens.push({ type: 'numbered-list', items: currentNumberedItems });
+        currentNumberedItems = [];
+      }
+      currentBulletItems.push(parseInlineMarkdown(bulletMatch[1] || ''));
+      continue;
+    }
+
+    // Numbered list: 1. item
+    const numberedMatch = line.match(/^\d+\.\s+(.+)$/);
+    if (numberedMatch) {
+      // Flush bullet list if any
+      if (currentBulletItems.length > 0) {
+        tokens.push({ type: 'bullet-list', items: currentBulletItems });
+        currentBulletItems = [];
+      }
+      currentNumberedItems.push(parseInlineMarkdown(numberedMatch[1] || ''));
+      continue;
+    }
+
+    // End lists if we hit a non-list line
+    if (currentBulletItems.length > 0) {
+      tokens.push({ type: 'bullet-list', items: currentBulletItems });
+      currentBulletItems = [];
+    }
+    if (currentNumberedItems.length > 0) {
+      tokens.push({ type: 'numbered-list', items: currentNumberedItems });
+      currentNumberedItems = [];
+    }
+
+    // Regular line - wrap in paragraph if not empty
+    if (line) {
+      tokens.push({ type: 'paragraph', content: parseInlineMarkdown(line) });
+    }
+  }
+
+  // Flush any remaining lists
+  if (currentBulletItems.length > 0) {
+    tokens.push({ type: 'bullet-list', items: currentBulletItems });
+  }
+  if (currentNumberedItems.length > 0) {
+    tokens.push({ type: 'numbered-list', items: currentNumberedItems });
+  }
+
+  return tokens;
+}
+
+/**
+ * Render inline tokens to a container element.
+ */
+function renderInlineTokens(container: HTMLElement, tokens: InlineToken[]): void {
+  for (const token of tokens) {
+    switch (token.type) {
+      case 'text':
+        container.appendChild(document.createTextNode(token.content));
+        break;
+      case 'bold': {
+        const strong = document.createElement('strong');
+        strong.textContent = token.content;
+        container.appendChild(strong);
+        break;
+      }
+      case 'italic': {
+        const em = document.createElement('em');
+        em.textContent = token.content;
+        container.appendChild(em);
+        break;
+      }
+    }
+  }
+}
+
+/**
+ * Render parsed markdown tokens to a container using safe DOM methods.
+ */
+function renderMarkdownToElement(container: HTMLElement, text: string): void {
+  container.textContent = ''; // Clear existing content
+
+  const tokens = parseMarkdownToTokens(text);
+
+  for (const token of tokens) {
+    switch (token.type) {
+      case 'paragraph': {
+        const p = document.createElement('p');
+        renderInlineTokens(p, token.content);
+        container.appendChild(p);
+        break;
+      }
+      case 'bullet-list': {
+        const ul = document.createElement('ul');
+        for (const itemTokens of token.items) {
+          const li = document.createElement('li');
+          renderInlineTokens(li, itemTokens);
+          ul.appendChild(li);
+        }
+        container.appendChild(ul);
+        break;
+      }
+      case 'numbered-list': {
+        const ol = document.createElement('ol');
+        for (const itemTokens of token.items) {
+          const li = document.createElement('li');
+          renderInlineTokens(li, itemTokens);
+          ol.appendChild(li);
+        }
+        container.appendChild(ol);
+        break;
+      }
+    }
+  }
+
+  // If no content was rendered, show default message
+  if (container.childNodes.length === 0) {
+    const p = document.createElement('p');
+    p.textContent = 'No commentary available.';
+    container.appendChild(p);
+  }
+}
+
+/**
+ * Create popover element for commentary display.
+ */
+function createPopoverElement(elementId: string): HTMLDivElement {
+  const popover = document.createElement('div');
+  popover.className = 'ai-commentary-popover';
+  popover.id = 'ai-popover-' + elementId.replace(/\./g, '-');
+
+  const header = document.createElement('div');
+  header.className = 'commentary-header';
+
+  const badge = document.createElement('span');
+  badge.className = 'ai-badge';
+  badge.textContent = 'AI Insight';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'commentary-close';
+  closeBtn.textContent = '×';
+  closeBtn.onclick = closeAICommentary;
+
+  header.appendChild(badge);
+  header.appendChild(closeBtn);
+
+  const body = document.createElement('div');
+  body.className = 'commentary-body';
+
+  const loading = document.createElement('div');
+  loading.className = 'commentary-loading';
+
+  const spinner = document.createElement('div');
+  spinner.className = 'commentary-loading-spinner';
+
+  const loadingText = document.createElement('span');
+  loadingText.className = 'commentary-loading-text';
+  loadingText.textContent = 'Generating insight...';
+
+  loading.appendChild(spinner);
+  loading.appendChild(loadingText);
+  body.appendChild(loading);
+
+  popover.appendChild(header);
+  popover.appendChild(body);
+
+  return popover;
+}
+
+/**
+ * Show AI commentary popover for an element.
+ */
+export async function showAICommentary(button: HTMLButtonElement): Promise<void> {
+  const elementId = button.dataset.elementId;
+  if (!elementId) return;
+
+  // Close any existing popover
+  closeAICommentary();
+
+  // Create container and popover
+  const container = document.createElement('div');
+  container.className = 'ai-popover-container';
+
+  const popover = createPopoverElement(elementId);
+  container.appendChild(popover);
+  document.body.appendChild(container);
+  activePopover = container;
+
+  // Position the popover (use fixed positioning)
+  positionPopover(popover, button);
+
+  // Trigger animation by adding visible class after append
+  requestAnimationFrame(() => {
+    container.classList.add('visible');
+  });
+
+  // Check for static explanation first (no API call needed)
+  if (STATIC_EXPLANATIONS[elementId]) {
+    const staticData = STATIC_EXPLANATIONS[elementId];
+    renderCommentaryContent(popover, {
+      commentary: staticData.content,
+      is_static: true,
+      element_id: elementId,
+    });
+    return;
+  }
+
+  // Check cache for dynamic content
+  if (commentaryCache[elementId] && !commentaryCache[elementId].error) {
+    renderCommentaryContent(popover, commentaryCache[elementId]);
+    return;
+  }
+
+  // Use streaming API for real-time text generation
+  try {
+    const baseUrl = getBaseUrl();
+    const eventSource = new EventSource(`${baseUrl}/api/commentary/${elementId}/stream`);
+    let fullText = '';
+    let ageHours = 0;
+
+    // Get content area and prepare for streaming
+    const body = popover.querySelector('.commentary-body');
+    const loading = body?.querySelector('.commentary-loading');
+
+    eventSource.onmessage = (event: MessageEvent) => {
+      const data: CommentarySSEMessage = JSON.parse(event.data);
+
+      if (data.error) {
+        eventSource.close();
+        renderCommentaryError(popover, data.error);
+        return;
+      }
+
+      if (data.type === 'cached') {
+        // Cached response - show immediately
+        fullText = data.commentary || '';
+        ageHours = data.age_hours || 0;
+        eventSource.close();
+        commentaryCache[elementId] = {
+          commentary: fullText,
+          age_hours: ageHours,
+          is_cached: true,
+          element_id: elementId,
+        };
+        renderCommentaryContent(popover, commentaryCache[elementId]);
+        return;
+      }
+
+      if (data.type === 'chunk') {
+        // First chunk - switch from loading to content
+        if (!fullText && body) {
+          if (loading) loading.remove();
+          const contentDiv = document.createElement('div');
+          contentDiv.className = 'commentary-content streaming';
+          body.appendChild(contentDiv);
+        }
+
+        fullText += data.text || '';
+
+        // Update content with parsed markdown using safe DOM methods
+        const contentDiv = body?.querySelector('.commentary-content');
+        if (contentDiv instanceof HTMLElement) {
+          renderMarkdownToElement(contentDiv, fullText);
+        }
+      }
+
+      if (data.type === 'complete' && body) {
+        eventSource.close();
+        ageHours = data.age_hours || 0;
+
+        // Cache the result
+        commentaryCache[elementId] = {
+          commentary: fullText,
+          age_hours: ageHours,
+          is_cached: false,
+          element_id: elementId,
+        };
+
+        // Remove streaming class
+        const contentDiv = body.querySelector('.commentary-content');
+        if (contentDiv) {
+          contentDiv.classList.remove('streaming');
+        }
+
+        // Add footer
+        const footer = document.createElement('div');
+        footer.className = 'commentary-footer';
+
+        const ageSpan = document.createElement('span');
+        ageSpan.className = 'commentary-age';
+        ageSpan.textContent = 'Generated just now';
+        footer.appendChild(ageSpan);
+
+        const refreshBtn = document.createElement('button');
+        refreshBtn.className = 'btn btn-sm btn-link';
+        refreshBtn.textContent = 'Refresh';
+        refreshBtn.onclick = () => refreshCommentary(elementId);
+        footer.appendChild(refreshBtn);
+
+        body.appendChild(footer);
+      }
+    };
+
+    eventSource.onerror = (error: Event) => {
+      console.error('SSE error:', error);
+      eventSource.close();
+      if (!fullText) {
+        renderCommentaryError(popover, 'Connection error. Please try again.');
+      }
+    };
+  } catch (error) {
+    console.error('Failed to start streaming:', error);
+    renderCommentaryError(popover, error instanceof Error ? error.message : 'Unknown error');
+  }
+}
+
+/**
+ * Close the active AI commentary popover.
+ */
+export function closeAICommentary(): void {
+  if (activePopover) {
+    activePopover.remove();
+    activePopover = null;
+  }
+  // Also close any orphaned containers and popovers
+  document.querySelectorAll('.ai-popover-container').forEach((c) => c.remove());
+  document.querySelectorAll('.ai-commentary-popover').forEach((p) => p.remove());
+}
+
+/**
+ * Position popover relative to button.
+ */
+function positionPopover(popover: HTMLElement, button: HTMLElement): void {
+  const rect = button.getBoundingClientRect();
+
+  // Default position: below and to the right
+  let top = rect.bottom + 8;
+  let left = rect.left;
+
+  // Adjust if would go off right edge
+  if (left + 350 > window.innerWidth) {
+    left = window.innerWidth - 360;
+  }
+
+  // Adjust if would go off bottom edge
+  if (top + 300 > window.innerHeight) {
+    top = rect.top - 308;
+  }
+
+  // Ensure doesn't go off left edge
+  if (left < 10) {
+    left = 10;
+  }
+
+  popover.style.top = top + 'px';
+  popover.style.left = left + 'px';
+}
+
+/**
+ * Get formatted age text from hours.
+ */
+function getAgeText(ageHours: number | undefined): string {
+  if (ageHours === undefined) return '';
+
+  if (ageHours < 1) {
+    return 'Generated just now';
+  } else if (ageHours < 24) {
+    return `Generated ${Math.round(ageHours)} hours ago`;
+  } else {
+    return `Generated ${Math.round(ageHours / 24)} days ago`;
+  }
+}
+
+/**
+ * Render commentary content in popover.
+ */
+function renderCommentaryContent(popover: HTMLElement, data: CommentaryData): void {
+  const body = popover.querySelector('.commentary-body');
+  if (!body) return;
+
+  body.textContent = ''; // Clear loading
+
+  const ageText = getAgeText(data.age_hours);
+
+  // Content div - render markdown using safe DOM methods
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'commentary-content';
+  renderMarkdownToElement(contentDiv, data.commentary);
+  body.appendChild(contentDiv);
+
+  // Action items (if any)
+  if (data.action_items && data.action_items.length > 0) {
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'commentary-actions';
+
+    const actionsTitle = document.createElement('strong');
+    actionsTitle.textContent = 'Suggested Actions:';
+    actionsDiv.appendChild(actionsTitle);
+
+    const actionsList = document.createElement('ul');
+    data.action_items.forEach((item) => {
+      const li = document.createElement('li');
+      li.textContent = item;
+      actionsList.appendChild(li);
+    });
+    actionsDiv.appendChild(actionsList);
+    body.appendChild(actionsDiv);
+  }
+
+  // Footer
+  const footer = document.createElement('div');
+  footer.className = 'commentary-footer';
+
+  const ageSpan = document.createElement('span');
+  ageSpan.className = 'commentary-age';
+
+  if (data.is_static) {
+    // Static explanation - no refresh needed
+    ageSpan.textContent = 'Educational content';
+  } else {
+    // Dynamic AI-generated content
+    ageSpan.textContent = ageText + (data.is_cached ? ' (cached)' : '');
+
+    const refreshBtn = document.createElement('button');
+    refreshBtn.className = 'btn btn-sm btn-link';
+    refreshBtn.textContent = 'Refresh';
+    refreshBtn.onclick = () => refreshCommentary(data.element_id);
+    footer.appendChild(refreshBtn);
+  }
+
+  footer.insertBefore(ageSpan, footer.firstChild);
+  body.appendChild(footer);
+}
+
+/**
+ * Render error state in popover.
+ */
+function renderCommentaryError(popover: HTMLElement, message: string): void {
+  const body = popover.querySelector('.commentary-body');
+  if (!body) return;
+
+  body.textContent = ''; // Clear loading
+
+  const errorDiv = document.createElement('div');
+  errorDiv.className = 'commentary-error';
+
+  const errorIcon = document.createElement('span');
+  errorIcon.className = 'error-icon';
+  errorIcon.textContent = '⚠️';
+
+  const errorText = document.createElement('span');
+  errorText.textContent = 'Unable to generate insight';
+
+  const errorDetail = document.createElement('small');
+  errorDetail.textContent = message;
+
+  errorDiv.appendChild(errorIcon);
+  errorDiv.appendChild(errorText);
+  errorDiv.appendChild(errorDetail);
+  body.appendChild(errorDiv);
+}
+
+/**
+ * Refresh a single commentary element.
+ */
+export async function refreshCommentary(elementId: string): Promise<void> {
+  // Clear from cache
+  delete commentaryCache[elementId];
+
+  // Find the button and re-trigger
+  const button = document.querySelector(`[data-element-id="${elementId}"]`);
+  if (button instanceof HTMLButtonElement) {
+    // Close current popover
+    closeAICommentary();
+
+    // Re-fetch with force refresh
+    try {
+      const baseUrl = getBaseUrl();
+      const response = await fetch(`${baseUrl}/api/commentary/${elementId}?force_refresh=true`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      commentaryCache[elementId] = data;
+
+      // Re-show the popover
+      await showAICommentary(button);
+    } catch (error) {
+      console.error('Failed to refresh commentary:', error);
+      showToast('Failed to refresh insight', 'error');
+    }
+  }
+}
+
+/**
+ * Refresh all AI insights.
+ */
+export async function refreshAllAIInsights(): Promise<void> {
+  try {
+    showToast('Refreshing AI insights...', 'info');
+    const baseUrl = getBaseUrl();
+    const response = await fetch(`${baseUrl}/api/commentary/refresh`, { method: 'POST' });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const result = await response.json();
+    commentaryCache = {};
+    showToast(`Refreshed ${result.refreshed_count} insights`, 'success');
+  } catch (error) {
+    console.error('Failed to refresh all insights:', error);
+    showToast('Failed to refresh insights', 'error');
+  }
+}
+
+/**
+ * Create an AI info button for an element.
+ */
+function createInfoButton(elementId: string): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.className = 'ai-info-btn';
+  btn.dataset.elementId = elementId;
+  btn.title = 'Get AI insight';
+  btn.textContent = '?';
+  btn.addEventListener('click', (e: Event) => {
+    e.stopPropagation();
+    showAICommentary(btn);
+  });
+
+  return btn;
+}
+
+/**
+ * Initialize AI commentary buttons on dashboard.
+ */
+export function initAICommentaryButtons(): void {
+  // Map value element IDs to commentary element IDs
+  const elementMappings: Record<string, string> = {
+    'total-value': 'dashboard.total_value',
+    'gain-loss': 'dashboard.total_gain_loss',
+    'retirement-value': 'dashboard.retirement_value',
+    'taxable-value': 'dashboard.taxable_value',
+    'monthly-retirement-income': 'dashboard.monthly_retirement_income',
+    'success-probability': 'dashboard.success_probability',
+  };
+
+  let buttonsAdded = 0;
+
+  // Find stat cards by the value element IDs they contain
+  Object.entries(elementMappings).forEach(([valueId, commentaryId]) => {
+    const valueElement = document.getElementById(valueId);
+    if (!valueElement) {
+      console.debug(`AI Commentary: Element '${valueId}' not found`);
+      return;
+    }
+
+    // Find the parent stat-card
+    const card = valueElement.closest('.stat-card');
+    if (!card) {
+      console.debug(`AI Commentary: stat-card not found for '${valueId}'`);
+      return;
+    }
+
+    // Check if button already exists
+    if (card.querySelector('.ai-info-btn')) {
+      return;
+    }
+
+    const label = card.querySelector('.stat-label');
+    if (label) {
+      const btn = createInfoButton(commentaryId);
+      label.appendChild(btn);
+      buttonsAdded++;
+    }
+  });
+
+  if (buttonsAdded > 0) {
+    console.debug(`AI Commentary: Added ${buttonsAdded} insight buttons`);
+  }
+
+  // Only add event listeners once
+  if (!commentaryListenersInitialized) {
+    // Close popover when clicking outside
+    document.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (activePopover && !activePopover.contains(target) && !target.closest('.ai-info-btn')) {
+        closeAICommentary();
+      }
+    });
+
+    // Close popover on escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeAICommentary();
+      }
+    });
+
+    commentaryListenersInitialized = true;
+  }
+}
+
+/**
+ * Get commentary from cache.
+ */
+export function getCommentaryCache(): Record<string, CommentaryData> {
+  return commentaryCache;
+}
+
+/**
+ * Initialize the commentary system.
+ */
+export function initCommentary(): void {
+  // Commentary buttons are added after data loads in dashboard
+  // This function can be used for any future initialization
+  console.debug('Commentary system initialized');
+}
