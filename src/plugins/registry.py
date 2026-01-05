@@ -55,13 +55,13 @@ class PluginRegistry:
     ):
         self.plugins_dir = Path(plugins_dir)
         self.data_dir = Path(data_dir)
-        self.installed_dir = self.plugins_dir / "installed"
-        self.builtin_dir = self.plugins_dir / "builtin"
+        self.installed_dir = self.data_dir / "installed"  # User-installed plugins in data/
+        self.builtin_dir = self.plugins_dir / "builtin"   # Built-in plugins in src/
 
         # Ensure directories exist
+        self.data_dir.mkdir(parents=True, exist_ok=True)
         self.installed_dir.mkdir(parents=True, exist_ok=True)
         self.builtin_dir.mkdir(parents=True, exist_ok=True)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
 
         # Plugin storage
         self._manifests: dict[str, PluginManifest] = {}

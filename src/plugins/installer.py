@@ -60,7 +60,7 @@ class PluginInstaller:
 
     def __init__(
         self,
-        installed_dir: str = "src/plugins/installed",
+        installed_dir: str = "data/plugins/installed",
         data_dir: str = "data/plugins",
     ):
         self.installed_dir = Path(installed_dir)
