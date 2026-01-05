@@ -1538,6 +1538,18 @@ body {
     font-size: 12px;
 }
 
+.btn-ghost {
+    background: transparent;
+    border: none;
+    color: var(--color-text-secondary);
+    padding: 6px;
+}
+
+.btn-ghost:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-primary);
+}
+
 /* Tab Content */
 .tab-content {
     display: none;
