@@ -14,6 +14,8 @@ Security features:
 - HMAC signature validation prevents request tampering
 """
 
+import hashlib
+import hmac
 import logging
 from typing import Callable
 
@@ -79,7 +81,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
         if should_enforce and request.method in ("POST", "PUT", "DELETE"):
             # Skip signing check for session init endpoint (chicken-and-egg)
             if path != "/api/session/init":
-                validation_error = self._validate_signature(request, session)
+                validation_error = await self._validate_signature(request, session)
                 if validation_error:
                     return validation_error
 
@@ -104,7 +106,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
 
         return response
 
-    def _validate_signature(
+    async def _validate_signature(
         self, request: Request, session: Session
     ) -> JSONResponse | None:
         """
@@ -130,6 +132,23 @@ class SessionMiddleware(BaseHTTPMiddleware):
                     "error_type": "signature_required",
                 },
             )
+
+        # Validate body hash if provided - prevents request body tampering
+        if body_hash:
+            body = await request.body()
+            computed_hash = hashlib.sha256(body).hexdigest()
+            if not hmac.compare_digest(body_hash, computed_hash):
+                logger.warning(
+                    f"Body hash mismatch for {request.method} {request.url.path}: "
+                    f"claimed={body_hash[:16]}..., computed={computed_hash[:16]}..."
+                )
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "detail": "Request body hash mismatch",
+                        "error_type": "body_hash_invalid",
+                    },
+                )
 
         # Validate signature
         if not self.session_manager.validate_signature(
