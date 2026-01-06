@@ -89,6 +89,14 @@ import {
   loadAccountsManagement,
   showCreateViewModal,
   hideViewModal,
+  loadEntitiesList,
+  showCreateEntityModal,
+  hideEntityModal,
+  editEntity,
+  saveEntity,
+  setDefaultEntity,
+  deleteEntity,
+  runAutoDetectEntities,
 } from '@/pages/settings';
 
 // Features
@@ -423,6 +431,14 @@ window.finlity = {
   loadAccountsManagement,
   showCreateViewModal,
   hideViewModal,
+  loadEntitiesList,
+  showCreateEntityModal,
+  hideEntityModal,
+  editEntity,
+  saveEntity,
+  setDefaultEntity,
+  deleteEntity,
+  runAutoDetectEntities,
 
   // Profiles
   loadProfiles,

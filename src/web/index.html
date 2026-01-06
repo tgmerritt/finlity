@@ -2046,6 +2046,37 @@
                         </div>
                     </div>
 
+                    <!-- Entity Management (Multi-person household) -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Entity Management</h3>
+                            <button class="btn btn-sm btn-primary" onclick="showCreateEntityModal()">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                New Entity
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <p class="settings-description">
+                                Manage household members or ownership entities. Entities allow you to track retirement metrics per person and filter accounts by owner.
+                            </p>
+                            <div id="entities-list" class="entities-list">
+                                <!-- Entities will be populated here -->
+                            </div>
+                            <div class="entity-actions" style="margin-top: 16px;">
+                                <button type="button" class="btn btn-default" onclick="runAutoDetectEntities()">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+                                        <circle cx="11" cy="11" r="8"></circle>
+                                        <path d="m21 21-4.35-4.35"></path>
+                                    </svg>
+                                    Auto-Detect from Account Names
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Plugin Security -->
                     <div class="card full-width">
                         <div class="card-header">
@@ -2065,6 +2096,39 @@
                             <p class="settings-description">Recent security events from the plugin system.</p>
                             <div id="security-audit-container">
                                 <p class="text-muted">Click Refresh to load audit log...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Account Management -->
+                    <div class="card full-width">
+                        <div class="card-header">
+                            <h3>Account Management</h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="section-description">Manage your investment accounts. Deleting an account will also delete all positions in that account.</p>
+                            <div class="table-scroll-container">
+                                <table class="data-table compact-table" id="accounts-management-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Account</th>
+                                            <th>Value</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="accounts-management-body">
+                                        <!-- Populated by JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="section-actions" style="margin-top: 16px;">
+                                <button type="button" class="btn btn-default" onclick="showAddPositionModal()">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                    Add Account/Position
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -2119,35 +2183,22 @@
                         </div>
                     </div>
 
-                    <!-- Account Management -->
+                    <!-- Plugins -->
                     <div class="card full-width">
                         <div class="card-header">
-                            <h3>Account Management</h3>
+                            <h3>Plugins</h3>
+                            <button class="btn btn-sm btn-default" onclick="discoverPlugins()">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                </svg>
+                                Refresh
+                            </button>
                         </div>
                         <div class="card-body">
-                            <p class="section-description">Manage your investment accounts. Deleting an account will also delete all positions in that account.</p>
-                            <div class="table-scroll-container">
-                                <table class="data-table compact-table" id="accounts-management-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Account</th>
-                                            <th>Value</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="accounts-management-body">
-                                        <!-- Populated by JavaScript -->
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div class="section-actions" style="margin-top: 16px;">
-                                <button type="button" class="btn btn-default" onclick="showAddPositionModal()">
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;">
-                                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                                    </svg>
-                                    Add Account/Position
-                                </button>
+                            <p class="settings-description">Extend functionality with plugins. Importers, analysis tools, widgets, and more.</p>
+                            <div id="plugins-list" class="plugins-grid">
+                                <p class="text-muted">Loading plugins...</p>
                             </div>
                         </div>
                     </div>
@@ -2215,26 +2266,6 @@
                                         <span class="theme-name">Light</span>
                                     </span>
                                 </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Plugins -->
-                    <div class="card full-width">
-                        <div class="card-header">
-                            <h3>Plugins</h3>
-                            <button class="btn btn-sm btn-default" onclick="discoverPlugins()">
-                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polyline points="23 4 23 10 17 10"></polyline>
-                                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                                </svg>
-                                Refresh
-                            </button>
-                        </div>
-                        <div class="card-body">
-                            <p class="settings-description">Extend functionality with plugins. Importers, analysis tools, widgets, and more.</p>
-                            <div id="plugins-list" class="plugins-grid">
-                                <p class="text-muted">Loading plugins...</p>
                             </div>
                         </div>
                     </div>
@@ -2592,6 +2623,49 @@
                     <div class="modal-actions">
                         <button type="button" onclick="hideViewModal()" class="btn btn-default">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save View</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Entity Modal -->
+    <div id="entity-modal" class="modal" style="display: none;">
+        <div class="modal-backdrop" onclick="hideEntityModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="entity-modal-title">Create Entity</h3>
+                <button class="modal-close" onclick="hideEntityModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-description">Create an entity to represent a person or ownership structure in your household.</p>
+                <form id="entity-form" onsubmit="saveEntity(event)">
+                    <input type="hidden" id="entity-edit-id">
+                    <div class="form-group">
+                        <label for="entity-name">Name</label>
+                        <input type="text" id="entity-name" placeholder="e.g., Alex, Sam" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="entity-type">Type</label>
+                        <select id="entity-type">
+                            <option value="individual">Individual</option>
+                            <option value="trust">Trust</option>
+                            <option value="llc">LLC</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="entity-color">Color</label>
+                        <input type="color" id="entity-color" value="#4A90D9">
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="entity-is-default">
+                            <span>Set as default entity</span>
+                        </label>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" onclick="hideEntityModal()" class="btn btn-default">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Entity</button>
                     </div>
                 </form>
             </div>

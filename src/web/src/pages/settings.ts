@@ -14,6 +14,7 @@ import { store } from '@/state/store';
 import { refreshData, loadRetirementMetrics } from '@/pages/dashboard';
 import { loadProfilesForSettings } from '@/features/profiles';
 import { loadPlugins, loadInstalledPlugins, loadPluginSecurity } from '@/features/plugins';
+import { loadEntities } from '@/features/entities';
 
 /**
  * AI provider model from API.
@@ -785,6 +786,321 @@ export async function deleteView(viewId: string): Promise<void> {
   }
 }
 
+// =============================================================================
+// Entity Management
+// =============================================================================
+
+interface EntityResponse {
+  id: string;
+  name: string;
+  entity_type: string;
+  is_default: boolean;
+  is_household: boolean;
+  color: string;
+  icon: string;
+  account_count: number;
+  income_count: number;
+  expense_count: number;
+}
+
+/**
+ * Create an entity item element using safe DOM methods.
+ */
+function createEntityItem(entity: EntityResponse): HTMLElement {
+  const isHousehold = entity.is_household;
+
+  const item = document.createElement('div');
+  item.className = 'entity-item';
+  if (entity.is_default) item.classList.add('is-default');
+  if (isHousehold) item.classList.add('is-household');
+
+  // Color indicator
+  const colorIndicator = document.createElement('div');
+  colorIndicator.className = 'entity-color-indicator';
+  colorIndicator.style.backgroundColor = entity.color;
+  item.appendChild(colorIndicator);
+
+  // Info section
+  const info = document.createElement('div');
+  info.className = 'entity-info';
+
+  const nameDiv = document.createElement('div');
+  nameDiv.className = 'entity-name';
+  nameDiv.appendChild(document.createTextNode(entity.name));
+
+  if (entity.is_default) {
+    const defaultBadge = document.createElement('span');
+    defaultBadge.className = 'default-badge';
+    defaultBadge.textContent = 'Default';
+    nameDiv.appendChild(defaultBadge);
+  }
+
+  if (isHousehold) {
+    const householdBadge = document.createElement('span');
+    householdBadge.className = 'household-badge';
+    householdBadge.textContent = 'Household';
+    nameDiv.appendChild(householdBadge);
+  } else {
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'entity-type-badge';
+    typeBadge.textContent = entity.entity_type;
+    nameDiv.appendChild(typeBadge);
+  }
+
+  info.appendChild(nameDiv);
+
+  const details = document.createElement('div');
+  details.className = 'entity-details';
+  const counts: string[] = [];
+  if (entity.account_count > 0) counts.push(`${entity.account_count} account${entity.account_count !== 1 ? 's' : ''}`);
+  if (entity.income_count > 0) counts.push(`${entity.income_count} income source${entity.income_count !== 1 ? 's' : ''}`);
+  details.textContent = counts.length > 0 ? counts.join(', ') : 'No accounts assigned';
+  info.appendChild(details);
+
+  item.appendChild(info);
+
+  // Actions
+  if (!isHousehold) {
+    const actions = document.createElement('div');
+    actions.className = 'entity-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.textContent = 'Edit';
+    editBtn.addEventListener('click', () => editEntity(entity.id));
+    actions.appendChild(editBtn);
+
+    if (!entity.is_default) {
+      const setDefaultBtn = document.createElement('button');
+      setDefaultBtn.textContent = 'Set Default';
+      setDefaultBtn.addEventListener('click', () => setDefaultEntity(entity.id));
+      actions.appendChild(setDefaultBtn);
+    }
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'danger';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', () => deleteEntity(entity.id));
+    actions.appendChild(deleteBtn);
+
+    item.appendChild(actions);
+  }
+
+  return item;
+}
+
+/**
+ * Load entities list for settings.
+ */
+export async function loadEntitiesList(): Promise<void> {
+  try {
+    const entities = await apiCall<EntityResponse[]>('/api/entities/');
+    const container = document.getElementById('entities-list');
+    if (!container) return;
+
+    // Clear existing content
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+
+    if (entities.length === 0) {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.className = 'text-muted';
+      emptyMsg.textContent = 'No entities configured. Click "Auto-Detect" to create entities from your account names, or click "New Entity" to create one manually.';
+      container.appendChild(emptyMsg);
+      return;
+    }
+
+    for (const entity of entities) {
+      container.appendChild(createEntityItem(entity));
+    }
+  } catch (error) {
+    console.error('Error loading entities:', error);
+    const container = document.getElementById('entities-list');
+    if (container) {
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+      const errorMsg = document.createElement('p');
+      errorMsg.className = 'text-error';
+      errorMsg.textContent = 'Failed to load entities';
+      container.appendChild(errorMsg);
+    }
+  }
+}
+
+/**
+ * Show create entity modal.
+ */
+export function showCreateEntityModal(): void {
+  const modal = document.getElementById('entity-modal');
+  const title = document.getElementById('entity-modal-title');
+  const editId = document.getElementById('entity-edit-id') as HTMLInputElement;
+  const nameInput = document.getElementById('entity-name') as HTMLInputElement;
+  const typeSelect = document.getElementById('entity-type') as HTMLSelectElement;
+  const colorInput = document.getElementById('entity-color') as HTMLInputElement;
+  const defaultCheckbox = document.getElementById('entity-is-default') as HTMLInputElement;
+
+  if (!modal || !title || !editId) return;
+
+  title.textContent = 'Create Entity';
+  editId.value = '';
+  if (nameInput) nameInput.value = '';
+  if (typeSelect) typeSelect.value = 'individual';
+  if (colorInput) colorInput.value = '#4A90D9';
+  if (defaultCheckbox) defaultCheckbox.checked = false;
+
+  modal.style.display = 'flex';
+}
+
+/**
+ * Hide entity modal.
+ */
+export function hideEntityModal(): void {
+  const modal = document.getElementById('entity-modal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+/**
+ * Edit entity.
+ */
+export async function editEntity(entityId: string): Promise<void> {
+  try {
+    const entity = await apiCall<EntityResponse>(`/api/entities/${entityId}`);
+
+    const modal = document.getElementById('entity-modal');
+    const title = document.getElementById('entity-modal-title');
+    const editId = document.getElementById('entity-edit-id') as HTMLInputElement;
+    const nameInput = document.getElementById('entity-name') as HTMLInputElement;
+    const typeSelect = document.getElementById('entity-type') as HTMLSelectElement;
+    const colorInput = document.getElementById('entity-color') as HTMLInputElement;
+    const defaultCheckbox = document.getElementById('entity-is-default') as HTMLInputElement;
+
+    if (!modal || !title || !editId) return;
+
+    title.textContent = 'Edit Entity';
+    editId.value = entityId;
+    if (nameInput) nameInput.value = entity.name;
+    if (typeSelect) typeSelect.value = entity.entity_type;
+    if (colorInput) colorInput.value = entity.color;
+    if (defaultCheckbox) defaultCheckbox.checked = entity.is_default;
+
+    modal.style.display = 'flex';
+  } catch (error) {
+    showToast('Failed to load entity', 'error');
+  }
+}
+
+/**
+ * Save entity (create or update).
+ */
+export async function saveEntity(event: Event): Promise<void> {
+  event.preventDefault();
+
+  const editId = (document.getElementById('entity-edit-id') as HTMLInputElement)?.value;
+  const name = (document.getElementById('entity-name') as HTMLInputElement)?.value;
+  const entityType = (document.getElementById('entity-type') as HTMLSelectElement)?.value;
+  const color = (document.getElementById('entity-color') as HTMLInputElement)?.value;
+  const isDefault = (document.getElementById('entity-is-default') as HTMLInputElement)?.checked;
+
+  if (!name) {
+    showToast('Entity name is required', 'error');
+    return;
+  }
+
+  const data = {
+    name,
+    entity_type: entityType,
+    color,
+    is_default: isDefault,
+  };
+
+  try {
+    if (editId) {
+      await apiCall(`/api/entities/${editId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+      showToast('Entity updated', 'success');
+    } else {
+      await apiCall('/api/entities/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      showToast('Entity created', 'success');
+    }
+    hideEntityModal();
+    await loadEntitiesList();
+    // Reload entity selector in sidebar
+    await loadEntities();
+  } catch (error) {
+    showToast('Failed to save entity', 'error');
+  }
+}
+
+/**
+ * Set default entity.
+ */
+export async function setDefaultEntity(entityId: string): Promise<void> {
+  try {
+    await apiCall(`/api/entities/${entityId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_default: true }),
+    });
+    showToast('Default entity updated', 'success');
+    await loadEntitiesList();
+  } catch (error) {
+    showToast('Failed to set default entity', 'error');
+  }
+}
+
+/**
+ * Delete entity.
+ */
+export async function deleteEntity(entityId: string): Promise<void> {
+  if (!confirm('Delete this entity? Accounts assigned to this entity will become unassigned.')) return;
+
+  try {
+    await apiCall(`/api/entities/${entityId}`, { method: 'DELETE' });
+    showToast('Entity deleted', 'success');
+    await loadEntitiesList();
+    // Reload entity selector in sidebar
+    await loadEntities();
+  } catch (error) {
+    showToast('Failed to delete entity', 'error');
+  }
+}
+
+/**
+ * Run auto-detect entities from account names.
+ */
+export async function runAutoDetectEntities(): Promise<void> {
+  try {
+    const result = await apiCall<{
+      success: boolean;
+      entities_created: string[];
+      accounts_assigned: number;
+      income_sources_assigned: number;
+    }>('/api/entities/auto-detect', { method: 'POST' });
+
+    if (result.entities_created.length > 0) {
+      showToast(
+        `Created ${result.entities_created.length} entities: ${result.entities_created.join(', ')}`,
+        'success'
+      );
+    } else {
+      showToast('No new entities detected from account names', 'info');
+    }
+
+    await loadEntitiesList();
+    // Reload entity selector in sidebar
+    await loadEntities();
+  } catch (error) {
+    showToast('Failed to auto-detect entities', 'error');
+  }
+}
+
 /**
  * Save personal settings.
  */
@@ -1152,6 +1468,7 @@ export function initSettings(): void {
       loadApiKeysStatus();
       loadAIProviders();
       loadViewsList();
+      loadEntitiesList();
       loadPersonalSettings();
       loadAssetClassTargets();
       loadMarketAssumptions();
