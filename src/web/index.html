@@ -421,7 +421,7 @@
                             </svg>
                         </div>
                         <div class="stat-content">
-                            <span class="stat-label">Monthly Retirement Income</span>
+                            <span class="stat-label">Retirement Income / mo</span>
                             <span class="stat-value" id="monthly-retirement-income">--</span>
                             <span class="stat-sublabel" id="withdrawal-rate-label">at 4% withdrawal</span>
                         </div>
@@ -1017,8 +1017,9 @@
                             </div>
 
                             <div id="tax-aware-settings" style="display: none;">
-                                <!-- Account Balances Row -->
+                                <!-- Three Column Layout: Balances | Tax Rates | Contribution Split -->
                                 <div class="mc-form-row">
+                                    <!-- Column 1: Account Balances -->
                                     <div class="mc-form-col">
                                         <div class="mc-form-group-title">
                                             Account Balances
@@ -1028,46 +1029,38 @@
                                             <label for="balance-taxable">Taxable</label>
                                             <input type="number" id="balance-taxable" value="0" min="0" step="1">
                                         </div>
-                                    </div>
-                                    <div class="mc-form-col">
-                                        <div class="mc-form-group-title">&nbsp;</div>
                                         <div class="mc-form-group">
                                             <label for="balance-traditional">Traditional</label>
                                             <input type="number" id="balance-traditional" value="0" min="0" step="1">
                                         </div>
-                                    </div>
-                                    <div class="mc-form-col">
-                                        <div class="mc-form-group-title">&nbsp;</div>
                                         <div class="mc-form-group">
                                             <label for="balance-roth">Roth</label>
                                             <input type="number" id="balance-roth" value="0" min="0" step="1">
                                         </div>
                                     </div>
-                                </div>
 
-                                <!-- Tax Rates & Contribution Split Row -->
-                                <div class="mc-form-row">
-                                    <div class="mc-form-col mc-form-col-2">
+                                    <!-- Column 2: Tax Rates -->
+                                    <div class="mc-form-col">
                                         <div class="mc-form-group-title">Tax Rates</div>
-                                        <div class="mc-form-grid-2x2">
-                                            <div class="mc-form-group">
-                                                <label for="tax-rate-ordinary">Federal %</label>
-                                                <input type="number" id="tax-rate-ordinary" value="22" min="0" max="50" step="1">
-                                            </div>
-                                            <div class="mc-form-group">
-                                                <label for="tax-rate-state">State %</label>
-                                                <input type="number" id="tax-rate-state" value="5" min="0" max="15" step="0.5">
-                                            </div>
-                                            <div class="mc-form-group">
-                                                <label for="tax-rate-cap-gains">Cap Gains %</label>
-                                                <input type="number" id="tax-rate-cap-gains" value="15" min="0" max="30" step="1">
-                                            </div>
-                                            <div class="mc-form-group">
-                                                <label for="cost-basis-ratio">Cost Basis %</label>
-                                                <input type="number" id="cost-basis-ratio" value="60" min="0" max="100" step="5">
-                                            </div>
+                                        <div class="mc-form-group">
+                                            <label for="tax-rate-ordinary">Federal %</label>
+                                            <input type="number" id="tax-rate-ordinary" value="22" min="0" max="50" step="1">
+                                        </div>
+                                        <div class="mc-form-group">
+                                            <label for="tax-rate-state">State %</label>
+                                            <input type="number" id="tax-rate-state" value="5" min="0" max="15" step="0.5">
+                                        </div>
+                                        <div class="mc-form-group">
+                                            <label for="tax-rate-cap-gains">Cap Gains %</label>
+                                            <input type="number" id="tax-rate-cap-gains" value="15" min="0" max="30" step="1">
+                                        </div>
+                                        <div class="mc-form-group">
+                                            <label for="cost-basis-ratio">Cost Basis %</label>
+                                            <input type="number" id="cost-basis-ratio" value="60" min="0" max="100" step="5">
                                         </div>
                                     </div>
+
+                                    <!-- Column 3: Contribution Split -->
                                     <div class="mc-form-col">
                                         <div class="mc-form-group-title">Contribution Split</div>
                                         <div class="mc-form-group">
@@ -1713,7 +1706,7 @@
                                 <h4 style="margin-bottom: 1rem;">Local Database</h4>
 
                                 <div id="local-db-status" class="info-box" style="margin-bottom: 1rem;">
-                                    <span id="local-db-status-text">No database loaded</span>
+                                    <span id="local-db-status-text">No local database loaded. Open a file, create new, or switch to Server mode above.</span>
                                 </div>
 
                                 <div class="button-group" style="flex-wrap: wrap; gap: 0.5rem;">
@@ -2990,6 +2983,6 @@
     <script src="/static/js/client-database.js"></script>
     <script src="/static/js/local-api.js"></script>
     <!-- Main application -->
-    <script src="/static/app.js"></script>
+    <script src="/static/dist/app.js"></script>
 </body>
 </html>

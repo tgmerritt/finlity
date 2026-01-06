@@ -82,7 +82,7 @@ ELEMENT_REGISTRY: dict[str, ElementConfig] = {
     "dashboard.monthly_retirement_income": {
         "type": "stat_card",
         "tab": "dashboard",
-        "title": "Monthly Retirement Income",
+        "title": "Retirement Income / mo",
         "data_dependencies": ["retirement_metrics.monthly_income", "summary.total_value"],
         "web_search_queries": [
             "average retirement income needed per month {current_year}",

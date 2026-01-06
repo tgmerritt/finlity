@@ -411,6 +411,84 @@ async def list_expense_categories():
         session.close()
 
 
+@router.post("/expense-categories/repair-orphaned")
+async def repair_orphaned_expenses():
+    """
+    Find and repair expenses with invalid/missing category references.
+
+    This handles the case where categories were deleted but expenses still
+    reference them, causing "Unknown" to appear in the UI.
+    """
+    from src.services.demo_mode import check_demo_data_protection
+    check_demo_data_protection()
+
+    db = get_database()
+    session = db.get_session()
+    try:
+        # First ensure default categories exist
+        categories = session.query(BudgetExpenseCategory).all()
+        category_ids = {c.id for c in categories}
+
+        if not categories:
+            # Seed default categories if none exist
+            for cat in DEFAULT_EXPENSE_CATEGORIES:
+                db_cat = BudgetExpenseCategory(
+                    name=cat.name,
+                    icon=cat.icon,
+                    color=cat.color,
+                    sort_order=cat.sort_order,
+                )
+                session.add(db_cat)
+            session.commit()
+
+            # Refresh category list
+            categories = session.query(BudgetExpenseCategory).all()
+            category_ids = {c.id for c in categories}
+
+        # Find "Other" category or create it
+        other_category = session.query(BudgetExpenseCategory).filter(
+            BudgetExpenseCategory.name == "Other"
+        ).first()
+
+        if not other_category:
+            other_category = BudgetExpenseCategory(
+                name="Other",
+                icon="ellipsis",
+                color="#6b7280",
+                sort_order=99,
+            )
+            session.add(other_category)
+            session.commit()
+            category_ids.add(other_category.id)
+
+        # Find orphaned expenses (category_id not in existing categories)
+        orphaned_expenses = session.query(BudgetExpense).filter(
+            BudgetExpense.is_active.is_(True),
+            ~BudgetExpense.category_id.in_(category_ids)
+        ).all()
+
+        repaired_count = 0
+        repaired_names = []
+
+        for expense in orphaned_expenses:
+            expense.category_id = other_category.id
+            repaired_count += 1
+            repaired_names.append(expense.name)
+
+        if repaired_count > 0:
+            session.commit()
+
+        return {
+            "success": True,
+            "repaired_count": repaired_count,
+            "repaired_expenses": repaired_names,
+            "other_category_id": other_category.id,
+            "total_categories": len(category_ids),
+        }
+    finally:
+        session.close()
+
+
 # =============================================================================
 # Expense Endpoints
 # =============================================================================
@@ -428,6 +506,30 @@ async def list_expenses():
         ).filter(
             BudgetExpense.is_active.is_(True)
         ).all()
+
+        # Check for orphaned expenses and auto-repair them
+        orphaned_expenses = [e for e in expenses if e.category is None]
+        if orphaned_expenses:
+            # Find or create "Other" category
+            other_category = session.query(BudgetExpenseCategory).filter(
+                BudgetExpenseCategory.name == "Other"
+            ).first()
+
+            if not other_category:
+                other_category = BudgetExpenseCategory(
+                    name="Other",
+                    icon="ellipsis",
+                    color="#6b7280",
+                    sort_order=99,
+                )
+                session.add(other_category)
+                session.commit()
+
+            # Auto-repair orphaned expenses
+            for expense in orphaned_expenses:
+                expense.category_id = other_category.id
+                expense.category = other_category
+            session.commit()
 
         # Frequency to annual multiplier
         freq_multiplier = {
@@ -447,7 +549,7 @@ async def list_expenses():
             result.append({
                 "id": e.id,
                 "category_id": e.category_id,
-                "category_name": e.category.name if e.category else "Unknown",
+                "category_name": e.category.name if e.category else "Other",
                 "name": e.name,
                 "amount": e.amount,
                 "frequency": e.frequency,
@@ -568,25 +670,49 @@ async def delete_expense(expense_id: str):
 
 @router.get("/deductions")
 async def list_deductions():
-    """List all pre-tax deductions."""
+    """List all pre-tax deductions with calculated annual amounts."""
     db = get_database()
     session = db.get_session()
     try:
-        deductions = session.query(BudgetPretaxDeduction).all()
+        # Eagerly load income_source relationship for pay frequency
+        deductions = session.query(BudgetPretaxDeduction).options(
+            joinedload(BudgetPretaxDeduction.income_source)
+        ).all()
 
-        return [
-            {
+        result = []
+        for d in deductions:
+            # Get pay frequency from linked income source, default to biweekly
+            if d.income_source and d.income_source.pay_frequency:
+                pay_frequency = d.income_source.pay_frequency
+                income_source_name = d.income_source.name
+            else:
+                pay_frequency = "biweekly"
+                income_source_name = None
+
+            # Calculate periods per year
+            periods_per_year = PAY_FREQUENCIES.get(pay_frequency, 26)
+
+            # Calculate annual amount
+            annual_amount = d.amount_per_period * periods_per_year
+            employer_annual = d.employer_match * periods_per_year if d.employer_match else 0
+
+            result.append({
                 "id": d.id,
                 "income_source_id": d.income_source_id,
+                "income_source_name": income_source_name,
+                "pay_frequency": pay_frequency,
+                "periods_per_year": periods_per_year,
                 "label": d.label,
                 "deduction_type": d.deduction_type,
                 "amount_per_period": d.amount_per_period,
                 "employer_match": d.employer_match,
                 "is_percentage": d.is_percentage,
                 "max_annual": d.max_annual,
-            }
-            for d in deductions
-        ]
+                "annual_amount": annual_amount,
+                "employer_annual": employer_annual,
+            })
+
+        return result
     finally:
         session.close()
 
