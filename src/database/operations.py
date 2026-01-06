@@ -153,6 +153,19 @@ class Database:
                 .all()
             )
 
+    def get_account_from_active_import(self, file_name: str) -> Optional[Account]:
+        """Get the account currently populated by a specific file import."""
+        with self.get_session() as session:
+            # Find an account that has positions linked to an import with this filename
+            result = (
+                session.query(Account)
+                .join(Position, Account.id == Position.account_id)
+                .join(FileImport, Position.last_import_id == FileImport.id)
+                .filter(FileImport.file_name == file_name)
+                .first()
+            )
+            return result
+
     # ==================== Account Operations ====================
 
     def get_or_create_account(
