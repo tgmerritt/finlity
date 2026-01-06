@@ -157,14 +157,16 @@ export async function refreshData(): Promise<void> {
 /**
  * Load retirement metrics for dashboard row 2.
  * If an entity is selected, loads metrics filtered to that entity.
+ *
+ * @returns true if metrics loaded successfully, false on error
  */
-export async function loadRetirementMetrics(): Promise<void> {
+export async function loadRetirementMetrics(): Promise<boolean> {
   try {
     // Build URL with entity filter if one is selected
     const currentEntityId = store.get('currentEntityId');
     let url = '/api/portfolio/dashboard-metrics';
     if (currentEntityId) {
-      url += `?entity_id=${currentEntityId}`;
+      url += `?entity_id=${encodeURIComponent(currentEntityId)}`;
     }
 
     const metrics = await apiCall<DashboardMetrics>(url);
@@ -247,8 +249,11 @@ export async function loadRetirementMetrics(): Promise<void> {
         }
       }
     }
+    return true;
   } catch (error) {
     console.error('Error loading retirement metrics:', error);
+    showToast('Unable to load retirement metrics', 'error');
+    return false;
   }
 }
 

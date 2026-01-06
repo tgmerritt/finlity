@@ -301,7 +301,7 @@ async function init(): Promise<void> {
 
   // Initialize features
   initProfiles();
-  initEntitySelector();
+  await initEntitySelector();
   initCommentary();
   initPlugins();
   initImportExport();

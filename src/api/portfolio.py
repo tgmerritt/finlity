@@ -740,6 +740,12 @@ def get_dashboard_metrics(
     from src.api.settings import load_config
     from datetime import date
 
+    # Validate entity_id if provided
+    if entity_id:
+        entity = db.get_entity_by_id(entity_id)
+        if not entity:
+            raise HTTPException(status_code=404, detail="Entity not found")
+
     # Get portfolio value - filtered by entity if specified
     if entity_id:
         summary = db.get_portfolio_summary_by_entity(entity_id)

@@ -1326,7 +1326,17 @@ class Database:
             return entity
 
     def delete_entity(self, entity_id: str) -> bool:
-        """Delete an entity. Cannot delete if accounts are associated."""
+        """Delete an entity.
+
+        Args:
+            entity_id: ID of the entity to delete
+
+        Returns:
+            True if deleted successfully, False if entity not found
+
+        Raises:
+            ValueError: If entity has associated accounts, income sources, or expenses
+        """
         with self.get_session() as session:
             entity = session.query(Entity).filter_by(id=entity_id).first()
             if not entity:
@@ -1335,7 +1345,27 @@ class Database:
             # Check for associated accounts
             account_count = session.query(Account).filter_by(entity_id=entity_id).count()
             if account_count > 0:
-                raise ValueError(f"Cannot delete entity with {account_count} associated accounts")
+                raise ValueError(
+                    f"Cannot delete entity with {account_count} associated accounts"
+                )
+
+            # Check for associated income sources
+            income_count = (
+                session.query(BudgetIncomeSource).filter_by(entity_id=entity_id).count()
+            )
+            if income_count > 0:
+                raise ValueError(
+                    f"Cannot delete entity with {income_count} associated income sources"
+                )
+
+            # Check for associated expenses
+            expense_count = (
+                session.query(BudgetExpense).filter_by(entity_id=entity_id).count()
+            )
+            if expense_count > 0:
+                raise ValueError(
+                    f"Cannot delete entity with {expense_count} associated expenses"
+                )
 
             session.delete(entity)
             session.commit()

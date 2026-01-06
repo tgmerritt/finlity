@@ -231,8 +231,13 @@ async def auto_detect_entities() -> dict:
     # Ensure household entity exists
     household = db.ensure_household_entity()
 
-    # Patterns to extract names from
-    # Match: "Name's ..." or "Name ..." at start of string
+    # Patterns to extract names from account/income names
+    # Match patterns like:
+    #   - "John's 401k" -> captures "John"
+    #   - "Schwab Alex IRA" -> captures "Alex" (after optional brokerage prefix)
+    #   - "Alex Roth IRA" -> captures "Alex"
+    # Requires: Name must start with uppercase, followed by lowercase letters
+    # Does NOT match: All-caps names like "JOHN", names without space/possessive after
     name_pattern = re.compile(r"^(?:[A-Za-z]+\s+)?([A-Z][a-z]+)(?:'s?\s|\s)")
 
     detected_names: set[str] = set()

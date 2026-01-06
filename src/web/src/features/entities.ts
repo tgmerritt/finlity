@@ -11,15 +11,21 @@ import type { Entity } from '@/types/api';
 
 /**
  * Load entities from the API and populate the entity selector.
+ *
+ * @returns true if entities loaded successfully, false on error
  */
-export async function loadEntities(): Promise<void> {
+export async function loadEntities(): Promise<boolean> {
   try {
     const entities = await apiCall<Entity[]>('/api/entities/');
     store.set('entities', entities);
     populateEntitySelector(entities);
+    return true;
   } catch (error) {
     console.error('Error loading entities:', error);
-    // Don't show error toast - entities are optional
+    // Set empty entities so UI knows we tried and failed
+    store.set('entities', []);
+    showToast('Unable to load entities. Using household view only.', 'warning');
+    return false;
   }
 }
 
@@ -104,14 +110,20 @@ export async function changeEntity(entityId: string): Promise<void> {
   // Update selector style
   updateEntitySelectorStyle(newEntityId);
 
-  // Reload retirement metrics with new entity filter
-  await loadRetirementMetrics();
-
-  // Show toast notification
+  // Get entity name for toast messages
   const entities = store.get('entities');
   const entity = entities.find((e) => e.id === newEntityId);
   const name = entity ? entity.name : 'Household';
-  showToast(`Retirement metrics: ${name}`, 'success');
+
+  // Reload retirement metrics with new entity filter
+  const metricsLoaded = await loadRetirementMetrics();
+
+  // Show appropriate toast notification based on load result
+  if (metricsLoaded) {
+    showToast(`Retirement metrics: ${name}`, 'success');
+  } else {
+    showToast(`Switched to ${name}, but metrics failed to load`, 'warning');
+  }
 }
 
 /**
@@ -146,14 +158,28 @@ export async function autoDetectEntities(): Promise<void> {
 
 /**
  * Initialize entity selector on page load.
+ *
+ * Restores saved entity selection from localStorage and validates
+ * that the entity still exists. Clears invalid selections.
  */
-export function initEntitySelector(): void {
-  // Load entities
-  loadEntities();
-
-  // Restore saved selection from localStorage
+export async function initEntitySelector(): Promise<void> {
+  // Restore saved selection first (for immediate UI feedback)
   const savedEntityId = localStorage.getItem('currentEntityId');
   if (savedEntityId) {
     store.set('currentEntityId', savedEntityId);
+  }
+
+  // Load entities and validate saved selection
+  await loadEntities();
+
+  // Validate saved entity ID exists after entities are loaded
+  if (savedEntityId) {
+    const entities = store.get('entities');
+    const exists = entities.some((e) => e.id === savedEntityId);
+    if (!exists && entities.length > 0) {
+      console.warn(`Saved entity ID ${savedEntityId} not found - clearing selection`);
+      localStorage.removeItem('currentEntityId');
+      store.set('currentEntityId', null);
+    }
   }
 }
