@@ -12,6 +12,8 @@ import { formatCurrency } from '@/utils/format';
 import { escapeHtml } from '@/utils/html';
 import { store } from '@/state/store';
 import { refreshData, loadRetirementMetrics } from '@/pages/dashboard';
+import { loadProfilesForSettings } from '@/features/profiles';
+import { loadPlugins, loadInstalledPlugins, loadPluginSecurity } from '@/features/plugins';
 
 /**
  * AI provider model from API.
@@ -857,6 +859,46 @@ export async function saveAssetClassTargets(event: Event): Promise<void> {
 }
 
 /**
+ * Load market assumptions from API and populate form.
+ */
+export async function loadMarketAssumptions(): Promise<void> {
+  try {
+    const data = await apiCall<{ market: {
+      stock_mean_return: number;
+      stock_std_dev: number;
+      bond_mean_return: number;
+      bond_std_dev: number;
+      inflation_rate: number;
+      risk_free_rate: number;
+    } }>('/api/settings/config/market');
+
+    if (!data?.market) return;
+
+    const m = data.market;
+
+    const stockReturn = document.getElementById('market-stock-return') as HTMLInputElement | null;
+    if (stockReturn) stockReturn.value = String(m.stock_mean_return * 100);
+
+    const stockStd = document.getElementById('market-stock-std') as HTMLInputElement | null;
+    if (stockStd) stockStd.value = String(m.stock_std_dev * 100);
+
+    const bondReturn = document.getElementById('market-bond-return') as HTMLInputElement | null;
+    if (bondReturn) bondReturn.value = String(m.bond_mean_return * 100);
+
+    const bondStd = document.getElementById('market-bond-std') as HTMLInputElement | null;
+    if (bondStd) bondStd.value = String(m.bond_std_dev * 100);
+
+    const inflation = document.getElementById('market-inflation') as HTMLInputElement | null;
+    if (inflation) inflation.value = String(m.inflation_rate * 100);
+
+    const riskFree = document.getElementById('market-risk-free') as HTMLInputElement | null;
+    if (riskFree) riskFree.value = String(m.risk_free_rate * 100);
+  } catch (error) {
+    console.error('Error loading market assumptions:', error);
+  }
+}
+
+/**
  * Save market assumptions.
  */
 export async function saveMarketAssumptions(event: Event): Promise<void> {
@@ -942,6 +984,42 @@ export async function saveMonteCarloSettings(event: Event): Promise<void> {
 }
 
 /**
+ * Load Monte Carlo settings from API and populate form.
+ */
+export async function loadMonteCarloSettings(): Promise<void> {
+  try {
+    const data = await apiCall<{ monte_carlo: {
+      num_simulations: number;
+      black_swan_probability: number;
+      black_swan_impact: number;
+      golden_swan_probability: number;
+      golden_swan_impact: number;
+    } }>('/api/settings/config/monte_carlo');
+
+    if (!data?.monte_carlo) return;
+
+    const mc = data.monte_carlo;
+
+    const simInput = document.getElementById('mc-simulations') as HTMLInputElement | null;
+    if (simInput) simInput.value = String(mc.num_simulations);
+
+    const bsProb = document.getElementById('mc-black-swan-prob') as HTMLInputElement | null;
+    if (bsProb) bsProb.value = String(mc.black_swan_probability * 100);
+
+    const bsImpact = document.getElementById('mc-black-swan-impact') as HTMLInputElement | null;
+    if (bsImpact) bsImpact.value = String(mc.black_swan_impact * 100);
+
+    const gsProb = document.getElementById('mc-golden-swan-prob') as HTMLInputElement | null;
+    if (gsProb) gsProb.value = String(mc.golden_swan_probability * 100);
+
+    const gsImpact = document.getElementById('mc-golden-swan-impact') as HTMLInputElement | null;
+    if (gsImpact) gsImpact.value = String(mc.golden_swan_impact * 100);
+  } catch (error) {
+    console.error('Error loading Monte Carlo settings:', error);
+  }
+}
+
+/**
  * Initialize settings page.
  */
 export function initSettings(): void {
@@ -1002,10 +1080,19 @@ export function initSettings(): void {
     viewModalClose.addEventListener('click', hideViewModal);
   }
 
-  // Load accounts management when switching to settings tab
+  // Load all settings data when switching to settings tab
   onTabChange((tab) => {
     if (tab === 'settings') {
       loadAccountsManagement();
+      loadProfilesForSettings();
+      loadApiKeysStatus();
+      loadAIProviders();
+      loadViewsList();
+      loadMarketAssumptions();
+      loadMonteCarloSettings();
+      loadPlugins();
+      loadInstalledPlugins();
+      loadPluginSecurity();
     }
   });
 }

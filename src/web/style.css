@@ -416,6 +416,7 @@ body {
 
 .profile-management-card {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 12px;
     padding: 12px;
@@ -423,6 +424,7 @@ body {
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius);
     transition: all var(--transition-fast);
+    overflow: hidden;
 }
 
 .profile-management-card:hover {
@@ -451,8 +453,9 @@ body {
 }
 
 .profile-card-info {
-    flex: 1;
+    flex: 1 1 120px;
     min-width: 0;
+    overflow: hidden;
 }
 
 .profile-card-name {
@@ -460,8 +463,9 @@ body {
     font-size: 14px;
     margin-bottom: 2px;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 4px 8px;
 }
 
 .profile-card-name .badge {
@@ -485,11 +489,14 @@ body {
 
 .profile-card-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
+    margin-left: auto;
 }
 
 .profile-card-actions .btn {
-    padding: 6px 8px;
+    padding: 4px 8px;
+    font-size: 12px;
 }
 
 /* Color Picker */
