@@ -283,9 +283,9 @@ export interface Entity {
   is_household: boolean;
   color: string;
   icon: string;
-  account_count?: number;
-  income_count?: number;
-  expense_count?: number;
+  account_count: number;
+  income_count: number;
+  expense_count: number;
 }
 
 // View types

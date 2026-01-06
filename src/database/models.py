@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, String, Text, Boolean
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, String, Text, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -29,6 +29,16 @@ class Entity(Base):
     """
 
     __tablename__ = "entities"
+
+    # Partial unique index to ensure only one household entity exists
+    __table_args__ = (
+        Index(
+            "ix_entities_unique_household",
+            "is_household",
+            unique=True,
+            sqlite_where="is_household = 1",
+        ),
+    )
 
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String, nullable=False)

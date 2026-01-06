@@ -7,14 +7,21 @@ Provides endpoints for:
 - Entity assignment for accounts, income, expenses
 """
 
+import logging
 import re
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.database import get_database
 from src.database.models import Account, BudgetIncomeSource
+
+logger = logging.getLogger(__name__)
+
+# Valid entity types
+VALID_ENTITY_TYPES = ("individual", "household", "trust", "llc")
 
 router = APIRouter(prefix="/api/entities", tags=["entities"])
 
@@ -27,7 +34,7 @@ router = APIRouter(prefix="/api/entities", tags=["entities"])
 class EntityCreate(BaseModel):
     """Request model for creating an entity."""
     name: str
-    entity_type: str = "individual"
+    entity_type: Literal["individual", "household", "trust", "llc"] = "individual"
     is_default: bool = False
     color: Optional[str] = None
     icon: Optional[str] = None
@@ -36,7 +43,7 @@ class EntityCreate(BaseModel):
 class EntityUpdate(BaseModel):
     """Request model for updating an entity."""
     name: Optional[str] = None
-    entity_type: Optional[str] = None
+    entity_type: Optional[Literal["individual", "household", "trust", "llc"]] = None
     is_default: Optional[bool] = None
     color: Optional[str] = None
     icon: Optional[str] = None
@@ -69,17 +76,79 @@ class AssignEntityRequest(BaseModel):
 @router.get("/")
 async def list_entities() -> list[EntityResponse]:
     """List all entities with counts."""
-    db = get_database()
-    entities = db.get_all_entities()
+    try:
+        db = get_database()
+        entities = db.get_all_entities()
 
-    result = []
-    for entity in entities:
-        # Count associated records
+        result = []
+        for entity in entities:
+            # Count associated records
+            accounts = db.get_accounts_by_entity(entity.id)
+            income_sources = db.get_income_sources_by_entity(entity.id)
+            expenses = db.get_expenses_by_entity(entity.id)
+
+            result.append(EntityResponse(
+                id=entity.id,
+                name=entity.name,
+                entity_type=entity.entity_type,
+                is_default=entity.is_default,
+                is_household=entity.is_household,
+                color=entity.color or "#4A90D9",
+                icon=entity.icon or "user",
+                account_count=len(accounts),
+                income_count=len(income_sources),
+                expense_count=len(expenses),
+            ))
+
+        return result
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in list_entities: {e}")
+        raise HTTPException(status_code=500, detail="Unable to retrieve entities")
+
+
+@router.post("/")
+async def create_entity(data: EntityCreate) -> EntityResponse:
+    """Create a new entity."""
+    try:
+        db = get_database()
+
+        entity = db.create_entity(
+            name=data.name,
+            entity_type=data.entity_type,
+            is_default=data.is_default,
+            color=data.color,
+            icon=data.icon,
+        )
+
+        return EntityResponse(
+            id=entity.id,
+            name=entity.name,
+            entity_type=entity.entity_type,
+            is_default=entity.is_default,
+            is_household=entity.is_household,
+            color=entity.color or "#4A90D9",
+            icon=entity.icon or "user",
+        )
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in create_entity: {e}")
+        raise HTTPException(status_code=500, detail="Unable to create entity")
+
+
+@router.get("/{entity_id}")
+async def get_entity(entity_id: str) -> EntityResponse:
+    """Get entity details."""
+    try:
+        db = get_database()
+        entity = db.get_entity_by_id(entity_id)
+
+        if not entity:
+            raise HTTPException(status_code=404, detail="Entity not found")
+
         accounts = db.get_accounts_by_entity(entity.id)
         income_sources = db.get_income_sources_by_entity(entity.id)
         expenses = db.get_expenses_by_entity(entity.id)
 
-        result.append(EntityResponse(
+        return EntityResponse(
             id=entity.id,
             name=entity.name,
             entity_type=entity.entity_type,
@@ -90,126 +159,92 @@ async def list_entities() -> list[EntityResponse]:
             account_count=len(accounts),
             income_count=len(income_sources),
             expense_count=len(expenses),
-        ))
-
-    return result
-
-
-@router.post("/")
-async def create_entity(data: EntityCreate) -> EntityResponse:
-    """Create a new entity."""
-    db = get_database()
-
-    entity = db.create_entity(
-        name=data.name,
-        entity_type=data.entity_type,
-        is_default=data.is_default,
-        color=data.color,
-        icon=data.icon,
-    )
-
-    return EntityResponse(
-        id=entity.id,
-        name=entity.name,
-        entity_type=entity.entity_type,
-        is_default=entity.is_default,
-        is_household=entity.is_household,
-        color=entity.color or "#4A90D9",
-        icon=entity.icon or "user",
-    )
-
-
-@router.get("/{entity_id}")
-async def get_entity(entity_id: str) -> EntityResponse:
-    """Get entity details."""
-    db = get_database()
-    entity = db.get_entity_by_id(entity_id)
-
-    if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
-
-    accounts = db.get_accounts_by_entity(entity.id)
-    income_sources = db.get_income_sources_by_entity(entity.id)
-    expenses = db.get_expenses_by_entity(entity.id)
-
-    return EntityResponse(
-        id=entity.id,
-        name=entity.name,
-        entity_type=entity.entity_type,
-        is_default=entity.is_default,
-        is_household=entity.is_household,
-        color=entity.color or "#4A90D9",
-        icon=entity.icon or "user",
-        account_count=len(accounts),
-        income_count=len(income_sources),
-        expense_count=len(expenses),
-    )
+        )
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in get_entity: {e}")
+        raise HTTPException(status_code=500, detail="Unable to retrieve entity")
 
 
 @router.put("/{entity_id}")
 async def update_entity(entity_id: str, data: EntityUpdate) -> EntityResponse:
     """Update an entity."""
-    db = get_database()
+    try:
+        db = get_database()
 
-    entity = db.update_entity(
-        entity_id=entity_id,
-        name=data.name,
-        entity_type=data.entity_type,
-        is_default=data.is_default,
-        color=data.color,
-        icon=data.icon,
-    )
+        entity = db.update_entity(
+            entity_id=entity_id,
+            name=data.name,
+            entity_type=data.entity_type,
+            is_default=data.is_default,
+            color=data.color,
+            icon=data.icon,
+        )
 
-    if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
+        if not entity:
+            raise HTTPException(status_code=404, detail="Entity not found")
 
-    accounts = db.get_accounts_by_entity(entity.id)
-    income_sources = db.get_income_sources_by_entity(entity.id)
-    expenses = db.get_expenses_by_entity(entity.id)
+        accounts = db.get_accounts_by_entity(entity.id)
+        income_sources = db.get_income_sources_by_entity(entity.id)
+        expenses = db.get_expenses_by_entity(entity.id)
 
-    return EntityResponse(
-        id=entity.id,
-        name=entity.name,
-        entity_type=entity.entity_type,
-        is_default=entity.is_default,
-        is_household=entity.is_household,
-        color=entity.color or "#4A90D9",
-        icon=entity.icon or "user",
-        account_count=len(accounts),
-        income_count=len(income_sources),
-        expense_count=len(expenses),
-    )
+        return EntityResponse(
+            id=entity.id,
+            name=entity.name,
+            entity_type=entity.entity_type,
+            is_default=entity.is_default,
+            is_household=entity.is_household,
+            color=entity.color or "#4A90D9",
+            icon=entity.icon or "user",
+            account_count=len(accounts),
+            income_count=len(income_sources),
+            expense_count=len(expenses),
+        )
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in update_entity: {e}")
+        raise HTTPException(status_code=500, detail="Unable to update entity")
 
 
 @router.delete("/{entity_id}")
 async def delete_entity(entity_id: str) -> dict:
     """Delete an entity."""
-    db = get_database()
-
     try:
+        db = get_database()
         success = db.delete_entity(entity_id)
         if not success:
             raise HTTPException(status_code=404, detail="Entity not found")
         return {"success": True, "message": "Entity deleted"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in delete_entity: {e}")
+        raise HTTPException(status_code=500, detail="Unable to delete entity")
 
 
 @router.get("/{entity_id}/summary")
 async def get_entity_summary(entity_id: str) -> dict:
     """Get portfolio summary for an entity."""
-    db = get_database()
+    try:
+        db = get_database()
 
-    entity = db.get_entity_by_id(entity_id)
-    if not entity:
-        raise HTTPException(status_code=404, detail="Entity not found")
+        entity = db.get_entity_by_id(entity_id)
+        if not entity:
+            raise HTTPException(status_code=404, detail="Entity not found")
 
-    summary = db.get_portfolio_summary_by_entity(entity_id)
-    return {
-        "entity_id": entity_id,
-        "entity_name": entity.name,
-        **summary,
-    }
+        summary = db.get_portfolio_summary_by_entity(entity_id)
+        return {
+            "entity_id": entity_id,
+            "entity_name": entity.name,
+            **summary,
+        }
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in get_entity_summary: {e}")
+        raise HTTPException(status_code=500, detail="Unable to retrieve entity summary")
 
 
 # =============================================================================
@@ -226,92 +261,106 @@ async def auto_detect_entities() -> dict:
     - "Schwab Alex IRA" -> Creates "Alex" entity
     - Names starting with a person's name followed by space or possessive
     """
-    db = get_database()
+    try:
+        db = get_database()
 
-    # Ensure household entity exists
-    household = db.ensure_household_entity()
+        # Ensure household entity exists
+        household = db.ensure_household_entity()
 
-    # Patterns to extract names from account/income names
-    # Match patterns like:
-    #   - "John's 401k" -> captures "John"
-    #   - "Schwab Alex IRA" -> captures "Alex" (after optional brokerage prefix)
-    #   - "Alex Roth IRA" -> captures "Alex"
-    # Requires: Name must start with uppercase, followed by lowercase letters
-    # Does NOT match: All-caps names like "JOHN", names without space/possessive after
-    name_pattern = re.compile(r"^(?:[A-Za-z]+\s+)?([A-Z][a-z]+)(?:'s?\s|\s)")
+        # Patterns to extract names from account/income names
+        # Match patterns like:
+        #   - "John's 401k" -> captures "John"
+        #   - "Schwab Alex IRA" -> captures "Alex" (after optional brokerage prefix)
+        #   - "Alex Roth IRA" -> captures "Alex"
+        # Requires: Name must start with uppercase, followed by lowercase letters
+        # Does NOT match: All-caps names like "JOHN", names without space/possessive after
+        name_pattern = re.compile(r"^(?:[A-Za-z]+\s+)?([A-Z][a-z]+)(?:'s?\s|\s)")
 
-    detected_names: set[str] = set()
-    associations: dict[str, list[str]] = {}  # entity_name -> [record_ids]
+        detected_names: set[str] = set()
+        associations: dict[str, list[str]] = {}  # entity_name -> [record_ids]
 
-    # Scan account names
-    with db.get_session() as session:
-        accounts = session.query(Account).all()
-        for account in accounts:
-            match = name_pattern.match(account.name)
-            if match:
-                name = match.group(1)
-                detected_names.add(name)
-                if name not in associations:
-                    associations[name] = []
-                associations[name].append(f"account:{account.id}")
+        # Scan account names
+        with db.get_session() as session:
+            accounts = session.query(Account).all()
+            for account in accounts:
+                match = name_pattern.match(account.name)
+                if match:
+                    name = match.group(1)
+                    detected_names.add(name)
+                    if name not in associations:
+                        associations[name] = []
+                    associations[name].append(f"account:{account.id}")
 
-        # Scan income source names
-        income_sources = session.query(BudgetIncomeSource).all()
-        for income in income_sources:
-            match = name_pattern.match(income.name)
-            if match:
-                name = match.group(1)
-                detected_names.add(name)
-                if name not in associations:
-                    associations[name] = []
-                associations[name].append(f"income:{income.id}")
+            # Scan income source names
+            income_sources = session.query(BudgetIncomeSource).all()
+            for income in income_sources:
+                match = name_pattern.match(income.name)
+                if match:
+                    name = match.group(1)
+                    detected_names.add(name)
+                    if name not in associations:
+                        associations[name] = []
+                    associations[name].append(f"income:{income.id}")
 
-    # Create entities for detected names
-    created_entities = []
-    assigned_accounts = 0
-    assigned_income = 0
+        # Create entities for detected names
+        created_entities = []
+        assigned_accounts = 0
+        assigned_income = 0
+        failed_assignments: list[str] = []
 
-    # Define colors for entities
-    colors = ["#4A90D9", "#E74C3C", "#2ECC71", "#9B59B6", "#F39C12", "#1ABC9C"]
+        # Define colors for entities
+        colors = ["#4A90D9", "#E74C3C", "#2ECC71", "#9B59B6", "#F39C12", "#1ABC9C"]
 
-    for idx, name in enumerate(sorted(detected_names)):
-        # Check if entity already exists
-        existing = None
-        for entity in db.get_all_entities():
-            if entity.name.lower() == name.lower():
-                existing = entity
-                break
+        for idx, name in enumerate(sorted(detected_names)):
+            # Check if entity already exists
+            existing = None
+            for entity in db.get_all_entities():
+                if entity.name.lower() == name.lower():
+                    existing = entity
+                    break
 
-        if not existing:
-            color = colors[idx % len(colors)]
-            entity = db.create_entity(
-                name=name,
-                entity_type="individual",
-                color=color,
-            )
-            created_entities.append(name)
-        else:
-            entity = existing
+            if not existing:
+                color = colors[idx % len(colors)]
+                entity = db.create_entity(
+                    name=name,
+                    entity_type="individual",
+                    color=color,
+                )
+                created_entities.append(name)
+            else:
+                entity = existing
 
-        # Assign records to entity
-        for record_ref in associations.get(name, []):
-            record_type, record_id = record_ref.split(":", 1)
-            if record_type == "account":
-                if db.assign_account_to_entity(record_id, entity.id):
-                    assigned_accounts += 1
-            elif record_type == "income":
-                if db.assign_income_source_to_entity(record_id, entity.id):
-                    assigned_income += 1
+            # Assign records to entity, tracking failures
+            for record_ref in associations.get(name, []):
+                record_type, record_id = record_ref.split(":", 1)
+                try:
+                    if record_type == "account":
+                        if db.assign_account_to_entity(record_id, entity.id):
+                            assigned_accounts += 1
+                        else:
+                            failed_assignments.append(f"{record_ref} (not found)")
+                    elif record_type == "income":
+                        if db.assign_income_source_to_entity(record_id, entity.id):
+                            assigned_income += 1
+                        else:
+                            failed_assignments.append(f"{record_ref} (not found)")
+                except Exception as e:
+                    failed_assignments.append(f"{record_ref} ({str(e)})")
 
-    return {
-        "success": True,
-        "entities_created": created_entities,
-        "entities_created_count": len(created_entities),
-        "accounts_assigned": assigned_accounts,
-        "income_sources_assigned": assigned_income,
-        "household_entity_id": household.id,
-        "detected_names": list(sorted(detected_names)),
-    }
+        return {
+            "success": len(failed_assignments) == 0,
+            "entities_created": created_entities,
+            "entities_created_count": len(created_entities),
+            "accounts_assigned": assigned_accounts,
+            "income_sources_assigned": assigned_income,
+            "household_entity_id": household.id,
+            "detected_names": list(sorted(detected_names)),
+            "failed_assignments": failed_assignments,
+            "warnings": f"{len(failed_assignments)} assignment(s) failed" if failed_assignments else None,
+        }
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in auto_detect_entities: {e}")
+        raise HTTPException(status_code=500, detail="Unable to auto-detect entities")
 
 
 # =============================================================================
@@ -322,34 +371,70 @@ async def auto_detect_entities() -> dict:
 @router.post("/accounts/{account_id}/assign")
 async def assign_account_entity(account_id: str, data: AssignEntityRequest) -> dict:
     """Assign an entity to an account."""
-    db = get_database()
+    try:
+        db = get_database()
 
-    success = db.assign_account_to_entity(account_id, data.entity_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Account not found")
+        # Validate entity exists if an ID is provided
+        if data.entity_id:
+            entity = db.get_entity_by_id(data.entity_id)
+            if not entity:
+                raise HTTPException(status_code=400, detail="Entity not found")
 
-    return {"success": True, "account_id": account_id, "entity_id": data.entity_id}
+        success = db.assign_account_to_entity(account_id, data.entity_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+        return {"success": True, "account_id": account_id, "entity_id": data.entity_id}
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in assign_account_entity: {e}")
+        raise HTTPException(status_code=500, detail="Unable to assign entity to account")
 
 
 @router.post("/income/{income_id}/assign")
 async def assign_income_entity(income_id: str, data: AssignEntityRequest) -> dict:
     """Assign an entity to an income source."""
-    db = get_database()
+    try:
+        db = get_database()
 
-    success = db.assign_income_source_to_entity(income_id, data.entity_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Income source not found")
+        # Validate entity exists if an ID is provided
+        if data.entity_id:
+            entity = db.get_entity_by_id(data.entity_id)
+            if not entity:
+                raise HTTPException(status_code=400, detail="Entity not found")
 
-    return {"success": True, "income_id": income_id, "entity_id": data.entity_id}
+        success = db.assign_income_source_to_entity(income_id, data.entity_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Income source not found")
+
+        return {"success": True, "income_id": income_id, "entity_id": data.entity_id}
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in assign_income_entity: {e}")
+        raise HTTPException(status_code=500, detail="Unable to assign entity to income source")
 
 
 @router.post("/expenses/{expense_id}/assign")
 async def assign_expense_entity(expense_id: str, data: AssignEntityRequest) -> dict:
     """Assign an entity to an expense."""
-    db = get_database()
+    try:
+        db = get_database()
 
-    success = db.assign_expense_to_entity(expense_id, data.entity_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Expense not found")
+        # Validate entity exists if an ID is provided
+        if data.entity_id:
+            entity = db.get_entity_by_id(data.entity_id)
+            if not entity:
+                raise HTTPException(status_code=400, detail="Entity not found")
 
-    return {"success": True, "expense_id": expense_id, "entity_id": data.entity_id}
+        success = db.assign_expense_to_entity(expense_id, data.entity_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Expense not found")
+
+        return {"success": True, "expense_id": expense_id, "entity_id": data.entity_id}
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in assign_expense_entity: {e}")
+        raise HTTPException(status_code=500, detail="Unable to assign entity to expense")

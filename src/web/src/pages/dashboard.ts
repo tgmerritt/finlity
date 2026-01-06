@@ -629,6 +629,17 @@ export async function updatePriceStatus(): Promise<void> {
     }
   } catch (error) {
     console.error('Error loading price status:', error);
+    // Set status to unknown state so users know the check failed
+    const statusEl = document.getElementById('price-status');
+    if (statusEl) {
+      statusEl.className = 'price-status';
+      statusEl.textContent = '';
+      const dot = document.createElement('span');
+      dot.className = 'status-dot';
+      statusEl.appendChild(dot);
+      statusEl.appendChild(document.createTextNode(' Status unavailable'));
+      statusEl.title = 'Unable to check price freshness';
+    }
   }
 }
 
