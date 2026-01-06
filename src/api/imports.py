@@ -505,15 +505,9 @@ def _suggest_account_with_ai(
                     reason=f"Matched brokerage ({brokerage}) and account type",
                 )
 
-    # If we have a brokerage match, return first matching account
-    if brokerage:
-        for account in accounts:
-            if account.brokerage and brokerage.lower() == account.brokerage.lower():
-                return SuggestedAccount(
-                    id=account.id,
-                    name=account.name,
-                    reason=f"Matched brokerage: {brokerage}",
-                )
+    # NOTE: Removed brokerage-only matching as it caused false positives
+    # (e.g., "John Doe Roth" file matching "Acme HYSA" just because both use same brokerage)
+    # Let the AI handle ambiguous cases where only brokerage matches
 
     # Try Claude AI if available (optional enhancement)
     try:
