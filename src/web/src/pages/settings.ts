@@ -859,6 +859,70 @@ export async function saveAssetClassTargets(event: Event): Promise<void> {
 }
 
 /**
+ * Load personal settings from API and populate form.
+ */
+export async function loadPersonalSettings(): Promise<void> {
+  try {
+    const data = await apiCall<{ personal?: {
+      dob?: string;
+      retirement_age?: number;
+      withdrawal_rate?: number;
+      target_monthly_income?: number;
+    } }>('/api/settings/config/personal');
+
+    if (!data?.personal) return;
+
+    const p = data.personal;
+
+    const dob = document.getElementById('settings-dob') as HTMLInputElement | null;
+    if (dob && p.dob) dob.value = p.dob;
+
+    const retirementAge = document.getElementById('settings-retirement-age') as HTMLInputElement | null;
+    if (retirementAge && p.retirement_age) retirementAge.value = String(p.retirement_age);
+
+    const withdrawalRate = document.getElementById('settings-withdrawal-rate') as HTMLInputElement | null;
+    if (withdrawalRate && p.withdrawal_rate) withdrawalRate.value = String(p.withdrawal_rate);
+
+    const targetIncome = document.getElementById('settings-target-income') as HTMLInputElement | null;
+    if (targetIncome && p.target_monthly_income != null) targetIncome.value = String(p.target_monthly_income);
+  } catch (error) {
+    console.error('Error loading personal settings:', error);
+  }
+}
+
+/**
+ * Load asset class targets from API and populate form.
+ */
+export async function loadAssetClassTargets(): Promise<void> {
+  try {
+    const data = await apiCall<{ targets?: { asset_class?: {
+      equities?: number;
+      bonds?: number;
+      alternatives?: number;
+      cash?: number;
+    } } }>('/api/settings/config/targets');
+
+    if (!data?.targets?.asset_class) return;
+
+    const t = data.targets.asset_class;
+
+    const equities = document.getElementById('target-equities') as HTMLInputElement | null;
+    if (equities && t.equities != null) equities.value = String(t.equities * 100);
+
+    const bonds = document.getElementById('target-bonds') as HTMLInputElement | null;
+    if (bonds && t.bonds != null) bonds.value = String(t.bonds * 100);
+
+    const alternatives = document.getElementById('target-alternatives') as HTMLInputElement | null;
+    if (alternatives && t.alternatives != null) alternatives.value = String(t.alternatives * 100);
+
+    const cash = document.getElementById('target-cash') as HTMLInputElement | null;
+    if (cash && t.cash != null) cash.value = String(t.cash * 100);
+  } catch (error) {
+    console.error('Error loading asset class targets:', error);
+  }
+}
+
+/**
  * Load market assumptions from API and populate form.
  */
 export async function loadMarketAssumptions(): Promise<void> {
@@ -1088,6 +1152,8 @@ export function initSettings(): void {
       loadApiKeysStatus();
       loadAIProviders();
       loadViewsList();
+      loadPersonalSettings();
+      loadAssetClassTargets();
       loadMarketAssumptions();
       loadMonteCarloSettings();
       loadPlugins();
