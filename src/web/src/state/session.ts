@@ -106,7 +106,9 @@ export async function generateSignatureHeaders(
   const nonce = crypto.randomUUID();
   // Include body hash in signature to prevent tampering
   const bodyHash = body ? await hashBody(JSON.stringify(body)) : '';
-  const message = `${timestamp}:${nonce}:${method}:${endpoint}:${bodyHash}`;
+  // Strip query parameters from endpoint to match backend request.url.path
+  const cleanEndpoint = endpoint.split('?')[0];
+  const message = `${timestamp}:${nonce}:${method}:${cleanEndpoint}:${bodyHash}`;
   const signature = await computeHmac(hmacKey, message);
 
   return {

@@ -79,8 +79,9 @@ class TestSessionManager:
         nonce = "test-nonce-12345"
         method = "POST"
         path = "/api/portfolio/accounts"
+        body_hash = ""
 
-        message = f"{timestamp}:{nonce}:{method}:{path}"
+        message = f"{timestamp}:{nonce}:{method}:{path}:{body_hash}"
         signature = hmac.new(
             session.hmac_key.encode(),
             message.encode(),
@@ -102,8 +103,9 @@ class TestSessionManager:
         nonce = "test-nonce-wrong-key"
         method = "POST"
         path = "/api/portfolio/accounts"
+        body_hash = ""
 
-        message = f"{timestamp}:{nonce}:{method}:{path}"
+        message = f"{timestamp}:{nonce}:{method}:{path}:{body_hash}"
         signature = hmac.new(
             b"wrong-key",
             message.encode(),
@@ -126,8 +128,9 @@ class TestSessionManager:
         nonce = "test-nonce-expired"
         method = "POST"
         path = "/api/portfolio/accounts"
+        body_hash = ""
 
-        message = f"{timestamp}:{nonce}:{method}:{path}"
+        message = f"{timestamp}:{nonce}:{method}:{path}:{body_hash}"
         signature = hmac.new(
             session.hmac_key.encode(),
             message.encode(),
@@ -149,8 +152,9 @@ class TestSessionManager:
         nonce = "unique-nonce-replay-test"
         method = "POST"
         path = "/api/portfolio/accounts"
+        body_hash = ""
 
-        message = f"{timestamp}:{nonce}:{method}:{path}"
+        message = f"{timestamp}:{nonce}:{method}:{path}:{body_hash}"
         signature = hmac.new(
             session.hmac_key.encode(),
             message.encode(),
