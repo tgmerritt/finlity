@@ -416,6 +416,7 @@ body {
 
 .profile-management-card {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 12px;
     padding: 12px;
@@ -423,6 +424,7 @@ body {
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius);
     transition: all var(--transition-fast);
+    overflow: hidden;
 }
 
 .profile-management-card:hover {
@@ -451,8 +453,9 @@ body {
 }
 
 .profile-card-info {
-    flex: 1;
+    flex: 1 1 120px;
     min-width: 0;
+    overflow: hidden;
 }
 
 .profile-card-name {
@@ -460,8 +463,9 @@ body {
     font-size: 14px;
     margin-bottom: 2px;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 4px 8px;
 }
 
 .profile-card-name .badge {
@@ -485,11 +489,14 @@ body {
 
 .profile-card-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
+    margin-left: auto;
 }
 
 .profile-card-actions .btn {
-    padding: 6px 8px;
+    padding: 4px 8px;
+    font-size: 12px;
 }
 
 /* Color Picker */
@@ -2450,6 +2457,7 @@ tr:hover td {
 }
 
 /* Toast Notifications */
+.toast-container,
 #toast-container {
     position: fixed;
     bottom: 24px;
@@ -2464,30 +2472,107 @@ tr:hover td {
 }
 
 .toast {
-    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 20px;
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-lg);
-    animation: slideUp 0.3s ease;
-    max-width: 400px;
+    max-width: 450px;
+    min-width: 280px;
     font-weight: 500;
+    font-size: 14px;
     pointer-events: auto;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
+.toast.toast-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.toast.toast-hiding {
+    opacity: 0;
+    transform: translateY(-10px);
+}
+
+.toast-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.toast-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.toast-message {
+    flex: 1;
+    line-height: 1.4;
+}
+
+.toast-close {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0 0 8px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.toast-close:hover {
+    opacity: 1;
+}
+
+/* Toast type styles - use dash notation to match TypeScript */
+.toast-success {
+    background: #15803d;
+    border: 1px solid #22c55e;
+    color: #fff;
+}
+
+.toast-error {
+    background: #b91c1c;
+    border: 1px solid #ef4444;
+    color: #fff;
+}
+
+.toast-warning {
+    background: #a16207;
+    border: 1px solid #eab308;
+    color: #fff;
+}
+
+.toast-info {
+    background: #1d4ed8;
+    border: 1px solid #3b82f6;
+    color: #fff;
+}
+
+/* Legacy class support (without dash) */
 .toast.success {
-    background: #389e0d;
-    border: 1px solid #52c41a;
+    background: #15803d;
+    border: 1px solid #22c55e;
     color: #fff;
 }
 
 .toast.error {
-    background: #cf1322;
-    border: 1px solid #ff4d4f;
+    background: #b91c1c;
+    border: 1px solid #ef4444;
     color: #fff;
 }
 
 .toast.info {
-    background: #096dd9;
-    border: 1px solid #1890ff;
+    background: #1d4ed8;
+    border: 1px solid #3b82f6;
     color: #fff;
 }
 
@@ -3919,6 +4004,117 @@ th.sortable.sort-desc .sort-icon::after {
 }
 
 .view-actions button.danger:hover {
+    color: var(--color-error);
+    border-color: var(--color-error);
+}
+
+/* Entities List */
+.entities-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.entity-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    background: var(--color-bg-spotlight);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    transition: all var(--transition-fast);
+}
+
+.entity-item:hover {
+    border-color: var(--color-primary);
+}
+
+.entity-item.is-default {
+    border-left: 3px solid var(--color-primary);
+}
+
+.entity-item.is-household {
+    background: var(--color-bg-container);
+    border-style: dashed;
+}
+
+.entity-color-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.entity-info {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.entity-name {
+    font-weight: 600;
+    color: var(--color-text-primary);
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.entity-name .default-badge,
+.entity-name .household-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: var(--color-primary-bg);
+    color: var(--color-primary);
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.entity-name .household-badge {
+    background: var(--color-bg-hover);
+    color: var(--color-text-secondary);
+}
+
+.entity-details {
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.entity-type-badge {
+    font-size: 11px;
+    padding: 2px 6px;
+    background: var(--color-bg-hover);
+    color: var(--color-text-secondary);
+    border-radius: 4px;
+    text-transform: capitalize;
+}
+
+.entity-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.entity-actions button {
+    padding: 6px 10px;
+    background: var(--color-bg-container);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+    transition: all var(--transition-fast);
+}
+
+.entity-actions button:hover {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.entity-actions button.danger:hover {
     color: var(--color-error);
     border-color: var(--color-error);
 }
@@ -6967,6 +7163,18 @@ th.sortable.sort-desc .sort-icon::after {
 .form-control:focus {
     outline: none;
     border-color: var(--color-primary);
+}
+
+.form-control-sm {
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+/* Entity select in account management table */
+.entity-select {
+    width: auto;
+    min-width: 120px;
+    max-width: 180px;
 }
 
 .form-hint {

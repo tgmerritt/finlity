@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from .models import (
     Base,
+    Entity,
     FileImport,
     Account,
     Position,
@@ -20,6 +21,8 @@ from .models import (
     AllocationTrigger,
     PortfolioView,
     MonteCarloResult,
+    BudgetIncomeSource,
+    BudgetExpense,
 )
 
 
@@ -41,61 +44,103 @@ class Database:
 
     def _migrate_schema(self) -> None:
         """Add missing columns to existing tables (for database upgrades)."""
+        import logging
         from sqlalchemy import text, inspect
+        from sqlalchemy.exc import SQLAlchemyError
 
+        logger = logging.getLogger(__name__)
         inspector = inspect(self.engine)
 
-        with self.engine.connect() as conn:
-            # Check and add missing columns to accounts table
-            if "accounts" in inspector.get_table_names():
-                existing_cols = {col["name"] for col in inspector.get_columns("accounts")}
-                account_migrations = [
-                    ("beneficiary", "TEXT"),
-                    ("custom_type_name", "TEXT"),
-                    ("is_retirement_account", "BOOLEAN DEFAULT 0"),
-                ]
-                for col_name, col_type in account_migrations:
-                    if col_name not in existing_cols:
-                        conn.execute(text(f"ALTER TABLE accounts ADD COLUMN {col_name} {col_type}"))
-                        conn.commit()
+        try:
+            with self.engine.connect() as conn:
+                # Check and add missing columns to accounts table
+                if "accounts" in inspector.get_table_names():
+                    existing_cols = {col["name"] for col in inspector.get_columns("accounts")}
+                    account_migrations = [
+                        ("beneficiary", "TEXT"),
+                        ("custom_type_name", "TEXT"),
+                        ("is_retirement_account", "BOOLEAN DEFAULT 0"),
+                    ]
+                    for col_name, col_type in account_migrations:
+                        if col_name not in existing_cols:
+                            conn.execute(text(f"ALTER TABLE accounts ADD COLUMN {col_name} {col_type}"))
+                            conn.commit()
 
-            # Check and add missing columns to positions table
-            if "positions" in inspector.get_table_names():
-                existing_cols = {col["name"] for col in inspector.get_columns("positions")}
-                position_migrations = [
-                    ("position_type", "TEXT DEFAULT 'equity'"),
-                    ("maturity_date", "DATETIME"),
-                    ("interest_rate", "REAL"),
-                    ("purchase_date", "DATETIME"),
-                ]
-                for col_name, col_type in position_migrations:
-                    if col_name not in existing_cols:
-                        conn.execute(text(f"ALTER TABLE positions ADD COLUMN {col_name} {col_type}"))
-                        conn.commit()
+                # Check and add missing columns to positions table
+                if "positions" in inspector.get_table_names():
+                    existing_cols = {col["name"] for col in inspector.get_columns("positions")}
+                    position_migrations = [
+                        ("position_type", "TEXT DEFAULT 'equity'"),
+                        ("maturity_date", "DATETIME"),
+                        ("interest_rate", "REAL"),
+                        ("purchase_date", "DATETIME"),
+                    ]
+                    for col_name, col_type in position_migrations:
+                        if col_name not in existing_cols:
+                            conn.execute(text(f"ALTER TABLE positions ADD COLUMN {col_name} {col_type}"))
+                            conn.commit()
 
-            # Check and add missing columns to monte_carlo_results table
-            if "monte_carlo_results" in inspector.get_table_names():
-                existing_cols = {col["name"] for col in inspector.get_columns("monte_carlo_results")}
-                mc_migrations = [
-                    ("projected_value_at_retirement", "REAL"),
-                    ("conservative_value_at_retirement", "REAL"),
-                    ("earliest_retirement_age", "REAL"),
-                ]
-                for col_name, col_type in mc_migrations:
-                    if col_name not in existing_cols:
-                        conn.execute(text(f"ALTER TABLE monte_carlo_results ADD COLUMN {col_name} {col_type}"))
-                        conn.commit()
+                # Check and add missing columns to monte_carlo_results table
+                if "monte_carlo_results" in inspector.get_table_names():
+                    existing_cols = {col["name"] for col in inspector.get_columns("monte_carlo_results")}
+                    mc_migrations = [
+                        ("projected_value_at_retirement", "REAL"),
+                        ("conservative_value_at_retirement", "REAL"),
+                        ("earliest_retirement_age", "REAL"),
+                    ]
+                    for col_name, col_type in mc_migrations:
+                        if col_name not in existing_cols:
+                            conn.execute(text(f"ALTER TABLE monte_carlo_results ADD COLUMN {col_name} {col_type}"))
+                            conn.commit()
 
-            # Check and add missing columns to budget_pretax_deductions table
-            if "budget_pretax_deductions" in inspector.get_table_names():
-                existing_cols = {col["name"] for col in inspector.get_columns("budget_pretax_deductions")}
-                deduction_migrations = [
-                    ("label", "TEXT"),  # User-friendly label (e.g., "John's 401k")
+                # Check and add missing columns to budget_pretax_deductions table
+                if "budget_pretax_deductions" in inspector.get_table_names():
+                    existing_cols = {col["name"] for col in inspector.get_columns("budget_pretax_deductions")}
+                    deduction_migrations = [
+                        ("label", "TEXT"),
+                    ]
+                    for col_name, col_type in deduction_migrations:
+                        if col_name not in existing_cols:
+                            conn.execute(text(f"ALTER TABLE budget_pretax_deductions ADD COLUMN {col_name} {col_type}"))
+                            conn.commit()
+
+                # Create entities table if it doesn't exist
+                if "entities" not in inspector.get_table_names():
+                    logger.info("Creating entities table")
+                    conn.execute(text("""
+                        CREATE TABLE entities (
+                            id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            entity_type TEXT NOT NULL DEFAULT 'individual',
+                            is_default BOOLEAN DEFAULT 0,
+                            is_household BOOLEAN DEFAULT 0,
+                            color TEXT DEFAULT '#4A90D9',
+                            icon TEXT DEFAULT 'user',
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """))
+                    conn.commit()
+
+                # Add entity_id column to tables that need entity ownership
+                entity_tables = [
+                    "accounts",
+                    "budget_income_sources",
+                    "budget_expenses",
+                    "budget_tax_config",
+                    "monte_carlo_results",
                 ]
-                for col_name, col_type in deduction_migrations:
-                    if col_name not in existing_cols:
-                        conn.execute(text(f"ALTER TABLE budget_pretax_deductions ADD COLUMN {col_name} {col_type}"))
-                        conn.commit()
+                for table_name in entity_tables:
+                    if table_name in inspector.get_table_names():
+                        existing_cols = {col["name"] for col in inspector.get_columns(table_name)}
+                        if "entity_id" not in existing_cols:
+                            logger.info(f"Adding entity_id column to {table_name}")
+                            conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN entity_id TEXT REFERENCES entities(id)"))
+                            conn.commit()
+
+        except SQLAlchemyError as e:
+            logger.error(f"Schema migration failed: {e}", exc_info=True)
+            raise RuntimeError(f"Database schema migration failed: {e}")
 
     def get_session(self) -> Session:
         """Get a new database session."""
@@ -1200,3 +1245,321 @@ class Database:
             return session.query(MonteCarloResult).order_by(
                 MonteCarloResult.run_date.desc()
             ).limit(limit).all()
+
+    # ==================== Entity Operations ====================
+
+    # Valid entity types for validation
+    VALID_ENTITY_TYPES = {"individual", "household", "trust", "llc"}
+
+    def create_entity(
+        self,
+        name: str,
+        entity_type: str = "individual",
+        is_default: bool = False,
+        is_household: bool = False,
+        color: Optional[str] = None,
+        icon: Optional[str] = None,
+    ) -> Entity:
+        """Create a new entity."""
+        import uuid as uuid_module
+
+        # Validate entity_type
+        if entity_type not in self.VALID_ENTITY_TYPES:
+            raise ValueError(f"Invalid entity_type '{entity_type}'. Must be one of: {self.VALID_ENTITY_TYPES}")
+
+        with self.get_session() as session:
+            # If setting as default, unset other defaults
+            if is_default:
+                session.query(Entity).filter(
+                    Entity.is_default.is_(True)
+                ).update({Entity.is_default: False})
+
+            entity = Entity(
+                id=str(uuid_module.uuid4()),
+                name=name,
+                entity_type=entity_type,
+                is_default=is_default,
+                is_household=is_household,
+                color=color or "#4A90D9",
+                icon=icon or ("users" if is_household else "user"),
+            )
+            session.add(entity)
+            session.commit()
+            session.refresh(entity)
+            return entity
+
+    def get_all_entities(self) -> list[Entity]:
+        """Get all entities."""
+        with self.get_session() as session:
+            return session.query(Entity).order_by(Entity.name).all()
+
+    def get_entity_by_id(self, entity_id: str) -> Optional[Entity]:
+        """Get entity by ID."""
+        with self.get_session() as session:
+            return session.query(Entity).filter_by(id=entity_id).first()
+
+    def get_default_entity(self) -> Optional[Entity]:
+        """Get the default entity."""
+        with self.get_session() as session:
+            return session.query(Entity).filter_by(is_default=True).first()
+
+    def get_household_entity(self) -> Optional[Entity]:
+        """Get the household entity (combined family view)."""
+        with self.get_session() as session:
+            return session.query(Entity).filter_by(is_household=True).first()
+
+    def update_entity(
+        self,
+        entity_id: str,
+        name: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        is_default: Optional[bool] = None,
+        color: Optional[str] = None,
+        icon: Optional[str] = None,
+    ) -> Optional[Entity]:
+        """Update an entity."""
+        # Validate entity_type if provided
+        if entity_type is not None and entity_type not in self.VALID_ENTITY_TYPES:
+            raise ValueError(f"Invalid entity_type '{entity_type}'. Must be one of: {self.VALID_ENTITY_TYPES}")
+
+        with self.get_session() as session:
+            entity = session.query(Entity).filter_by(id=entity_id).first()
+            if entity:
+                if name is not None:
+                    entity.name = name
+                if entity_type is not None:
+                    entity.entity_type = entity_type
+                if is_default is not None:
+                    if is_default:
+                        # Unset other defaults first
+                        session.query(Entity).filter(
+                            Entity.is_default.is_(True),
+                            Entity.id != entity_id
+                        ).update({Entity.is_default: False})
+                    entity.is_default = is_default
+                if color is not None:
+                    entity.color = color
+                if icon is not None:
+                    entity.icon = icon
+                entity.updated_at = datetime.utcnow()
+                session.commit()
+                session.refresh(entity)
+            return entity
+
+    def delete_entity(self, entity_id: str) -> bool:
+        """Delete an entity, unassigning any associated records.
+
+        Args:
+            entity_id: ID of the entity to delete
+
+        Returns:
+            True if deleted successfully, False if entity not found
+
+        Raises:
+            ValueError: If trying to delete the household entity
+        """
+        with self.get_session() as session:
+            entity = session.query(Entity).filter_by(id=entity_id).first()
+            if not entity:
+                return False
+
+            # Prevent deletion of household entity
+            if entity.is_household:
+                raise ValueError("Cannot delete the household entity")
+
+            # Unassign associated accounts (set entity_id to NULL)
+            session.query(Account).filter_by(entity_id=entity_id).update(
+                {"entity_id": None}
+            )
+
+            # Unassign associated income sources
+            session.query(BudgetIncomeSource).filter_by(entity_id=entity_id).update(
+                {"entity_id": None}
+            )
+
+            # Unassign associated expenses
+            session.query(BudgetExpense).filter_by(entity_id=entity_id).update(
+                {"entity_id": None}
+            )
+
+            session.delete(entity)
+            session.commit()
+            return True
+
+    def ensure_household_entity(self) -> Entity:
+        """Ensure a household entity exists and return it."""
+        with self.get_session() as session:
+            household = session.query(Entity).filter_by(is_household=True).first()
+
+            if not household:
+                import uuid as uuid_module
+                household = Entity(
+                    id=str(uuid_module.uuid4()),
+                    name="Household",
+                    entity_type="household",
+                    is_household=True,
+                    icon="users",
+                    color="#2ECC71",
+                )
+                session.add(household)
+                session.commit()
+                session.refresh(household)
+
+            return household
+
+    # ==================== Entity-Filtered Queries ====================
+
+    def get_accounts_by_entity(self, entity_id: str) -> list[Account]:
+        """Get all accounts for a specific entity."""
+        with self.get_session() as session:
+            return session.query(Account).filter_by(entity_id=entity_id).all()
+
+    def get_income_sources_by_entity(self, entity_id: str) -> list[BudgetIncomeSource]:
+        """Get all income sources for a specific entity."""
+        with self.get_session() as session:
+            return session.query(BudgetIncomeSource).filter_by(entity_id=entity_id).all()
+
+    def get_expenses_by_entity(self, entity_id: str) -> list[BudgetExpense]:
+        """Get all expenses for a specific entity."""
+        with self.get_session() as session:
+            return session.query(BudgetExpense).filter_by(entity_id=entity_id).all()
+
+    def get_portfolio_summary_by_entity(self, entity_id: Optional[str] = None) -> dict:
+        """Get portfolio summary filtered by entity.
+
+        If entity_id is None, returns combined household summary (all accounts).
+        """
+        with self.get_session() as session:
+            if entity_id:
+                accounts = session.query(Account).filter_by(entity_id=entity_id).all()
+            else:
+                accounts = session.query(Account).all()
+
+            total_value = 0.0
+            total_cost = 0.0
+            retirement_value = 0.0
+            taxable_value = 0.0
+            account_list = []
+
+            for account in accounts:
+                positions = session.query(Position).filter_by(account_id=account.id).all()
+                account_value = sum(p.market_value for p in positions if p.current_price)
+                account_cost = sum(p.cost_basis or 0 for p in positions)
+
+                total_value += account_value
+                total_cost += account_cost
+
+                if account.is_retirement:
+                    retirement_value += account_value
+                else:
+                    taxable_value += account_value
+
+                account_list.append({
+                    "id": account.id,
+                    "name": account.name,
+                    "type": account.account_type,
+                    "display_type": account.display_type,
+                    "value": account_value,
+                    "is_retirement": account.is_retirement,
+                })
+
+            total_gain_loss = total_value - total_cost if total_cost > 0 else 0
+
+            return {
+                "total_value": total_value,
+                "total_cost": total_cost,
+                "total_gain_loss": total_gain_loss,
+                "retirement_value": retirement_value,
+                "taxable_value": taxable_value,
+                "accounts": account_list,
+            }
+
+    def get_latest_monte_carlo_result_by_entity(
+        self, entity_id: Optional[str] = None
+    ) -> Optional[MonteCarloResult]:
+        """Get the most recent Monte Carlo simulation result for an entity.
+
+        If entity_id is None, gets the household/global result (entity_id IS NULL).
+        """
+        with self.get_session() as session:
+            query = session.query(MonteCarloResult)
+            if entity_id:
+                query = query.filter_by(entity_id=entity_id)
+            else:
+                query = query.filter(MonteCarloResult.entity_id.is_(None))
+            return query.order_by(MonteCarloResult.run_date.desc()).first()
+
+    def save_monte_carlo_result_for_entity(
+        self,
+        entity_id: Optional[str],
+        current_age: float,
+        retirement_age: float,
+        portfolio_balance: float,
+        monthly_contribution: float,
+        monthly_withdrawal: float,
+        success_rate: float,
+        median_final_value: Optional[float] = None,
+        worst_case_final: Optional[float] = None,
+        best_case_final: Optional[float] = None,
+        earliest_retirement_age: Optional[float] = None,
+        projected_value_at_retirement: Optional[float] = None,
+        conservative_value_at_retirement: Optional[float] = None,
+    ) -> MonteCarloResult:
+        """Save a Monte Carlo simulation result for a specific entity."""
+        import uuid as uuid_module
+
+        with self.get_session() as session:
+            result = MonteCarloResult(
+                id=str(uuid_module.uuid4()),
+                entity_id=entity_id,
+                current_age=current_age,
+                retirement_age=retirement_age,
+                portfolio_balance=portfolio_balance,
+                monthly_contribution=monthly_contribution,
+                monthly_withdrawal=monthly_withdrawal,
+                success_rate=success_rate,
+                median_final_value=median_final_value,
+                worst_case_final=worst_case_final,
+                best_case_final=best_case_final,
+                earliest_retirement_age=earliest_retirement_age,
+                projected_value_at_retirement=projected_value_at_retirement,
+                conservative_value_at_retirement=conservative_value_at_retirement,
+                run_date=datetime.utcnow(),
+            )
+            session.add(result)
+            session.commit()
+            session.refresh(result)
+            return result
+
+    def assign_account_to_entity(self, account_id: str, entity_id: Optional[str]) -> bool:
+        """Assign an account to an entity."""
+        with self.get_session() as session:
+            account = session.query(Account).filter_by(id=account_id).first()
+            if account:
+                account.entity_id = entity_id
+                account.updated_at = datetime.utcnow()
+                session.commit()
+                return True
+            return False
+
+    def assign_income_source_to_entity(self, income_id: str, entity_id: Optional[str]) -> bool:
+        """Assign an income source to an entity."""
+        with self.get_session() as session:
+            income = session.query(BudgetIncomeSource).filter_by(id=income_id).first()
+            if income:
+                income.entity_id = entity_id
+                income.updated_at = datetime.utcnow()
+                session.commit()
+                return True
+            return False
+
+    def assign_expense_to_entity(self, expense_id: str, entity_id: Optional[str]) -> bool:
+        """Assign an expense to an entity."""
+        with self.get_session() as session:
+            expense = session.query(BudgetExpense).filter_by(id=expense_id).first()
+            if expense:
+                expense.entity_id = entity_id
+                expense.updated_at = datetime.utcnow()
+                session.commit()
+                return True
+            return False

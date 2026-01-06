@@ -274,6 +274,20 @@ export interface Profile {
   last_accessed?: string;
 }
 
+// Entity types (for multi-person household tracking)
+export interface Entity {
+  id: string;
+  name: string;
+  entity_type: 'individual' | 'household' | 'trust' | 'llc';
+  is_default: boolean;
+  is_household: boolean;
+  color: string;
+  icon: string;
+  account_count: number;
+  income_count: number;
+  expense_count: number;
+}
+
 // View types
 export interface PortfolioView {
   id: string;

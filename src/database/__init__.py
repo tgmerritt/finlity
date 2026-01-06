@@ -11,6 +11,7 @@ CSV/YAML files are only used for first-time initialization.
 
 from .models import (
     Base,
+    Entity,
     FileImport,
     Account,
     Position,
@@ -42,6 +43,7 @@ from .seed_loader import (
 __all__ = [
     # Models
     "Base",
+    "Entity",
     "FileImport",
     "Account",
     "Position",

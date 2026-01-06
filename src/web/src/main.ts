@@ -6,11 +6,10 @@
 // Core state and session
 import { initSession } from '@/state/session';
 import { initTheme, toggleTheme } from '@/state/theme';
-import { store } from '@/state/store';
 
 // UI components
 import { initTabs, initMobileNav, showTab, toggleMobileNav } from '@/ui/tabs';
-import { showToast, showError, showWarning } from '@/ui/toast';
+import { showToast, showError } from '@/ui/toast';
 import { hideLoading, showLoading } from '@/ui/loading';
 import {
   showModal,
@@ -23,9 +22,6 @@ import {
 
 // API client
 import { apiCall } from '@/api/client';
-
-// Types
-import type { PortfolioView } from '@/types/api';
 
 // Charts
 import {
@@ -93,6 +89,14 @@ import {
   loadAccountsManagement,
   showCreateViewModal,
   hideViewModal,
+  loadEntitiesList,
+  showCreateEntityModal,
+  hideEntityModal,
+  editEntity,
+  saveEntity,
+  setDefaultEntity,
+  deleteEntity,
+  runAutoDetectEntities,
 } from '@/pages/settings';
 
 // Features
@@ -108,6 +112,17 @@ import {
   saveProfile,
   importProfileFromFile,
 } from '@/features/profiles';
+import {
+  initEntitySelector,
+  loadEntities,
+  changeEntity,
+  autoDetectEntities,
+} from '@/features/entities';
+import {
+  loadViews,
+  changeView,
+  initViewSelector,
+} from '@/features/views';
 import { initCommentary, initAICommentaryButtons, showAICommentary } from '@/features/commentary';
 import {
   initPlugins,
@@ -175,18 +190,6 @@ export {
   createBarChartData,
 } from '@/charts/plotly-utils';
 
-/**
- * Load portfolio views from the API.
- */
-async function loadViews(): Promise<void> {
-  try {
-    const views = await apiCall<PortfolioView[]>('/api/settings/views');
-    store.set('availableViews', views);
-  } catch (error) {
-    console.error('Failed to load views:', error);
-    showWarning('Unable to load portfolio views.');
-  }
-}
 
 /**
  * Update price status display.
@@ -295,6 +298,8 @@ async function init(): Promise<void> {
 
   // Initialize features
   initProfiles();
+  await initEntitySelector();
+  await initViewSelector();
   initCommentary();
   initPlugins();
   initImportExport();
@@ -313,7 +318,6 @@ async function init(): Promise<void> {
   showLoading('Loading portfolio...');
   try {
     await loadProfiles();
-    await loadViews();
     await updatePriceStatus();
     await checkDemoModeStatus();
 
@@ -427,6 +431,14 @@ window.finlity = {
   loadAccountsManagement,
   showCreateViewModal,
   hideViewModal,
+  loadEntitiesList,
+  showCreateEntityModal,
+  hideEntityModal,
+  editEntity,
+  saveEntity,
+  setDefaultEntity,
+  deleteEntity,
+  runAutoDetectEntities,
 
   // Profiles
   loadProfiles,
@@ -439,6 +451,15 @@ window.finlity = {
   createProfile: saveProfile,
   saveProfile,
   importProfileFromFile,
+
+  // Entities (multi-person household tracking)
+  loadEntities,
+  changeEntity,
+  autoDetectEntities,
+
+  // Views (portfolio filters)
+  loadViews,
+  changeView,
 
   // Plugins
   loadPlugins,

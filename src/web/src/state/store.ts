@@ -18,6 +18,7 @@ import type {
   ImportParseResult,
   CommentaryEntry,
   Trigger,
+  Entity,
 } from '@/types/api';
 
 /**
@@ -60,6 +61,10 @@ export interface AppState {
   // Profile state
   profiles: Profile[];
   activeProfileId: string | null;
+
+  // Entity state (for multi-person household tracking)
+  entities: Entity[];
+  currentEntityId: string | null;  // null = household/combined view
 
   // Session state
   sessionHmacKey: string | null;
@@ -117,6 +122,10 @@ const initialState: AppState = {
   // Profile state
   profiles: [],
   activeProfileId: null,
+
+  // Entity state
+  entities: [],
+  currentEntityId: localStorage.getItem('currentEntityId'),
 
   // Session state
   sessionHmacKey: null,
@@ -237,6 +246,7 @@ export function resetState(): void {
     ...initialState,
     // Preserve localStorage-based values
     currentViewId: localStorage.getItem('portfolioViewId'),
+    currentEntityId: localStorage.getItem('currentEntityId'),
     // Create fresh instances for mutable types
     selectedAccounts: new Set(),
     commentaryCache: {},

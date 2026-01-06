@@ -3,14 +3,18 @@
  * Handles AI providers, API keys, views, personal settings, and market assumptions.
  */
 
-import { apiCall } from '@/api/client';
+import { apiCall, ApiError } from '@/api/client';
 import { showModal, closeModal } from '@/ui/modal';
 import { showToast } from '@/ui/toast';
 import { showLoading, hideLoading } from '@/ui/loading';
+import { onTabChange } from '@/ui/tabs';
 import { formatCurrency } from '@/utils/format';
 import { escapeHtml } from '@/utils/html';
 import { store } from '@/state/store';
 import { refreshData, loadRetirementMetrics } from '@/pages/dashboard';
+import { loadProfilesForSettings } from '@/features/profiles';
+import { loadPlugins, loadInstalledPlugins, loadPluginSecurity } from '@/features/plugins';
+import { loadEntities } from '@/features/entities';
 
 /**
  * AI provider model from API.
@@ -51,7 +55,11 @@ interface Account {
   brokerage?: string;
   position_count?: number;
   value?: number;
+  entity_id?: string | null;
 }
+
+/** Cached entities for account assignment. */
+let entitiesCache: EntityResponse[] = [];
 
 /**
  * View configuration from API.
@@ -226,7 +234,15 @@ export function getAIPreferences(): { provider_id: string | null; model_id: stri
  */
 export async function loadAccountsManagement(): Promise<void> {
   try {
-    const accounts = await apiCall<Account[]>('/api/portfolio/accounts');
+    // Fetch accounts and entities in parallel
+    const [accounts, entities] = await Promise.all([
+      apiCall<Account[]>('/api/portfolio/accounts'),
+      apiCall<EntityResponse[]>('/api/entities/'),
+    ]);
+
+    // Cache entities for later use
+    entitiesCache = entities || [];
+
     const tbody = document.getElementById('accounts-management-body');
     if (!tbody) return;
 
@@ -235,7 +251,7 @@ export async function loadAccountsManagement(): Promise<void> {
     if (!accounts || accounts.length === 0) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 3;
+      cell.colSpan = 4;
       cell.className = 'no-data';
       cell.textContent = 'No accounts found. Add your first account above.';
       row.appendChild(cell);
@@ -263,6 +279,37 @@ export async function loadAccountsManagement(): Promise<void> {
       infoDiv.appendChild(metaSpan);
       infoCell.appendChild(infoDiv);
 
+      // Owner cell with entity selector
+      const ownerCell = document.createElement('td');
+      const ownerSelect = document.createElement('select');
+      ownerSelect.className = 'form-control form-control-sm entity-select';
+
+      // Add "Unassigned" option
+      const unassignedOption = document.createElement('option');
+      unassignedOption.value = '';
+      unassignedOption.textContent = '— Unassigned —';
+      ownerSelect.appendChild(unassignedOption);
+
+      // Add entity options (skip household entity)
+      for (const entity of entitiesCache) {
+        if (entity.is_household) continue;
+        const option = document.createElement('option');
+        option.value = entity.id;
+        option.textContent = entity.name;
+        option.style.color = entity.color;
+        if (account.entity_id === entity.id) {
+          option.selected = true;
+        }
+        ownerSelect.appendChild(option);
+      }
+
+      // Handle entity assignment change
+      ownerSelect.addEventListener('change', () => {
+        assignAccountToEntity(account.id, ownerSelect.value || null);
+      });
+
+      ownerCell.appendChild(ownerSelect);
+
       // Value cell
       const valueCell = document.createElement('td');
       valueCell.className = 'text-right';
@@ -280,12 +327,35 @@ export async function loadAccountsManagement(): Promise<void> {
       actionsCell.appendChild(deleteBtn);
 
       row.appendChild(infoCell);
+      row.appendChild(ownerCell);
       row.appendChild(valueCell);
       row.appendChild(actionsCell);
       tbody.appendChild(row);
     });
   } catch (error) {
     console.error('Error loading accounts for management:', error);
+  }
+}
+
+/**
+ * Assign an account to an entity.
+ */
+async function assignAccountToEntity(accountId: string, entityId: string | null): Promise<void> {
+  try {
+    await apiCall(`/api/entities/accounts/${accountId}/assign`, {
+      method: 'POST',
+      body: { entity_id: entityId },
+    });
+    showToast(entityId ? 'Account owner updated' : 'Account unassigned', 'success');
+    // Reload entities list to update counts
+    await loadEntitiesList();
+  } catch (error) {
+    console.error('Error assigning account to entity:', error);
+    // Extract API error message for better user feedback
+    const message = error instanceof ApiError ? error.message : 'Failed to update account owner';
+    showToast(message, 'error');
+    // Reload to reset the dropdown to previous value
+    await loadAccountsManagement();
   }
 }
 
@@ -782,6 +852,321 @@ export async function deleteView(viewId: string): Promise<void> {
   }
 }
 
+// =============================================================================
+// Entity Management
+// =============================================================================
+
+interface EntityResponse {
+  id: string;
+  name: string;
+  entity_type: string;
+  is_default: boolean;
+  is_household: boolean;
+  color: string;
+  icon: string;
+  account_count: number;
+  income_count: number;
+  expense_count: number;
+}
+
+/**
+ * Create an entity item element using safe DOM methods.
+ */
+function createEntityItem(entity: EntityResponse): HTMLElement {
+  const isHousehold = entity.is_household;
+
+  const item = document.createElement('div');
+  item.className = 'entity-item';
+  if (entity.is_default) item.classList.add('is-default');
+  if (isHousehold) item.classList.add('is-household');
+
+  // Color indicator
+  const colorIndicator = document.createElement('div');
+  colorIndicator.className = 'entity-color-indicator';
+  colorIndicator.style.backgroundColor = entity.color;
+  item.appendChild(colorIndicator);
+
+  // Info section
+  const info = document.createElement('div');
+  info.className = 'entity-info';
+
+  const nameDiv = document.createElement('div');
+  nameDiv.className = 'entity-name';
+  nameDiv.appendChild(document.createTextNode(entity.name));
+
+  if (entity.is_default) {
+    const defaultBadge = document.createElement('span');
+    defaultBadge.className = 'default-badge';
+    defaultBadge.textContent = 'Default';
+    nameDiv.appendChild(defaultBadge);
+  }
+
+  if (isHousehold) {
+    const householdBadge = document.createElement('span');
+    householdBadge.className = 'household-badge';
+    householdBadge.textContent = 'Household';
+    nameDiv.appendChild(householdBadge);
+  } else {
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'entity-type-badge';
+    typeBadge.textContent = entity.entity_type;
+    nameDiv.appendChild(typeBadge);
+  }
+
+  info.appendChild(nameDiv);
+
+  const details = document.createElement('div');
+  details.className = 'entity-details';
+  const counts: string[] = [];
+  if (entity.account_count > 0) counts.push(`${entity.account_count} account${entity.account_count !== 1 ? 's' : ''}`);
+  if (entity.income_count > 0) counts.push(`${entity.income_count} income source${entity.income_count !== 1 ? 's' : ''}`);
+  details.textContent = counts.length > 0 ? counts.join(', ') : 'No accounts assigned';
+  info.appendChild(details);
+
+  item.appendChild(info);
+
+  // Actions
+  if (!isHousehold) {
+    const actions = document.createElement('div');
+    actions.className = 'entity-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.textContent = 'Edit';
+    editBtn.addEventListener('click', () => editEntity(entity.id));
+    actions.appendChild(editBtn);
+
+    if (!entity.is_default) {
+      const setDefaultBtn = document.createElement('button');
+      setDefaultBtn.textContent = 'Set Default';
+      setDefaultBtn.addEventListener('click', () => setDefaultEntity(entity.id));
+      actions.appendChild(setDefaultBtn);
+    }
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'danger';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', () => deleteEntity(entity.id));
+    actions.appendChild(deleteBtn);
+
+    item.appendChild(actions);
+  }
+
+  return item;
+}
+
+/**
+ * Load entities list for settings.
+ */
+export async function loadEntitiesList(): Promise<void> {
+  try {
+    const entities = await apiCall<EntityResponse[]>('/api/entities/');
+    const container = document.getElementById('entities-list');
+    if (!container) return;
+
+    // Clear existing content
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+
+    if (entities.length === 0) {
+      const emptyMsg = document.createElement('p');
+      emptyMsg.className = 'text-muted';
+      emptyMsg.textContent = 'No entities configured. Click "Auto-Detect" to create entities from your account names, or click "New Entity" to create one manually.';
+      container.appendChild(emptyMsg);
+      return;
+    }
+
+    for (const entity of entities) {
+      container.appendChild(createEntityItem(entity));
+    }
+  } catch (error) {
+    console.error('Error loading entities:', error);
+    const container = document.getElementById('entities-list');
+    if (container) {
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+      const errorMsg = document.createElement('p');
+      errorMsg.className = 'text-error';
+      errorMsg.textContent = 'Failed to load entities';
+      container.appendChild(errorMsg);
+    }
+  }
+}
+
+/**
+ * Show create entity modal.
+ */
+export function showCreateEntityModal(): void {
+  const modal = document.getElementById('entity-modal');
+  const title = document.getElementById('entity-modal-title');
+  const editId = document.getElementById('entity-edit-id') as HTMLInputElement;
+  const nameInput = document.getElementById('entity-name') as HTMLInputElement;
+  const typeSelect = document.getElementById('entity-type') as HTMLSelectElement;
+  const colorInput = document.getElementById('entity-color') as HTMLInputElement;
+  const defaultCheckbox = document.getElementById('entity-is-default') as HTMLInputElement;
+
+  if (!modal || !title || !editId) return;
+
+  title.textContent = 'Create Entity';
+  editId.value = '';
+  if (nameInput) nameInput.value = '';
+  if (typeSelect) typeSelect.value = 'individual';
+  if (colorInput) colorInput.value = '#4A90D9';
+  if (defaultCheckbox) defaultCheckbox.checked = false;
+
+  modal.style.display = 'flex';
+}
+
+/**
+ * Hide entity modal.
+ */
+export function hideEntityModal(): void {
+  const modal = document.getElementById('entity-modal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+/**
+ * Edit entity.
+ */
+export async function editEntity(entityId: string): Promise<void> {
+  try {
+    const entity = await apiCall<EntityResponse>(`/api/entities/${entityId}`);
+
+    const modal = document.getElementById('entity-modal');
+    const title = document.getElementById('entity-modal-title');
+    const editId = document.getElementById('entity-edit-id') as HTMLInputElement;
+    const nameInput = document.getElementById('entity-name') as HTMLInputElement;
+    const typeSelect = document.getElementById('entity-type') as HTMLSelectElement;
+    const colorInput = document.getElementById('entity-color') as HTMLInputElement;
+    const defaultCheckbox = document.getElementById('entity-is-default') as HTMLInputElement;
+
+    if (!modal || !title || !editId) return;
+
+    title.textContent = 'Edit Entity';
+    editId.value = entityId;
+    if (nameInput) nameInput.value = entity.name;
+    if (typeSelect) typeSelect.value = entity.entity_type;
+    if (colorInput) colorInput.value = entity.color;
+    if (defaultCheckbox) defaultCheckbox.checked = entity.is_default;
+
+    modal.style.display = 'flex';
+  } catch (error) {
+    showToast('Failed to load entity', 'error');
+  }
+}
+
+/**
+ * Save entity (create or update).
+ */
+export async function saveEntity(event: Event): Promise<void> {
+  event.preventDefault();
+
+  const editId = (document.getElementById('entity-edit-id') as HTMLInputElement)?.value;
+  const name = (document.getElementById('entity-name') as HTMLInputElement)?.value;
+  const entityType = (document.getElementById('entity-type') as HTMLSelectElement)?.value;
+  const color = (document.getElementById('entity-color') as HTMLInputElement)?.value;
+  const isDefault = (document.getElementById('entity-is-default') as HTMLInputElement)?.checked;
+
+  if (!name) {
+    showToast('Entity name is required', 'error');
+    return;
+  }
+
+  const data = {
+    name,
+    entity_type: entityType,
+    color,
+    is_default: isDefault,
+  };
+
+  try {
+    if (editId) {
+      await apiCall(`/api/entities/${editId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+      showToast('Entity updated', 'success');
+    } else {
+      await apiCall('/api/entities/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      showToast('Entity created', 'success');
+    }
+    hideEntityModal();
+    await loadEntitiesList();
+    // Reload entity selector in sidebar
+    await loadEntities();
+  } catch (error) {
+    showToast('Failed to save entity', 'error');
+  }
+}
+
+/**
+ * Set default entity.
+ */
+export async function setDefaultEntity(entityId: string): Promise<void> {
+  try {
+    await apiCall(`/api/entities/${entityId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_default: true }),
+    });
+    showToast('Default entity updated', 'success');
+    await loadEntitiesList();
+  } catch (error) {
+    showToast('Failed to set default entity', 'error');
+  }
+}
+
+/**
+ * Delete entity.
+ */
+export async function deleteEntity(entityId: string): Promise<void> {
+  if (!confirm('Delete this entity? Accounts assigned to this entity will become unassigned.')) return;
+
+  try {
+    await apiCall(`/api/entities/${entityId}`, { method: 'DELETE' });
+    showToast('Entity deleted', 'success');
+    await loadEntitiesList();
+    // Reload entity selector in sidebar
+    await loadEntities();
+  } catch (error) {
+    showToast('Failed to delete entity', 'error');
+  }
+}
+
+/**
+ * Run auto-detect entities from account names.
+ */
+export async function runAutoDetectEntities(): Promise<void> {
+  try {
+    const result = await apiCall<{
+      success: boolean;
+      entities_created: string[];
+      accounts_assigned: number;
+      income_sources_assigned: number;
+    }>('/api/entities/auto-detect', { method: 'POST' });
+
+    if (result.entities_created.length > 0) {
+      showToast(
+        `Created ${result.entities_created.length} entities: ${result.entities_created.join(', ')}`,
+        'success'
+      );
+    } else {
+      showToast('No new entities detected from account names', 'info');
+    }
+
+    await loadEntitiesList();
+    // Reload entity selector in sidebar
+    await loadEntities();
+  } catch (error) {
+    showToast('Failed to auto-detect entities', 'error');
+  }
+}
+
 /**
  * Save personal settings.
  */
@@ -852,6 +1237,110 @@ export async function saveAssetClassTargets(event: Event): Promise<void> {
     showToast('Asset targets saved', 'success');
   } catch (error) {
     showToast('Failed to save targets', 'error');
+  }
+}
+
+/**
+ * Load personal settings from API and populate form.
+ */
+export async function loadPersonalSettings(): Promise<void> {
+  try {
+    const data = await apiCall<{ personal?: {
+      dob?: string;
+      retirement_age?: number;
+      withdrawal_rate?: number;
+      target_monthly_income?: number;
+    } }>('/api/settings/config/personal');
+
+    if (!data?.personal) return;
+
+    const p = data.personal;
+
+    const dob = document.getElementById('settings-dob') as HTMLInputElement | null;
+    if (dob && p.dob) dob.value = p.dob;
+
+    const retirementAge = document.getElementById('settings-retirement-age') as HTMLInputElement | null;
+    if (retirementAge && p.retirement_age) retirementAge.value = String(p.retirement_age);
+
+    const withdrawalRate = document.getElementById('settings-withdrawal-rate') as HTMLInputElement | null;
+    if (withdrawalRate && p.withdrawal_rate) withdrawalRate.value = String(p.withdrawal_rate);
+
+    const targetIncome = document.getElementById('settings-target-income') as HTMLInputElement | null;
+    if (targetIncome && p.target_monthly_income != null) targetIncome.value = String(p.target_monthly_income);
+  } catch (error) {
+    console.error('Error loading personal settings:', error);
+  }
+}
+
+/**
+ * Load asset class targets from API and populate form.
+ */
+export async function loadAssetClassTargets(): Promise<void> {
+  try {
+    const data = await apiCall<{ targets?: { asset_class?: {
+      equities?: number;
+      bonds?: number;
+      alternatives?: number;
+      cash?: number;
+    } } }>('/api/settings/config/targets');
+
+    if (!data?.targets?.asset_class) return;
+
+    const t = data.targets.asset_class;
+
+    const equities = document.getElementById('target-equities') as HTMLInputElement | null;
+    if (equities && t.equities != null) equities.value = String(t.equities * 100);
+
+    const bonds = document.getElementById('target-bonds') as HTMLInputElement | null;
+    if (bonds && t.bonds != null) bonds.value = String(t.bonds * 100);
+
+    const alternatives = document.getElementById('target-alternatives') as HTMLInputElement | null;
+    if (alternatives && t.alternatives != null) alternatives.value = String(t.alternatives * 100);
+
+    const cash = document.getElementById('target-cash') as HTMLInputElement | null;
+    if (cash && t.cash != null) cash.value = String(t.cash * 100);
+  } catch (error) {
+    console.error('Error loading asset class targets:', error);
+  }
+}
+
+/**
+ * Load market assumptions from API and populate form.
+ */
+export async function loadMarketAssumptions(): Promise<void> {
+  try {
+    const data = await apiCall<{ market: {
+      stock_mean_return: number;
+      stock_std_dev: number;
+      bond_mean_return: number;
+      bond_std_dev: number;
+      inflation_rate: number;
+      risk_free_rate: number;
+    } }>('/api/settings/config/market');
+
+    if (!data?.market) return;
+
+    const m = data.market;
+
+    const stockReturn = document.getElementById('market-stock-return') as HTMLInputElement | null;
+    if (stockReturn) stockReturn.value = String(m.stock_mean_return * 100);
+
+    const stockStd = document.getElementById('market-stock-std') as HTMLInputElement | null;
+    if (stockStd) stockStd.value = String(m.stock_std_dev * 100);
+
+    const bondReturn = document.getElementById('market-bond-return') as HTMLInputElement | null;
+    if (bondReturn) bondReturn.value = String(m.bond_mean_return * 100);
+
+    const bondStd = document.getElementById('market-bond-std') as HTMLInputElement | null;
+    if (bondStd) bondStd.value = String(m.bond_std_dev * 100);
+
+    const inflation = document.getElementById('market-inflation') as HTMLInputElement | null;
+    if (inflation) inflation.value = String(m.inflation_rate * 100);
+
+    const riskFree = document.getElementById('market-risk-free') as HTMLInputElement | null;
+    if (riskFree) riskFree.value = String(m.risk_free_rate * 100);
+  } catch (error) {
+    console.error('Error loading market assumptions:', error);
   }
 }
 
@@ -941,6 +1430,42 @@ export async function saveMonteCarloSettings(event: Event): Promise<void> {
 }
 
 /**
+ * Load Monte Carlo settings from API and populate form.
+ */
+export async function loadMonteCarloSettings(): Promise<void> {
+  try {
+    const data = await apiCall<{ monte_carlo: {
+      num_simulations: number;
+      black_swan_probability: number;
+      black_swan_impact: number;
+      golden_swan_probability: number;
+      golden_swan_impact: number;
+    } }>('/api/settings/config/monte_carlo');
+
+    if (!data?.monte_carlo) return;
+
+    const mc = data.monte_carlo;
+
+    const simInput = document.getElementById('mc-simulations') as HTMLInputElement | null;
+    if (simInput) simInput.value = String(mc.num_simulations);
+
+    const bsProb = document.getElementById('mc-black-swan-prob') as HTMLInputElement | null;
+    if (bsProb) bsProb.value = String(mc.black_swan_probability * 100);
+
+    const bsImpact = document.getElementById('mc-black-swan-impact') as HTMLInputElement | null;
+    if (bsImpact) bsImpact.value = String(mc.black_swan_impact * 100);
+
+    const gsProb = document.getElementById('mc-golden-swan-prob') as HTMLInputElement | null;
+    if (gsProb) gsProb.value = String(mc.golden_swan_probability * 100);
+
+    const gsImpact = document.getElementById('mc-golden-swan-impact') as HTMLInputElement | null;
+    if (gsImpact) gsImpact.value = String(mc.golden_swan_impact * 100);
+  } catch (error) {
+    console.error('Error loading Monte Carlo settings:', error);
+  }
+}
+
+/**
  * Initialize settings page.
  */
 export function initSettings(): void {
@@ -1000,4 +1525,23 @@ export function initSettings(): void {
   if (viewModalClose) {
     viewModalClose.addEventListener('click', hideViewModal);
   }
+
+  // Load all settings data when switching to settings tab
+  onTabChange((tab) => {
+    if (tab === 'settings') {
+      loadAccountsManagement();
+      loadProfilesForSettings();
+      loadApiKeysStatus();
+      loadAIProviders();
+      loadViewsList();
+      loadEntitiesList();
+      loadPersonalSettings();
+      loadAssetClassTargets();
+      loadMarketAssumptions();
+      loadMonteCarloSettings();
+      loadPlugins();
+      loadInstalledPlugins();
+      loadPluginSecurity();
+    }
+  });
 }

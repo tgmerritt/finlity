@@ -368,7 +368,11 @@ function loadEmbed(embedContainer: HTMLElement): void {
   iframe.setAttribute('allowfullscreen', 'true');
   iframe.setAttribute('loading', 'lazy');
   // Security: Sandbox third-party content with minimal permissions
-  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+  // allow-popups needed for social embed links/buttons to open in new windows
+  iframe.setAttribute(
+    'sandbox',
+    'allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox'
+  );
 
   // Handle iframe load errors
   iframe.addEventListener('error', () => {

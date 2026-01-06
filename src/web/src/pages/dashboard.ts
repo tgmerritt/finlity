@@ -156,10 +156,20 @@ export async function refreshData(): Promise<void> {
 
 /**
  * Load retirement metrics for dashboard row 2.
+ * If an entity is selected, loads metrics filtered to that entity.
+ *
+ * @returns true if metrics loaded successfully, false on error
  */
-export async function loadRetirementMetrics(): Promise<void> {
+export async function loadRetirementMetrics(): Promise<boolean> {
   try {
-    const metrics = await apiCall<DashboardMetrics>('/api/portfolio/dashboard-metrics');
+    // Build URL with entity filter if one is selected
+    const currentEntityId = store.get('currentEntityId');
+    let url = '/api/portfolio/dashboard-metrics';
+    if (currentEntityId) {
+      url += `?entity_id=${encodeURIComponent(currentEntityId)}`;
+    }
+
+    const metrics = await apiCall<DashboardMetrics>(url);
 
     // Update Monthly Retirement Income
     const monthlyIncomeEl = document.getElementById('monthly-retirement-income');
@@ -239,8 +249,11 @@ export async function loadRetirementMetrics(): Promise<void> {
         }
       }
     }
+    return true;
   } catch (error) {
     console.error('Error loading retirement metrics:', error);
+    showToast('Unable to load retirement metrics', 'error');
+    return false;
   }
 }
 
@@ -317,6 +330,12 @@ export async function checkForDuplicates(): Promise<void> {
     }
   } catch (error) {
     console.error('Error checking for duplicates:', error);
+    // Inform user and hide warning since we can't verify status
+    showToast('Unable to check for duplicate positions', 'warning');
+    const warningEl = document.getElementById('duplicate-warning');
+    if (warningEl) {
+      warningEl.style.display = 'none';
+    }
   }
 }
 
@@ -610,6 +629,17 @@ export async function updatePriceStatus(): Promise<void> {
     }
   } catch (error) {
     console.error('Error loading price status:', error);
+    // Set status to unknown state so users know the check failed
+    const statusEl = document.getElementById('price-status');
+    if (statusEl) {
+      statusEl.className = 'price-status';
+      statusEl.textContent = '';
+      const dot = document.createElement('span');
+      dot.className = 'status-dot';
+      statusEl.appendChild(dot);
+      statusEl.appendChild(document.createTextNode(' Status unavailable'));
+      statusEl.title = 'Unable to check price freshness';
+    }
   }
 }
 

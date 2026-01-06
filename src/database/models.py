@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, String, Text, Boolean
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, String, Text, Boolean, text
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -13,6 +13,49 @@ Base = declarative_base()
 def generate_uuid() -> str:
     """Generate a new UUID string."""
     return str(uuid.uuid4())
+
+
+class Entity(Base):
+    """An entity represents an owner for financial tracking.
+
+    Entities can be:
+    - Individual: A single person
+    - Household: A combined family unit
+    - Trust: A legal trust entity
+    - LLC: A limited liability company
+
+    Accounts, income, and expenses are associated with entities to enable
+    multi-person household tracking and separate financial views.
+    """
+
+    __tablename__ = "entities"
+
+    # Partial unique index to ensure only one household entity exists
+    __table_args__ = (
+        Index(
+            "ix_entities_unique_household",
+            "is_household",
+            unique=True,
+            sqlite_where=text("is_household = 1"),
+        ),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False)
+    entity_type = Column(String, nullable=False, default="individual")  # individual, household, trust, llc
+    is_default = Column(Boolean, default=False)  # Default entity for new items
+    is_household = Column(Boolean, default=False)  # Special flag for combined view
+    color = Column(String, default="#4A90D9")  # UI color for entity
+    icon = Column(String, default="user")  # UI icon identifier
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships (back_populates defined on related models)
+    accounts = relationship("Account", back_populates="entity")
+    income_sources = relationship("BudgetIncomeSource", back_populates="entity")
+    expenses = relationship("BudgetExpense", back_populates="entity")
+    tax_configs = relationship("BudgetTaxConfig", back_populates="entity")
+    monte_carlo_results = relationship("MonteCarloResult", back_populates="entity")
 
 
 class FileImport(Base):
@@ -40,6 +83,7 @@ class Account(Base):
     __tablename__ = "accounts"
 
     id = Column(String, primary_key=True, default=generate_uuid)
+    entity_id = Column(String, ForeignKey("entities.id"), nullable=True)  # Owner entity
     name = Column(String, nullable=False)
     account_type = Column(String, nullable=False)  # roth_ira, traditional_401k, custom:*, etc.
     brokerage = Column(String, default="other")  # schwab, fidelity, vanguard, other
@@ -49,7 +93,8 @@ class Account(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationship to positions in this account
+    # Relationships
+    entity = relationship("Entity", back_populates="accounts")
     positions = relationship("Position", back_populates="account", cascade="all, delete-orphan")
 
     @property
@@ -230,6 +275,7 @@ class MonteCarloResult(Base):
     __tablename__ = "monte_carlo_results"
 
     id = Column(String, primary_key=True, default=generate_uuid)
+    entity_id = Column(String, ForeignKey("entities.id"), nullable=True)  # Entity for per-person results
     run_date = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     # Input parameters
@@ -252,6 +298,9 @@ class MonteCarloResult(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Relationships
+    entity = relationship("Entity", back_populates="monte_carlo_results")
+
 
 # =============================================================================
 # Budget Module Tables
@@ -264,6 +313,7 @@ class BudgetIncomeSource(Base):
     __tablename__ = "budget_income_sources"
 
     id = Column(String, primary_key=True, default=generate_uuid)
+    entity_id = Column(String, ForeignKey("entities.id"), nullable=True)  # Owner entity
     name = Column(String, nullable=False)  # "Primary Job", "Spouse Job", etc.
     income_type = Column(String, nullable=False, default="employment")  # employment, self_employment, other
     gross_annual = Column(Float, nullable=False)  # Annual gross income
@@ -274,6 +324,7 @@ class BudgetIncomeSource(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
+    entity = relationship("Entity", back_populates="income_sources")
     deductions = relationship("BudgetPretaxDeduction", back_populates="income_source", cascade="all, delete-orphan")
 
 
@@ -283,6 +334,7 @@ class BudgetTaxConfig(Base):
     __tablename__ = "budget_tax_config"
 
     id = Column(String, primary_key=True, default=generate_uuid)
+    entity_id = Column(String, ForeignKey("entities.id"), nullable=True)  # Entity for per-person tax config
     tax_year = Column(Float, nullable=False, default=2024)
     filing_status = Column(String, nullable=False, default="single")  # single, married_joint, married_separate, head_household
     state = Column(String, default="CA")  # Primary state of residence
@@ -291,6 +343,9 @@ class BudgetTaxConfig(Base):
     itemized_deduction = Column(Float, nullable=True)  # None = use standard deduction
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    entity = relationship("Entity", back_populates="tax_configs")
 
 
 class BudgetExpenseCategory(Base):
@@ -315,6 +370,7 @@ class BudgetExpense(Base):
     __tablename__ = "budget_expenses"
 
     id = Column(String, primary_key=True, default=generate_uuid)
+    entity_id = Column(String, ForeignKey("entities.id"), nullable=True)  # Owner entity
     category_id = Column(String, ForeignKey("budget_expense_categories.id"), nullable=False)
     name = Column(String, nullable=False)  # "Mortgage", "Electric Bill", etc.
     amount = Column(Float, nullable=False)
@@ -330,6 +386,7 @@ class BudgetExpense(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
+    entity = relationship("Entity", back_populates="expenses")
     category = relationship("BudgetExpenseCategory", back_populates="expenses")
 
 
