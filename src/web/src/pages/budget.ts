@@ -6,6 +6,7 @@
 import { apiCall } from '@/api/client';
 import { showToast } from '@/ui/toast';
 import { createDynamicModal, closeModal } from '@/ui/modal';
+import { onTabChange } from '@/ui/tabs';
 import { formatCurrency } from '@/utils/format';
 import { escapeHtml } from '@/utils/html';
 import { store } from '@/state/store';
@@ -1262,4 +1263,11 @@ export function initBudget(): void {
   if (runTransitionBtn) {
     runTransitionBtn.addEventListener('click', runTransitionProjection);
   }
+
+  // Load budget data when switching to the budget tab
+  onTabChange((tab) => {
+    if (tab === 'budget') {
+      loadBudgetTab();
+    }
+  });
 }

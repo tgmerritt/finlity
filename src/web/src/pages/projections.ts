@@ -5,6 +5,7 @@
 
 import { apiCall, runAsyncApiCall } from '@/api/client';
 import { showLoading, hideLoading, updateLoadingMessage } from '@/ui/loading';
+import { onTabChange } from '@/ui/tabs';
 import { showToast } from '@/ui/toast';
 import { formatCurrency } from '@/utils/format';
 import {
@@ -551,4 +552,11 @@ export function initProjections(): void {
   if (refreshBalancesBtn) {
     refreshBalancesBtn.addEventListener('click', loadAccountBalancesByType);
   }
+
+  // Load taxes tab data when switching to taxes tab
+  onTabChange((tab) => {
+    if (tab === 'taxes') {
+      loadTaxesTab();
+    }
+  });
 }
