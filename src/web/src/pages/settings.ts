@@ -3,7 +3,7 @@
  * Handles AI providers, API keys, views, personal settings, and market assumptions.
  */
 
-import { apiCall } from '@/api/client';
+import { apiCall, ApiError } from '@/api/client';
 import { showModal, closeModal } from '@/ui/modal';
 import { showToast } from '@/ui/toast';
 import { showLoading, hideLoading } from '@/ui/loading';
@@ -351,7 +351,9 @@ async function assignAccountToEntity(accountId: string, entityId: string | null)
     await loadEntitiesList();
   } catch (error) {
     console.error('Error assigning account to entity:', error);
-    showToast('Failed to update account owner', 'error');
+    // Extract API error message for better user feedback
+    const message = error instanceof ApiError ? error.message : 'Failed to update account owner';
+    showToast(message, 'error');
     // Reload to reset the dropdown to previous value
     await loadAccountsManagement();
   }

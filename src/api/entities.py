@@ -12,7 +12,7 @@ import re
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.database import get_database
@@ -39,6 +39,24 @@ class EntityCreate(BaseModel):
     color: Optional[str] = None
     icon: Optional[str] = None
 
+    @field_validator('name')
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        """Ensure name is not empty or whitespace-only."""
+        if not v or not v.strip():
+            raise ValueError('Entity name cannot be empty')
+        return v.strip()
+
+    @field_validator('color')
+    @classmethod
+    def color_valid_hex(cls, v: str | None) -> str | None:
+        """Ensure color is a valid hex color if provided."""
+        if v is None:
+            return v
+        if not re.match(r'^#[0-9A-Fa-f]{6}$', v):
+            raise ValueError('Color must be a valid hex color (e.g., #4A90D9)')
+        return v
+
 
 class EntityUpdate(BaseModel):
     """Request model for updating an entity."""
@@ -48,12 +66,32 @@ class EntityUpdate(BaseModel):
     color: Optional[str] = None
     icon: Optional[str] = None
 
+    @field_validator('name')
+    @classmethod
+    def name_not_empty(cls, v: str | None) -> str | None:
+        """Ensure name is not empty or whitespace-only if provided."""
+        if v is None:
+            return v
+        if not v.strip():
+            raise ValueError('Entity name cannot be empty')
+        return v.strip()
+
+    @field_validator('color')
+    @classmethod
+    def color_valid_hex(cls, v: str | None) -> str | None:
+        """Ensure color is a valid hex color if provided."""
+        if v is None:
+            return v
+        if not re.match(r'^#[0-9A-Fa-f]{6}$', v):
+            raise ValueError('Color must be a valid hex color (e.g., #4A90D9)')
+        return v
+
 
 class EntityResponse(BaseModel):
     """Response model for an entity."""
     id: str
     name: str
-    entity_type: str
+    entity_type: Literal["individual", "household", "trust", "llc"]
     is_default: bool
     is_household: bool
     color: str

@@ -44,93 +44,103 @@ class Database:
 
     def _migrate_schema(self) -> None:
         """Add missing columns to existing tables (for database upgrades)."""
+        import logging
         from sqlalchemy import text, inspect
+        from sqlalchemy.exc import SQLAlchemyError
 
+        logger = logging.getLogger(__name__)
         inspector = inspect(self.engine)
 
-        with self.engine.connect() as conn:
-            # Check and add missing columns to accounts table
-            if "accounts" in inspector.get_table_names():
-                existing_cols = {col["name"] for col in inspector.get_columns("accounts")}
-                account_migrations = [
-                    ("beneficiary", "TEXT"),
-                    ("custom_type_name", "TEXT"),
-                    ("is_retirement_account", "BOOLEAN DEFAULT 0"),
+        try:
+            with self.engine.connect() as conn:
+                # Check and add missing columns to accounts table
+                if "accounts" in inspector.get_table_names():
+                    existing_cols = {col["name"] for col in inspector.get_columns("accounts")}
+                    account_migrations = [
+                        ("beneficiary", "TEXT"),
+                        ("custom_type_name", "TEXT"),
+                        ("is_retirement_account", "BOOLEAN DEFAULT 0"),
+                    ]
+                    for col_name, col_type in account_migrations:
+                        if col_name not in existing_cols:
+                            conn.execute(text(f"ALTER TABLE accounts ADD COLUMN {col_name} {col_type}"))
+                            conn.commit()
+
+                # Check and add missing columns to positions table
+                if "positions" in inspector.get_table_names():
+                    existing_cols = {col["name"] for col in inspector.get_columns("positions")}
+                    position_migrations = [
+                        ("position_type", "TEXT DEFAULT 'equity'"),
+                        ("maturity_date", "DATETIME"),
+                        ("interest_rate", "REAL"),
+                        ("purchase_date", "DATETIME"),
+                    ]
+                    for col_name, col_type in position_migrations:
+                        if col_name not in existing_cols:
+                            conn.execute(text(f"ALTER TABLE positions ADD COLUMN {col_name} {col_type}"))
+                            conn.commit()
+
+                # Check and add missing columns to monte_carlo_results table
+                if "monte_carlo_results" in inspector.get_table_names():
+                    existing_cols = {col["name"] for col in inspector.get_columns("monte_carlo_results")}
+                    mc_migrations = [
+                        ("projected_value_at_retirement", "REAL"),
+                        ("conservative_value_at_retirement", "REAL"),
+                        ("earliest_retirement_age", "REAL"),
+                    ]
+                    for col_name, col_type in mc_migrations:
+                        if col_name not in existing_cols:
+                            conn.execute(text(f"ALTER TABLE monte_carlo_results ADD COLUMN {col_name} {col_type}"))
+                            conn.commit()
+
+                # Check and add missing columns to budget_pretax_deductions table
+                if "budget_pretax_deductions" in inspector.get_table_names():
+                    existing_cols = {col["name"] for col in inspector.get_columns("budget_pretax_deductions")}
+                    deduction_migrations = [
+                        ("label", "TEXT"),
+                    ]
+                    for col_name, col_type in deduction_migrations:
+                        if col_name not in existing_cols:
+                            conn.execute(text(f"ALTER TABLE budget_pretax_deductions ADD COLUMN {col_name} {col_type}"))
+                            conn.commit()
+
+                # Create entities table if it doesn't exist
+                if "entities" not in inspector.get_table_names():
+                    logger.info("Creating entities table")
+                    conn.execute(text("""
+                        CREATE TABLE entities (
+                            id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            entity_type TEXT NOT NULL DEFAULT 'individual',
+                            is_default BOOLEAN DEFAULT 0,
+                            is_household BOOLEAN DEFAULT 0,
+                            color TEXT DEFAULT '#4A90D9',
+                            icon TEXT DEFAULT 'user',
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """))
+                    conn.commit()
+
+                # Add entity_id column to tables that need entity ownership
+                entity_tables = [
+                    "accounts",
+                    "budget_income_sources",
+                    "budget_expenses",
+                    "budget_tax_config",
+                    "monte_carlo_results",
                 ]
-                for col_name, col_type in account_migrations:
-                    if col_name not in existing_cols:
-                        conn.execute(text(f"ALTER TABLE accounts ADD COLUMN {col_name} {col_type}"))
-                        conn.commit()
+                for table_name in entity_tables:
+                    if table_name in inspector.get_table_names():
+                        existing_cols = {col["name"] for col in inspector.get_columns(table_name)}
+                        if "entity_id" not in existing_cols:
+                            logger.info(f"Adding entity_id column to {table_name}")
+                            conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN entity_id TEXT REFERENCES entities(id)"))
+                            conn.commit()
 
-            # Check and add missing columns to positions table
-            if "positions" in inspector.get_table_names():
-                existing_cols = {col["name"] for col in inspector.get_columns("positions")}
-                position_migrations = [
-                    ("position_type", "TEXT DEFAULT 'equity'"),
-                    ("maturity_date", "DATETIME"),
-                    ("interest_rate", "REAL"),
-                    ("purchase_date", "DATETIME"),
-                ]
-                for col_name, col_type in position_migrations:
-                    if col_name not in existing_cols:
-                        conn.execute(text(f"ALTER TABLE positions ADD COLUMN {col_name} {col_type}"))
-                        conn.commit()
-
-            # Check and add missing columns to monte_carlo_results table
-            if "monte_carlo_results" in inspector.get_table_names():
-                existing_cols = {col["name"] for col in inspector.get_columns("monte_carlo_results")}
-                mc_migrations = [
-                    ("projected_value_at_retirement", "REAL"),
-                    ("conservative_value_at_retirement", "REAL"),
-                    ("earliest_retirement_age", "REAL"),
-                ]
-                for col_name, col_type in mc_migrations:
-                    if col_name not in existing_cols:
-                        conn.execute(text(f"ALTER TABLE monte_carlo_results ADD COLUMN {col_name} {col_type}"))
-                        conn.commit()
-
-            # Check and add missing columns to budget_pretax_deductions table
-            if "budget_pretax_deductions" in inspector.get_table_names():
-                existing_cols = {col["name"] for col in inspector.get_columns("budget_pretax_deductions")}
-                deduction_migrations = [
-                    ("label", "TEXT"),  # User-friendly label (e.g., "John's 401k")
-                ]
-                for col_name, col_type in deduction_migrations:
-                    if col_name not in existing_cols:
-                        conn.execute(text(f"ALTER TABLE budget_pretax_deductions ADD COLUMN {col_name} {col_type}"))
-                        conn.commit()
-
-            # Create entities table if it doesn't exist
-            if "entities" not in inspector.get_table_names():
-                conn.execute(text("""
-                    CREATE TABLE entities (
-                        id TEXT PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        entity_type TEXT NOT NULL DEFAULT 'individual',
-                        is_default BOOLEAN DEFAULT 0,
-                        is_household BOOLEAN DEFAULT 0,
-                        color TEXT DEFAULT '#4A90D9',
-                        icon TEXT DEFAULT 'user',
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                    )
-                """))
-                conn.commit()
-
-            # Add entity_id column to tables that need entity ownership
-            entity_tables = [
-                "accounts",
-                "budget_income_sources",
-                "budget_expenses",
-                "budget_tax_config",
-                "monte_carlo_results",
-            ]
-            for table_name in entity_tables:
-                if table_name in inspector.get_table_names():
-                    existing_cols = {col["name"] for col in inspector.get_columns(table_name)}
-                    if "entity_id" not in existing_cols:
-                        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN entity_id TEXT REFERENCES entities(id)"))
-                        conn.commit()
+        except SQLAlchemyError as e:
+            logger.error(f"Schema migration failed: {e}", exc_info=True)
+            raise RuntimeError(f"Database schema migration failed: {e}")
 
     def get_session(self) -> Session:
         """Get a new database session."""
@@ -1238,6 +1248,9 @@ class Database:
 
     # ==================== Entity Operations ====================
 
+    # Valid entity types for validation
+    VALID_ENTITY_TYPES = {"individual", "household", "trust", "llc"}
+
     def create_entity(
         self,
         name: str,
@@ -1249,6 +1262,10 @@ class Database:
     ) -> Entity:
         """Create a new entity."""
         import uuid as uuid_module
+
+        # Validate entity_type
+        if entity_type not in self.VALID_ENTITY_TYPES:
+            raise ValueError(f"Invalid entity_type '{entity_type}'. Must be one of: {self.VALID_ENTITY_TYPES}")
 
         with self.get_session() as session:
             # If setting as default, unset other defaults
@@ -1301,6 +1318,10 @@ class Database:
         icon: Optional[str] = None,
     ) -> Optional[Entity]:
         """Update an entity."""
+        # Validate entity_type if provided
+        if entity_type is not None and entity_type not in self.VALID_ENTITY_TYPES:
+            raise ValueError(f"Invalid entity_type '{entity_type}'. Must be one of: {self.VALID_ENTITY_TYPES}")
+
         with self.get_session() as session:
             entity = session.query(Entity).filter_by(id=entity_id).first()
             if entity:
