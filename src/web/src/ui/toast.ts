@@ -7,6 +7,18 @@ export type ToastType = 'success' | 'error' | 'warning' | 'info';
 interface ToastOptions {
   duration?: number;
   dismissible?: boolean;
+  /** Allow duplicate messages (default: false) */
+  allowDuplicate?: boolean;
+}
+
+// Track active toasts to prevent duplicates
+const activeToasts = new Map<string, HTMLElement>();
+
+/**
+ * Generate a unique key for a toast based on message and type.
+ */
+function getToastKey(message: string, type: ToastType): string {
+  return `${type}:${message}`;
 }
 
 /**
@@ -106,7 +118,13 @@ export function showToast(
   type: ToastType = 'info',
   options: ToastOptions = {}
 ): void {
-  const { duration = 3000, dismissible = true } = options;
+  const { duration = 3000, dismissible = true, allowDuplicate = false } = options;
+
+  // Prevent duplicate toasts unless explicitly allowed
+  const toastKey = getToastKey(message, type);
+  if (!allowDuplicate && activeToasts.has(toastKey)) {
+    return;
+  }
 
   // Get or create toast container
   let container = document.getElementById('toast-container');
@@ -120,6 +138,10 @@ export function showToast(
   // Create toast element
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
+  toast.dataset.toastKey = toastKey;
+
+  // Track this toast
+  activeToasts.set(toastKey, toast);
 
   // Add icon
   const iconSpan = document.createElement('span');
@@ -161,6 +183,12 @@ export function showToast(
  * Remove a toast with animation.
  */
 function removeToast(toast: HTMLElement): void {
+  // Remove from active toasts tracking
+  const toastKey = toast.dataset.toastKey;
+  if (toastKey) {
+    activeToasts.delete(toastKey);
+  }
+
   toast.classList.remove('toast-visible');
   toast.classList.add('toast-hiding');
 
