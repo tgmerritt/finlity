@@ -330,6 +330,12 @@ export async function checkForDuplicates(): Promise<void> {
     }
   } catch (error) {
     console.error('Error checking for duplicates:', error);
+    // Inform user and hide warning since we can't verify status
+    showToast('Unable to check for duplicate positions', 'warning');
+    const warningEl = document.getElementById('duplicate-warning');
+    if (warningEl) {
+      warningEl.style.display = 'none';
+    }
   }
 }
 
