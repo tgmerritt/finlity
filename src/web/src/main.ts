@@ -9,10 +9,17 @@ import { initTheme, toggleTheme } from '@/state/theme';
 import { store } from '@/state/store';
 
 // UI components
-import { initTabs, initMobileNav, showTab } from '@/ui/tabs';
+import { initTabs, initMobileNav, showTab, toggleMobileNav } from '@/ui/tabs';
 import { showToast, showError, showWarning } from '@/ui/toast';
 import { hideLoading, showLoading } from '@/ui/loading';
-import { showModal, closeModal, initModal } from '@/ui/modal';
+import {
+  showModal,
+  closeModal,
+  initModal,
+  showTriggerModal,
+  hideTriggerModal,
+  closeBudgetModal,
+} from '@/ui/modal';
 
 // API client
 import { apiCall } from '@/api/client';
@@ -33,14 +40,33 @@ import {
   refreshData as refreshDashboardData,
   loadRetirementMetrics,
   checkForDuplicates,
+  refreshPrices,
+  showDuplicateDetails,
 } from '@/pages/dashboard';
-import { initHoldings, updateHoldings, sortPositions } from '@/pages/holdings';
+import {
+  initHoldings,
+  updateHoldings,
+  sortPositions,
+  sortHoldings,
+  selectAllAccounts,
+  toggleMultiSelect,
+  showAddPositionModal,
+  hideAddPositionModal,
+  showEditPositionModal,
+  hideEditPositionModal,
+  showNewAccountForm,
+  createNewAccount,
+} from '@/pages/holdings';
 import {
   initAnalysis,
   analyzeFund,
   sendStreamingChatMessage,
   showGlobalChat,
   hideGlobalChat,
+  getAdvisorAnalysis,
+  analyzePortfolioFunds,
+  updatePositionSectors,
+  clearGlobalChat,
 } from '@/pages/analysis';
 import {
   initProjections,
@@ -48,14 +74,25 @@ import {
   calculateFire,
   loadTaxesTab,
   runTaxProjection,
+  loadAccountBalancesByType,
 } from '@/pages/projections';
-import { initBudget, showBudgetTab, loadBudgetTab } from '@/pages/budget';
+import {
+  initBudget,
+  showBudgetTab,
+  loadBudgetTab,
+  showAddIncomeModal,
+  showAddExpenseModal,
+  showAddDeductionModal,
+  runTransitionProjection,
+} from '@/pages/budget';
 import {
   initSettings,
   loadAIProviders,
   loadApiKeysStatus,
   loadViewsList,
   loadAccountsManagement,
+  showCreateViewModal,
+  hideViewModal,
 } from '@/pages/settings';
 
 // Features
@@ -64,8 +101,14 @@ import {
   loadProfiles,
   updateProfileDisplay,
   switchProfile,
+  showManageProfilesModal,
+  toggleProfileDropdown,
+  showCreateProfileModal,
+  hideProfileModal,
+  saveProfile,
+  importProfileFromFile,
 } from '@/features/profiles';
-import { initCommentary, initAICommentaryButtons } from '@/features/commentary';
+import { initCommentary, initAICommentaryButtons, showAICommentary } from '@/features/commentary';
 import {
   initPlugins,
   loadPlugins,
@@ -73,6 +116,11 @@ import {
   loadPluginSecurity,
   loadWidgets,
   loadPluginAnalysis,
+  showInstallPluginModal,
+  hideInstallPluginModal,
+  switchInstallTab,
+  checkPluginUpdates,
+  discoverPlugins,
 } from '@/features/plugins';
 import {
   initImportExport,
@@ -80,6 +128,10 @@ import {
   exportAllToCSV,
   confirmImport,
   hideImportModal,
+  showImportNewAccountForm,
+  createImportAccount,
+  browseExistingDatabase,
+  handleFileSelect,
 } from '@/features/import-export';
 import {
   initOnboarding,
@@ -92,6 +144,8 @@ import {
   endTour,
   showProfileSetup,
   closeProfileSetup,
+  completeWelcome,
+  selectStorageMode,
 } from '@/features/onboarding';
 
 // Utilities
@@ -293,88 +347,11 @@ if (document.readyState === 'loading') {
   });
 }
 
-// Expose key functions to window for HTML onclick handlers during transition
-// These will be removed once all event handlers are migrated to TypeScript
+// Expose key functions to window for HTML onclick handlers
+// Using 'any' type for finlity to avoid maintaining duplicate type definitions
 declare global {
   interface Window {
-    finlity: {
-      // Navigation
-      showTab: typeof showTab;
-      refreshData: typeof refreshData;
-      toggleTheme: typeof toggleTheme;
-
-      // UI
-      showModal: typeof showModal;
-      closeModal: typeof closeModal;
-      showToast: typeof showToast;
-
-      // Dashboard
-      checkForDuplicates: typeof checkForDuplicates;
-
-      // Holdings
-      updateHoldings: typeof updateHoldings;
-      sortPositions: typeof sortPositions;
-
-      // Analysis
-      analyzeFund: typeof analyzeFund;
-      sendStreamingChatMessage: typeof sendStreamingChatMessage;
-      showGlobalChat: typeof showGlobalChat;
-      hideGlobalChat: typeof hideGlobalChat;
-
-      // Projections
-      runProjection: typeof runProjection;
-      calculateFire: typeof calculateFire;
-      loadTaxesTab: typeof loadTaxesTab;
-      runTaxProjection: typeof runTaxProjection;
-
-      // Budget
-      showBudgetTab: typeof showBudgetTab;
-      loadBudgetTab: typeof loadBudgetTab;
-
-      // Settings
-      loadAIProviders: typeof loadAIProviders;
-      loadApiKeysStatus: typeof loadApiKeysStatus;
-      loadViewsList: typeof loadViewsList;
-      loadAccountsManagement: typeof loadAccountsManagement;
-
-      // Profiles
-      loadProfiles: typeof loadProfiles;
-      switchProfile: typeof switchProfile;
-      updateProfileDisplay: typeof updateProfileDisplay;
-
-      // Plugins
-      loadPlugins: typeof loadPlugins;
-      loadInstalledPlugins: typeof loadInstalledPlugins;
-      loadPluginSecurity: typeof loadPluginSecurity;
-      loadWidgets: typeof loadWidgets;
-      loadPluginAnalysis: typeof loadPluginAnalysis;
-
-      // Import/Export
-      exportToCSV: typeof exportToCSV;
-      exportAllToCSV: typeof exportAllToCSV;
-      confirmImport: typeof confirmImport;
-      hideImportModal: typeof hideImportModal;
-
-      // Onboarding
-      startDemoMode: typeof startDemoMode;
-      toggleDemoMode: typeof toggleDemoMode;
-      startTour: typeof startTour;
-      nextTourStep: typeof nextTourStep;
-      endTour: typeof endTour;
-      showProfileSetup: typeof showProfileSetup;
-      closeProfileSetup: typeof closeProfileSetup;
-
-      // Charts
-      updateAllocationCharts: typeof updateAllocationCharts;
-      updateHistoryChart: typeof updateHistoryChart;
-      setHistoryTimeRange: typeof setHistoryTimeRange;
-
-      // Utilities
-      formatCurrency: typeof formatCurrency;
-      formatPercent: typeof formatPercent;
-      formatNumber: typeof formatNumber;
-      escapeHtml: typeof escapeHtml;
-    };
+    finlity: Record<string, unknown>;
   }
 }
 
@@ -384,45 +361,81 @@ window.finlity = {
   showTab,
   refreshData,
   toggleTheme,
+  toggleMobileNav,
 
-  // UI
+  // UI Modals
   showModal,
   closeModal,
   showToast,
+  showTriggerModal,
+  hideTriggerModal,
+  showAddTriggerModal: showTriggerModal,
+  hideAddTriggerModal: hideTriggerModal,
+  closeBudgetModal,
 
   // Dashboard
   checkForDuplicates,
+  refreshPrices,
+  showDuplicateDetails,
 
   // Holdings
   updateHoldings,
   sortPositions,
+  sortHoldings,
+  selectAllAccounts,
+  toggleMultiSelect,
+  showAddPositionModal,
+  hideAddPositionModal,
+  showEditPositionModal,
+  hideEditPositionModal,
+  showNewAccountForm,
+  createNewAccount,
 
   // Analysis
   analyzeFund,
   sendStreamingChatMessage,
   showGlobalChat,
   hideGlobalChat,
+  getAdvisorAnalysis,
+  analyzePortfolioFunds,
+  updatePositionSectors,
+  clearGlobalChat,
+  showAICommentary,
 
   // Projections
   runProjection,
   calculateFire,
   loadTaxesTab,
   runTaxProjection,
+  loadAccountBalancesByType,
 
   // Budget
   showBudgetTab,
   loadBudgetTab,
+  showAddIncomeModal,
+  showAddExpenseModal,
+  showAddDeductionModal,
+  runTransitionProjection,
 
   // Settings
   loadAIProviders,
   loadApiKeysStatus,
   loadViewsList,
   loadAccountsManagement,
+  showCreateViewModal,
+  hideViewModal,
 
   // Profiles
   loadProfiles,
   switchProfile,
   updateProfileDisplay,
+  showManageProfilesModal,
+  toggleProfileDropdown,
+  showCreateProfileModal,
+  hideProfileModal,
+  createProfile: saveProfile,
+  saveProfile,
+  importProfileFromFile,
 
   // Plugins
   loadPlugins,
@@ -430,12 +443,21 @@ window.finlity = {
   loadPluginSecurity,
   loadWidgets,
   loadPluginAnalysis,
+  showInstallPluginModal,
+  hideInstallPluginModal,
+  switchInstallTab,
+  checkPluginUpdates,
+  discoverPlugins,
 
   // Import/Export
   exportToCSV,
   exportAllToCSV,
   confirmImport,
   hideImportModal,
+  showImportNewAccountForm,
+  createImportAccount,
+  browseExistingDatabase,
+  handleFileSelect,
 
   // Onboarding
   startDemoMode,
@@ -445,6 +467,8 @@ window.finlity = {
   endTour,
   showProfileSetup,
   closeProfileSetup,
+  completeWelcome,
+  selectStorageMode,
 
   // Charts
   updateAllocationCharts,
@@ -457,3 +481,6 @@ window.finlity = {
   formatNumber,
   escapeHtml,
 };
+
+// Also expose all finlity functions directly on window for HTML onclick handlers
+Object.assign(window, window.finlity);
