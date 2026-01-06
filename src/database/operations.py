@@ -1326,7 +1326,7 @@ class Database:
             return entity
 
     def delete_entity(self, entity_id: str) -> bool:
-        """Delete an entity.
+        """Delete an entity, unassigning any associated records.
 
         Args:
             entity_id: ID of the entity to delete
@@ -1335,37 +1335,31 @@ class Database:
             True if deleted successfully, False if entity not found
 
         Raises:
-            ValueError: If entity has associated accounts, income sources, or expenses
+            ValueError: If trying to delete the household entity
         """
         with self.get_session() as session:
             entity = session.query(Entity).filter_by(id=entity_id).first()
             if not entity:
                 return False
 
-            # Check for associated accounts
-            account_count = session.query(Account).filter_by(entity_id=entity_id).count()
-            if account_count > 0:
-                raise ValueError(
-                    f"Cannot delete entity with {account_count} associated accounts"
-                )
+            # Prevent deletion of household entity
+            if entity.is_household:
+                raise ValueError("Cannot delete the household entity")
 
-            # Check for associated income sources
-            income_count = (
-                session.query(BudgetIncomeSource).filter_by(entity_id=entity_id).count()
+            # Unassign associated accounts (set entity_id to NULL)
+            session.query(Account).filter_by(entity_id=entity_id).update(
+                {"entity_id": None}
             )
-            if income_count > 0:
-                raise ValueError(
-                    f"Cannot delete entity with {income_count} associated income sources"
-                )
 
-            # Check for associated expenses
-            expense_count = (
-                session.query(BudgetExpense).filter_by(entity_id=entity_id).count()
+            # Unassign associated income sources
+            session.query(BudgetIncomeSource).filter_by(entity_id=entity_id).update(
+                {"entity_id": None}
             )
-            if expense_count > 0:
-                raise ValueError(
-                    f"Cannot delete entity with {expense_count} associated expenses"
-                )
+
+            # Unassign associated expenses
+            session.query(BudgetExpense).filter_by(entity_id=entity_id).update(
+                {"entity_id": None}
+            )
 
             session.delete(entity)
             session.commit()

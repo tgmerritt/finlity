@@ -4048,6 +4048,8 @@ th.sortable.sort-desc .sort-icon::after {
 
 .entity-info {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .entity-name {
@@ -4092,6 +4094,7 @@ th.sortable.sort-desc .sort-icon::after {
 .entity-actions {
     display: flex;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 .entity-actions button {
@@ -4102,6 +4105,7 @@ th.sortable.sort-desc .sort-icon::after {
     color: var(--color-text-secondary);
     cursor: pointer;
     font-size: 12px;
+    white-space: nowrap;
     transition: all var(--transition-fast);
 }
 
@@ -7159,6 +7163,18 @@ th.sortable.sort-desc .sort-icon::after {
 .form-control:focus {
     outline: none;
     border-color: var(--color-primary);
+}
+
+.form-control-sm {
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+/* Entity select in account management table */
+.entity-select {
+    width: auto;
+    min-width: 120px;
+    max-width: 180px;
 }
 
 .form-hint {

@@ -29,6 +29,15 @@ interface TaxProjectionResult {
     total_withdrawn: number;
     total_gross_withdrawn?: number;
     final_balance: number;
+    // Pre-retirement (accumulation phase) tax totals
+    pre_retirement_federal_tax?: number;
+    pre_retirement_state_tax?: number;
+    pre_retirement_total_tax?: number;
+    pre_retirement_avg_effective_rate?: number;
+    // Post-retirement (withdrawal phase) tax totals
+    post_retirement_federal_tax?: number;
+    post_retirement_state_tax?: number;
+    post_retirement_total_tax?: number;
   };
   chart_data: TaxBurdenChartData & {
     taxable_balances: number[];
@@ -470,8 +479,11 @@ function displayTaxProjectionResults(result: TaxProjectionResult): void {
 
   const totalDetail = document.getElementById('tax-total-detail');
   if (totalDetail) {
+    // Use post-retirement taxes only when calculating % of withdrawals
+    // (total_tax includes pre-retirement salary taxes which shouldn't be compared to withdrawals)
+    const retirementTax = result.summary.post_retirement_total_tax ?? result.summary.total_tax;
     const taxAsPercent =
-      grossWithdrawn > 0 ? ((result.summary.total_tax / grossWithdrawn) * 100).toFixed(1) : '0.0';
+      grossWithdrawn > 0 ? ((retirementTax / grossWithdrawn) * 100).toFixed(1) : '0.0';
     totalDetail.textContent = `${taxAsPercent}% of gross withdrawals over ${withdrawalYears} years`;
   }
 

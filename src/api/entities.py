@@ -276,6 +276,21 @@ async def auto_detect_entities() -> dict:
         # Does NOT match: All-caps names like "JOHN", names without space/possessive after
         name_pattern = re.compile(r"^(?:[A-Za-z]+\s+)?([A-Z][a-z]+)(?:'s?\s|\s)")
 
+        # Exclude common financial terms, account types, and company names
+        excluded_names = {
+            # Account types
+            "Roth", "Traditional", "Rollover", "Inherited", "Beneficiary",
+            "Individual", "Joint", "Custodial", "Trust", "Estate",
+            # Financial institutions and providers
+            "Schwab", "Fidelity", "Vanguard", "Marcus", "Optum", "Human",
+            "Principal", "Merrill", "Morgan", "Chase", "Wells", "Citi",
+            "Ally", "Capital", "American", "United", "First", "National",
+            # Account descriptors
+            "High", "Yield", "Savings", "Checking", "Money", "Market",
+            "Health", "College", "Education", "Retirement", "Brokerage",
+            "Taxable", "Investment", "Personal", "Business", "Corporate",
+        }
+
         detected_names: set[str] = set()
         associations: dict[str, list[str]] = {}  # entity_name -> [record_ids]
 
@@ -286,10 +301,11 @@ async def auto_detect_entities() -> dict:
                 match = name_pattern.match(account.name)
                 if match:
                     name = match.group(1)
-                    detected_names.add(name)
-                    if name not in associations:
-                        associations[name] = []
-                    associations[name].append(f"account:{account.id}")
+                    if name not in excluded_names:
+                        detected_names.add(name)
+                        if name not in associations:
+                            associations[name] = []
+                        associations[name].append(f"account:{account.id}")
 
             # Scan income source names
             income_sources = session.query(BudgetIncomeSource).all()
@@ -297,10 +313,11 @@ async def auto_detect_entities() -> dict:
                 match = name_pattern.match(income.name)
                 if match:
                     name = match.group(1)
-                    detected_names.add(name)
-                    if name not in associations:
-                        associations[name] = []
-                    associations[name].append(f"income:{income.id}")
+                    if name not in excluded_names:
+                        detected_names.add(name)
+                        if name not in associations:
+                            associations[name] = []
+                        associations[name].append(f"income:{income.id}")
 
         # Create entities for detected names
         created_entities = []

@@ -55,7 +55,11 @@ interface Account {
   brokerage?: string;
   position_count?: number;
   value?: number;
+  entity_id?: string | null;
 }
+
+/** Cached entities for account assignment. */
+let entitiesCache: EntityResponse[] = [];
 
 /**
  * View configuration from API.
@@ -230,7 +234,15 @@ export function getAIPreferences(): { provider_id: string | null; model_id: stri
  */
 export async function loadAccountsManagement(): Promise<void> {
   try {
-    const accounts = await apiCall<Account[]>('/api/portfolio/accounts');
+    // Fetch accounts and entities in parallel
+    const [accounts, entities] = await Promise.all([
+      apiCall<Account[]>('/api/portfolio/accounts'),
+      apiCall<EntityResponse[]>('/api/entities/'),
+    ]);
+
+    // Cache entities for later use
+    entitiesCache = entities || [];
+
     const tbody = document.getElementById('accounts-management-body');
     if (!tbody) return;
 
@@ -239,7 +251,7 @@ export async function loadAccountsManagement(): Promise<void> {
     if (!accounts || accounts.length === 0) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 3;
+      cell.colSpan = 4;
       cell.className = 'no-data';
       cell.textContent = 'No accounts found. Add your first account above.';
       row.appendChild(cell);
@@ -267,6 +279,37 @@ export async function loadAccountsManagement(): Promise<void> {
       infoDiv.appendChild(metaSpan);
       infoCell.appendChild(infoDiv);
 
+      // Owner cell with entity selector
+      const ownerCell = document.createElement('td');
+      const ownerSelect = document.createElement('select');
+      ownerSelect.className = 'form-control form-control-sm entity-select';
+
+      // Add "Unassigned" option
+      const unassignedOption = document.createElement('option');
+      unassignedOption.value = '';
+      unassignedOption.textContent = '— Unassigned —';
+      ownerSelect.appendChild(unassignedOption);
+
+      // Add entity options (skip household entity)
+      for (const entity of entitiesCache) {
+        if (entity.is_household) continue;
+        const option = document.createElement('option');
+        option.value = entity.id;
+        option.textContent = entity.name;
+        option.style.color = entity.color;
+        if (account.entity_id === entity.id) {
+          option.selected = true;
+        }
+        ownerSelect.appendChild(option);
+      }
+
+      // Handle entity assignment change
+      ownerSelect.addEventListener('change', () => {
+        assignAccountToEntity(account.id, ownerSelect.value || null);
+      });
+
+      ownerCell.appendChild(ownerSelect);
+
       // Value cell
       const valueCell = document.createElement('td');
       valueCell.className = 'text-right';
@@ -284,12 +327,33 @@ export async function loadAccountsManagement(): Promise<void> {
       actionsCell.appendChild(deleteBtn);
 
       row.appendChild(infoCell);
+      row.appendChild(ownerCell);
       row.appendChild(valueCell);
       row.appendChild(actionsCell);
       tbody.appendChild(row);
     });
   } catch (error) {
     console.error('Error loading accounts for management:', error);
+  }
+}
+
+/**
+ * Assign an account to an entity.
+ */
+async function assignAccountToEntity(accountId: string, entityId: string | null): Promise<void> {
+  try {
+    await apiCall(`/api/entities/accounts/${accountId}/assign`, {
+      method: 'POST',
+      body: { entity_id: entityId },
+    });
+    showToast(entityId ? 'Account owner updated' : 'Account unassigned', 'success');
+    // Reload entities list to update counts
+    await loadEntitiesList();
+  } catch (error) {
+    console.error('Error assigning account to entity:', error);
+    showToast('Failed to update account owner', 'error');
+    // Reload to reset the dropdown to previous value
+    await loadAccountsManagement();
   }
 }
 

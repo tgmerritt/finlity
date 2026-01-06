@@ -42,6 +42,7 @@ class AccountResponse(BaseModel):
     position_count: int
     beneficiary: Optional[str] = None
     is_retirement: bool = False
+    entity_id: Optional[str] = None
 
 
 class PositionResponse(BaseModel):
@@ -153,6 +154,7 @@ def get_portfolio_summary(db: Database = Depends(get_db)) -> PortfolioSummary:
             cost_basis=a["cost_basis"],
             position_count=a["position_count"],
             is_retirement=a["is_retirement"],
+            entity_id=a.get("entity_id"),
         )
         for a in summary["accounts"]
     ]
@@ -194,6 +196,7 @@ def get_accounts(db: Database = Depends(get_db)) -> list[AccountResponse]:
             position_count=len(positions),
             beneficiary=account.beneficiary,
             is_retirement=account.is_retirement,
+            entity_id=account.entity_id,
         ))
 
     return result
