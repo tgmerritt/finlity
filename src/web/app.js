@@ -101,21 +101,43 @@ async function computeHmac(key, message) {
 }
 
 /**
- * Generate signature headers for mutating requests.
+ * Compute SHA-256 hash of a string using Web Crypto API.
  */
-async function generateSignatureHeaders(method, endpoint) {
+async function computeSha256Hash(data) {
+  const encoder = new TextEncoder();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(data));
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Generate signature headers for mutating requests.
+ * @param {string} method - HTTP method (POST, PUT, DELETE, PATCH)
+ * @param {string} endpoint - API endpoint path
+ * @param {string} body - Request body (JSON string or empty string for no body)
+ */
+async function generateSignatureHeaders(method, endpoint, body = '') {
   if (!sessionHmacKey) return {};
 
   const timestamp = Math.floor(Date.now() / 1000);
   const nonce = crypto.randomUUID();
-  const message = `${timestamp}:${nonce}:${method}:${endpoint}`;
+  const bodyHash = body ? await computeSha256Hash(body) : '';
+  const message = `${timestamp}:${nonce}:${method}:${endpoint}:${bodyHash}`;
   const signature = await computeHmac(sessionHmacKey, message);
 
-  return {
+  const headers = {
     'X-Request-Timestamp': timestamp.toString(),
     'X-Request-Nonce': nonce,
     'X-Request-Signature': signature,
   };
+
+  // Include body hash header if we have a body
+  if (bodyHash) {
+    headers['X-Request-Body-Hash'] = bodyHash;
+  }
+
+  return headers;
 }
 
 // Welcome page functions
@@ -488,10 +510,16 @@ async function apiCall(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const method = options.method || 'GET';
 
+  // Stringify body first (needed for signature computation)
+  let bodyString = '';
+  if (options.body) {
+    bodyString = typeof options.body === 'object' ? JSON.stringify(options.body) : options.body;
+  }
+
   // Generate signing headers for mutating requests in multi-user mode
   let sigHeaders = {};
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && sessionHmacKey) {
-    sigHeaders = await generateSignatureHeaders(method, endpoint);
+    sigHeaders = await generateSignatureHeaders(method, endpoint, bodyString);
   }
 
   const config = {
@@ -501,12 +529,8 @@ async function apiCall(endpoint, options = {}) {
     },
     credentials: 'include', // Send session cookie
     ...options,
+    body: bodyString || undefined,
   };
-
-  // If body is an object, stringify it
-  if (config.body && typeof config.body === 'object') {
-    config.body = JSON.stringify(config.body);
-  }
 
   const response = await fetch(url, config);
 
@@ -567,10 +591,16 @@ async function pollForTaskResult(taskId, options = {}) {
 async function runAsyncApiCall(endpoint, options = {}, taskOptions = {}) {
   const method = options.method || 'GET';
 
+  // Stringify body first (needed for signature computation)
+  let bodyString = '';
+  if (options.body) {
+    bodyString = typeof options.body === 'object' ? JSON.stringify(options.body) : options.body;
+  }
+
   // Generate signing headers for mutating requests in multi-user mode
   let sigHeaders = {};
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && sessionHmacKey) {
-    sigHeaders = await generateSignatureHeaders(method, endpoint);
+    sigHeaders = await generateSignatureHeaders(method, endpoint, bodyString);
   }
 
   const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -580,6 +610,7 @@ async function runAsyncApiCall(endpoint, options = {}, taskOptions = {}) {
     },
     credentials: 'include', // Send session cookie
     ...options,
+    body: bodyString || undefined,
   });
 
   if (!response.ok) {
@@ -2239,12 +2270,13 @@ async function installFromGit(event) {
   btnLoading.style.display = 'inline-flex';
 
   try {
-    const signatureHeaders = await generateSignatureHeaders('POST', '/api/plugins/install/git');
+    const bodyString = JSON.stringify({ source: source });
+    const signatureHeaders = await generateSignatureHeaders('POST', '/api/plugins/install/git', bodyString);
     const response = await fetch(API_BASE + '/api/plugins/install/git', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...signatureHeaders },
       credentials: 'include',
-      body: JSON.stringify({ source: source }),
+      body: bodyString,
     });
 
     const data = await response.json();
@@ -7286,7 +7318,7 @@ async function loadDeductions() {
                         ${ded.employer_match > 0 ? ' + ' + formatCurrency(ded.employer_match) + ' employer match' : ''}
                     </div>
                 </div>
-                <div class="deduction-item-amount">${formatCurrency(ded.amount_per_period * 26)}/yr</div>
+                <div class="deduction-item-amount">${formatCurrency(ded.annual_amount || ded.amount_per_period * 26)}/yr</div>
                 <div class="deduction-item-actions">
                     <button class="btn btn-sm btn-default" onclick="editDeduction('${ded.id}')">Edit</button>
                     <button class="btn btn-sm btn-danger" onclick="deleteDeduction('${ded.id}')">Delete</button>
@@ -8067,9 +8099,24 @@ function showAddExpenseModal() {
 }
 
 function showAddDeductionModal() {
+  // Build income source options from loaded data
+  const incomeOptions = budgetIncomeSources.length > 0
+    ? budgetIncomeSources.map(inc =>
+        `<option value="${inc.id}">${escapeHtml(inc.name)} (${inc.pay_frequency})</option>`
+      ).join('')
+    : '';
+
   const modal = createModal(
     'Add Pre-tax Deduction',
     `
+        <div class="form-group">
+            <label for="deduction-income-source">Income Source</label>
+            <select id="deduction-income-source">
+                <option value="">Not linked (applies to all)</option>
+                ${incomeOptions}
+            </select>
+            <small style="color: var(--text-secondary); font-size: 0.85em;">Link to a specific income for accurate annual calculations</small>
+        </div>
         <div class="form-group">
             <label for="deduction-label">Label (optional)</label>
             <input type="text" id="deduction-label" placeholder="e.g., John's 401k, Jane's HSA">
@@ -8096,7 +8143,9 @@ function showAddDeductionModal() {
         </div>
     `,
     async () => {
+      const incomeSourceId = document.getElementById('deduction-income-source').value || null;
       const data = {
+        income_source_id: incomeSourceId,
         label: document.getElementById('deduction-label').value || null,
         deduction_type: document.getElementById('deduction-type').value,
         amount_per_period: parseFloat(document.getElementById('deduction-amount').value) || 0,
@@ -8298,9 +8347,22 @@ function editDeduction(id) {
     return;
   }
 
+  // Build income source options from loaded data
+  const incomeOptions = budgetIncomeSources.map(inc => {
+    const selected = deduction.income_source_id === inc.id ? 'selected' : '';
+    return `<option value="${inc.id}" ${selected}>${escapeHtml(inc.name)} (${inc.pay_frequency})</option>`;
+  }).join('');
+
   const modal = createModal(
     'Edit Pre-tax Deduction',
     `
+        <div class="form-group">
+            <label for="deduction-income-source">Income Source</label>
+            <select id="deduction-income-source">
+                <option value="" ${!deduction.income_source_id ? 'selected' : ''}>Not linked (applies to all)</option>
+                ${incomeOptions}
+            </select>
+        </div>
         <div class="form-group">
             <label for="deduction-type">Type</label>
             <select id="deduction-type">
@@ -8328,7 +8390,9 @@ function editDeduction(id) {
         </div>
     `,
     async () => {
+      const incomeSourceId = document.getElementById('deduction-income-source').value || null;
       const data = {
+        income_source_id: incomeSourceId,
         deduction_type: document.getElementById('deduction-type').value,
         amount_per_period: parseFloat(document.getElementById('deduction-amount').value) || 0,
         employer_match: parseFloat(document.getElementById('deduction-match').value) || 0,
