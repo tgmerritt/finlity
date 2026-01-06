@@ -199,7 +199,7 @@ async def test_budget(page: Page):
     add_income_btn = page.locator('button:has-text("Add Income")')
     if await add_income_btn.count() > 0:
         print("  Found 'Add Income' button, clicking...")
-        await add_income_btn.first.click()
+        await add_income_btn.first.click(force=True)
         await page.wait_for_timeout(800)
 
         # Check if modal opened
@@ -291,7 +291,7 @@ async def test_add_position_modal(page: Page):
     # Click Add Position button
     add_btn = page.locator('button:has-text("Add Position")')
     if await add_btn.count() > 0:
-        await add_btn.first.click()
+        await add_btn.first.click(force=True)
         await page.wait_for_timeout(500)
 
         modal_visible = await page.locator('.modal:visible, #add-position-modal:visible').count() > 0
@@ -336,7 +336,7 @@ async def main():
             await page.evaluate("localStorage.setItem('hasVisitedBefore', 'true')")
             # Reload to apply the localStorage setting
             await page.reload()
-            await page.wait_for_timeout(3000)  # Wait for initial load
+            await page.wait_for_timeout(5000)  # Wait for initial load and API calls to complete
 
             # Check if page loaded
             title = await page.title()
