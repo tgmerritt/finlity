@@ -147,6 +147,7 @@ import {
   completeWelcome,
   selectStorageMode,
 } from '@/features/onboarding';
+import { initSocialFeed, destroySocialFeed, refreshSocialFeed } from '@/features/social-feed';
 
 // Utilities
 import { formatCurrency, formatPercent, formatNumber } from '@/utils/format';
@@ -298,6 +299,7 @@ async function init(): Promise<void> {
   initPlugins();
   initImportExport();
   initOnboarding();
+  initSocialFeed();
 
   // Initialize pages
   initDashboard();
@@ -470,6 +472,11 @@ window.finlity = {
   closeProfileSetup,
   completeWelcome,
   selectStorageMode,
+
+  // Social Feed
+  initSocialFeed,
+  destroySocialFeed,
+  refreshSocialFeed,
 
   // Charts
   updateAllocationCharts,
