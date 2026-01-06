@@ -5,6 +5,7 @@ Provides a REST API and serves a web dashboard for managing and analyzing
 your investment portfolio.
 """
 
+import logging
 import os
 import time
 import webbrowser
@@ -38,6 +39,8 @@ from src.api.session import router as session_router
 from src.database import get_profile_manager, get_database
 from src.importers import FolderScanner
 from src.services.session import is_multi_user_mode
+
+logger = logging.getLogger(__name__)
 
 
 def get_allowed_origins() -> list[str]:
@@ -261,13 +264,26 @@ async def serve_dashboard():
     """Serve the main dashboard with cache-busted JS reference."""
     index_path = web_dir / "index.html"
     if index_path.exists():
-        # Read HTML and inject cache-busting version
-        html_content = index_path.read_text()
-        html_content = html_content.replace(
-            'src="/static/dist/app.js"',
-            f'src="/static/dist/app.js?v={_build_version}"'
-        )
-        return HTMLResponse(content=html_content)
+        try:
+            # Read HTML and inject cache-busting version
+            html_content = index_path.read_text(encoding="utf-8")
+            original_content = html_content
+            html_content = html_content.replace(
+                'src="/static/dist/app.js"',
+                f'src="/static/dist/app.js?v={_build_version}"',
+            )
+            # Warn if cache-busting replacement didn't match
+            if html_content == original_content:
+                logger.warning(
+                    "Cache-busting replacement failed - pattern not found in index.html"
+                )
+            return HTMLResponse(content=html_content)
+        except (OSError, UnicodeDecodeError) as e:
+            logger.error(f"Error reading index.html: {e}")
+            return HTMLResponse(
+                content="<h1>Error loading dashboard</h1>",
+                status_code=500,
+            )
     return {
         "message": "Investment Portfolio API",
         "docs": "/docs",
