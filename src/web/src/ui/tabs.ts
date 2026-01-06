@@ -66,9 +66,11 @@ export function showTab(tabName: TabName): void {
   });
 
   // Show selected tab content
-  const selectedContent = querySelector<HTMLElement>(`#${tabName}-content`);
+  const selectedContent = querySelector<HTMLElement>(`#tab-${tabName}`);
   if (selectedContent) {
     selectedContent.style.display = 'block';
+  } else {
+    console.error(`Tab content element not found: #tab-${tabName}`);
   }
 
   // Add active class to selected nav item
