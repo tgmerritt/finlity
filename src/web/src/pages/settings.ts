@@ -7,6 +7,7 @@ import { apiCall } from '@/api/client';
 import { showModal, closeModal } from '@/ui/modal';
 import { showToast } from '@/ui/toast';
 import { showLoading, hideLoading } from '@/ui/loading';
+import { onTabChange } from '@/ui/tabs';
 import { formatCurrency } from '@/utils/format';
 import { escapeHtml } from '@/utils/html';
 import { store } from '@/state/store';
@@ -1000,4 +1001,11 @@ export function initSettings(): void {
   if (viewModalClose) {
     viewModalClose.addEventListener('click', hideViewModal);
   }
+
+  // Load accounts management when switching to settings tab
+  onTabChange((tab) => {
+    if (tab === 'settings') {
+      loadAccountsManagement();
+    }
+  });
 }
