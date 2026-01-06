@@ -18,6 +18,7 @@ export function showLoading(message = 'Loading...'): void {
 
   if (overlay) {
     overlay.style.display = 'flex';
+    overlay.classList.add('visible');
   }
 
   if (textElement) {
@@ -33,6 +34,7 @@ export function hideLoading(): void {
 
   const overlay = getElementById('loading-overlay');
   if (overlay) {
+    overlay.classList.remove('visible');
     overlay.style.display = 'none';
   }
 }
