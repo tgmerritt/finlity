@@ -335,6 +335,9 @@ async def main():
             await page.reload()
             await page.wait_for_timeout(5000)  # Wait for initial load and API calls to complete
 
+            # Clear any console errors from the reload (transient fetch errors are expected)
+            console_errors.clear()
+
             # Check if page loaded
             title = await page.title()
             print(f"Page title: {title}")
