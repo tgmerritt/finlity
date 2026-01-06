@@ -719,8 +719,15 @@ class DashboardMetricsResponse(BaseModel):
 
 
 @router.get("/dashboard-metrics", response_model=DashboardMetricsResponse)
-def get_dashboard_metrics(db: Database = Depends(get_db)):
+def get_dashboard_metrics(
+    entity_id: Optional[str] = None,
+    db: Database = Depends(get_db),
+):
     """Get retirement planning metrics for dashboard display.
+
+    Args:
+        entity_id: Optional entity ID to filter metrics for a specific person.
+                   If None, returns combined household metrics.
 
     Returns:
     - Monthly retirement income based on PROJECTED portfolio value at retirement (from Monte Carlo)
@@ -733,8 +740,11 @@ def get_dashboard_metrics(db: Database = Depends(get_db)):
     from src.api.settings import load_config
     from datetime import date
 
-    # Get portfolio value
-    summary = db.get_portfolio_summary()
+    # Get portfolio value - filtered by entity if specified
+    if entity_id:
+        summary = db.get_portfolio_summary_by_entity(entity_id)
+    else:
+        summary = db.get_portfolio_summary()
     total_value = summary["total_value"]
 
     # Get personal settings
@@ -756,8 +766,11 @@ def get_dashboard_metrics(db: Database = Depends(get_db)):
         except ValueError:
             pass
 
-    # Get latest Monte Carlo result
-    latest_mc = db.get_latest_monte_carlo_result()
+    # Get latest Monte Carlo result - filtered by entity if specified
+    if entity_id:
+        latest_mc = db.get_latest_monte_carlo_result_by_entity(entity_id)
+    else:
+        latest_mc = db.get_latest_monte_carlo_result()
 
     # Initialize values that require simulation
     monthly_retirement_income = None

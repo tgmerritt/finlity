@@ -156,10 +156,18 @@ export async function refreshData(): Promise<void> {
 
 /**
  * Load retirement metrics for dashboard row 2.
+ * If an entity is selected, loads metrics filtered to that entity.
  */
 export async function loadRetirementMetrics(): Promise<void> {
   try {
-    const metrics = await apiCall<DashboardMetrics>('/api/portfolio/dashboard-metrics');
+    // Build URL with entity filter if one is selected
+    const currentEntityId = store.get('currentEntityId');
+    let url = '/api/portfolio/dashboard-metrics';
+    if (currentEntityId) {
+      url += `?entity_id=${currentEntityId}`;
+    }
+
+    const metrics = await apiCall<DashboardMetrics>(url);
 
     // Update Monthly Retirement Income
     const monthlyIncomeEl = document.getElementById('monthly-retirement-income');

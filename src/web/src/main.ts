@@ -108,6 +108,12 @@ import {
   saveProfile,
   importProfileFromFile,
 } from '@/features/profiles';
+import {
+  initEntitySelector,
+  loadEntities,
+  changeEntity,
+  autoDetectEntities,
+} from '@/features/entities';
 import { initCommentary, initAICommentaryButtons, showAICommentary } from '@/features/commentary';
 import {
   initPlugins,
@@ -295,6 +301,7 @@ async function init(): Promise<void> {
 
   // Initialize features
   initProfiles();
+  initEntitySelector();
   initCommentary();
   initPlugins();
   initImportExport();
@@ -439,6 +446,11 @@ window.finlity = {
   createProfile: saveProfile,
   saveProfile,
   importProfileFromFile,
+
+  // Entities (multi-person household tracking)
+  loadEntities,
+  changeEntity,
+  autoDetectEntities,
 
   // Plugins
   loadPlugins,
