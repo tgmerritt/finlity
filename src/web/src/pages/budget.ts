@@ -204,10 +204,10 @@ export async function saveTaxConfig(): Promise<void> {
   try {
     await apiCall('/api/budget/tax-config', {
       method: 'PUT',
-      body: JSON.stringify({
+      body: {
         filing_status: filingStatus,
         state: state,
-      }),
+      },
     });
     updatePaycheckPreview();
   } catch (error) {
@@ -500,7 +500,7 @@ export async function updatePaycheckPreview(incomeIndex: number | null = null): 
 
     const paycheck = await apiCall<PaycheckBreakdown>('/api/budget/calculate-paycheck', {
       method: 'POST',
-      body: JSON.stringify({
+      body: {
         gross_per_period: grossPerPeriod,
         pay_frequency: primaryIncome.pay_frequency,
         filing_status: filingStatus,
@@ -509,7 +509,7 @@ export async function updatePaycheckPreview(incomeIndex: number | null = null): 
         pretax_hsa: pretaxHsa,
         pretax_fsa: pretaxFsa,
         pretax_other: pretaxOther,
-      }),
+      },
     });
 
     if (!paycheck) return;
@@ -685,11 +685,11 @@ export async function loadCashFlowData(): Promise<void> {
       }
     >('/api/budget/calculate-annual', {
       method: 'POST',
-      body: JSON.stringify({
+      body: {
         filing_status: filingStatus,
         state: state,
         tax_year: new Date().getFullYear(),
-      }),
+      },
     });
 
     if (!summary) return;
@@ -736,13 +736,13 @@ export async function runTransitionProjection(): Promise<void> {
   try {
     const data = await apiCall<TransitionResponse>('/api/budget/income-transition', {
       method: 'POST',
-      body: JSON.stringify({
+      body: {
         current_age: currentAge,
         retirement_age: retirementAge,
         ss_claiming_age: ssAge,
         end_age: endAge,
         ss_benefit_override: ssOverride,
-      }),
+      },
     });
 
     if (data && data.years) {
@@ -845,7 +845,7 @@ export async function showAddIncomeModal(): Promise<void> {
 
       await apiCall('/api/budget/income', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: data,
       });
 
       closeModal();
@@ -909,7 +909,7 @@ export function showAddExpenseModal(): void {
 
       await apiCall('/api/budget/expenses', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: data,
       });
 
       closeModal();
@@ -963,7 +963,7 @@ export function showAddDeductionModal(): void {
 
       await apiCall('/api/budget/deductions', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: data,
       });
 
       closeModal();
@@ -1070,7 +1070,7 @@ export function editIncome(id: string): void {
 
       await apiCall(`/api/budget/income/${id}`, {
         method: 'PUT',
-        body: JSON.stringify(data),
+        body: data,
       });
 
       closeModal();
@@ -1143,7 +1143,7 @@ export function editExpense(id: string): void {
 
       await apiCall(`/api/budget/expenses/${id}`, {
         method: 'PUT',
-        body: JSON.stringify(data),
+        body: data,
       });
 
       closeModal();
@@ -1198,7 +1198,7 @@ export function editDeduction(id: string): void {
 
       await apiCall(`/api/budget/deductions/${id}`, {
         method: 'PUT',
-        body: JSON.stringify(data),
+        body: data,
       });
 
       closeModal();

@@ -550,7 +550,7 @@ export async function saveApiKey(keyId: string): Promise<void> {
   try {
     await apiCall('/api/settings/api-key', {
       method: 'POST',
-      body: JSON.stringify({ key: keyId, value: value }),
+      body: { key: keyId, value: value },
     });
 
     showToast('API key saved successfully', 'success');
@@ -803,7 +803,7 @@ export async function saveView(event: Event): Promise<void> {
 
     await apiCall(url, {
       method,
-      body: JSON.stringify({ name, account_ids: accountIds, is_default: isDefault }),
+      body: { name, account_ids: accountIds, is_default: isDefault },
     });
 
     showToast(editId ? 'View updated' : 'View created', 'success');
@@ -1086,13 +1086,13 @@ export async function saveEntity(event: Event): Promise<void> {
     if (editId) {
       await apiCall(`/api/entities/${editId}`, {
         method: 'PUT',
-        body: JSON.stringify(data),
+        body: data,
       });
       showToast('Entity updated', 'success');
     } else {
       await apiCall('/api/entities/', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: data,
       });
       showToast('Entity created', 'success');
     }
@@ -1112,7 +1112,7 @@ export async function setDefaultEntity(entityId: string): Promise<void> {
   try {
     await apiCall(`/api/entities/${entityId}`, {
       method: 'PUT',
-      body: JSON.stringify({ is_default: true }),
+      body: { is_default: true },
     });
     showToast('Default entity updated', 'success');
     await loadEntitiesList();
@@ -1195,7 +1195,7 @@ export async function savePersonalSettings(event: Event): Promise<void> {
   try {
     await apiCall('/api/settings/config/personal', {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: data,
     });
     showToast('Personal settings saved', 'success');
     await loadRetirementMetrics();
@@ -1232,7 +1232,7 @@ export async function saveAssetClassTargets(event: Event): Promise<void> {
   try {
     await apiCall('/api/settings/config/targets/asset_class', {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: data,
     });
     showToast('Asset targets saved', 'success');
   } catch (error) {
@@ -1381,7 +1381,7 @@ export async function saveMarketAssumptions(event: Event): Promise<void> {
   try {
     await apiCall('/api/settings/config/market', {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: data,
     });
     showToast('Market assumptions saved', 'success');
   } catch (error) {
@@ -1421,7 +1421,7 @@ export async function saveMonteCarloSettings(event: Event): Promise<void> {
   try {
     await apiCall('/api/settings/config/monte_carlo', {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: data,
     });
     showToast('Monte Carlo settings saved', 'success');
   } catch (error) {

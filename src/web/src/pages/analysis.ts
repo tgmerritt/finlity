@@ -10,6 +10,7 @@
 import { apiCall } from '@/api/client';
 import { store } from '@/state/store';
 import { showLoading, hideLoading } from '@/ui/loading';
+import { onTabChange } from '@/ui/tabs';
 import { showToast } from '@/ui/toast';
 import { showGlobalChatModal, hideGlobalChatModal } from '@/ui/modal';
 import type { DashboardPosition } from '@/types/api';
@@ -69,6 +70,90 @@ interface AdvisorAnalysisResult {
     description?: string;
   }>;
   recommendations?: string[];
+}
+
+/**
+ * Performance metrics from API.
+ */
+interface PerformanceMetrics {
+  total_value: number;
+  total_cost_basis: number;
+  total_gain_loss: number;
+  total_gain_loss_pct: number;
+  ytd_return: number;
+  one_year_return: number;
+  benchmark_ytd: number;
+  benchmark_one_year: number;
+  alpha_ytd: number;
+  alpha_one_year: number;
+}
+
+/**
+ * Risk metrics from API.
+ */
+interface RiskMetrics {
+  volatility: number;
+  sharpe_ratio: number;
+  sortino_ratio: number;
+  max_drawdown: number;
+  beta: number;
+  var_95: number;
+  cvar_95: number;
+  diversification_ratio: number;
+}
+
+/**
+ * Allocation data from API.
+ */
+interface AllocationData {
+  by_asset_class: Record<string, number>;
+  by_sector: Record<string, number>;
+  by_account_type: Record<string, number>;
+  by_brokerage: Record<string, number>;
+  concentration_top5: number;
+  concentration_top10: number;
+}
+
+/**
+ * Allocation row from detailed API.
+ */
+interface AllocationRow {
+  name: string;
+  stocks_bonds: number;
+  funds: number;
+  total: number;
+  current_pct: number;
+  target_pct?: number;
+  deviation?: number;
+}
+
+/**
+ * Detailed allocation data from API.
+ */
+interface DetailedAllocationData {
+  total_value: number;
+  by_sector: AllocationRow[];
+  by_geography: AllocationRow[];
+  by_cap: AllocationRow[];
+  by_style: AllocationRow[];
+  by_asset_class: AllocationRow[];
+  by_position_type: AllocationRow[];
+  cash_allocation: number;
+  invested_allocation: number;
+}
+
+/**
+ * Position data from API.
+ */
+interface PositionData {
+  id: string;
+  ticker: string;
+  name: string;
+  shares: number;
+  current_price: number;
+  market_value: number;
+  account_name: string;
+  account_id: string;
 }
 
 /**
@@ -997,6 +1082,308 @@ export async function updatePositionSectors(): Promise<void> {
 }
 
 /**
+ * Helper to format a percentage value for display.
+ */
+function formatPercent(value: number | null | undefined, decimals = 2): string {
+  if (value === null || value === undefined || isNaN(value)) return '-';
+  return `${value.toFixed(decimals)}%`;
+}
+
+/**
+ * Helper to update a DOM element's text content safely.
+ */
+function setElementText(id: string, text: string): void {
+  const el = document.getElementById(id);
+  if (el) {
+    el.textContent = text;
+  }
+}
+
+/**
+ * Load and display analysis metrics (performance, risk, allocation).
+ */
+export async function loadAnalysisData(): Promise<void> {
+  try {
+    // Load all data in parallel
+    const [performance, risk, allocation] = await Promise.all([
+      apiCall<PerformanceMetrics>('/api/analysis/performance'),
+      apiCall<RiskMetrics>('/api/analysis/risk'),
+      apiCall<AllocationData>('/api/analysis/allocation'),
+    ]);
+
+    // Update performance metrics
+    setElementText('ytd-return', formatPercent(performance.ytd_return));
+    setElementText('one-year-return', formatPercent(performance.one_year_return));
+    setElementText('alpha-ytd', formatPercent(performance.alpha_ytd));
+    setElementText('benchmark-ytd', formatPercent(performance.benchmark_ytd));
+
+    // Update risk metrics
+    setElementText('volatility', formatPercent(risk.volatility));
+    setElementText('sharpe-ratio', risk.sharpe_ratio?.toFixed(2) || '-');
+    setElementText('max-drawdown', formatPercent(risk.max_drawdown));
+    setElementText('beta', risk.beta?.toFixed(2) || '-');
+    setElementText('var-95', formatPercent(risk.var_95));
+
+    // Update concentration metrics
+    setElementText('concentration-top5', formatPercent(allocation.concentration_top5));
+    setElementText('concentration-top10', formatPercent(allocation.concentration_top10));
+
+    // Calculate cash vs invested allocation
+    const cashPct = allocation.by_asset_class['cash'] || allocation.by_asset_class['Cash'] || 0;
+    const investedPct = 100 - cashPct;
+    setElementText('cash-allocation', formatPercent(cashPct));
+    setElementText('invested-allocation', formatPercent(investedPct));
+
+    // Store allocation data for context-aware chat
+    (window as unknown as Record<string, unknown>).detailedAllocation = {
+      cash_allocation: cashPct,
+      invested_allocation: investedPct,
+      by_sector: allocation.by_sector,
+      by_asset_class: allocation.by_asset_class,
+    };
+
+    // Load top holdings
+    await loadTopHoldings();
+
+    // Load default allocation tab (asset-class)
+    await showAllocationTab('asset-class');
+  } catch (error) {
+    console.error('Error loading analysis data:', error);
+  }
+}
+
+/**
+ * Show detailed information for a metric.
+ * Currently shows a toast with metric info - could be expanded to a modal.
+ */
+export function showMetricDetail(metricId: string): void {
+  const descriptions: Record<string, string> = {
+    'ytd-return': 'Year-to-date return measures portfolio growth since January 1st.',
+    'one-year-return': 'Rolling 12-month return of your portfolio.',
+    'alpha': 'Excess return compared to the S&P 500 benchmark.',
+    'volatility': 'Annualized standard deviation of returns - higher means more price swings.',
+    'sharpe': 'Risk-adjusted return (return per unit of risk). Higher is better.',
+    'max-drawdown': 'Largest peak-to-trough decline in portfolio value.',
+    'beta': 'Sensitivity to market movements. 1.0 = moves with market.',
+    'var': 'Value at Risk - maximum expected daily loss 95% of the time.',
+  };
+
+  const description = descriptions[metricId] || 'No additional information available.';
+  showToast(description, 'info');
+}
+
+/** Cached detailed allocation data */
+let cachedDetailedAllocationData: DetailedAllocationData | null = null;
+
+/** Cached positions data */
+let cachedPositionsData: PositionData[] | null = null;
+
+/**
+ * Format currency value for display.
+ */
+function formatCurrencyValue(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+/**
+ * Load and display top holdings in the Top Holdings card.
+ */
+export async function loadTopHoldings(): Promise<void> {
+  const container = document.getElementById('top-holdings-list');
+  if (!container) return;
+
+  try {
+    // Fetch positions if not cached
+    if (!cachedPositionsData) {
+      cachedPositionsData = await apiCall<PositionData[]>('/api/portfolio/positions');
+    }
+
+    // Sort by market value descending and take top 5
+    const topHoldings = [...cachedPositionsData]
+      .filter((p) => p.market_value && p.market_value > 0)
+      .sort((a, b) => (b.market_value || 0) - (a.market_value || 0))
+      .slice(0, 5);
+
+    // Calculate total portfolio value for percentages
+    const totalValue = cachedPositionsData.reduce((sum, p) => sum + (p.market_value || 0), 0);
+
+    // Clear container
+    container.textContent = '';
+
+    if (topHoldings.length === 0) {
+      const emptyMsg = document.createElement('div');
+      emptyMsg.className = 'text-muted';
+      emptyMsg.textContent = 'No holdings found';
+      container.appendChild(emptyMsg);
+      return;
+    }
+
+    // Render each holding
+    for (const holding of topHoldings) {
+      const item = document.createElement('div');
+      item.className = 'holding-item';
+
+      const tickerSpan = document.createElement('span');
+      tickerSpan.className = 'holding-ticker';
+      tickerSpan.textContent = holding.ticker;
+      item.appendChild(tickerSpan);
+
+      const valueSpan = document.createElement('span');
+      valueSpan.className = 'holding-value';
+      const pct = totalValue > 0 ? (holding.market_value / totalValue) * 100 : 0;
+      valueSpan.textContent = `${formatCurrencyValue(holding.market_value)} (${pct.toFixed(1)}%)`;
+      item.appendChild(valueSpan);
+
+      container.appendChild(item);
+    }
+  } catch (error) {
+    console.error('Error loading top holdings:', error);
+    container.textContent = '';
+    const errorMsg = document.createElement('div');
+    errorMsg.className = 'text-muted';
+    errorMsg.textContent = 'Failed to load top holdings';
+    container.appendChild(errorMsg);
+  }
+}
+
+/**
+ * Show detailed view of top N holdings.
+ */
+export async function showTopHoldingsDetail(count: number): Promise<void> {
+  try {
+    // Fetch positions if not cached
+    if (!cachedPositionsData) {
+      cachedPositionsData = await apiCall<PositionData[]>('/api/portfolio/positions');
+    }
+
+    // Sort by market value descending and take top N
+    const topHoldings = [...cachedPositionsData]
+      .filter((p) => p.market_value && p.market_value > 0)
+      .sort((a, b) => (b.market_value || 0) - (a.market_value || 0))
+      .slice(0, count);
+
+    // Calculate total portfolio value for percentages
+    const totalValue = cachedPositionsData.reduce((sum, p) => sum + (p.market_value || 0), 0);
+
+    // Build content for toast or modal
+    const lines: string[] = [`Top ${count} Holdings:`];
+    for (const holding of topHoldings) {
+      const pct = totalValue > 0 ? (holding.market_value / totalValue) * 100 : 0;
+      lines.push(`${holding.ticker}: ${formatCurrencyValue(holding.market_value)} (${pct.toFixed(1)}%)`);
+    }
+
+    showToast(lines.join('\n'), 'info');
+  } catch (error) {
+    console.error('Error loading top holdings detail:', error);
+    showToast('Failed to load top holdings', 'error');
+  }
+}
+
+/**
+ * Show allocation breakdown for a specific category tab.
+ * Uses the detailed allocation API to get proper dollar values.
+ */
+export async function showAllocationTab(tabName: string): Promise<void> {
+  // Update active tab styling
+  document.querySelectorAll('.alloc-tab').forEach((btn) => {
+    btn.classList.remove('active');
+    const onclick = btn.getAttribute('onclick') || '';
+    if (onclick.includes(`'${tabName}'`)) {
+      btn.classList.add('active');
+    }
+  });
+
+  // Fetch detailed allocation data if not cached
+  if (!cachedDetailedAllocationData) {
+    try {
+      cachedDetailedAllocationData = await apiCall<DetailedAllocationData>('/api/analysis/allocation/detailed');
+    } catch (error) {
+      console.error('Error loading detailed allocation data:', error);
+      return;
+    }
+  }
+
+  // Get the data for the selected tab
+  let rows: AllocationRow[] = [];
+  const allocation = cachedDetailedAllocationData;
+
+  switch (tabName) {
+    case 'asset-class':
+      rows = allocation.by_asset_class || [];
+      break;
+    case 'sector':
+      rows = allocation.by_sector || [];
+      break;
+    case 'geography':
+      rows = allocation.by_geography || [];
+      break;
+    case 'cap':
+      rows = allocation.by_cap || [];
+      break;
+    case 'style':
+      rows = allocation.by_style || [];
+      break;
+    case 'position-type':
+      rows = allocation.by_position_type || [];
+      break;
+    default:
+      rows = allocation.by_asset_class || [];
+  }
+
+  // Update the allocation table
+  const table = document.getElementById('allocation-table');
+  if (!table) return;
+
+  const tbody = table.querySelector('tbody') || table;
+
+  // Clear existing rows (keep header if present)
+  const existingRows = tbody.querySelectorAll('tr:not(:first-child)');
+  existingRows.forEach((row) => row.remove());
+
+  // If no data, show empty message
+  if (rows.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 3;
+    cell.textContent = 'No data available for this category';
+    cell.style.textAlign = 'center';
+    cell.style.color = 'var(--text-muted)';
+    row.appendChild(cell);
+    tbody.appendChild(row);
+    return;
+  }
+
+  // Sort by total value descending and add rows
+  const sortedRows = [...rows].sort((a, b) => b.total - a.total);
+
+  for (const allocRow of sortedRows) {
+    const row = document.createElement('tr');
+
+    // Category name cell
+    const nameCell = document.createElement('td');
+    nameCell.textContent = allocRow.name;
+    row.appendChild(nameCell);
+
+    // Value cell (dollar value)
+    const valueCell = document.createElement('td');
+    valueCell.textContent = formatCurrencyValue(allocRow.total);
+    row.appendChild(valueCell);
+
+    // Percentage cell
+    const pctCell = document.createElement('td');
+    pctCell.textContent = `${allocRow.current_pct.toFixed(1)}%`;
+    row.appendChild(pctCell);
+
+    tbody.appendChild(row);
+  }
+}
+
+/**
  * Initialize analysis page event handlers.
  */
 export function initAnalysis(): void {
@@ -1083,4 +1470,11 @@ export function initAnalysis(): void {
 
   // Check Claude status on load
   checkClaudeStatus();
+
+  // Load analysis data when switching to analysis tab
+  onTabChange((tab) => {
+    if (tab === 'analysis') {
+      loadAnalysisData();
+    }
+  });
 }

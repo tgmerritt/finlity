@@ -63,6 +63,11 @@ import {
   analyzePortfolioFunds,
   updatePositionSectors,
   clearGlobalChat,
+  loadAnalysisData,
+  showMetricDetail,
+  showAllocationTab,
+  loadTopHoldings,
+  showTopHoldingsDetail,
 } from '@/pages/analysis';
 import {
   initProjections,
@@ -407,7 +412,12 @@ window.finlity = {
   analyzePortfolioFunds,
   updatePositionSectors,
   clearGlobalChat,
+  loadAnalysisData,
+  showMetricDetail,
+  showAllocationTab,
   showAICommentary,
+  loadTopHoldings,
+  showTopHoldingsDetail,
 
   // Projections
   runProjection,

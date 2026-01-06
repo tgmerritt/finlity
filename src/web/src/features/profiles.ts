@@ -510,13 +510,13 @@ export async function saveProfile(event: Event): Promise<void> {
       // Update existing profile
       await apiCall(`/api/profiles/${profileId}`, {
         method: 'PUT',
-        body: JSON.stringify({ name, description, color, icon }),
+        body: { name, description, color, icon },
       });
     } else {
       // Create new profile
       await apiCall('/api/profiles', {
         method: 'POST',
-        body: JSON.stringify({ name, description, color, icon }),
+        body: { name, description, color, icon },
       });
     }
 
@@ -583,7 +583,7 @@ export async function duplicateProfile(profileId: string): Promise<void> {
   try {
     await apiCall(`/api/profiles/${profileId}/duplicate`, {
       method: 'POST',
-      body: JSON.stringify({ new_name: newName }),
+      body: { new_name: newName },
     });
 
     showToast('Profile duplicated', 'success');
