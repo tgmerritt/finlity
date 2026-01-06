@@ -206,20 +206,18 @@ async def test_budget(page: Page):
 
     if modal_visible:
         # Fill the form using the actual modal field IDs
-        # Name field
-        await page.fill('#income-name', 'Test Job')
-        print("  Filled name: Test Job")
+        # Name field - use a placeholder to test form functionality
+        await page.fill('#income-name', 'UI Test - Do Not Save')
+        print("  Filled name field (form test only)")
 
         # Annual gross income
         await page.fill('#income-gross', '85000')
-        print("  Filled gross income: 85000")
+        print("  Filled gross income field (form test only)")
 
-        # Save - button has ID modal-save-btn
-        save_btn = page.locator('#modal-save-btn')
-        if await save_btn.count() > 0:
-            await save_btn.click()
-            await page.wait_for_timeout(1000)
-            print("  Clicked Save")
+        # NOTE: We intentionally do NOT click Save here.
+        # This is a UI test to verify the modal opens and form fields work.
+        # Actually saving would pollute the user's database with test data.
+        print("  Form fields verified (not saving to avoid database pollution)")
 
     await close_any_modals(page)
     return True
