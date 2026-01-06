@@ -316,7 +316,8 @@ async function init(): Promise<void> {
     await checkDemoModeStatus();
 
     // Show welcome tab for first-time visitors
-    if (isFirstVisit()) {
+    const firstVisit = isFirstVisit();
+    if (firstVisit) {
       showTab('welcome');
     } else {
       showTab('dashboard');
