@@ -6325,8 +6325,10 @@ let currentStorageMode = 'server';
 
 /**
  * Set storage mode (server or local)
+ * @param {string} mode - 'server' or 'local'
+ * @param {boolean} silent - If true, skip toast notification (used during initialization)
  */
-function setStorageMode(mode) {
+function setStorageMode(mode, silent = false) {
   currentStorageMode = mode;
 
   // Update UI
@@ -6349,7 +6351,9 @@ function setStorageMode(mode) {
     refreshData();
   }
 
-  showToast(`Switched to ${mode} mode`, 'info');
+  if (!silent) {
+    showToast(`Switched to ${mode} mode`, 'info');
+  }
 }
 
 /**
@@ -6361,7 +6365,7 @@ async function checkBrowserStorageData() {
     if (hasData) {
       updateLocalDbStatus('Browser storage found - click "Load from Browser" to restore', 'info');
     } else {
-      updateLocalDbStatus('No database loaded. Open a file or create new.', 'warning');
+      updateLocalDbStatus('No local database loaded. Open a file, create new, or switch to Server mode above.', 'warning');
     }
   } catch (error) {
     console.error('Error checking browser storage:', error);
@@ -6658,7 +6662,8 @@ function initStorageMode() {
   if (radioEl) {
     radioEl.checked = true;
     if (savedMode === 'local') {
-      setStorageMode('local');
+      // Use silent=true to avoid showing toast on every page load
+      setStorageMode('local', true);
     }
   }
 }
