@@ -329,9 +329,13 @@ async def main():
         page.on("response", lambda response: network_errors.append(f"{response.status} {response.url}") if response.status >= 400 else None)
 
         try:
-            # Load the page
+            # Set localStorage to bypass first-visit welcome screen
+            # This must be done after navigating to the domain
             print(f"\nLoading {BASE_URL}...")
             await page.goto(BASE_URL)
+            await page.evaluate("localStorage.setItem('hasVisitedBefore', 'true')")
+            # Reload to apply the localStorage setting
+            await page.reload()
             await page.wait_for_timeout(3000)  # Wait for initial load
 
             # Check if page loaded
