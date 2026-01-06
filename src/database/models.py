@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, String, Text, Boolean
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, String, Text, Boolean, text
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -36,7 +36,7 @@ class Entity(Base):
             "ix_entities_unique_household",
             "is_household",
             unique=True,
-            sqlite_where="is_household = 1",
+            sqlite_where=text("is_household = 1"),
         ),
     )
 
