@@ -125,7 +125,7 @@ export {
  */
 async function loadViews(): Promise<void> {
   try {
-    const views = await apiCall<PortfolioView[]>('/api/portfolio/views');
+    const views = await apiCall<PortfolioView[]>('/api/settings/views');
     store.set('availableViews', views);
   } catch (error) {
     console.error('Failed to load views:', error);
@@ -139,7 +139,7 @@ async function loadViews(): Promise<void> {
 async function updatePriceStatus(): Promise<void> {
   try {
     const data = await apiCall<{ last_update: string | null; prices_stale: boolean }>(
-      '/api/portfolio/price-status'
+      '/api/imports/price-status'
     );
     const statusEl = document.getElementById('price-status');
     if (statusEl && data.last_update) {
