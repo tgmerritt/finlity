@@ -353,6 +353,7 @@ class FolderScanner:
         pending: PendingFile,
         brokerage: Optional[str] = None,
         fetch_prices: bool = True,
+        target_account_id: Optional[str] = None,
     ) -> ImportResult:
         """Import a pending file into the database.
 
@@ -365,16 +366,17 @@ class FolderScanner:
 
         # Use plugin-based import if available
         if pending.use_plugin and pending.plugin_id:
-            return self._import_with_plugin(pending, brokerage, fetch_prices)
+            return self._import_with_plugin(pending, brokerage, fetch_prices, target_account_id)
 
         # Legacy import
-        return self._import_legacy(pending, brokerage, fetch_prices)
+        return self._import_legacy(pending, brokerage, fetch_prices, target_account_id)
 
     def _import_with_plugin(
         self,
         pending: PendingFile,
         brokerage: str,
         fetch_prices: bool,
+        target_account_id: Optional[str] = None,
     ) -> ImportResult:
         """Import using a plugin importer."""
         try:
@@ -402,14 +404,25 @@ class FolderScanner:
                 )
 
             # Get or create account
-            account_name = plugin_result.account_name or self._generate_account_name(
-                pending.account_type, brokerage
-            )
-            account = self.db.get_or_create_account(
-                name=account_name,
-                account_type=pending.account_type,
-                brokerage=brokerage,
-            )
+            if target_account_id:
+                account = self.db.get_account_by_id(target_account_id)
+                if not account:
+                    return ImportResult(
+                        file_path=pending.path,
+                        success=False,
+                        positions_imported=0,
+                        error_message=f"Target account {target_account_id} not found",
+                    )
+                account_name = account.name
+            else:
+                account_name = plugin_result.account_name or self._generate_account_name(
+                    pending.account_type, brokerage
+                )
+                account = self.db.get_or_create_account(
+                    name=account_name,
+                    account_type=pending.account_type,
+                    brokerage=brokerage,
+                )
 
             # Record the import
             file_import = self.db.record_import(
@@ -495,6 +508,7 @@ class FolderScanner:
         pending: PendingFile,
         brokerage: str,
         fetch_prices: bool,
+        target_account_id: Optional[str] = None,
     ) -> ImportResult:
         """Legacy import using column detection."""
         try:
@@ -508,12 +522,23 @@ class FolderScanner:
                 )
 
             # Get or create account
-            account_name = self._generate_account_name(pending.account_type, brokerage)
-            account = self.db.get_or_create_account(
-                name=account_name,
-                account_type=pending.account_type,
-                brokerage=brokerage,
-            )
+            if target_account_id:
+                account = self.db.get_account_by_id(target_account_id)
+                if not account:
+                    return ImportResult(
+                        file_path=pending.path,
+                        success=False,
+                        positions_imported=0,
+                        error_message=f"Target account {target_account_id} not found",
+                    )
+                account_name = account.name
+            else:
+                account_name = self._generate_account_name(pending.account_type, brokerage)
+                account = self.db.get_or_create_account(
+                    name=account_name,
+                    account_type=pending.account_type,
+                    brokerage=brokerage,
+                )
 
             # Record the import first (as pending)
             file_import = self.db.record_import(
@@ -771,6 +796,8 @@ class FolderScanner:
     def _fetch_and_update_prices(self, tickers: list[str]) -> None:
         """Fetch prices using PriceService and update positions."""
         from src.data.prices import PriceService
+        from datetime import datetime
+        from src.database.models import PriceCache, Position
 
         price_service = PriceService()
 
@@ -792,8 +819,36 @@ class FolderScanner:
                     self._update_position_prices(ticker, price_data.current_price)
                     logger.debug(f"Fetched price for {ticker}: ${price_data.current_price:.2f}")
                 else:
-                    # Price service returned None (skip tickers like CDs, cash, etc.)
-                    logger.debug(f"Skipped price lookup for {ticker} (non-market ticker)")
+                    # Check if it was skipped intentionally
+                    normalized = price_service.normalize_ticker(ticker)
+                    should_skip = (
+                        ticker in price_service.SKIP_PRICE_LOOKUP or
+                        normalized in price_service.SKIP_PRICE_LOOKUP or
+                        ticker.startswith(price_service.SKIP_PRICE_PREFIXES)
+                    )
+
+                    if should_skip:
+                        with self.db.get_session() as session:
+                            cache = session.query(PriceCache).filter_by(ticker=ticker).first()
+                            if cache:
+                                cache.last_updated = datetime.utcnow()
+                                logger.debug(f"Refreshed timestamp for skipped ticker {ticker}")
+                            else:
+                                # Create cache entry using existing position price or default 1.0
+                                position = session.query(Position).filter_by(ticker=ticker).first()
+                                price = position.current_price if position and position.current_price else 1.0
+                                
+                                cache = PriceCache(
+                                    ticker=ticker,
+                                    current_price=price,
+                                    last_updated=datetime.utcnow()
+                                )
+                                session.add(cache)
+                                logger.debug(f"Created cache entry for skipped ticker {ticker} with price {price}")
+                            session.commit()
+                    else:
+                        # Price service returned None (failure or unknown ticker)
+                        logger.debug(f"Skipped price lookup for {ticker} (non-market ticker)")
 
             except Exception as e:
                 logger.warning(f"Could not fetch price for {ticker}: {e}")

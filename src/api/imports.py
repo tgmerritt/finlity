@@ -6,6 +6,7 @@ from typing import Optional
 from pathlib import Path
 import re
 import logging
+import difflib
 
 from src.database import Database
 from src.importers import FolderScanner
@@ -15,6 +16,60 @@ router = APIRouter(prefix="/api/imports", tags=["imports"])
 import_router = APIRouter(prefix="/api/import", tags=["import"])
 
 logger = logging.getLogger(__name__)
+
+
+def _find_similar_existing_file(directory: Path, filename: str) -> Optional[Path]:
+    """Find a file with a similar name in the directory.
+
+    Similarity is defined as:
+    - Same prefix before date/random numbers
+    - Example: 'Alex IRA-Positions-2026...' matches 'Alex IRA-Positions-2025...'
+    """
+    if not directory.exists():
+        return None
+
+    # Remove extension
+    stem = Path(filename).stem
+
+    # Regex to strip trailing date/timestamp/random digits
+    # Matches -202X or -YYMMDD or just digits at end
+    match = re.search(r'[-_ ]\d{4}[-_]?\d{2}[-_]?\d{2}', stem)
+    if match:
+        prefix = stem[:match.start()]
+    else:
+        # Fallback: try to strip just any trailing digits/dashes if no full date found
+        # e.g. "MyAccount-123" -> "MyAccount"
+        match_digits = re.search(r'[-_ ]\d+$', stem)
+        if match_digits:
+            prefix = stem[:match_digits.start()]
+        else:
+            prefix = stem
+
+    # Too short to be safe (e.g. "A.csv")
+    if len(prefix) < 3:
+        prefix = stem
+
+    best_match = None
+    best_ratio = 0.0
+
+    for file in directory.iterdir():
+        if file.name == filename:
+            continue
+        if file.suffix.lower() not in ['.csv', '.xlsx', '.xls']:
+            continue
+
+        # Check if starts with prefix
+        if file.stem.startswith(prefix):
+            return file
+
+        # Fallback: similarity ratio for cases where prefix logic fails
+        ratio = difflib.SequenceMatcher(None, stem, file.stem).ratio()
+        if ratio > 0.8: # High similarity threshold
+             if ratio > best_ratio:
+                 best_ratio = ratio
+                 best_match = file
+
+    return best_match
 
 
 def get_db() -> Database:
@@ -209,17 +264,41 @@ async def upload_file(
 
     # Process the file
     scanner = FolderScanner(db)
+
+    # Check for similar file and linked account
+    similar_file = _find_similar_existing_file(import_dir, file.filename)
+    target_account = None
+
+    if similar_file:
+        logger.info(f"Found similar file for {file.filename}: {similar_file.name}")
+        # Try to find the account associated with this file
+        target_account = db.get_account_from_active_import(similar_file.name)
+        if target_account:
+            logger.info(f"Found linked account for upload: {target_account.name} (ID: {target_account.id})")
+            # Use the account's brokerage setting if available
+            if target_account.brokerage and target_account.brokerage != "other":
+                brokerage = target_account.brokerage
+
     pending = scanner.scan_for_new_files()
 
     # Find and process our file
     for p in pending:
         if p.path == file_path:
-            result = scanner.import_file(p, brokerage=brokerage, fetch_prices=fetch_prices)
+            # Pass target_account_id if we found one
+            target_id = target_account.id if target_account else None
+
+            result = scanner.import_file(
+                p,
+                brokerage=brokerage,
+                fetch_prices=fetch_prices,
+                target_account_id=target_id,
+            )
             return {
                 "message": "File imported successfully" if result.success else "Import failed",
                 "status": "success" if result.success else "error",
                 "positions_imported": result.positions_imported,
                 "error": result.error_message,
+                "linked_account": target_account.name if target_account else None,
             }
 
     return {
