@@ -568,17 +568,11 @@ def set_demo_mode(settings: DemoModeSettings) -> dict:
     - Restores the previous profile
     - Returns to personal portfolio data
 
-    Note: When PROTECT_DEMO_DATA is enabled, turning off demo mode is blocked.
+    Note: PROTECT_DEMO_DATA only protects demo data from modifications,
+    it does NOT prevent toggling demo mode on/off.
     """
-    from src.services.demo_mode import get_demo_manager, is_demo_data_protected
+    from src.services.demo_mode import get_demo_manager
     from src.database import get_profile_manager, reset_database_caches
-
-    # Block turning OFF demo mode when protection is enabled
-    if not settings.enabled and is_demo_data_protected():
-        raise HTTPException(
-            status_code=403,
-            detail="Demo mode cannot be disabled on the hosted demo site."
-        )
 
     demo_manager = get_demo_manager()
     profile_manager = get_profile_manager()
