@@ -5916,6 +5916,42 @@ th.sortable.sort-desc .sort-icon::after {
     color: var(--color-success);
 }
 
+/* Disabled storage option (Heroku restriction) */
+.radio-card.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.radio-card.disabled input {
+    cursor: not-allowed;
+}
+
+/* Heroku storage restriction warning banner */
+.warning-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 193, 7, 0.1);
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: var(--border-radius);
+    color: #856404;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+[data-theme="dark"] .warning-banner {
+    background: rgba(255, 193, 7, 0.15);
+    border-color: rgba(255, 193, 7, 0.4);
+    color: #ffc107;
+}
+
+.warning-banner svg {
+    flex-shrink: 0;
+    color: #ffc107;
+}
+
 /* =============================================================================
    AI Commentary - Info Icons & Popovers
    ============================================================================= */
