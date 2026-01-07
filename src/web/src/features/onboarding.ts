@@ -403,7 +403,7 @@ export function closeProfileSetup(): void {
 }
 
 /**
- * Select storage mode option.
+ * Select storage mode option (visual update only).
  */
 export function selectStorageMode(mode: 'server' | 'local'): void {
   // Update visual selection
@@ -415,6 +415,98 @@ export function selectStorageMode(mode: 'server' | 'local'): void {
       input.checked = true;
     }
   });
+}
+
+/**
+ * Set storage mode (called from HTML onclick handlers).
+ * Updates localStorage, UI badge, and shows/hides local storage options.
+ */
+export function setStorageMode(mode: 'server' | 'local'): void {
+  // Save to localStorage
+  localStorage.setItem('storageMode', mode);
+
+  // Update badge
+  const badge = getElementById<HTMLElement>('storage-mode-badge');
+  if (badge) {
+    badge.textContent = mode === 'server' ? 'Server' : 'Local';
+    badge.className = `badge ${mode}`;
+  }
+
+  // Show/hide local storage options
+  const localOptions = getElementById<HTMLElement>('local-storage-options');
+  if (localOptions) {
+    localOptions.style.display = mode === 'local' ? 'block' : 'none';
+  }
+
+  // Update radio selection
+  const serverRadio = getElementById<HTMLInputElement>('storage-mode-server');
+  const localRadio = document.querySelector<HTMLInputElement>('input[name="storage-mode"][value="local"]');
+  if (serverRadio) serverRadio.checked = mode === 'server';
+  if (localRadio) localRadio.checked = mode === 'local';
+
+  console.debug(`Storage mode set to: ${mode}`);
+}
+
+/**
+ * Deployment info from server.
+ */
+interface DeploymentInfo {
+  is_heroku: boolean;
+  demo_mode: boolean;
+  server_storage_allowed: boolean;
+  server_storage_reason: string | null;
+}
+
+/**
+ * Load deployment information from server.
+ * Used to determine if storage restrictions apply (Heroku non-demo mode).
+ */
+export async function loadDeploymentInfo(): Promise<DeploymentInfo | null> {
+  try {
+    const info = await apiCall<DeploymentInfo>('/api/settings/deployment-info');
+    updateStorageModeRestrictions(info.server_storage_allowed, info.server_storage_reason);
+    return info;
+  } catch (error) {
+    console.error('Failed to load deployment info:', error);
+    return null;
+  }
+}
+
+/**
+ * Update storage mode UI based on deployment restrictions.
+ * On Heroku when demo mode is disabled, server storage is not allowed.
+ */
+export function updateStorageModeRestrictions(
+  serverAllowed: boolean,
+  reason: string | null
+): void {
+  const serverOption = getElementById<HTMLElement>('server-storage-option');
+  const serverRadio = getElementById<HTMLInputElement>('storage-mode-server');
+  const localRadio = document.querySelector<HTMLInputElement>('input[name="storage-mode"][value="local"]');
+  const banner = getElementById<HTMLElement>('heroku-storage-banner');
+  const message = getElementById<HTMLElement>('heroku-storage-message');
+
+  if (!serverAllowed) {
+    // Disable server option
+    if (serverOption) serverOption.classList.add('disabled');
+    if (serverRadio) serverRadio.disabled = true;
+
+    // Show warning banner
+    if (banner) banner.style.display = 'flex';
+    if (message && reason) message.textContent = reason;
+
+    // Auto-select local mode if server was selected
+    if (localRadio && serverRadio?.checked) {
+      setStorageMode('local');
+    }
+  } else {
+    // Enable server option
+    if (serverOption) serverOption.classList.remove('disabled');
+    if (serverRadio) serverRadio.disabled = false;
+
+    // Hide warning banner
+    if (banner) banner.style.display = 'none';
+  }
 }
 
 /**

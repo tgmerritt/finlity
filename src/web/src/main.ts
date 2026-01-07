@@ -166,6 +166,9 @@ import {
   closeProfileSetup,
   completeWelcome,
   selectStorageMode,
+  setStorageMode,
+  loadDeploymentInfo,
+  updateStorageModeRestrictions,
 } from '@/features/onboarding';
 import { initSocialFeed, destroySocialFeed, refreshSocialFeed } from '@/features/social-feed';
 
@@ -325,6 +328,7 @@ async function init(): Promise<void> {
     await loadProfiles();
     await updatePriceStatus();
     await checkDemoModeStatus();
+    await loadDeploymentInfo();
 
     // Show welcome tab for first-time visitors
     const firstVisit = isFirstVisit();
@@ -503,6 +507,9 @@ window.finlity = {
   closeProfileSetup,
   completeWelcome,
   selectStorageMode,
+  setStorageMode,
+  loadDeploymentInfo,
+  updateStorageModeRestrictions,
 
   // Social Feed
   initSocialFeed,

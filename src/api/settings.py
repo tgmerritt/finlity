@@ -605,7 +605,39 @@ def set_demo_mode(settings: DemoModeSettings) -> dict:
     result["action"] = "reload"
     result["message"] = "Demo mode toggled. Reload the page to see changes."
 
+    # Include deployment info so frontend can update storage restrictions
+    import os
+    is_heroku = bool(os.environ.get("DYNO"))
+    result["is_heroku"] = is_heroku
+    result["server_storage_allowed"] = not is_heroku or settings.enabled
+
     return result
+
+
+@router.get("/deployment-info")
+def get_deployment_info() -> dict:
+    """Get deployment environment information.
+
+    Returns Heroku detection status and storage restrictions.
+    On Heroku, server storage is only allowed in demo mode to prevent
+    users from accidentally storing personal data on the hosted site.
+    """
+    import os
+    from src.services.demo_mode import is_demo_mode
+
+    is_heroku = bool(os.environ.get("DYNO"))
+    demo_enabled = is_demo_mode()
+    server_storage_allowed = not is_heroku or demo_enabled
+
+    return {
+        "is_heroku": is_heroku,
+        "demo_mode": demo_enabled,
+        "server_storage_allowed": server_storage_allowed,
+        "server_storage_reason": (
+            "Server storage is disabled on the hosted site for security. "
+            "Your personal data should be stored locally on your device."
+        ) if is_heroku and not demo_enabled else None,
+    }
 
 
 @router.post("/demo/generate")

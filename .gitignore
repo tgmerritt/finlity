@@ -39,6 +39,7 @@ output/
 
 # CSV/Excel files (may contain brokerage exports with personal info)
 *.csv
+!data/demo/*.csv
 *.xlsm
 *.xlsx
 *.xls
