@@ -191,9 +191,10 @@ def generate_test_database(output_path: str = "data/test_portfolio.db") -> str:
     print(f"  Positions: {len(TEST_POSITIONS)}")
     print(f"  Total Value: ${total_value:,.2f}")
     print(f"  Total Cost:  ${total_cost:,.2f}")
-    print(f"  Total Gain:  ${total_gain:,.2f} ({total_gain/total_cost*100:.1f}%)")
-    print(f"\nUse this file to test the local file picker on Heroku.")
-    print(f"NOTE: This file is NOT committed to git.")
+    gain_pct = (total_gain / total_cost * 100) if total_cost > 0 else 0
+    print(f"  Total Gain:  ${total_gain:,.2f} ({gain_pct:.1f}%)")
+    print("\nUse this file to test the local file picker on Heroku.")
+    print("NOTE: This file is NOT committed to git.")
 
     return str(db_path)
 

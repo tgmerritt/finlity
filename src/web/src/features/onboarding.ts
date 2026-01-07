@@ -460,6 +460,7 @@ interface DeploymentInfo {
 /**
  * Load deployment information from server.
  * Used to determine if storage restrictions apply (Heroku non-demo mode).
+ * On failure, defaults to blocking server storage for safety.
  */
 export async function loadDeploymentInfo(): Promise<DeploymentInfo | null> {
   try {
@@ -468,6 +469,17 @@ export async function loadDeploymentInfo(): Promise<DeploymentInfo | null> {
     return info;
   } catch (error) {
     console.error('Failed to load deployment info:', error);
+
+    // Notify user about the failure
+    showToast(
+      'Unable to determine deployment settings. Storage mode may be restricted.',
+      'warning'
+    );
+
+    // SAFETY: On failure, assume server storage is NOT allowed to prevent data loss
+    // This ensures users don't accidentally store personal data on ephemeral storage
+    updateStorageModeRestrictions(false, 'Unable to verify deployment environment. Using local storage for safety.');
+
     return null;
   }
 }
