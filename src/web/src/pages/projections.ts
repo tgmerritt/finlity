@@ -423,7 +423,6 @@ function displayTaxProjectionResults(result: TaxProjectionResult): void {
   const retirementAge = getInputValue('tax-retirement-age');
   const endAge = getInputValue('tax-end-age');
   const stateRate = getInputValue('tax-state-rate');
-  const federalRate = getInputValue('tax-federal-rate');
   const monthlyContrib = getInputValue('tax-monthly-contribution');
   const accumulationYears = retirementAge - currentAge;
   const withdrawalYears = endAge - retirementAge;
@@ -467,25 +466,46 @@ function displayTaxProjectionResults(result: TaxProjectionResult): void {
   // Update detail descriptions
   const federalDetail = document.getElementById('tax-federal-detail');
   if (federalDetail) {
-    const avgAnnualFederal = result.summary.total_federal_tax / withdrawalYears;
-    federalDetail.textContent = `~${formatCurrency(avgAnnualFederal)}/yr at ${federalRate}% marginal rate`;
+    // Use post-retirement federal tax for annual average (not total which includes pre-retirement salary taxes)
+    const postRetirementFederal = result.summary.post_retirement_federal_tax ?? result.summary.total_federal_tax;
+    const avgAnnualFederal = postRetirementFederal / withdrawalYears;
+    // Calculate federal effective rate (federal tax / gross withdrawn)
+    const federalEffRate = grossWithdrawn > 0 ? (postRetirementFederal / grossWithdrawn * 100) : 0;
+    federalDetail.textContent = `~${formatCurrency(avgAnnualFederal)}/yr (~${federalEffRate.toFixed(1)}% effective rate)`;
   }
 
   const stateDetail = document.getElementById('tax-state-detail');
   const stateRateDisplay = document.getElementById('tax-state-rate-display');
   if (stateRateDisplay) stateRateDisplay.textContent = `${stateRate}%`;
-  if (stateDetail && stateRate === 0) {
-    stateDetail.textContent = 'No state income tax configured';
+  if (stateDetail) {
+    if (stateRate === 0) {
+      stateDetail.textContent = 'No state income tax configured';
+    } else {
+      // Use post-retirement state tax for annual average
+      const postRetirementState = result.summary.post_retirement_state_tax ?? result.summary.total_state_tax;
+      const avgAnnualState = postRetirementState / withdrawalYears;
+      // Calculate state effective rate
+      const stateEffRate = grossWithdrawn > 0 ? (postRetirementState / grossWithdrawn * 100) : 0;
+      stateDetail.textContent = `~${formatCurrency(avgAnnualState)}/yr (~${stateEffRate.toFixed(1)}% effective rate)`;
+    }
   }
 
   const totalDetail = document.getElementById('tax-total-detail');
   if (totalDetail) {
-    // Use post-retirement taxes only when calculating % of withdrawals
-    // (total_tax includes pre-retirement salary taxes which shouldn't be compared to withdrawals)
-    const retirementTax = result.summary.post_retirement_total_tax ?? result.summary.total_tax;
-    const taxAsPercent =
-      grossWithdrawn > 0 ? ((retirementTax / grossWithdrawn) * 100).toFixed(1) : '0.0';
-    totalDetail.textContent = `${taxAsPercent}% of gross withdrawals over ${withdrawalYears} years`;
+    // Calculate total years (accumulation + withdrawal)
+    const totalYears = accumulationYears + withdrawalYears;
+    // Show whether this includes pre-retirement taxes
+    const hasPreRetirement = accumulationYears > 0 && (result.summary.pre_retirement_total_tax ?? 0) > 0;
+    if (hasPreRetirement) {
+      const retirementPct = grossWithdrawn > 0
+        ? (((result.summary.post_retirement_total_tax ?? 0) / grossWithdrawn) * 100).toFixed(1)
+        : '0.0';
+      totalDetail.textContent = `${retirementPct}% of gross withdrawals over ${totalYears} years`;
+    } else {
+      const taxAsPercent =
+        grossWithdrawn > 0 ? ((result.summary.total_tax / grossWithdrawn) * 100).toFixed(1) : '0.0';
+      totalDetail.textContent = `${taxAsPercent}% of gross withdrawals over ${withdrawalYears} years`;
+    }
   }
 
   const withdrawnDetail = document.getElementById('tax-withdrawn-detail');

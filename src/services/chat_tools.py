@@ -548,6 +548,8 @@ class ChatToolExecutor:
             strategy = TaxAwareWithdrawalStrategy(
                 tax_rate_ordinary=federal_tax_rate,
                 tax_rate_state=state_tax_rate,
+                filing_status="married_joint",  # Default for chat tool
+                tax_year=2025,
             )
 
             result = strategy.project_year_by_year(
