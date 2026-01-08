@@ -1,10 +1,13 @@
 """Commentary API endpoints for AI-generated dashboard insights."""
 
+import json
+import logging
+from datetime import datetime
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime
 
 from src.database import Database
 from src.services.commentary_service import CommentaryService
@@ -13,6 +16,8 @@ from src.services.commentary_registry import (
     get_element_config,
     get_elements_by_tab,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/commentary", tags=["commentary"])
 
@@ -376,10 +381,13 @@ def stream_element_commentary(
     current_data = None
     if data:
         try:
-            import json
             current_data = json.loads(data)
-        except json.JSONDecodeError:
-            pass  # Ignore invalid JSON, fall back to collected data
+        except json.JSONDecodeError as e:
+            logger.warning(
+                "Failed to parse current_data JSON for element %s: %s",
+                element_id,
+                str(e),
+            )
 
     def event_generator():
         yield from service.generate_commentary_streaming(

@@ -481,7 +481,15 @@ export async function showAICommentary(button: HTMLButtonElement): Promise<void>
     const loading = body?.querySelector('.commentary-loading');
 
     eventSource.onmessage = (event: MessageEvent) => {
-      const data: CommentarySSEMessage = JSON.parse(event.data);
+      let data: CommentarySSEMessage;
+      try {
+        data = JSON.parse(event.data);
+      } catch (parseError) {
+        console.error('Failed to parse SSE message:', parseError, event.data);
+        eventSource.close();
+        renderCommentaryError(popover, 'Failed to parse server response');
+        return;
+      }
 
       if (data.error) {
         eventSource.close();

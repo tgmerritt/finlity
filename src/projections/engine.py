@@ -1094,7 +1094,11 @@ class MonteCarloEngine:
             try:
                 from src.api.settings import load_config
                 config = load_config()
-            except Exception:
+            except ImportError as e:
+                logger.warning("Could not import settings module: %s", e)
+                config = {}
+            except (FileNotFoundError, OSError) as e:
+                logger.warning("Could not load config file: %s", e)
                 config = {}
 
         market = config.get("market", {})
