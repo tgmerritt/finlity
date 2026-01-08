@@ -98,6 +98,85 @@ export function clearCommentaryCache(): void {
 }
 
 /**
+ * Extract visible data from the page for a given element.
+ * This allows the AI to "see" the current values displayed on the page.
+ */
+function extractVisibleData(elementId: string): Record<string, unknown> | null {
+  const data: Record<string, unknown> = {};
+
+  // Handle tax projection tiles
+  if (elementId.startsWith('taxes.')) {
+    // Extract all tax tile values
+    const federalEl = document.getElementById('tax-total-federal');
+    const stateEl = document.getElementById('tax-total-state');
+    const totalEl = document.getElementById('tax-total-all');
+    const avgRateEl = document.getElementById('tax-avg-rate');
+    const withdrawnEl = document.getElementById('tax-total-withdrawn');
+    const balanceEl = document.getElementById('tax-final-balance');
+    const federalDetailEl = document.getElementById('tax-federal-detail');
+    const stateDetailEl = document.getElementById('tax-state-detail');
+    const totalDetailEl = document.getElementById('tax-total-detail');
+    const withdrawnDetailEl = document.getElementById('tax-withdrawn-detail');
+    const balanceDetailEl = document.getElementById('tax-balance-detail');
+    const contextPeriodEl = document.getElementById('tax-context-period');
+    const contextYearsEl = document.getElementById('tax-context-years');
+
+    // Get tax projection settings from form inputs
+    const currentAgeEl = document.getElementById('tax-current-age') as HTMLInputElement;
+    const retireAgeEl = document.getElementById('tax-retirement-age') as HTMLInputElement;
+    const endAgeEl = document.getElementById('tax-end-age') as HTMLInputElement;
+    const annualSpendEl = document.getElementById('tax-annual-spending') as HTMLInputElement;
+    const federalRateEl = document.getElementById('tax-federal-rate') as HTMLInputElement;
+    const stateRateEl = document.getElementById('tax-state-rate') as HTMLInputElement;
+
+    data.federal_tax_total = federalEl?.textContent || 'Not calculated';
+    data.state_tax_total = stateEl?.textContent || 'Not calculated';
+    data.total_lifetime_tax = totalEl?.textContent || 'Not calculated';
+    data.average_effective_rate = avgRateEl?.textContent || 'Not calculated';
+    data.total_withdrawn = withdrawnEl?.textContent || 'Not calculated';
+    data.final_balance = balanceEl?.textContent || 'Not calculated';
+    data.federal_detail = federalDetailEl?.textContent || '';
+    data.state_detail = stateDetailEl?.textContent || '';
+    data.total_detail = totalDetailEl?.textContent || '';
+    data.withdrawn_detail = withdrawnDetailEl?.textContent || '';
+    data.balance_detail = balanceDetailEl?.textContent || '';
+    data.projection_period = contextPeriodEl?.textContent || '';
+    data.projection_years = contextYearsEl?.textContent || '';
+
+    // Settings
+    data.current_age = currentAgeEl?.value || '';
+    data.retirement_age = retireAgeEl?.value || '';
+    data.end_age = endAgeEl?.value || '';
+    data.annual_spending = annualSpendEl?.value || '';
+    data.federal_rate = federalRateEl?.value || '';
+    data.state_rate = stateRateEl?.value || '';
+
+    // Add which specific tile was clicked
+    data.clicked_tile = elementId;
+
+    return data;
+  }
+
+  // Handle dashboard tiles
+  if (elementId.startsWith('dashboard.')) {
+    // Get the stat card containing this button
+    const cardId = elementId.replace('dashboard.', '');
+    const statCard = document.querySelector(`[data-stat="${cardId}"]`) ||
+                     document.querySelector(`.stat-card:has([data-element-id="${elementId}"])`);
+
+    if (statCard) {
+      const value = statCard.querySelector('.stat-value, .stat-card-value');
+      const label = statCard.querySelector('.stat-label, .stat-card-label');
+      data.value = value?.textContent || '';
+      data.label = label?.textContent || '';
+    }
+    return data;
+  }
+
+  return null;
+}
+
+/**
  * Parsed markdown token types.
  */
 type MarkdownToken =
@@ -384,7 +463,16 @@ export async function showAICommentary(button: HTMLButtonElement): Promise<void>
   // Use streaming API for real-time text generation
   try {
     const baseUrl = getBaseUrl();
-    const eventSource = new EventSource(`${baseUrl}/api/commentary/${elementId}/stream`);
+
+    // Extract visible data from the page to send to the AI
+    const visibleData = extractVisibleData(elementId);
+    let streamUrl = `${baseUrl}/api/commentary/${elementId}/stream`;
+    if (visibleData) {
+      const dataParam = encodeURIComponent(JSON.stringify(visibleData));
+      streamUrl += `?data=${dataParam}`;
+    }
+
+    const eventSource = new EventSource(streamUrl);
     let fullText = '';
     let ageHours = 0;
 
@@ -393,7 +481,15 @@ export async function showAICommentary(button: HTMLButtonElement): Promise<void>
     const loading = body?.querySelector('.commentary-loading');
 
     eventSource.onmessage = (event: MessageEvent) => {
-      const data: CommentarySSEMessage = JSON.parse(event.data);
+      let data: CommentarySSEMessage;
+      try {
+        data = JSON.parse(event.data);
+      } catch (parseError) {
+        console.error('Failed to parse SSE message:', parseError, event.data);
+        eventSource.close();
+        renderCommentaryError(popover, 'Failed to parse server response');
+        return;
+      }
 
       if (data.error) {
         eventSource.close();

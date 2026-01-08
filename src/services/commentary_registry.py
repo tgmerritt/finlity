@@ -558,6 +558,42 @@ ELEMENT_REGISTRY: dict[str, ElementConfig] = {
         "refresh_triggers": ["settings_change"],
         "prompt_key": "tax_balance_chart",
     },
+    "taxes.effective_rate": {
+        "type": "stat_card",
+        "tab": "taxes",
+        "title": "Average Effective Tax Rate",
+        "data_dependencies": ["tax_projection.average_effective_rate"],
+        "web_search_queries": [
+            "average effective tax rate retirees",
+            "effective vs marginal tax rate retirement",
+        ],
+        "refresh_triggers": ["settings_change"],
+        "prompt_key": "effective_rate",
+    },
+    "taxes.total_withdrawn": {
+        "type": "stat_card",
+        "tab": "taxes",
+        "title": "Total Withdrawn",
+        "data_dependencies": ["tax_projection.total_gross_withdrawn"],
+        "web_search_queries": [
+            "average retirement withdrawal rate",
+            "sustainable withdrawal rate retirement",
+        ],
+        "refresh_triggers": ["settings_change"],
+        "prompt_key": "total_withdrawn",
+    },
+    "taxes.final_balance": {
+        "type": "stat_card",
+        "tab": "taxes",
+        "title": "Final Portfolio Balance",
+        "data_dependencies": ["tax_projection.final_balance"],
+        "web_search_queries": [
+            "retirement portfolio depletion risk",
+            "legacy planning retirement",
+        ],
+        "refresh_triggers": ["settings_change"],
+        "prompt_key": "final_balance",
+    },
 
     # =========================================================================
     # BUDGET TAB

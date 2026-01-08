@@ -484,25 +484,46 @@ Help them interpret the fan-shaped chart - the spread represents uncertainty, no
     # TAXES
     # =========================================================================
     "federal_tax": """
-The user is viewing projected **Lifetime Federal Income Tax**: **${federal_total:,.0f}**
+The user is viewing their **Federal Income Tax** projection tile.
 
-This is the estimated total federal tax on retirement withdrawals over {years} years.
-Average annual federal tax: ${federal_annual:,.0f}
+**Current Values Displayed:**
+- Total Federal Tax: {federal_tax_total}
+- Detail: {federal_detail}
+
+**User Settings:**
+- Current Age: {current_age}
+- Retirement Age: {retirement_age}
+- End Age: {end_age}
+- Annual Spending: ${annual_spending}
+- Federal Rate: {federal_rate}%
 
 {comparison_context}
 
-Briefly explain that this comes from withdrawals from traditional (tax-deferred) accounts.
+Explain what this federal tax projection represents. Note that:
+- This includes taxes during both the accumulation phase (on salary) and retirement (on withdrawals)
+- Retirement withdrawals from traditional 401k/IRA are taxed as ordinary income
+- The tax is calculated using progressive brackets with standard deduction
+- Roth withdrawals are tax-free
 """,
 
     "state_tax": """
-The user is viewing projected **Lifetime State Income Tax**: **${state_total:,.0f}**
+The user is viewing their **State Income Tax** projection tile.
 
-State: {state}
-Average annual state tax: ${state_annual:,.0f}
+**Current Values Displayed:**
+- Total State Tax: {state_tax_total}
+- Detail: {state_detail}
+
+**User Settings:**
+- State Rate: {state_rate}%
+- Current Age: {current_age}
+- Retirement Age: {retirement_age}
 
 {comparison_context}
 
-Note any relevant state tax considerations (some states have no income tax, etc.).
+Explain what this state tax projection represents. Mention:
+- Some states have no income tax (FL, TX, WA, NV, etc.)
+- State tax applies to both salary and retirement withdrawals
+- Consider suggesting states with no income tax for retirement if applicable
 """,
 
     "cap_gains_tax": """
@@ -517,18 +538,27 @@ Briefly explain long-term vs short-term capital gains rates if relevant.
 """,
 
     "total_tax": """
-The user is viewing their projected **Total Lifetime Tax**: **${total_tax:,.0f}**
+The user is viewing their **Total Lifetime Tax Burden** projection tile.
 
-Breakdown:
-- Federal income tax: ${federal:,.0f}
-- State income tax: ${state:,.0f}
-- Capital gains tax: ${cap_gains:,.0f}
+**Current Values Displayed:**
+- Total Lifetime Tax: {total_lifetime_tax}
+- Detail: {total_detail}
+- Federal Tax: {federal_tax_total}
+- State Tax: {state_tax_total}
+- Average Effective Rate: {average_effective_rate}
 
-Effective tax rate on withdrawals: {effective_rate:.1f}%
+**User Settings:**
+- Current Age: {current_age}
+- Retirement Age: {retirement_age}
+- End Age: {end_age}
+- Annual Spending: ${annual_spending}
 
 {comparison_context}
 
-Comment on whether this tax burden is reasonable and any obvious optimization opportunities.
+Explain the total tax burden and provide context:
+- This combines all taxes over the projection period (pre-retirement + retirement)
+- Compare to total withdrawals to put in perspective
+- Suggest potential optimization strategies (Roth conversions, tax-loss harvesting, etc.)
 """,
 
     "withdrawal_table": """
@@ -597,6 +627,63 @@ The user is viewing an **Account Balances Over Time** chart showing how each acc
 {comparison_context}
 
 Explain the withdrawal sequence logic and what the user's balance trajectory means for their retirement security.
+""",
+
+    "effective_rate": """
+The user is viewing their **Average Effective Tax Rate**: **{effective_rate:.1f}%**
+
+This represents the average percentage of retirement withdrawals paid as taxes over the projection period.
+
+**Context:**
+- Marginal federal rate configured: {federal_rate}%
+- Marginal state rate configured: {state_rate}%
+- Combined marginal rate: {combined_marginal:.1f}%
+
+**Why effective rate differs from marginal rate:**
+The effective rate is typically lower because:
+1. Roth withdrawals are tax-free
+2. Taxable account withdrawals only tax gains (not principal)
+3. Progressive tax brackets mean lower rates on initial income
+
+{comparison_context}
+
+Explain the difference between marginal and effective tax rates, and why their effective rate makes sense given their account mix.
+""",
+
+    "total_withdrawn": """
+The user is viewing **Total Withdrawn**: **${total_withdrawn:,.0f}**
+
+This is the total gross amount withdrawn from all accounts over {years} years of retirement.
+- Average annual withdrawal: ${avg_annual:,.0f}
+- Target annual spending: ${annual_spending:,.0f}
+
+**Withdrawal Sources (over entire retirement):**
+- From taxable accounts: ${from_taxable:,.0f}
+- From traditional (IRA/401k): ${from_traditional:,.0f}
+- From Roth (tax-free): ${from_roth:,.0f}
+
+{comparison_context}
+
+Explain what this total represents and how the tax-efficient withdrawal strategy works to minimize taxes over time.
+""",
+
+    "final_balance": """
+The user is viewing their **Final Portfolio Balance**: **${final_balance:,.0f}**
+
+This is the projected value remaining at age {end_age} after {years} years of retirement withdrawals.
+
+**Projection Summary:**
+- Starting balance (at retirement): ${starting_balance:,.0f}
+- Total withdrawn: ${total_withdrawn:,.0f}
+- Total taxes paid: ${total_taxes:,.0f}
+- Investment growth during retirement: ${investment_growth:,.0f}
+
+**What this means:**
+{balance_interpretation}
+
+{comparison_context}
+
+Explain whether this ending balance indicates a healthy retirement trajectory. Mention legacy planning if balance is substantial, or portfolio risk if balance is low/depleted.
 """,
 
     # =========================================================================

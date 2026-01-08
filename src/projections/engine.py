@@ -260,19 +260,32 @@ class TaxAwareWithdrawalStrategy:
         tax_rate_capital_gains: float = 0.15,
         tax_rate_state: float = 0.05,
         cost_basis_ratio: float = 0.60,
+        filing_status: str = "single",
+        tax_year: int = 2025,
     ):
         """Initialize withdrawal strategy.
 
         Args:
-            tax_rate_ordinary: Marginal federal tax rate for ordinary income
+            tax_rate_ordinary: Marginal federal tax rate (used as fallback)
             tax_rate_capital_gains: Long-term capital gains rate
             tax_rate_state: State income tax rate
             cost_basis_ratio: Portion of taxable account that is cost basis
+            filing_status: Tax filing status for progressive brackets
+            tax_year: Tax year for bracket lookup
         """
         self.tax_rate_ordinary = tax_rate_ordinary
         self.tax_rate_capital_gains = tax_rate_capital_gains
         self.tax_rate_state = tax_rate_state
         self.cost_basis_ratio = cost_basis_ratio
+        self.filing_status = filing_status
+        self.tax_year = tax_year
+
+        # Initialize tax calculator for progressive bracket calculations
+        self._tax_calculator = PayrollTaxCalculator(
+            filing_status=filing_status,
+            state="",  # We handle state tax separately
+            tax_year=tax_year,
+        )
 
     def calculate_rmd(self, age: int, traditional_balance: float) -> float:
         """Calculate Required Minimum Distribution.
@@ -307,16 +320,33 @@ class TaxAwareWithdrawalStrategy:
         federal, state = self.calculate_tax_breakdown(amount, source)
         return federal + state
 
+    def calculate_progressive_federal_tax(self, taxable_income: float) -> float:
+        """Calculate federal tax using progressive brackets with standard deduction.
+
+        Args:
+            taxable_income: Total ordinary income subject to federal tax
+
+        Returns:
+            Federal income tax amount
+        """
+        return self._tax_calculator.calculate_federal_income_tax(
+            annual_gross=taxable_income,
+            pretax_deductions=0,  # No pre-tax deductions in retirement
+            use_standard_deduction=True,
+        )
+
     def calculate_tax_breakdown(
         self,
         amount: float,
         source: str,  # "taxable", "traditional", "roth"
+        total_ordinary_income: float = 0.0,
     ) -> tuple[float, float]:
         """Calculate federal and state tax on a withdrawal.
 
         Args:
             amount: Withdrawal amount
             source: Account type
+            total_ordinary_income: Total ordinary income for the year (for bracket calc)
 
         Returns:
             Tuple of (federal_tax, state_tax)
@@ -330,12 +360,26 @@ class TaxAwareWithdrawalStrategy:
             # Capital gains are taxed at federal rate only (simplified)
             federal_tax = taxable_portion * self.tax_rate_capital_gains
             # Some states also tax capital gains
-            state_tax = taxable_portion * self.tax_rate_state * 0.5  # Reduced state rate on cap gains
+            state_tax = taxable_portion * self.tax_rate_state * 0.5
             return federal_tax, state_tax
 
         elif source == "traditional":
-            # Entire amount is ordinary income
-            federal_tax = amount * self.tax_rate_ordinary
+            # Use progressive brackets for federal tax on ordinary income
+            # Calculate marginal tax: tax on (total + this amount) - tax on (total)
+            if total_ordinary_income > 0:
+                # Marginal calculation when we have prior ordinary income
+                tax_with = self.calculate_progressive_federal_tax(
+                    total_ordinary_income + amount
+                )
+                tax_without = self.calculate_progressive_federal_tax(
+                    total_ordinary_income
+                )
+                federal_tax = tax_with - tax_without
+            else:
+                # First traditional withdrawal - calculate tax on full amount
+                federal_tax = self.calculate_progressive_federal_tax(amount)
+
+            # State tax still uses flat rate (most states use flat or simple brackets)
             state_tax = amount * self.tax_rate_state
             return federal_tax, state_tax
 
@@ -394,6 +438,9 @@ class TaxAwareWithdrawalStrategy:
         total_state_tax = 0.0
         remaining_need = spending_needed
 
+        # Track cumulative ordinary income for progressive bracket calculation
+        cumulative_ordinary_income = 0.0
+
         new_balances = AccountBalances(
             taxable=balances.taxable,
             traditional=balances.traditional,
@@ -408,8 +455,11 @@ class TaxAwareWithdrawalStrategy:
             from_traditional += actual_rmd
             new_balances.traditional -= actual_rmd
 
-            # Calculate tax on RMD
-            federal, state = self.calculate_tax_breakdown(actual_rmd, "traditional")
+            # Calculate tax on RMD using progressive brackets
+            federal, state = self.calculate_tax_breakdown(
+                actual_rmd, "traditional", cumulative_ordinary_income
+            )
+            cumulative_ordinary_income += actual_rmd
             total_federal_tax += federal
             total_state_tax += state
             rmd_tax = federal + state
@@ -426,6 +476,7 @@ class TaxAwareWithdrawalStrategy:
             from_taxable += actual_withdrawal
             new_balances.taxable -= actual_withdrawal
 
+            # Taxable account uses capital gains rate, not ordinary income
             federal, state = self.calculate_tax_breakdown(actual_withdrawal, "taxable")
             total_federal_tax += federal
             total_state_tax += state
@@ -442,7 +493,11 @@ class TaxAwareWithdrawalStrategy:
             from_traditional += actual_withdrawal
             new_balances.traditional -= actual_withdrawal
 
-            federal, state = self.calculate_tax_breakdown(actual_withdrawal, "traditional")
+            # Calculate tax using progressive brackets with prior ordinary income
+            federal, state = self.calculate_tax_breakdown(
+                actual_withdrawal, "traditional", cumulative_ordinary_income
+            )
+            cumulative_ordinary_income += actual_withdrawal
             total_federal_tax += federal
             total_state_tax += state
             tax = federal + state
@@ -966,11 +1021,14 @@ def _run_simulation_batch(
             return max(min(annual_return, 1.0), -0.80)
 
     # Tax-aware mode with separate account tracking
+    # Use default filing_status="single" for Monte Carlo (more conservative)
     withdrawal_strategy = TaxAwareWithdrawalStrategy(
         tax_rate_ordinary=tax_rate_ordinary,
         tax_rate_capital_gains=tax_rate_capital_gains,
         tax_rate_state=tax_rate_state,
         cost_basis_ratio=cost_basis_ratio,
+        filing_status="single",
+        tax_year=2025,
     )
 
     for sim in range(batch_size):
@@ -1036,7 +1094,11 @@ class MonteCarloEngine:
             try:
                 from src.api.settings import load_config
                 config = load_config()
-            except Exception:
+            except ImportError as e:
+                logger.warning("Could not import settings module: %s", e)
+                config = {}
+            except (FileNotFoundError, OSError) as e:
+                logger.warning("Could not load config file: %s", e)
                 config = {}
 
         market = config.get("market", {})

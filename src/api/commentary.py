@@ -1,10 +1,13 @@
 """Commentary API endpoints for AI-generated dashboard insights."""
 
+import json
+import logging
+from datetime import datetime
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime
 
 from src.database import Database
 from src.services.commentary_service import CommentaryService
@@ -13,6 +16,8 @@ from src.services.commentary_registry import (
     get_element_config,
     get_elements_by_tab,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/commentary", tags=["commentary"])
 
@@ -349,6 +354,7 @@ def invalidate_commentary(
 def stream_element_commentary(
     element_id: str,
     force_refresh: bool = Query(False, description="Force regeneration even if cached"),
+    data: Optional[str] = Query(None, description="JSON-encoded current data from the page"),
     service: CommentaryService = Depends(get_commentary_service),
 ):
     """Stream AI commentary for a specific dashboard element using SSE.
@@ -359,6 +365,7 @@ def stream_element_commentary(
     Args:
         element_id: The element identifier (e.g., "dashboard.total_value")
         force_refresh: If True, regenerate commentary even if cached
+        data: Optional JSON-encoded current data visible on the page
 
     Returns:
         Server-Sent Events stream with commentary chunks
@@ -370,8 +377,22 @@ def stream_element_commentary(
             detail=f"Unknown element: {element_id}. Use GET /api/commentary/elements to see available elements."
         )
 
+    # Parse current_data if provided
+    current_data = None
+    if data:
+        try:
+            current_data = json.loads(data)
+        except json.JSONDecodeError as e:
+            logger.warning(
+                "Failed to parse current_data JSON for element %s: %s",
+                element_id,
+                str(e),
+            )
+
     def event_generator():
-        yield from service.generate_commentary_streaming(element_id, force_refresh=force_refresh)
+        yield from service.generate_commentary_streaming(
+            element_id, force_refresh=force_refresh, current_data=current_data
+        )
 
     return StreamingResponse(
         event_generator(),

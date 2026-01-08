@@ -1104,6 +1104,8 @@ def _run_tax_projection_task(params: dict) -> dict:
         tax_rate_capital_gains=params["capital_gains_rate"],
         tax_rate_state=params["state_tax_rate"],
         cost_basis_ratio=params["cost_basis_ratio"],
+        filing_status=params["filing_status"],
+        tax_year=2025,
     )
 
     result = strategy.project_year_by_year(
