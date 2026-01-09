@@ -157,7 +157,88 @@ function extractVisibleData(elementId: string): Record<string, unknown> | null {
     return data;
   }
 
-  // Handle dashboard tiles
+  // Handle dashboard chart tiles (allocation and account type)
+  if (elementId === 'dashboard.allocation_chart') {
+    // Extract allocation data from Plotly chart or window state
+    const chartDiv = document.getElementById('chart-allocation') as HTMLElement & { data?: unknown[] };
+    if (chartDiv?.data && chartDiv.data[0]) {
+      const chartData = chartDiv.data[0] as { labels?: string[]; values?: number[] };
+      const labels = chartData.labels;
+      const values = chartData.values;
+      if (labels && values) {
+        const total = values.reduce((sum: number, v: number) => sum + v, 0);
+        const allocations: string[] = [];
+        for (let i = 0; i < Math.min(labels.length, 10); i++) {
+          const val = values[i] ?? 0;
+          const pct = total > 0 ? (val / total * 100).toFixed(1) : '0';
+          allocations.push(`${labels[i]}: ${pct}%`);
+        }
+        data.allocation_summary = allocations.join(', ');
+        data.num_positions = labels.length;
+        // Calculate top 5 and top 10 concentrations
+        const sortedValues = [...values].sort((a, b) => b - a);
+        const top5Value = sortedValues.slice(0, 5).reduce((sum, v) => sum + v, 0);
+        const top10Value = sortedValues.slice(0, 10).reduce((sum, v) => sum + v, 0);
+        data.top_5_pct = total > 0 ? (top5Value / total * 100) : 0;
+        data.top_10_pct = total > 0 ? (top10Value / total * 100) : 0;
+      }
+    }
+    return data;
+  }
+
+  if (elementId === 'dashboard.account_type_chart') {
+    // Extract account type data from Plotly chart or window state
+    const chartDiv = document.getElementById('chart-account-type') as HTMLElement & { data?: unknown[] };
+    if (chartDiv?.data && chartDiv.data[0]) {
+      const chartData = chartDiv.data[0] as { labels?: string[]; values?: number[] };
+      const labels = chartData.labels;
+      const values = chartData.values;
+      if (labels && values) {
+        const total = values.reduce((sum: number, v: number) => sum + v, 0);
+        const allocations: string[] = [];
+        let taxableValue = 0;
+        let traditionalValue = 0;
+        let rothValue = 0;
+        let taxAdvantagedValue = 0;
+
+        for (let i = 0; i < labels.length; i++) {
+          const labelText = labels[i];
+          const value = values[i];
+          if (labelText === undefined || value === undefined) continue;
+
+          const label = labelText.toLowerCase();
+          const pct = total > 0 ? (value / total * 100).toFixed(1) : '0';
+          allocations.push(`${labelText}: ${pct}%`);
+
+          // Categorize by account type
+          if (label.includes('taxable') || label === 'brokerage') {
+            taxableValue += value;
+          } else if (label.includes('traditional') || (label.includes('401k') && !label.includes('roth'))) {
+            traditionalValue += value;
+            taxAdvantagedValue += value;
+          } else if (label.includes('roth')) {
+            rothValue += value;
+            taxAdvantagedValue += value;
+          } else if (label.includes('ira') || label.includes('retirement') || label.includes('529')) {
+            taxAdvantagedValue += value;
+            // Default non-Roth retirement to traditional for categorization
+            if (!label.includes('roth')) {
+              traditionalValue += value;
+            }
+          }
+        }
+
+        data.account_type_summary = allocations.join(', ');
+        data.taxable_pct = total > 0 ? (taxableValue / total * 100) : 0;
+        data.traditional_pct = total > 0 ? (traditionalValue / total * 100) : 0;
+        data.roth_pct = total > 0 ? (rothValue / total * 100) : 0;
+        data.tax_advantaged_pct = total > 0 ? (taxAdvantagedValue / total * 100) : 0;
+      }
+    }
+    return data;
+  }
+
+  // Handle dashboard stat tiles
   if (elementId.startsWith('dashboard.')) {
     // Get the stat card containing this button
     const cardId = elementId.replace('dashboard.', '');

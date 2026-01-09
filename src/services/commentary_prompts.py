@@ -147,13 +147,28 @@ Explain the benefit of having multiple account types and any notable observation
 """,
 
     "allocation_chart": """
-The user is viewing an **Asset Allocation** pie chart showing their top holdings:
+The user is viewing an **Asset Allocation** pie chart showing their top holdings by ticker:
 
 {allocation_summary}
 
+**Portfolio Statistics:**
+- Total positions: {num_positions}
+- Top 5 holdings: {top_5_pct:.1f}% of portfolio
+- Top 10 holdings: {top_10_pct:.1f}% of portfolio
+
 {comparison_context}
 
-Comment on their diversification level. Are they concentrated in a few holdings or well-diversified? Reference the comparison data about recommended diversification if available.
+**Provide analysis covering:**
+
+1. **Concentration Risk**: Evaluate whether any single position represents outsized risk. A common guideline suggests no single stock should exceed 5-10% of a portfolio, though index funds/ETFs can be larger.
+
+2. **Diversification Quality**: Assess if the holdings provide true diversification or if they're clustered in similar sectors/asset classes. Holding multiple tech stocks, for example, doesn't provide the same diversification as spreading across sectors.
+
+3. **Fund vs Individual Stocks**: If the portfolio contains broad index funds (VTI, VOO, VXUS, etc.), explain that these provide built-in diversification across hundreds or thousands of underlying holdings.
+
+4. **Actionable Observations**: If concentration is high, suggest considering additional diversification. If well-diversified, acknowledge the balanced approach.
+
+Provide a detailed response (1-2 paragraphs) commenting on their diversification level, any notable concentration risks, and practical observations about their asset allocation.
 """,
 
     "account_type_chart": """
@@ -161,12 +176,33 @@ The user is viewing a chart showing portfolio breakdown by **Account Type**:
 
 {account_type_summary}
 
+**Current Allocation:**
 - Tax-advantaged (retirement): {tax_advantaged_pct:.0f}%
 - Taxable: {taxable_pct:.0f}%
 
+**Breakdown by Tax Treatment:**
+- Traditional (IRA/401k): {traditional_pct:.0f}% - Withdrawals taxed as ordinary income
+- Roth (IRA/401k): {roth_pct:.0f}% - Withdrawals are tax-free
+- Taxable: {taxable_pct:.0f}% - Only gains taxed (at capital gains rates)
+
 {comparison_context}
 
-Explain the tax implications of this split and whether it's a reasonable balance.
+**Provide detailed guidance covering these key points:**
+
+1. **Income Limits & Contribution Restrictions**: In 2024, direct Roth IRA contributions phase out at $146k-$161k (single) or $230k-$240k (married filing jointly) MAGI. Traditional IRA deductions also phase out for those with workplace retirement plans. High earners who exceed these limits cannot contribute directly to Roth IRAs.
+
+2. **Why High Earners Often Have Larger Taxable Allocations**: Once you exceed income limits for Roth contributions and max out 401k contributions ($23,000 in 2024, plus $7,500 catch-up if 50+), additional savings must go to taxable brokerage accounts. This is a normal outcome for high earners, not a planning failure. Backdoor Roth conversions can help but have limitations.
+
+3. **Tax-Efficient Withdrawal Strategy**: In retirement, the optimal withdrawal sequence is typically:
+   - First: Taxable accounts (only gains are taxed, at preferential capital gains rates of 0%, 15%, or 20%)
+   - Second: Traditional accounts (fully taxed as ordinary income; plus Required Minimum Distributions start at age 73)
+   - Last: Roth accounts (completely tax-free; no RMDs during owner's lifetime, so let it grow longest)
+
+4. **Tax Diversification Benefits**: Having a mix of account types provides flexibility to manage tax brackets in retirement. You can pull from Roth in high-income years and Traditional in lower-income years.
+
+5. **Asset Location Strategy**: Consider holding tax-inefficient investments (bonds, REITs) in tax-advantaged accounts and tax-efficient investments (index funds, growth stocks) in taxable accounts.
+
+Provide a detailed response (1-2 paragraphs) explaining the tax implications of their current allocation, whether it represents reasonable diversification given typical income limits, and any strategic considerations for future contributions or withdrawals.
 """,
 
     "history_chart": """
