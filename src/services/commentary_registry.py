@@ -147,6 +147,7 @@ ELEMENT_REGISTRY: dict[str, ElementConfig] = {
         "data_dependencies": ["positions"],
         "web_search_queries": [
             "recommended portfolio diversification {user_age} years old",
+            "portfolio concentration risk guidelines single stock percentage",
         ],
         "refresh_triggers": ["position_change"],
         "prompt_key": "allocation_chart",
@@ -157,7 +158,8 @@ ELEMENT_REGISTRY: dict[str, ElementConfig] = {
         "title": "By Account Type",
         "data_dependencies": ["summary.by_account_type"],
         "web_search_queries": [
-            "optimal tax-advantaged vs taxable account ratio",
+            "Roth IRA income limits {current_year}",
+            "traditional vs roth ira high income earners tax strategy",
         ],
         "refresh_triggers": ["position_change"],
         "prompt_key": "account_type_chart",

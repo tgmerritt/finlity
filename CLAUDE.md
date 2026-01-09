@@ -2,6 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Claude Code Features (v2.1+)
+
+This project leverages modern Claude Code capabilities:
+
+### Skills & Agents
+- Use `/skills` to see available skills
+- Use `@agent-name` to invoke custom agents (e.g., `@markdown-expert`)
+- Skills auto-reload when modified - no restart needed
+
+### Useful Commands
+- `/plan` - Enter plan mode for complex tasks
+- `/context` - View current context window usage
+- `/permissions` - Manage tool permissions (supports wildcards like `Bash(npm *)`)
+- `/rewind` - Undo code changes
+- `Alt+T` - Toggle thinking mode (sticky across sessions)
+- `Ctrl+R` - Search command history
+- `Ctrl+B` - Background long-running tasks
+
+### Background Agents
+Long-running tasks can be backgrounded with `Ctrl+B`. Use `&` prefix to run tasks in background from the start.
+
 ## Security
 
 Always scan code and REMOVE any PII from files checked in to git - WARN the user about any other security issues during your scan.
@@ -176,9 +197,14 @@ ANTHROPIC_MODEL=sonnet  # or opus, haiku
 
 | Alias | Model | Use Case |
 |-------|-------|----------|
-| `opus` | claude-opus-4-5-20251101 | Complex analysis |
-| `sonnet` | claude-sonnet-4-20250514 | Default, balanced |
-| `haiku` | claude-3-5-haiku-20241022 | Fast, simple tasks |
+| `opus` | claude-opus-4-5-20251101 | Complex analysis, deep reasoning |
+| `sonnet` | claude-sonnet-4-20250514 | Default, balanced performance |
+| `haiku` | claude-haiku-4-5-20250929 | Fast tasks, cost-effective |
+
+**Claude Code Model Selection:**
+- Use `/model` to change models during a session
+- "Opus Plan Mode" runs Opus for planning, Sonnet for execution
+- Thinking mode is enabled by default for Opus 4.5
 
 ## Testing
 

@@ -157,7 +157,145 @@ function extractVisibleData(elementId: string): Record<string, unknown> | null {
     return data;
   }
 
-  // Handle dashboard tiles
+  // Handle dashboard chart tiles (allocation and account type)
+  if (elementId === 'dashboard.allocation_chart') {
+    // Extract allocation data from Plotly chart
+    const chartDiv = document.getElementById('chart-allocation') as HTMLElement & { data?: unknown[] };
+    if (!chartDiv) {
+      console.warn('AI Commentary: chart-allocation element not found');
+      data.extraction_error = 'Chart element not found';
+      return data;
+    }
+    if (!chartDiv.data || !chartDiv.data[0]) {
+      console.warn('AI Commentary: allocation chart has no data (chart may not be rendered yet)');
+      data.extraction_error = 'Chart data not available';
+      return data;
+    }
+    const chartData = chartDiv.data[0] as { labels?: string[]; values?: number[] };
+    const labels = chartData.labels;
+    const values = chartData.values;
+    if (!labels || !values) {
+      console.warn('AI Commentary: allocation chart missing labels or values');
+      data.extraction_error = 'Chart data incomplete';
+      return data;
+    }
+    const total = values.reduce((sum: number, v: number) => sum + v, 0);
+    if (total <= 0) {
+      console.warn('AI Commentary: allocation chart total is zero or negative');
+      data.extraction_error = 'No allocation data';
+      return data;
+    }
+    const allocations: string[] = [];
+    // Limit to top 10 allocations to keep prompt size manageable
+    for (let i = 0; i < Math.min(labels.length, 10); i++) {
+      const val = values[i];
+      if (val === undefined) {
+        console.warn(`AI Commentary: allocation data missing at index ${i}`);
+        continue;
+      }
+      const pct = (val / total * 100).toFixed(1);
+      allocations.push(`${labels[i]}: ${pct}%`);
+    }
+    data.allocation_summary = allocations.join(', ');
+    data.num_positions = labels.length;
+    // Calculate top 5 and top 10 concentration percentages
+    const sortedValues = [...values].sort((a, b) => b - a);
+    const top5Value = sortedValues.slice(0, 5).reduce((sum, v) => sum + v, 0);
+    const top10Value = sortedValues.slice(0, 10).reduce((sum, v) => sum + v, 0);
+    data.top_5_pct = (top5Value / total * 100);
+    data.top_10_pct = (top10Value / total * 100);
+    return data;
+  }
+
+  if (elementId === 'dashboard.account_type_chart') {
+    // Extract account type data from Plotly chart
+    const chartDiv = document.getElementById('chart-account-type') as HTMLElement & { data?: unknown[] };
+    if (!chartDiv) {
+      console.warn('AI Commentary: chart-account-type element not found');
+      data.extraction_error = 'Chart element not found';
+      return data;
+    }
+    if (!chartDiv.data || !chartDiv.data[0]) {
+      console.warn('AI Commentary: account type chart has no data (chart may not be rendered yet)');
+      data.extraction_error = 'Chart data not available';
+      return data;
+    }
+    const chartData = chartDiv.data[0] as { labels?: string[]; values?: number[] };
+    const labels = chartData.labels;
+    const values = chartData.values;
+    if (!labels || !values) {
+      console.warn('AI Commentary: account type chart missing labels or values');
+      data.extraction_error = 'Chart data incomplete';
+      return data;
+    }
+    const total = values.reduce((sum: number, v: number) => sum + v, 0);
+    if (total <= 0) {
+      console.warn('AI Commentary: account type chart total is zero or negative');
+      data.extraction_error = 'No account data';
+      return data;
+    }
+    const allocations: string[] = [];
+    let taxableValue = 0;
+    let traditionalValue = 0;
+    let rothValue = 0;
+    let taxAdvantagedValue = 0;
+    let otherValue = 0;
+
+    for (let i = 0; i < labels.length; i++) {
+      const labelText = labels[i];
+      const value = values[i];
+      if (labelText === undefined || value === undefined) {
+        console.warn(`AI Commentary: account type data missing at index ${i}`);
+        continue;
+      }
+
+      const label = labelText.toLowerCase();
+      const pct = (value / total * 100).toFixed(1);
+      allocations.push(`${labelText}: ${pct}%`);
+
+      // Categorize by account type for tax analysis
+      // Priority: specific matches first, then general categories
+      if (label.includes('taxable') || label === 'brokerage') {
+        taxableValue += value;
+      } else if (label.includes('traditional') || (label.includes('401k') && !label.includes('roth'))) {
+        traditionalValue += value;
+        taxAdvantagedValue += value;
+      } else if (label.includes('roth')) {
+        rothValue += value;
+        taxAdvantagedValue += value;
+      } else if (label.includes('529') || label.includes('education')) {
+        // 529 plans are tax-advantaged but neither traditional nor Roth
+        taxAdvantagedValue += value;
+      } else if (label.includes('ira') || label.includes('retirement')) {
+        // Generic IRA/retirement accounts default to traditional
+        traditionalValue += value;
+        taxAdvantagedValue += value;
+      } else if (label.includes('hsa') || label.includes('health')) {
+        // HSA is tax-advantaged (triple tax benefit)
+        taxAdvantagedValue += value;
+      } else if (label.includes('property') || label.includes('real estate')) {
+        // Real estate is typically in taxable category
+        taxableValue += value;
+      } else {
+        // Track uncategorized accounts so percentages still add up
+        otherValue += value;
+        console.warn(`AI Commentary: uncategorized account type "${labelText}" with value ${value}`);
+      }
+    }
+
+    data.account_type_summary = allocations.join(', ');
+    data.taxable_pct = (taxableValue / total * 100);
+    data.traditional_pct = (traditionalValue / total * 100);
+    data.roth_pct = (rothValue / total * 100);
+    data.tax_advantaged_pct = (taxAdvantagedValue / total * 100);
+    if (otherValue > 0) {
+      data.other_pct = (otherValue / total * 100);
+      data.has_uncategorized = true;
+    }
+    return data;
+  }
+
+  // Handle dashboard stat tiles
   if (elementId.startsWith('dashboard.')) {
     // Get the stat card containing this button
     const cardId = elementId.replace('dashboard.', '');
