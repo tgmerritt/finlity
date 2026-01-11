@@ -146,12 +146,15 @@ import {
   initImportExport,
   exportToCSV,
   exportAllToCSV,
-  confirmImport,
+  confirmImport as confirmImportWithCallback,
   hideImportModal,
   showImportNewAccountForm,
   createImportAccount,
   browseExistingDatabase,
   handleFileSelect,
+  handleDragOver,
+  handleDragLeave,
+  handleFileDrop,
 } from '@/features/import-export';
 import {
   initOnboarding,
@@ -233,6 +236,14 @@ export async function refreshData(): Promise<void> {
   } finally {
     hideLoading();
   }
+}
+
+/**
+ * Wrapper for confirmImport that provides the refreshData callback.
+ * Used by HTML onclick handlers.
+ */
+export async function confirmImport(): Promise<void> {
+  await confirmImportWithCallback(refreshData);
 }
 
 /**
@@ -501,6 +512,9 @@ window.finlity = {
   createImportAccount,
   browseExistingDatabase,
   handleFileSelect,
+  handleDragOver,
+  handleDragLeave,
+  handleFileDrop,
 
   // Onboarding
   startDemoMode,
