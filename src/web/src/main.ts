@@ -322,6 +322,11 @@ async function init(): Promise<void> {
   initBudget();
   initSettings();
 
+  // Listen for holdings refresh requests (from position CRUD operations)
+  document.addEventListener('holdings:refreshRequested', () => {
+    refreshData().catch(console.error);
+  });
+
   // Load initial data
   showLoading('Loading portfolio...');
   try {
