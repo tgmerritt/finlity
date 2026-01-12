@@ -1790,6 +1790,13 @@ body {
     margin-bottom: 16px;
 }
 
+/* Chart Container Heights - Plotly requires explicit heights to avoid overflow */
+#chart-projection,
+#chart-history {
+    min-height: 400px;
+    height: 400px;
+}
+
 /* Analysis/Settings Grid */
 .analysis-grid,
 .settings-grid,
