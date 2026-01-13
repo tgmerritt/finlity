@@ -1,6 +1,6 @@
 name: Sector Treemap
-version: 1.0.0
-description: Interactive treemap visualization of portfolio allocation by sector
+version: 2.0.0
+description: Interactive Plotly.js treemap with daily performance heatmap coloring
 author: Portfolio Analyzer
 license: MIT
 plugin_type: widget
@@ -17,7 +17,7 @@ dependencies: []
 permissions:
   file_read: false
   file_write: false
-  network: false
+  network: true  # For fetching daily price changes
   database: read_only
 
 settings:

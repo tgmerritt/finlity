@@ -1008,6 +1008,37 @@ body {
     margin-top: 2px;
 }
 
+/* Plotly Treemap Container */
+.plotly-treemap {
+    min-height: 350px;
+}
+
+.treemap-plotly-container {
+    width: 100%;
+    height: 700px;
+    min-height: 550px;
+}
+
+/* Ensure Plotly charts scale properly in widgets */
+.treemap-plotly-container .plotly {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.treemap-plotly-container .js-plotly-plot {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Dark mode adjustments for Plotly treemap */
+[data-theme="dark"] .treemap-plotly-container .modebar {
+    background-color: transparent !important;
+}
+
+[data-theme="dark"] .treemap-plotly-container .modebar-btn path {
+    fill: var(--color-text-muted) !important;
+}
+
 /* Responsive widget grid */
 @media (max-width: 768px) {
     .widget-grid {
@@ -1471,6 +1502,28 @@ body {
 
 .price-status.stale .status-dot {
     background: var(--color-warning);
+}
+
+/* Enrichment Status */
+.enrichment-status {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.enrichment-status .status-text {
+    color: var(--color-text-secondary);
+}
+
+.enrichment-status .status-text.status-current {
+    color: var(--color-success);
+}
+
+.enrichment-status .status-time {
+    color: var(--color-text-tertiary);
+    font-size: 0.8rem;
 }
 
 /* Buttons */

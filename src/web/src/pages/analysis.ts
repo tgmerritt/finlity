@@ -12,6 +12,7 @@ import { store } from '@/state/store';
 import { showLoading, hideLoading } from '@/ui/loading';
 import { onTabChange } from '@/ui/tabs';
 import { showToast } from '@/ui/toast';
+import { loadPluginAnalysis, loadWidgets } from '@/features/plugins';
 import { showGlobalChatModal, hideGlobalChatModal } from '@/ui/modal';
 import type { DashboardPosition } from '@/types/api';
 
@@ -1082,6 +1083,111 @@ export async function updatePositionSectors(): Promise<void> {
 }
 
 /**
+ * Unified function to enrich all portfolio data with sector classifications.
+ * Consolidates two data sources: FundDataService (for mutual funds/ETFs) and
+ * yfinance (for individual stocks). Refreshes widgets afterward to display
+ * updated sector allocations in visualizations like the treemap.
+ */
+export async function enrichAllData(): Promise<void> {
+  showLoading('Enriching portfolio data...');
+
+  let totalUpdated = 0;
+  let anySuccess = false;
+  const errors: string[] = [];
+
+  try {
+    // Analyze funds (gets sector data from FundDataService)
+    try {
+      const fundResult = await apiCall<{ positions_updated?: number }>(
+        '/api/analysis/fund/analyze-portfolio',
+        { method: 'POST' }
+      );
+      totalUpdated += fundResult.positions_updated || 0;
+      anySuccess = true;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unknown error';
+      console.error('Fund analysis failed:', e);
+      errors.push(`Fund analysis: ${message}`);
+    }
+
+    // Update remaining position sectors (via yfinance)
+    try {
+      const sectorResult = await apiCall<{ positions_updated?: number }>(
+        '/api/analysis/positions/update-sectors',
+        { method: 'POST' }
+      );
+      totalUpdated += sectorResult.positions_updated || 0;
+      anySuccess = true;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Unknown error';
+      console.error('Sector update failed:', e);
+      errors.push(`Sector update: ${message}`);
+    }
+
+    // Only save timestamp and show success if at least one call succeeded
+    if (anySuccess) {
+      localStorage.setItem('enrichment_last_update', new Date().toISOString());
+      updateEnrichmentStatus();
+
+      if (errors.length > 0) {
+        showToast(`Enriched ${totalUpdated} positions (with some errors)`, 'warning');
+      } else if (totalUpdated > 0) {
+        showToast(`Enriched ${totalUpdated} positions`, 'success');
+      } else {
+        showToast('All positions already have sector data', 'info');
+      }
+    } else {
+      showToast(`Failed to enrich data: ${errors.join('; ')}`, 'error');
+    }
+
+    // Refresh widgets regardless to show current state
+    await loadWidgets();
+  } catch (error) {
+    console.error('Error enriching data:', error);
+    showToast('Failed to enrich data', 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/**
+ * Update the enrichment status display based on localStorage timestamp.
+ * Data is considered "current" if enriched within the last 24 hours,
+ * otherwise displayed as "may be stale" to prompt re-enrichment.
+ */
+export function updateEnrichmentStatus(): void {
+  const lastUpdate = localStorage.getItem('enrichment_last_update');
+  const statusText = document.getElementById('enrichment-status-text');
+  const timeEl = document.getElementById('enrichment-last-update');
+
+  if (!lastUpdate) {
+    if (statusText) {
+      statusText.textContent = 'Data has not been enriched yet';
+      statusText.classList.remove('status-current');
+    }
+    if (timeEl) timeEl.textContent = '';
+    return;
+  }
+
+  const lastDate = new Date(lastUpdate);
+  const hoursSince = (Date.now() - lastDate.getTime()) / (1000 * 60 * 60);
+
+  if (statusText) {
+    if (hoursSince < 24) {
+      statusText.textContent = 'Data is current';
+      statusText.classList.add('status-current');
+    } else {
+      statusText.textContent = 'Data may be stale';
+      statusText.classList.remove('status-current');
+    }
+  }
+
+  if (timeEl) {
+    timeEl.textContent = `Last updated: ${lastDate.toLocaleDateString()} ${lastDate.toLocaleTimeString()}`;
+  }
+}
+
+/**
  * Helper to format a percentage value for display.
  */
 function formatPercent(value: number | null | undefined, decimals = 2): string {
@@ -1475,6 +1581,8 @@ export function initAnalysis(): void {
   onTabChange((tab) => {
     if (tab === 'analysis') {
       loadAnalysisData();
+      loadPluginAnalysis();
+      updateEnrichmentStatus();
     }
   });
 }

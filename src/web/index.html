@@ -648,6 +648,26 @@
 
             <!-- Analysis Tab -->
             <div id="tab-analysis" class="tab-content">
+                <!-- Data Enrichment Section -->
+                <div class="card" id="data-enrichment-card" style="margin-bottom: 1.5rem;">
+                    <div class="card-header">
+                        <h3>Enrich Portfolio Data</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted" style="margin-bottom: 1rem;">
+                            Update sector classifications and fund data for more accurate analysis.
+                            Data sources: Financial Modeling Prep, yfinance, local cache.
+                        </p>
+                        <div class="enrichment-status" id="enrichment-status">
+                            <span class="status-text" id="enrichment-status-text">Checking status...</span>
+                            <span class="status-time" id="enrichment-last-update"></span>
+                        </div>
+                        <button type="button" class="btn btn-primary" id="enrich-data-btn" onclick="enrichAllData()">
+                            Enrich All Data
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Performance & Risk Metrics Row -->
                 <section class="analysis-grid">
                     <div class="card">
@@ -837,7 +857,6 @@
                 <div class="card">
                     <div class="card-header">
                         <h3>Dashboard Widgets</h3>
-                        <button class="btn btn-sm btn-default" onclick="loadWidgets()">Refresh Widgets</button>
                     </div>
                     <div class="card-body">
                         <div id="widget-loading" style="display: none;">
@@ -872,24 +891,6 @@
                                 </div>
                                 <div class="form-group form-group-button">
                                     <button type="button" class="btn btn-default" onclick="analyzeFund()">Quick Analysis</button>
-                                </div>
-                            </div>
-                            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border-secondary); display: flex; flex-direction: column; gap: 10px;">
-                                <div>
-                                    <button type="button" class="btn btn-secondary" onclick="analyzePortfolioFunds()">
-                                        Analyze All Portfolio Funds
-                                    </button>
-                                    <span class="text-muted" style="margin-left: 8px; font-size: 0.85em;">
-                                        Fetches sector data for funds
-                                    </span>
-                                </div>
-                                <div>
-                                    <button type="button" class="btn btn-secondary" onclick="updatePositionSectors()">
-                                        Update All Position Sectors
-                                    </button>
-                                    <span class="text-muted" style="margin-left: 8px; font-size: 0.85em;">
-                                        Looks up sector for stocks, ETFs, and funds
-                                    </span>
                                 </div>
                             </div>
                         </div>

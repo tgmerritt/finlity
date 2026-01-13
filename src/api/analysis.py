@@ -1630,21 +1630,26 @@ def run_plugin_analysis(db: Database = Depends(get_db)):
     # Run analysis plugins
     result = pipeline.run_all(positions, accounts)
 
-    return {
-        "success": result.success,
-        "metrics": result.all_metrics,
-        "insights": result.all_insights,
-        "errors": result.errors,
-        "plugins": [
-            {
+    # Deduplicate plugin results by plugin_id
+    seen_plugins = set()
+    deduplicated_plugins = []
+    for pr in result.plugin_results:
+        if pr.plugin_id not in seen_plugins:
+            seen_plugins.add(pr.plugin_id)
+            deduplicated_plugins.append({
                 "plugin_id": pr.plugin_id,
                 "plugin_name": pr.plugin_name,
                 "success": pr.result.success,
                 "metrics": pr.result.metrics,
                 "insights": pr.result.insights,
-            }
-            for pr in result.plugin_results
-        ],
+            })
+
+    return {
+        "success": result.success,
+        "metrics": result.all_metrics,
+        "insights": result.all_insights,
+        "errors": result.errors,
+        "plugins": deduplicated_plugins,
         "position_count": len(positions),
         "account_count": len(accounts),
     }
@@ -1717,6 +1722,70 @@ def run_single_plugin_analysis(plugin_id: str, db: Database = Depends(get_db)):
     }
 
 
+def _get_widget_portfolio_data(db: Database) -> tuple[list[dict], list[dict]]:
+    """
+    Get portfolio data formatted for widget rendering with sector enrichment.
+
+    Fetches all accounts and positions from the database, enriching fund sectors
+    from the FundDataService cache when available. Uses only fast local lookups.
+
+    Returns:
+        Tuple of (positions, accounts) lists formatted for widget plugins.
+    """
+    from src.services.fund_data import FundDataService
+    from src.services.secrets import SecretsManager
+
+    secrets = SecretsManager(db)
+    fmp_key = secrets.get_api_key(secrets.FMP_API_KEY)
+    fund_service = FundDataService(cache_path="funds.yaml", fmp_api_key=fmp_key)
+
+    positions = []
+    accounts = []
+
+    for db_account in db.get_all_accounts():
+        accounts.append({
+            "id": db_account.id,
+            "name": db_account.name,
+            "account_type": db_account.account_type,
+            "brokerage": db_account.brokerage,
+            "is_retirement": db_account.account_type in [
+                "traditional_401k", "roth_401k", "traditional_ira", "roth_ira",
+                "hsa", "pension", "sep_ira", "simple_ira",
+            ],
+        })
+
+        for db_pos in db.get_positions_by_account(db_account.id):
+            sector = db_pos.sector or "Other"
+            # For funds with no sector, try FundDataService cache (fast local lookup)
+            if sector.lower() == "other" and db_pos.is_fund:
+                try:
+                    fund_data = fund_service.get_fund_raw_data(db_pos.ticker)
+                    if fund_data:
+                        sector_breakdown = fund_data.get("sector_breakdown", {})
+                        if sector_breakdown:
+                            sector = max(sector_breakdown, key=sector_breakdown.get)
+                except Exception:
+                    # Cache lookup failures shouldn't break widget rendering
+                    pass
+
+            positions.append({
+                "ticker": db_pos.ticker,
+                "name": db_pos.name or db_pos.ticker,
+                "shares": db_pos.shares,
+                "current_price": db_pos.current_price,
+                "cost_basis": db_pos.cost_basis,
+                "sector": sector or "Other",
+                "asset_class": db_pos.asset_class,
+                "is_fund": db_pos.is_fund,
+                "position_type": db_pos.position_type,
+                "account_id": db_account.id,
+                "account_name": db_account.name,
+                "account_type": db_account.account_type,
+            })
+
+    return positions, accounts
+
+
 @router.get("/widgets")
 def render_widgets(db: Database = Depends(get_db)):
     """
@@ -1733,42 +1802,7 @@ def render_widgets(db: Database = Depends(get_db)):
     registry.load_enabled_plugins()
 
     pipeline = get_widget_pipeline()
-
-    # Get portfolio data from database
-    positions = []
-    accounts = []
-
-    for db_account in db.get_all_accounts():
-        # Add account info
-        accounts.append({
-            "id": db_account.id,
-            "name": db_account.name,
-            "account_type": db_account.account_type,
-            "brokerage": db_account.brokerage,
-            "is_retirement": db_account.account_type in [
-                "traditional_401k", "roth_401k", "traditional_ira", "roth_ira",
-                "hsa", "pension", "sep_ira", "simple_ira",
-            ],
-        })
-
-        # Add positions
-        for db_pos in db.get_positions_by_account(db_account.id):
-            positions.append({
-                "ticker": db_pos.ticker,
-                "name": db_pos.name or db_pos.ticker,
-                "shares": db_pos.shares,
-                "current_price": db_pos.current_price,
-                "cost_basis": db_pos.cost_basis,
-                "sector": db_pos.sector or "Other",
-                "asset_class": db_pos.asset_class,
-                "is_fund": db_pos.is_fund,
-                "position_type": db_pos.position_type,
-                "account_id": db_account.id,
-                "account_name": db_account.name,
-                "account_type": db_account.account_type,
-            })
-
-    # Run all widgets
+    positions, accounts = _get_widget_portfolio_data(db)
     result = pipeline.render_all(positions, accounts)
 
     return result.to_dict()
@@ -1791,40 +1825,7 @@ def render_single_widget(plugin_id: str, db: Database = Depends(get_db)):
     registry.load_enabled_plugins()
 
     pipeline = get_widget_pipeline()
-
-    # Get portfolio data from database
-    positions = []
-    accounts = []
-
-    for db_account in db.get_all_accounts():
-        accounts.append({
-            "id": db_account.id,
-            "name": db_account.name,
-            "account_type": db_account.account_type,
-            "brokerage": db_account.brokerage,
-            "is_retirement": db_account.account_type in [
-                "traditional_401k", "roth_401k", "traditional_ira", "roth_ira",
-                "hsa", "pension", "sep_ira", "simple_ira",
-            ],
-        })
-
-        for db_pos in db.get_positions_by_account(db_account.id):
-            positions.append({
-                "ticker": db_pos.ticker,
-                "name": db_pos.name or db_pos.ticker,
-                "shares": db_pos.shares,
-                "current_price": db_pos.current_price,
-                "cost_basis": db_pos.cost_basis,
-                "sector": db_pos.sector or "Other",
-                "asset_class": db_pos.asset_class,
-                "is_fund": db_pos.is_fund,
-                "position_type": db_pos.position_type,
-                "account_id": db_account.id,
-                "account_name": db_account.name,
-                "account_type": db_account.account_type,
-            })
-
-    # Render specific widget
+    positions, accounts = _get_widget_portfolio_data(db)
     result = pipeline.render_widget(plugin_id, positions, accounts)
 
     if result is None:
