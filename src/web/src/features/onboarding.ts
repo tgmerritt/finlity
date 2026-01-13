@@ -438,11 +438,21 @@ export function setStorageMode(mode: 'server' | 'local'): void {
     localOptions.style.display = mode === 'local' ? 'block' : 'none';
   }
 
-  // Update radio selection
+  // Update Settings page radio selection (uses :checked CSS)
   const serverRadio = getElementById<HTMLInputElement>('storage-mode-server');
-  const localRadio = document.querySelector<HTMLInputElement>('input[name="storage-mode"][value="local"]');
+  const localRadio = getElementById<HTMLInputElement>('storage-mode-local');
   if (serverRadio) serverRadio.checked = mode === 'server';
   if (localRadio) localRadio.checked = mode === 'local';
+
+  // Also update Profile modal .radio-option selection (uses .selected class)
+  document.querySelectorAll('.radio-option').forEach((opt) => {
+    const input = opt.querySelector<HTMLInputElement>('input[name="storage-mode"]');
+    if (input) {
+      const isSelected = input.value === mode;
+      opt.classList.toggle('selected', isSelected);
+      input.checked = isSelected;
+    }
+  });
 
   console.debug(`Storage mode set to: ${mode}`);
 }
