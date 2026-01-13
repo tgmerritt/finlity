@@ -180,6 +180,10 @@ import {
   createNewLocalDatabase,
   saveLocalDatabase,
   downloadLocalDatabase,
+  openLocalDatabase,
+  loadFromBrowserStorage,
+  saveToBrowserStorage,
+  clearBrowserStorage,
 } from '@/features/onboarding';
 import { initSocialFeed, destroySocialFeed, refreshSocialFeed } from '@/features/social-feed';
 
@@ -286,7 +290,7 @@ function initStorageMode(): void {
   // Update badge
   const badge = document.getElementById('storage-mode-badge');
   if (badge) {
-    badge.textContent = mode === 'server' ? 'Server' : 'Local';
+    badge.textContent = mode === 'server' ? 'Backend' : 'Browser';
     badge.className = `badge ${mode}`;
   }
 
@@ -561,6 +565,10 @@ window.finlity = {
   createNewLocalDatabase,
   saveLocalDatabase,
   downloadLocalDatabase,
+  openLocalDatabase,
+  loadFromBrowserStorage,
+  saveToBrowserStorage,
+  clearBrowserStorage,
 
   // Social Feed
   initSocialFeed,

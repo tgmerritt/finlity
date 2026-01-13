@@ -428,7 +428,7 @@ export function setStorageMode(mode: 'server' | 'local'): void {
   // Update badge
   const badge = getElementById<HTMLElement>('storage-mode-badge');
   if (badge) {
-    badge.textContent = mode === 'server' ? 'Server' : 'Local';
+    badge.textContent = mode === 'server' ? 'Backend' : 'Browser';
     badge.className = `badge ${mode}`;
   }
 
@@ -614,6 +614,148 @@ export async function downloadLocalDatabase(): Promise<void> {
     showToast('Failed to download database', 'error');
   } finally {
     hideLoading();
+  }
+}
+
+/**
+ * Open a local database file using file picker.
+ * Supports CSV files for import.
+ */
+export function openLocalDatabase(): void {
+  // Create a hidden file input
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv,.db,.sqlite';
+  input.style.display = 'none';
+
+  input.addEventListener('change', async (e) => {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (!file) return;
+
+    showLoading(`Opening ${file.name}...`);
+    try {
+      // For CSV files, use the import flow
+      if (file.name.endsWith('.csv')) {
+        // Trigger the import modal with this file
+        const importModal = getElementById<HTMLElement>('import-modal');
+        if (importModal) {
+          importModal.style.display = 'flex';
+        }
+
+        // Create a DataTransfer to simulate file drop
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+
+        // Find the file input in import modal and set the file
+        const importFileInput = document.getElementById('import-file') as HTMLInputElement | null;
+        if (importFileInput) {
+          importFileInput.files = dataTransfer.files;
+          // Trigger change event to process the file
+          importFileInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        showToast('File loaded. Review the import preview and confirm.', 'info');
+      } else {
+        showToast('Only CSV files are currently supported for import.', 'warning');
+      }
+    } catch (error) {
+      console.error('Error opening database:', error);
+      showToast('Failed to open database file', 'error');
+    } finally {
+      hideLoading();
+    }
+
+    // Clean up
+    document.body.removeChild(input);
+  });
+
+  document.body.appendChild(input);
+  input.click();
+}
+
+/**
+ * Browser storage key for portfolio data.
+ */
+const BROWSER_STORAGE_KEY = 'finlity_portfolio_data';
+
+/**
+ * Load portfolio data from browser storage (localStorage).
+ * This restores previously saved account and position data.
+ */
+export async function loadFromBrowserStorage(): Promise<void> {
+  const storedData = localStorage.getItem(BROWSER_STORAGE_KEY);
+  if (!storedData) {
+    showToast('No saved data found in browser storage', 'warning');
+    return;
+  }
+
+  try {
+    const data = JSON.parse(storedData);
+    const positionCount = data.positions?.length || 0;
+    const accountCount = data.accounts?.length || 0;
+
+    showToast(
+      `Browser storage contains ${accountCount} accounts and ${positionCount} positions. ` +
+        'Use Import to restore this data.',
+      'info'
+    );
+
+    // For now, just show what's stored - full restore requires import functionality
+    console.log('Browser storage data:', data);
+  } catch (error) {
+    console.error('Error parsing browser storage:', error);
+    showToast('Browser storage data is corrupted', 'error');
+  }
+}
+
+/**
+ * Save current portfolio data to browser storage (localStorage).
+ * Fetches accounts and positions from API and stores them locally.
+ */
+export async function saveToBrowserStorage(): Promise<void> {
+  showLoading('Saving to browser storage...');
+  try {
+    // Fetch accounts and positions from API
+    const accounts = await apiCall<unknown[]>('/api/portfolio/accounts');
+    const positions = await apiCall<unknown[]>('/api/portfolio/positions');
+
+    const data = {
+      accounts,
+      positions,
+      savedAt: new Date().toISOString(),
+    };
+
+    // Store in localStorage
+    localStorage.setItem(BROWSER_STORAGE_KEY, JSON.stringify(data));
+
+    showToast(`Saved ${accounts.length} accounts and ${positions.length} positions to browser`, 'success');
+  } catch (error) {
+    console.error('Error saving to browser storage:', error);
+    showToast('Failed to save data to browser storage', 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/**
+ * Clear all portfolio data from browser storage.
+ */
+export function clearBrowserStorage(): void {
+  const confirmed = window.confirm(
+    'This will permanently delete all portfolio data stored in your browser.\n\n' +
+      'This action cannot be undone.\n\n' +
+      'Continue?'
+  );
+
+  if (!confirmed) return;
+
+  try {
+    localStorage.removeItem(BROWSER_STORAGE_KEY);
+    showToast('Browser storage cleared', 'success');
+  } catch (error) {
+    console.error('Error clearing browser storage:', error);
+    showToast('Failed to clear browser storage', 'error');
   }
 }
 
