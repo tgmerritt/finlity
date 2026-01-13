@@ -10,6 +10,7 @@ import { showToast } from '@/ui/toast';
 import { closeModal, showConfirmDialog, createDynamicModal } from '@/ui/modal';
 import { formatCurrency, formatNumber } from '@/utils/format';
 import { updateAllocationCharts, updateHistoryChart } from '@/charts/allocation';
+import { loadWidgets } from '@/features/plugins';
 import type {
   DashboardData,
   DashboardPosition,
@@ -141,6 +142,9 @@ export async function refreshData(): Promise<void> {
 
     // Load retirement metrics for dashboard
     await loadRetirementMetrics();
+
+    // Auto-load dashboard widgets
+    await loadWidgets();
 
     // Re-initialize AI commentary buttons after data loads
     // This is called from main.ts after import

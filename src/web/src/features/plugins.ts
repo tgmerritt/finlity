@@ -634,10 +634,20 @@ export async function savePluginSettings(event: Event, pluginId: string): Promis
   }
 }
 
+// Loading state to prevent concurrent calls
+let isLoadingPluginAnalysis = false;
+
 /**
  * Load plugin analysis results.
  */
 export async function loadPluginAnalysis(): Promise<void> {
+  // Prevent concurrent calls that cause duplicate rendering
+  if (isLoadingPluginAnalysis) {
+    console.debug('loadPluginAnalysis already in progress, skipping');
+    return;
+  }
+  isLoadingPluginAnalysis = true;
+
   const container = getElementById<HTMLElement>('plugin-insights-container');
   const loading = getElementById<HTMLElement>('plugin-insights-loading');
 
@@ -645,11 +655,16 @@ export async function loadPluginAnalysis(): Promise<void> {
   if (container) clearElement(container);
 
   try {
-    const data = await apiCall<PluginAnalysisData>('/api/analysis/plugins');
+    // Add cache-busting timestamp to prevent stale data
+    const timestamp = Date.now();
+    const data = await apiCall<PluginAnalysisData>(`/api/analysis/plugins?_t=${timestamp}`);
 
     setVisible(loading, false);
 
     if (!container) return;
+
+    // Clear again before rendering to handle any race conditions
+    clearElement(container);
 
     if (!data.plugins || data.plugins.length === 0) {
       const p = document.createElement('p');
@@ -659,8 +674,17 @@ export async function loadPluginAnalysis(): Promise<void> {
       return;
     }
 
-    // Render each plugin's results
+    // Track rendered plugins to prevent duplicates
+    const renderedPlugins = new Set<string>();
+
+    // Render each plugin's results (deduplicated)
     data.plugins.forEach((plugin) => {
+      // Skip if already rendered (prevents duplicates)
+      if (renderedPlugins.has(plugin.plugin_name)) {
+        console.warn(`Skipping duplicate plugin: ${plugin.plugin_name}`);
+        return;
+      }
+      renderedPlugins.add(plugin.plugin_name);
       const resultDiv = document.createElement('div');
       resultDiv.className = 'plugin-result';
 
@@ -751,6 +775,8 @@ export async function loadPluginAnalysis(): Promise<void> {
         'Failed to load analysis. ' + (error instanceof Error ? error.message : 'Unknown error');
       container.appendChild(p);
     }
+  } finally {
+    isLoadingPluginAnalysis = false;
   }
 }
 
@@ -781,6 +807,26 @@ function addMetricItem(
 }
 
 /**
+ * Purge all Plotly charts in a container before clearing.
+ * This prevents stale chart data from being cached.
+ */
+function purgeChartsInContainer(container: HTMLElement): void {
+  // Find all elements that might be Plotly charts
+  const chartDivs = container.querySelectorAll('[class*="plotly"], [class*="js-plotly"]');
+  chartDivs.forEach((div) => {
+    try {
+      // Plotly is loaded globally via CDN
+      const Plotly = (window as unknown as { Plotly?: { purge: (el: Element) => void } }).Plotly;
+      if (Plotly?.purge) {
+        Plotly.purge(div);
+      }
+    } catch (e) {
+      // Ignore errors if Plotly not loaded
+    }
+  });
+}
+
+/**
  * Load widget dashboard.
  */
 export async function loadWidgets(): Promise<void> {
@@ -788,10 +834,17 @@ export async function loadWidgets(): Promise<void> {
   const loading = getElementById<HTMLElement>('widget-loading');
 
   setVisible(loading, true);
-  if (container) clearElement(container);
+
+  // Purge any existing Plotly charts before clearing to prevent cache issues
+  if (container) {
+    purgeChartsInContainer(container);
+    clearElement(container);
+  }
 
   try {
-    const data = await apiCall<{ widgets: WidgetData[] }>('/api/analysis/widgets');
+    // Add cache-busting timestamp to prevent stale data
+    const timestamp = Date.now();
+    const data = await apiCall<{ widgets: WidgetData[] }>(`/api/analysis/widgets?_t=${timestamp}`);
 
     setVisible(loading, false);
 
@@ -853,6 +906,20 @@ export async function loadWidgets(): Promise<void> {
         // This is analogous to markdown rendering in analysis.ts.
         // eslint-disable-next-line no-unsanitized/property
         body.innerHTML = content.html;
+
+        // Execute scripts that were added via innerHTML (browsers don't auto-execute them)
+        const scripts = body.querySelectorAll('script');
+        scripts.forEach((oldScript) => {
+          const newScript = document.createElement('script');
+          // Copy all attributes
+          Array.from(oldScript.attributes).forEach((attr) => {
+            newScript.setAttribute(attr.name, attr.value);
+          });
+          // Copy script content
+          newScript.textContent = oldScript.textContent;
+          // Replace old with new (this executes the script)
+          oldScript.parentNode?.replaceChild(newScript, oldScript);
+        });
       } else {
         const emptyP = document.createElement('p');
         emptyP.className = 'text-muted';
