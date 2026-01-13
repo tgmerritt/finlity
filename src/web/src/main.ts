@@ -78,6 +78,9 @@ import {
   loadTaxesTab,
   runTaxProjection,
   loadAccountBalancesByType,
+  toggleTaxAwareSettings,
+  toggleConfigPanel,
+  updateMonteCarloConfigSummary,
 } from '@/pages/projections';
 import {
   initBudget,
@@ -174,6 +177,9 @@ import {
   setStorageMode,
   loadDeploymentInfo,
   updateStorageModeRestrictions,
+  createNewLocalDatabase,
+  saveLocalDatabase,
+  downloadLocalDatabase,
 } from '@/features/onboarding';
 import { initSocialFeed, destroySocialFeed, refreshSocialFeed } from '@/features/social-feed';
 
@@ -449,6 +455,9 @@ window.finlity = {
   loadTaxesTab,
   runTaxProjection,
   loadAccountBalancesByType,
+  toggleTaxAwareSettings,
+  toggleConfigPanel,
+  updateMonteCarloConfigSummary,
 
   // Budget
   showBudgetTab,
@@ -533,6 +542,9 @@ window.finlity = {
   setStorageMode,
   loadDeploymentInfo,
   updateStorageModeRestrictions,
+  createNewLocalDatabase,
+  saveLocalDatabase,
+  downloadLocalDatabase,
 
   // Social Feed
   initSocialFeed,
