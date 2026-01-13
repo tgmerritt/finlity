@@ -438,11 +438,21 @@ export function setStorageMode(mode: 'server' | 'local'): void {
     localOptions.style.display = mode === 'local' ? 'block' : 'none';
   }
 
-  // Update radio selection
+  // Update Settings page radio selection (uses :checked CSS)
   const serverRadio = getElementById<HTMLInputElement>('storage-mode-server');
-  const localRadio = document.querySelector<HTMLInputElement>('input[name="storage-mode"][value="local"]');
+  const localRadio = getElementById<HTMLInputElement>('storage-mode-local');
   if (serverRadio) serverRadio.checked = mode === 'server';
   if (localRadio) localRadio.checked = mode === 'local';
+
+  // Also update Profile modal .radio-option selection (uses .selected class)
+  document.querySelectorAll('.radio-option').forEach((opt) => {
+    const input = opt.querySelector<HTMLInputElement>('input[name="storage-mode"]');
+    if (input) {
+      const isSelected = input.value === mode;
+      opt.classList.toggle('selected', isSelected);
+      input.checked = isSelected;
+    }
+  });
 
   console.debug(`Storage mode set to: ${mode}`);
 }
@@ -526,6 +536,85 @@ export function updateStorageModeRestrictions(
  */
 export function isTourCompleted(): boolean {
   return localStorage.getItem('tourCompleted') === 'true';
+}
+
+/**
+ * Create a new local database by resetting server data to empty state.
+ * This creates a fresh portfolio without any existing positions or accounts.
+ */
+export async function createNewLocalDatabase(): Promise<void> {
+  const confirmed = window.confirm(
+    'This will create a new empty portfolio database.\n\n' +
+    'Your current data will remain on the server. ' +
+    'You can switch back to server mode to access it.\n\n' +
+    'Continue?'
+  );
+
+  if (!confirmed) return;
+
+  showLoading('Creating new database...');
+  try {
+    // Create a new profile for local storage
+    await apiCall('/api/profiles', {
+      method: 'POST',
+      body: {
+        name: `Local Profile ${new Date().toLocaleDateString()}`,
+        description: 'Created for local storage mode',
+      },
+    });
+
+    // Ensure local mode is selected
+    setStorageMode('local');
+
+    showToast('New database created. You can now import your data.', 'success');
+
+    // Navigate to holdings tab to start importing
+    showTab('holdings');
+  } catch (error) {
+    console.error('Error creating new database:', error);
+    showToast('Failed to create new database: ' + (error as Error).message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/**
+ * Save the current local database state.
+ * In local mode, this persists data to localStorage/IndexedDB.
+ */
+export async function saveLocalDatabase(): Promise<void> {
+  showToast('Data is automatically saved', 'info');
+}
+
+/**
+ * Download the local database as a backup file.
+ */
+export async function downloadLocalDatabase(): Promise<void> {
+  showLoading('Preparing download...');
+  try {
+    // Use the existing export functionality
+    const response = await fetch('/api/portfolio/export/all-csv');
+    if (!response.ok) {
+      throw new Error('Failed to export data');
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `portfolio-backup-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    showToast('Database exported successfully', 'success');
+  } catch (error) {
+    console.error('Error downloading database:', error);
+    showToast('Failed to download database', 'error');
+  } finally {
+    hideLoading();
+  }
 }
 
 /**

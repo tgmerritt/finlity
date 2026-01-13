@@ -224,6 +224,40 @@ export function toggleTaxAwareSettings(): void {
 }
 
 /**
+ * Toggle a collapsible config panel's expanded state.
+ */
+export function toggleConfigPanel(panelId: string): void {
+  const panel = document.getElementById(panelId);
+  if (panel) {
+    panel.classList.toggle('expanded');
+  }
+}
+
+/**
+ * Update the Monte Carlo config summary text shown in the collapsed header.
+ * Displays key configuration values at a glance.
+ */
+export function updateMonteCarloConfigSummary(): void {
+  const summary = document.getElementById('monte-carlo-config-summary');
+  if (!summary) return;
+
+  const currentAge = (document.getElementById('current-age') as HTMLInputElement)?.value || '35';
+  const retirementAge = (document.getElementById('retirement-age') as HTMLInputElement)?.value || '65';
+  const monthlyContribution = (document.getElementById('monthly-contribution') as HTMLInputElement)?.value || '0';
+  const monthlyWithdrawal = (document.getElementById('monthly-withdrawal') as HTMLInputElement)?.value || '0';
+
+  const contrib = parseInt(monthlyContribution, 10);
+  const withdraw = parseInt(monthlyWithdrawal, 10);
+
+  const parts: string[] = [];
+  parts.push(`Age ${currentAge}→${retirementAge}`);
+  if (contrib > 0) parts.push(`+$${contrib.toLocaleString()}/mo`);
+  if (withdraw > 0) parts.push(`-$${withdraw.toLocaleString()}/mo`);
+
+  summary.textContent = parts.join(' • ');
+}
+
+/**
  * Load account balances by tax type from the API.
  * Populates the tax-aware mode balance inputs.
  */

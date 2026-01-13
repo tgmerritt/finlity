@@ -78,6 +78,9 @@ import {
   loadTaxesTab,
   runTaxProjection,
   loadAccountBalancesByType,
+  toggleTaxAwareSettings,
+  toggleConfigPanel,
+  updateMonteCarloConfigSummary,
 } from '@/pages/projections';
 import {
   initBudget,
@@ -174,6 +177,9 @@ import {
   setStorageMode,
   loadDeploymentInfo,
   updateStorageModeRestrictions,
+  createNewLocalDatabase,
+  saveLocalDatabase,
+  downloadLocalDatabase,
 } from '@/features/onboarding';
 import { initSocialFeed, destroySocialFeed, refreshSocialFeed } from '@/features/social-feed';
 
@@ -276,10 +282,26 @@ function initSidebarState(): void {
  */
 function initStorageMode(): void {
   const mode = localStorage.getItem('storageMode') || 'server';
+
+  // Update badge
   const badge = document.getElementById('storage-mode-badge');
   if (badge) {
     badge.textContent = mode === 'server' ? 'Server' : 'Local';
     badge.className = `badge ${mode}`;
+  }
+
+  // Update radio buttons to reflect stored state
+  const serverRadio = document.getElementById('storage-mode-server') as HTMLInputElement | null;
+  const localRadio = document.querySelector<HTMLInputElement>(
+    'input[name="storage-mode"][value="local"]'
+  );
+  if (serverRadio) serverRadio.checked = mode === 'server';
+  if (localRadio) localRadio.checked = mode === 'local';
+
+  // Show/hide local storage options based on stored mode
+  const localOptions = document.getElementById('local-storage-options');
+  if (localOptions) {
+    localOptions.style.display = mode === 'local' ? 'block' : 'none';
   }
 }
 
@@ -449,6 +471,9 @@ window.finlity = {
   loadTaxesTab,
   runTaxProjection,
   loadAccountBalancesByType,
+  toggleTaxAwareSettings,
+  toggleConfigPanel,
+  updateMonteCarloConfigSummary,
 
   // Budget
   showBudgetTab,
@@ -533,6 +558,9 @@ window.finlity = {
   setStorageMode,
   loadDeploymentInfo,
   updateStorageModeRestrictions,
+  createNewLocalDatabase,
+  saveLocalDatabase,
+  downloadLocalDatabase,
 
   // Social Feed
   initSocialFeed,
