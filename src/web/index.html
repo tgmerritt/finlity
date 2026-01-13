@@ -1709,7 +1709,7 @@
                         </div>
                         <div class="card-body">
                             <p class="form-help" style="margin-bottom: 1rem;">
-                                Choose where your portfolio data is stored. <strong>Local mode</strong> keeps all data on your device - nothing is sent to the server.
+                                Choose where your portfolio data is stored. Your data never leaves your control.
                             </p>
 
                             <!-- Warning banner for Heroku storage restriction -->
@@ -1733,8 +1733,8 @@
                                             <line x1="6" y1="18" x2="6.01" y2="18"></line>
                                         </svg>
                                         <div>
-                                            <strong>Server Mode</strong>
-                                            <small>Data stored on server (current behavior)</small>
+                                            <strong>Backend Database</strong>
+                                            <small>SQLite file on the machine running this app</small>
                                         </div>
                                     </div>
                                 </label>
@@ -1743,84 +1743,83 @@
                                     <input type="radio" name="storage-mode" value="local" id="storage-mode-local" onchange="setStorageMode('local')">
                                     <div class="radio-card-content">
                                         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                            <line x1="3" y1="9" x2="21" y2="9"></line>
+                                            <line x1="9" y1="21" x2="9" y2="9"></line>
                                         </svg>
                                         <div>
-                                            <strong>Local Mode</strong>
-                                            <small>Data stays on your device only</small>
+                                            <strong>Browser Storage</strong>
+                                            <small>Data stored in your browser only</small>
                                         </div>
                                     </div>
                                 </label>
                             </div>
 
-                            <!-- Local mode options (hidden by default) -->
+                            <!-- Browser storage options (hidden by default) -->
                             <div id="local-storage-options" style="display: none; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
-                                <h4 style="margin-bottom: 1rem;">Local Database</h4>
+                                <h4 style="margin-bottom: 0.5rem;">Browser Storage Options</h4>
+
+                                <!-- Security warning -->
+                                <div class="warning-banner" style="margin-bottom: 1rem; background: var(--warning-bg); border-color: var(--warning-border);">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                    </svg>
+                                    <span style="font-size: 0.85rem;">
+                                        <strong>Security Note:</strong> Browser storage is not encrypted.
+                                        Download your data regularly and clear browser storage when done.
+                                    </span>
+                                </div>
 
                                 <div id="local-db-status" class="info-box" style="margin-bottom: 1rem;">
-                                    <span id="local-db-status-text">No local database loaded. Open a file, create new, or switch to Server mode above.</span>
+                                    <span id="local-db-status-text">Data is stored in your browser's localStorage. Download a backup to keep your data safe.</span>
                                 </div>
 
                                 <div class="button-group" style="flex-wrap: wrap; gap: 0.5rem;">
                                     <button type="button" class="btn btn-primary" onclick="openLocalDatabase()">
                                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="17 8 12 3 7 8"></polyline>
+                                            <line x1="12" y1="3" x2="12" y2="15"></line>
                                         </svg>
-                                        Open Database File
+                                        Import CSV
                                     </button>
 
-                                    <button type="button" class="btn btn-secondary" onclick="createNewLocalDatabase()">
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                                        </svg>
-                                        Create New
-                                    </button>
-
-                                    <button type="button" class="btn btn-secondary" onclick="saveLocalDatabase()" id="btn-save-local-db" disabled>
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                                            <polyline points="7 3 7 8 15 8"></polyline>
-                                        </svg>
-                                        Save
-                                    </button>
-
-                                    <button type="button" class="btn btn-secondary" onclick="downloadLocalDatabase()" id="btn-download-local-db" disabled>
+                                    <button type="button" class="btn btn-secondary" onclick="downloadLocalDatabase()">
                                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                             <polyline points="7 10 12 15 17 10"></polyline>
                                             <line x1="12" y1="15" x2="12" y2="3"></line>
                                         </svg>
-                                        Export
+                                        Download Backup
+                                    </button>
+
+                                    <button type="button" class="btn btn-danger" onclick="clearBrowserStorage()">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        </svg>
+                                        Clear Browser Data
                                     </button>
                                 </div>
 
-                                <div style="margin-top: 1rem;">
-                                    <label class="file-upload-label">
-                                        <input type="file" id="import-db-file" accept=".db,.sqlite,.sqlite3" onchange="importLocalDatabase(event)" style="display: none;">
-                                        <span class="btn btn-secondary">
-                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                                <polyline points="17 8 12 3 7 8"></polyline>
-                                                <line x1="12" y1="3" x2="12" y2="15"></line>
-                                            </svg>
-                                            Import Database File
-                                        </span>
-                                    </label>
-                                </div>
-
                                 <div id="browser-storage-section" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-                                    <h5>Browser Storage</h5>
-                                    <p class="form-help">Automatically saves your database in the browser for persistence.</p>
+                                    <h5>Session Persistence</h5>
+                                    <p class="form-help">Save your current session to browser storage so it persists if you refresh the page.</p>
                                     <div class="button-group" style="margin-top: 0.5rem;">
-                                        <button type="button" class="btn btn-secondary btn-sm" onclick="loadFromBrowserStorage()">
-                                            Load from Browser
-                                        </button>
                                         <button type="button" class="btn btn-secondary btn-sm" onclick="saveToBrowserStorage()">
-                                            Save to Browser
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                            </svg>
+                                            Save Session
+                                        </button>
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="loadFromBrowserStorage()">
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                            </svg>
+                                            Restore Session
                                         </button>
                                         <button type="button" class="btn btn-danger btn-sm" onclick="clearBrowserStorage()">
                                             Clear Browser Data
@@ -3047,13 +3046,13 @@
                             <input type="radio" name="storage-mode" value="local" checked>
                             <div class="radio-content">
                                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                                    <line x1="8" y1="21" x2="16" y2="21"></line>
-                                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                    <line x1="3" y1="9" x2="21" y2="9"></line>
+                                    <line x1="9" y1="21" x2="9" y2="9"></line>
                                 </svg>
                                 <div>
-                                    <strong>Local</strong>
-                                    <small>Data stays on this device only</small>
+                                    <strong>Browser Storage</strong>
+                                    <small>Data stored in your browser (not encrypted)</small>
                                 </div>
                             </div>
                         </label>
@@ -3067,8 +3066,8 @@
                                     <line x1="6" y1="18" x2="6.01" y2="18"></line>
                                 </svg>
                                 <div>
-                                    <strong>Server</strong>
-                                    <small>Syncs with backend server</small>
+                                    <strong>Backend Database</strong>
+                                    <small>SQLite on the machine running this app</small>
                                 </div>
                             </div>
                         </label>

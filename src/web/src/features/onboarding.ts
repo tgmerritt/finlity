@@ -428,7 +428,7 @@ export function setStorageMode(mode: 'server' | 'local'): void {
   // Update badge
   const badge = getElementById<HTMLElement>('storage-mode-badge');
   if (badge) {
-    badge.textContent = mode === 'server' ? 'Server' : 'Local';
+    badge.textContent = mode === 'server' ? 'Backend' : 'Browser';
     badge.className = `badge ${mode}`;
   }
 
