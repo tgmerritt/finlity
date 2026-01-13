@@ -1722,36 +1722,27 @@ def run_single_plugin_analysis(plugin_id: str, db: Database = Depends(get_db)):
     }
 
 
-@router.get("/widgets")
-def render_widgets(db: Database = Depends(get_db)):
+def _get_widget_portfolio_data(db: Database) -> tuple[list[dict], list[dict]]:
     """
-    Render all enabled widget plugins with current portfolio data.
+    Get portfolio data formatted for widget rendering with sector enrichment.
 
-    This endpoint fetches portfolio data from the database and renders all
-    enabled widget plugins (Correlation Heatmap, Sector Treemap, etc.)
+    Fetches all accounts and positions from the database, enriching fund sectors
+    from the FundDataService cache when available. Uses only fast local lookups.
+
+    Returns:
+        Tuple of (positions, accounts) lists formatted for widget plugins.
     """
-    from src.plugins import get_plugin_registry, get_widget_pipeline
     from src.services.fund_data import FundDataService
     from src.services.secrets import SecretsManager
 
-    # Ensure plugins are loaded
-    registry = get_plugin_registry()
-    registry.discover_plugins(auto_enable_builtin=True)
-    registry.load_enabled_plugins()
-
-    pipeline = get_widget_pipeline()
-
-    # Initialize fund data service for sector enrichment
     secrets = SecretsManager(db)
     fmp_key = secrets.get_api_key(secrets.FMP_API_KEY)
     fund_service = FundDataService(cache_path="funds.yaml", fmp_api_key=fmp_key)
 
-    # Get portfolio data from database
     positions = []
     accounts = []
 
     for db_account in db.get_all_accounts():
-        # Add account info
         accounts.append({
             "id": db_account.id,
             "name": db_account.name,
@@ -1763,16 +1754,19 @@ def render_widgets(db: Database = Depends(get_db)):
             ],
         })
 
-        # Add positions with sector enrichment (using only fast cached lookups)
         for db_pos in db.get_positions_by_account(db_account.id):
             sector = db_pos.sector or "Other"
             # For funds with no sector, try FundDataService cache (fast local lookup)
             if sector.lower() == "other" and db_pos.is_fund:
-                fund_data = fund_service.get_fund_raw_data(db_pos.ticker)
-                if fund_data:
-                    sector_breakdown = fund_data.get("sector_breakdown", {})
-                    if sector_breakdown:
-                        sector = max(sector_breakdown, key=sector_breakdown.get)
+                try:
+                    fund_data = fund_service.get_fund_raw_data(db_pos.ticker)
+                    if fund_data:
+                        sector_breakdown = fund_data.get("sector_breakdown", {})
+                        if sector_breakdown:
+                            sector = max(sector_breakdown, key=sector_breakdown.get)
+                except Exception:
+                    # Cache lookup failures shouldn't break widget rendering
+                    pass
 
             positions.append({
                 "ticker": db_pos.ticker,
@@ -1789,7 +1783,26 @@ def render_widgets(db: Database = Depends(get_db)):
                 "account_type": db_account.account_type,
             })
 
-    # Run all widgets
+    return positions, accounts
+
+
+@router.get("/widgets")
+def render_widgets(db: Database = Depends(get_db)):
+    """
+    Render all enabled widget plugins with current portfolio data.
+
+    This endpoint fetches portfolio data from the database and renders all
+    enabled widget plugins (Correlation Heatmap, Sector Treemap, etc.)
+    """
+    from src.plugins import get_plugin_registry, get_widget_pipeline
+
+    # Ensure plugins are loaded
+    registry = get_plugin_registry()
+    registry.discover_plugins(auto_enable_builtin=True)
+    registry.load_enabled_plugins()
+
+    pipeline = get_widget_pipeline()
+    positions, accounts = _get_widget_portfolio_data(db)
     result = pipeline.render_all(positions, accounts)
 
     return result.to_dict()
@@ -1804,8 +1817,6 @@ def render_single_widget(plugin_id: str, db: Database = Depends(get_db)):
         plugin_id: ID of the widget plugin to render (e.g., "correlation-heatmap")
     """
     from src.plugins import get_plugin_registry, get_widget_pipeline
-    from src.services.fund_data import FundDataService
-    from src.services.secrets import SecretsManager
     from fastapi import HTTPException
 
     # Ensure plugins are loaded
@@ -1814,55 +1825,7 @@ def render_single_widget(plugin_id: str, db: Database = Depends(get_db)):
     registry.load_enabled_plugins()
 
     pipeline = get_widget_pipeline()
-
-    # Initialize fund data service for sector enrichment
-    secrets = SecretsManager(db)
-    fmp_key = secrets.get_api_key(secrets.FMP_API_KEY)
-    fund_service = FundDataService(cache_path="funds.yaml", fmp_api_key=fmp_key)
-
-    # Get portfolio data from database
-    positions = []
-    accounts = []
-
-    for db_account in db.get_all_accounts():
-        accounts.append({
-            "id": db_account.id,
-            "name": db_account.name,
-            "account_type": db_account.account_type,
-            "brokerage": db_account.brokerage,
-            "is_retirement": db_account.account_type in [
-                "traditional_401k", "roth_401k", "traditional_ira", "roth_ira",
-                "hsa", "pension", "sep_ira", "simple_ira",
-            ],
-        })
-
-        # Add positions with sector enrichment (using only fast cached lookups)
-        for db_pos in db.get_positions_by_account(db_account.id):
-            sector = db_pos.sector or "Other"
-            # For funds with no sector, try FundDataService cache (fast local lookup)
-            if sector.lower() == "other" and db_pos.is_fund:
-                fund_data = fund_service.get_fund_raw_data(db_pos.ticker)
-                if fund_data:
-                    sector_breakdown = fund_data.get("sector_breakdown", {})
-                    if sector_breakdown:
-                        sector = max(sector_breakdown, key=sector_breakdown.get)
-
-            positions.append({
-                "ticker": db_pos.ticker,
-                "name": db_pos.name or db_pos.ticker,
-                "shares": db_pos.shares,
-                "current_price": db_pos.current_price,
-                "cost_basis": db_pos.cost_basis,
-                "sector": sector or "Other",
-                "asset_class": db_pos.asset_class,
-                "is_fund": db_pos.is_fund,
-                "position_type": db_pos.position_type,
-                "account_id": db_account.id,
-                "account_name": db_account.name,
-                "account_type": db_account.account_type,
-            })
-
-    # Render specific widget
+    positions, accounts = _get_widget_portfolio_data(db)
     result = pipeline.render_widget(plugin_id, positions, accounts)
 
     if result is None:

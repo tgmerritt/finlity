@@ -74,10 +74,14 @@ class SectorTreemapWidget(WidgetPlugin):
             daily_change_pct = pos.get("daily_change_pct")
             if daily_change_pct is None:
                 # Try to fetch from price service
-                price_data = self.price_service.get_current_price(ticker)
-                if price_data:
-                    daily_change_pct = price_data.daily_change_pct
-                else:
+                try:
+                    price_data = self.price_service.get_current_price(ticker)
+                    if price_data:
+                        daily_change_pct = price_data.daily_change_pct
+                    else:
+                        daily_change_pct = None  # Will show as grey
+                except Exception:
+                    # Individual price failures shouldn't break the whole widget
                     daily_change_pct = None  # Will show as grey
 
             if sector not in sectors:

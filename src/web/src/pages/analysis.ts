@@ -1083,48 +1083,64 @@ export async function updatePositionSectors(): Promise<void> {
 }
 
 /**
- * Unified function to enrich all portfolio data.
- * Calls both fund analysis and sector update endpoints, then refreshes widgets.
+ * Unified function to enrich all portfolio data with sector classifications.
+ * Consolidates two data sources: FundDataService (for mutual funds/ETFs) and
+ * yfinance (for individual stocks). Refreshes widgets afterward to display
+ * updated sector allocations in visualizations like the treemap.
  */
 export async function enrichAllData(): Promise<void> {
   showLoading('Enriching portfolio data...');
 
-  try {
-    let totalUpdated = 0;
+  let totalUpdated = 0;
+  let anySuccess = false;
+  const errors: string[] = [];
 
-    // Step 1: Analyze funds (gets sector data from FundDataService)
+  try {
+    // Analyze funds (gets sector data from FundDataService)
     try {
       const fundResult = await apiCall<{ positions_updated?: number }>(
         '/api/analysis/fund/analyze-portfolio',
         { method: 'POST' }
       );
       totalUpdated += fundResult.positions_updated || 0;
+      anySuccess = true;
     } catch (e) {
-      console.warn('Fund analysis failed, continuing with sector update:', e);
+      const message = e instanceof Error ? e.message : 'Unknown error';
+      console.error('Fund analysis failed:', e);
+      errors.push(`Fund analysis: ${message}`);
     }
 
-    // Step 2: Update remaining position sectors (via yfinance)
+    // Update remaining position sectors (via yfinance)
     try {
       const sectorResult = await apiCall<{ positions_updated?: number }>(
         '/api/analysis/positions/update-sectors',
         { method: 'POST' }
       );
       totalUpdated += sectorResult.positions_updated || 0;
+      anySuccess = true;
     } catch (e) {
-      console.warn('Sector update failed:', e);
+      const message = e instanceof Error ? e.message : 'Unknown error';
+      console.error('Sector update failed:', e);
+      errors.push(`Sector update: ${message}`);
     }
 
-    // Save enrichment timestamp
-    localStorage.setItem('enrichment_last_update', new Date().toISOString());
-    updateEnrichmentStatus();
+    // Only save timestamp and show success if at least one call succeeded
+    if (anySuccess) {
+      localStorage.setItem('enrichment_last_update', new Date().toISOString());
+      updateEnrichmentStatus();
 
-    if (totalUpdated > 0) {
-      showToast(`Enriched ${totalUpdated} positions`, 'success');
+      if (errors.length > 0) {
+        showToast(`Enriched ${totalUpdated} positions (with some errors)`, 'warning');
+      } else if (totalUpdated > 0) {
+        showToast(`Enriched ${totalUpdated} positions`, 'success');
+      } else {
+        showToast('All positions already have sector data', 'info');
+      }
     } else {
-      showToast('All positions already have sector data', 'info');
+      showToast(`Failed to enrich data: ${errors.join('; ')}`, 'error');
     }
 
-    // Refresh widgets to show updated data
+    // Refresh widgets regardless to show current state
     await loadWidgets();
   } catch (error) {
     console.error('Error enriching data:', error);
@@ -1136,6 +1152,8 @@ export async function enrichAllData(): Promise<void> {
 
 /**
  * Update the enrichment status display based on localStorage timestamp.
+ * Data is considered "current" if enriched within the last 24 hours,
+ * otherwise displayed as "may be stale" to prompt re-enrichment.
  */
 export function updateEnrichmentStatus(): void {
   const lastUpdate = localStorage.getItem('enrichment_last_update');

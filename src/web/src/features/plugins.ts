@@ -634,7 +634,9 @@ export async function savePluginSettings(event: Event, pluginId: string): Promis
   }
 }
 
-// Loading state to prevent concurrent calls
+// Mutex flag to prevent concurrent loadPluginAnalysis() calls.
+// Multiple calls can occur from tab switching + automatic triggers,
+// causing duplicate DOM rendering.
 let isLoadingPluginAnalysis = false;
 
 /**
@@ -655,7 +657,7 @@ export async function loadPluginAnalysis(): Promise<void> {
   if (container) clearElement(container);
 
   try {
-    // Add cache-busting timestamp to prevent stale data
+    // Add cache-busting timestamp to bypass browser HTTP cache
     const timestamp = Date.now();
     const data = await apiCall<PluginAnalysisData>(`/api/analysis/plugins?_t=${timestamp}`);
 
@@ -663,7 +665,8 @@ export async function loadPluginAnalysis(): Promise<void> {
 
     if (!container) return;
 
-    // Clear again before rendering to handle any race conditions
+    // Clear container again in case a concurrent call populated it
+    // between our initial clear and the await completing
     clearElement(container);
 
     if (!data.plugins || data.plugins.length === 0) {
@@ -674,12 +677,11 @@ export async function loadPluginAnalysis(): Promise<void> {
       return;
     }
 
-    // Track rendered plugins to prevent duplicates
+    // Deduplicate plugins - API may return duplicates due to race conditions
+    // or registry state; track what we've rendered to avoid duplicate DOM nodes.
     const renderedPlugins = new Set<string>();
 
-    // Render each plugin's results (deduplicated)
     data.plugins.forEach((plugin) => {
-      // Skip if already rendered (prevents duplicates)
       if (renderedPlugins.has(plugin.plugin_name)) {
         console.warn(`Skipping duplicate plugin: ${plugin.plugin_name}`);
         return;
@@ -807,11 +809,11 @@ function addMetricItem(
 }
 
 /**
- * Purge all Plotly charts in a container before clearing.
- * This prevents stale chart data from being cached.
+ * Properly clean up Plotly chart instances before clearing a container.
+ * Plotly maintains internal state tied to DOM elements; calling purge()
+ * releases these resources and prevents memory leaks or rendering artifacts.
  */
 function purgeChartsInContainer(container: HTMLElement): void {
-  // Find all elements that might be Plotly charts
   const chartDivs = container.querySelectorAll('[class*="plotly"], [class*="js-plotly"]');
   chartDivs.forEach((div) => {
     try {
@@ -821,28 +823,39 @@ function purgeChartsInContainer(container: HTMLElement): void {
         Plotly.purge(div);
       }
     } catch (e) {
-      // Ignore errors if Plotly not loaded
+      // Log but continue - Plotly may not be loaded yet, which is expected on first render
+      console.debug('Failed to purge Plotly chart (may be expected if Plotly not loaded):', e);
     }
   });
 }
+
+// Mutex flag to prevent concurrent loadWidgets() calls
+let isLoadingWidgets = false;
 
 /**
  * Load widget dashboard.
  */
 export async function loadWidgets(): Promise<void> {
+  // Prevent concurrent calls that cause duplicate rendering
+  if (isLoadingWidgets) {
+    console.debug('loadWidgets already in progress, skipping');
+    return;
+  }
+  isLoadingWidgets = true;
+
   const container = getElementById<HTMLElement>('widget-grid');
   const loading = getElementById<HTMLElement>('widget-loading');
 
   setVisible(loading, true);
 
-  // Purge any existing Plotly charts before clearing to prevent cache issues
+  // Purge any existing Plotly charts before clearing to release resources
   if (container) {
     purgeChartsInContainer(container);
     clearElement(container);
   }
 
   try {
-    // Add cache-busting timestamp to prevent stale data
+    // Add cache-busting timestamp to bypass browser HTTP cache
     const timestamp = Date.now();
     const data = await apiCall<{ widgets: WidgetData[] }>(`/api/analysis/widgets?_t=${timestamp}`);
 
@@ -907,18 +920,22 @@ export async function loadWidgets(): Promise<void> {
         // eslint-disable-next-line no-unsanitized/property
         body.innerHTML = content.html;
 
-        // Execute scripts that were added via innerHTML (browsers don't auto-execute them)
+        // Execute scripts that were added via innerHTML.
+        // Browsers don't auto-execute script tags inserted via innerHTML for security.
+        // We explicitly re-execute them here because widget HTML comes from our
+        // trusted backend plugins, not user input.
         const scripts = body.querySelectorAll('script');
         scripts.forEach((oldScript) => {
-          const newScript = document.createElement('script');
-          // Copy all attributes
-          Array.from(oldScript.attributes).forEach((attr) => {
-            newScript.setAttribute(attr.name, attr.value);
-          });
-          // Copy script content
-          newScript.textContent = oldScript.textContent;
-          // Replace old with new (this executes the script)
-          oldScript.parentNode?.replaceChild(newScript, oldScript);
+          try {
+            const newScript = document.createElement('script');
+            Array.from(oldScript.attributes).forEach((attr) => {
+              newScript.setAttribute(attr.name, attr.value);
+            });
+            newScript.textContent = oldScript.textContent;
+            oldScript.parentNode?.replaceChild(newScript, oldScript);
+          } catch (e) {
+            console.error(`Failed to execute widget script for ${widget.plugin_name}:`, e);
+          }
         });
       } else {
         const emptyP = document.createElement('p');
@@ -940,6 +957,8 @@ export async function loadWidgets(): Promise<void> {
         'Failed to load widgets. ' + (error instanceof Error ? error.message : 'Unknown error');
       container.appendChild(p);
     }
+  } finally {
+    isLoadingWidgets = false;
   }
 }
 
