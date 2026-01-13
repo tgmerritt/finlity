@@ -180,6 +180,10 @@ import {
   createNewLocalDatabase,
   saveLocalDatabase,
   downloadLocalDatabase,
+  openLocalDatabase,
+  loadFromBrowserStorage,
+  saveToBrowserStorage,
+  clearBrowserStorage,
 } from '@/features/onboarding';
 import { initSocialFeed, destroySocialFeed, refreshSocialFeed } from '@/features/social-feed';
 
@@ -561,6 +565,10 @@ window.finlity = {
   createNewLocalDatabase,
   saveLocalDatabase,
   downloadLocalDatabase,
+  openLocalDatabase,
+  loadFromBrowserStorage,
+  saveToBrowserStorage,
+  clearBrowserStorage,
 
   // Social Feed
   initSocialFeed,
