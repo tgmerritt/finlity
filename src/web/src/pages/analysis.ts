@@ -1447,9 +1447,10 @@ export async function showAllocationTab(tabName: string): Promise<void> {
 
   const tbody = table.querySelector('tbody') || table;
 
-  // Clear existing rows (keep header if present)
-  const existingRows = tbody.querySelectorAll('tr:not(:first-child)');
-  existingRows.forEach((row) => row.remove());
+  // Clear all existing rows from tbody (header is in thead, not tbody)
+  while (tbody.firstChild) {
+    tbody.removeChild(tbody.firstChild);
+  }
 
   // If no data, show empty message
   if (rows.length === 0) {
