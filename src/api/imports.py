@@ -309,9 +309,15 @@ async def upload_file(
 
 
 @router.get("/price-status")
-def get_price_status(db: Database = Depends(get_db)):
-    """Get status of price cache - freshness, last update times."""
+def get_price_status(timezone: str = "UTC", db: Database = Depends(get_db)):
+    """Get status of price cache - freshness, last update times.
+
+    Args:
+        timezone: User's IANA timezone (e.g., "America/New_York") for future
+                  market-hours-aware staleness checks. Currently uses 24h UTC threshold.
+    """
     status = db.get_price_cache_status()
+    status["user_timezone"] = timezone
     return status
 
 
@@ -743,7 +749,7 @@ async def import_positions(
 
         for pos in request.positions:
             try:
-                db.add_position(
+                db.upsert_position(
                     account_id=request.account_id,
                     ticker=pos.ticker,
                     shares=pos.shares,

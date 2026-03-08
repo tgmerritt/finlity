@@ -119,9 +119,12 @@ class CommentaryService:
                 error=f"Unknown element: {element_id}"
             )
 
-        # Get current data if not provided
-        if current_data is None:
-            current_data = self._collect_element_data(element_id)
+        # Always collect server-side data (has correct keys for prompt templates),
+        # then merge any frontend-provided data on top
+        server_data = self._collect_element_data(element_id)
+        if current_data is not None:
+            server_data.update(current_data)
+        current_data = server_data
 
         # Compute hash for change detection
         current_hash = self._compute_data_hash(element_id, current_data)
@@ -503,9 +506,12 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             yield f"data: {json.dumps({'error': f'Unknown element: {element_id}'})}\n\n"
             return
 
-        # Get current data if not provided
-        if current_data is None:
-            current_data = self._collect_element_data(element_id)
+        # Always collect server-side data (has correct keys for prompt templates),
+        # then merge any frontend-provided data on top
+        server_data = self._collect_element_data(element_id)
+        if current_data is not None:
+            server_data.update(current_data)
+        current_data = server_data
 
         # Compute hash for change detection
         current_hash = self._compute_data_hash(element_id, current_data)

@@ -698,5 +698,35 @@ export function initDashboard(): void {
   updatePriceStatus();
 }
 
+/**
+ * Auto-refresh prices if any are stale (older than 24 hours).
+ * Uses the user's browser timezone for accurate staleness detection.
+ * Only refreshes stale tickers to conserve API rate limits.
+ */
+export async function autoRefreshIfStale(): Promise<void> {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const status = await apiCall<PriceStatusResponse>(
+      `/api/imports/price-status?timezone=${encodeURIComponent(tz)}`
+    );
+
+    if (!status.all_fresh && status.stale_tickers > 0) {
+      console.log(
+        `Auto-refreshing ${status.stale_tickers} stale ticker(s) (timezone: ${tz})`
+      );
+      showLoading('Updating stale prices...');
+      const result = await apiCall<PriceRefreshResponse>(
+        '/api/imports/refresh-prices',
+        { method: 'POST' }
+      );
+      if (result.updated > 0) {
+        showToast(`Auto-updated ${result.updated} stale price(s)`, 'info');
+      }
+    }
+  } catch (error) {
+    console.warn('Auto-refresh price check failed:', error);
+  }
+}
+
 // Alias for compatibility
 export const loadData = refreshData;

@@ -38,6 +38,7 @@ import {
   checkForDuplicates,
   refreshPrices,
   showDuplicateDetails,
+  autoRefreshIfStale,
 } from '@/pages/dashboard';
 import {
   initHoldings,
@@ -370,6 +371,7 @@ async function init(): Promise<void> {
   showLoading('Loading portfolio...');
   try {
     await loadProfiles();
+    await autoRefreshIfStale();
     await updatePriceStatus();
     await checkDemoModeStatus();
     await loadDeploymentInfo();
