@@ -1199,6 +1199,9 @@ export async function savePersonalSettings(event: Event): Promise<void> {
     });
     showToast('Personal settings saved', 'success');
     await loadRetirementMetrics();
+
+    // Notify other pages to update age fields from the new settings
+    document.dispatchEvent(new CustomEvent('settings:personalUpdated'));
   } catch (error) {
     showToast('Failed to save settings', 'error');
   }

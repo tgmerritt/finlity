@@ -216,6 +216,59 @@ export {
 
 
 /**
+ * Populate age-related form fields across all pages from saved personal settings.
+ * Falls back to HTML defaults (35/65) if no settings are saved.
+ */
+async function populateAgeFromSettings(): Promise<void> {
+  try {
+    const data = await apiCall<{ personal?: {
+      dob?: string;
+      retirement_age?: number;
+    } }>('/api/settings/config/personal');
+
+    if (!data?.personal) return;
+
+    const p = data.personal;
+
+    // Calculate current age from DOB
+    let currentAge: number | null = null;
+    if (p.dob) {
+      const dob = new Date(p.dob + 'T00:00:00');
+      const today = new Date();
+      currentAge = today.getFullYear() - dob.getFullYear();
+      const monthDiff = today.getMonth() - dob.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+        currentAge--;
+      }
+    }
+
+    const retirementAge = p.retirement_age || null;
+
+    // All current-age input IDs across pages
+    const ageFields = ['current-age', 'tax-current-age', 'transition-current-age'];
+    // All retirement-age input IDs across pages
+    const retireFields = ['retirement-age', 'tax-retirement-age', 'transition-retirement-age'];
+
+    if (currentAge !== null && currentAge > 0) {
+      for (const id of ageFields) {
+        const el = document.getElementById(id) as HTMLInputElement | null;
+        if (el) el.value = String(currentAge);
+      }
+    }
+
+    if (retirementAge !== null) {
+      for (const id of retireFields) {
+        const el = document.getElementById(id) as HTMLInputElement | null;
+        if (el) el.value = String(retirementAge);
+      }
+    }
+  } catch (error) {
+    // Non-critical — fields keep their HTML defaults
+    console.warn('Could not load personal settings for age fields:', error);
+  }
+}
+
+/**
  * Update price status display.
  */
 async function updatePriceStatus(): Promise<void> {
@@ -367,10 +420,16 @@ async function init(): Promise<void> {
     refreshData().catch(console.error);
   });
 
+  // Re-populate age fields when personal settings are saved
+  document.addEventListener('settings:personalUpdated', () => {
+    populateAgeFromSettings().catch(console.error);
+  });
+
   // Load initial data
   showLoading('Loading portfolio...');
   try {
     await loadProfiles();
+    await populateAgeFromSettings();
     await autoRefreshIfStale();
     await updatePriceStatus();
     await checkDemoModeStatus();
