@@ -17,6 +17,10 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- sql.js for client-side SQLite database -->
     <script src="https://sql.js.org/dist/sql-wasm.js"></script>
+    <!-- Google Fonts: Inter for UI, JetBrains Mono for financial data -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom styles -->
     <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -421,7 +425,7 @@
 
                 <!-- Summary Cards -->
                 <section class="stats-row">
-                    <div class="stat-card">
+                    <div class="stat-card stat-card--hero">
                         <div class="stat-icon blue">
                             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="1" x2="12" y2="23"></line>
@@ -429,7 +433,7 @@
                             </svg>
                         </div>
                         <div class="stat-content">
-                            <span class="stat-label">Total Value</span>
+                            <span class="stat-label">Total Portfolio Value</span>
                             <span class="stat-value" id="total-value">$0</span>
                         </div>
                     </div>
