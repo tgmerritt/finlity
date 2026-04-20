@@ -65,10 +65,8 @@ RUN useradd --create-home --shell /bin/sh appuser
 
 COPY src/ ./src/
 COPY scripts/ ./scripts/
-COPY tests/ ./tests/
 COPY config.yaml .
 COPY funds.yaml .
-COPY pytest.ini .
 
 COPY --from=frontend-builder /app/src/web/dist/ ./src/web/dist/
 
