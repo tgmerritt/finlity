@@ -592,13 +592,21 @@ export async function saveLocalDatabase(): Promise<void> {
 export async function downloadLocalDatabase(): Promise<void> {
   showLoading('Preparing download...');
   try {
-    // Use the existing export functionality
-    const response = await fetch('/api/portfolio/export/all-csv');
-    if (!response.ok) {
-      throw new Error('Failed to export data');
+    // Backend exposes separate CSV endpoints per data_type; concatenate them
+    // into a single multi-section CSV file for backup purposes.
+    const dataTypes = ['accounts', 'positions', 'snapshots'];
+    const sections: string[] = [];
+
+    for (const dataType of dataTypes) {
+      const response = await fetch(`/api/portfolio/export/${dataType}`);
+      if (!response.ok) {
+        throw new Error(`Failed to export ${dataType} (HTTP ${response.status})`);
+      }
+      const text = await response.text();
+      sections.push(`# ${dataType}\n${text.trim()}`);
     }
 
-    const blob = await response.blob();
+    const blob = new Blob([sections.join('\n\n')], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

@@ -5,7 +5,7 @@
 
 // Core state and session
 import { initSession } from '@/state/session';
-import { initTheme, toggleTheme } from '@/state/theme';
+import { initTheme, toggleTheme, setTheme } from '@/state/theme';
 
 // UI components
 import { initTabs, initMobileNav, showTab, toggleMobileNav } from '@/ui/tabs';
@@ -53,11 +53,16 @@ import {
   hideEditPositionModal,
   showNewAccountForm,
   createNewAccount,
+  addManualPosition,
+  filterHoldings,
+  togglePositionTypeFields,
+  updatePosition,
 } from '@/pages/holdings';
 import {
   initAnalysis,
   analyzeFund,
   sendStreamingChatMessage,
+  sendGlobalChatMessage,
   showGlobalChat,
   hideGlobalChat,
   getAdvisorAnalysis,
@@ -91,6 +96,7 @@ import {
   showAddExpenseModal,
   showAddDeductionModal,
   runTransitionProjection,
+  updateBudgetCalc,
 } from '@/pages/budget';
 import {
   initSettings,
@@ -108,6 +114,13 @@ import {
   setDefaultEntity,
   deleteEntity,
   runAutoDetectEntities,
+  onAIModelChange,
+  onAIProviderChange,
+  saveAssetClassTargets,
+  saveMarketAssumptions,
+  saveMonteCarloSettings,
+  savePersonalSettings,
+  saveView,
 } from '@/pages/settings';
 
 // Features
@@ -122,6 +135,7 @@ import {
   hideProfileModal,
   saveProfile,
   importProfileFromFile,
+  handleProfileImport,
 } from '@/features/profiles';
 import {
   initEntitySelector,
@@ -147,6 +161,9 @@ import {
   switchInstallTab,
   checkPluginUpdates,
   discoverPlugins,
+  handlePluginFileSelect,
+  installFromGit,
+  installFromUpload,
 } from '@/features/plugins';
 import {
   initImportExport,
@@ -161,6 +178,7 @@ import {
   handleDragOver,
   handleDragLeave,
   handleFileDrop,
+  toggleAllImportPositions,
 } from '@/features/import-export';
 import {
   initOnboarding,
@@ -482,6 +500,7 @@ window.finlity = {
   showTab,
   refreshData,
   toggleTheme,
+  setTheme,
   toggleMobileNav,
 
   // UI Modals
@@ -511,10 +530,15 @@ window.finlity = {
   hideEditPositionModal,
   showNewAccountForm,
   createNewAccount,
+  addManualPosition,
+  filterHoldings,
+  togglePositionTypeFields,
+  updatePosition,
 
   // Analysis
   analyzeFund,
   sendStreamingChatMessage,
+  sendGlobalChatMessage,
   showGlobalChat,
   hideGlobalChat,
   getAdvisorAnalysis,
@@ -547,6 +571,7 @@ window.finlity = {
   showAddExpenseModal,
   showAddDeductionModal,
   runTransitionProjection,
+  updateBudgetCalc,
 
   // Settings
   loadAIProviders,
@@ -563,6 +588,13 @@ window.finlity = {
   setDefaultEntity,
   deleteEntity,
   runAutoDetectEntities,
+  onAIModelChange,
+  onAIProviderChange,
+  saveAssetClassTargets,
+  saveMarketAssumptions,
+  saveMonteCarloSettings,
+  savePersonalSettings,
+  saveView,
 
   // Profiles
   loadProfiles,
@@ -575,6 +607,7 @@ window.finlity = {
   createProfile: saveProfile,
   saveProfile,
   importProfileFromFile,
+  handleProfileImport,
 
   // Entities (multi-person household tracking)
   loadEntities,
@@ -596,6 +629,9 @@ window.finlity = {
   switchInstallTab,
   checkPluginUpdates,
   discoverPlugins,
+  handlePluginFileSelect,
+  installFromGit,
+  installFromUpload,
 
   // Import/Export
   exportToCSV,
@@ -609,6 +645,7 @@ window.finlity = {
   handleDragOver,
   handleDragLeave,
   handleFileDrop,
+  toggleAllImportPositions,
 
   // Onboarding
   startDemoMode,
