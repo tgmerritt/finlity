@@ -137,11 +137,14 @@ jobs:
         with:
           context: .
           push: true
+          platforms: linux/amd64
           tags: registry.heroku.com/${{ secrets.HEROKU_APP_NAME }}/web
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          provenance: true
-          sbom: true
+          # Heroku Container Registry rejects OCI image indexes / attestation
+          # manifests ("unsupported"). Emit a plain Docker v2 manifest.
+          provenance: false
+          sbom: false
         continue-on-error: false
 
       - name: Install Heroku CLI
