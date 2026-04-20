@@ -198,27 +198,16 @@ export function updateHoldings(positions: DashboardPosition[]): void {
     }
     row.appendChild(gainLossCell);
 
-    // Actions cell
+    // Actions cell — inline icon buttons (edit / delete)
     const actionsCell = document.createElement('td');
-    const dropdown = document.createElement('div');
-    dropdown.className = 'actions-dropdown';
-
-    const actionsBtn = document.createElement('button');
-    actionsBtn.className = 'actions-btn';
-    actionsBtn.textContent = 'Actions ';
-    const arrow = document.createElement('span');
-    arrow.textContent = '▼';
-    actionsBtn.appendChild(arrow);
-    actionsBtn.addEventListener('click', (e) =>
-      toggleActionsMenu(e.currentTarget as HTMLButtonElement)
-    );
-    dropdown.appendChild(actionsBtn);
-
-    const menu = document.createElement('div');
-    menu.className = 'actions-menu';
+    actionsCell.className = 'actions-cell';
 
     const editBtn = document.createElement('button');
-    editBtn.textContent = '✏️ Edit';
+    editBtn.type = 'button';
+    editBtn.className = 'icon-btn icon-btn-edit';
+    editBtn.title = 'Edit position';
+    editBtn.setAttribute('aria-label', 'Edit position');
+    editBtn.appendChild(createEditIcon());
     editBtn.addEventListener('click', () => {
       showEditPositionModal(
         pos.id,
@@ -232,16 +221,17 @@ export function updateHoldings(positions: DashboardPosition[]): void {
         pos.maturity_date || ''
       );
     });
-    menu.appendChild(editBtn);
+    actionsCell.appendChild(editBtn);
 
     const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'danger';
-    deleteBtn.textContent = '🗑️ Delete';
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'icon-btn icon-btn-delete';
+    deleteBtn.title = 'Delete position';
+    deleteBtn.setAttribute('aria-label', 'Delete position');
+    deleteBtn.appendChild(createTrashIcon());
     deleteBtn.addEventListener('click', () => deletePosition(pos.id));
-    menu.appendChild(deleteBtn);
+    actionsCell.appendChild(deleteBtn);
 
-    dropdown.appendChild(menu);
-    actionsCell.appendChild(dropdown);
     row.appendChild(actionsCell);
 
     tbody.appendChild(row);
@@ -365,23 +355,42 @@ export function filterHoldings(): void {
   updateHoldings(positions);
 }
 
-/**
- * Toggle actions dropdown menu.
- */
-function toggleActionsMenu(btn: HTMLButtonElement): void {
-  const dropdown = btn.closest('.actions-dropdown');
-  if (!dropdown) return;
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
-  dropdown.classList.toggle('open');
+function buildSvg(paths: Array<{ tag: string; attrs: Record<string, string> }>): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '16');
+  svg.setAttribute('height', '16');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const p of paths) {
+    const el = document.createElementNS(SVG_NS, p.tag);
+    for (const [k, v] of Object.entries(p.attrs)) el.setAttribute(k, v);
+    svg.appendChild(el);
+  }
+  return svg;
+}
 
-  // Close when clicking outside
-  const closeMenu = (e: Event) => {
-    if (!dropdown.contains(e.target as Node)) {
-      dropdown.classList.remove('open');
-      document.removeEventListener('click', closeMenu);
-    }
-  };
-  setTimeout(() => document.addEventListener('click', closeMenu), 0);
+function createEditIcon(): SVGSVGElement {
+  return buildSvg([
+    { tag: 'path', attrs: { d: 'M12 20h9' } },
+    { tag: 'path', attrs: { d: 'M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z' } },
+  ]);
+}
+
+function createTrashIcon(): SVGSVGElement {
+  return buildSvg([
+    { tag: 'polyline', attrs: { points: '3 6 5 6 21 6' } },
+    { tag: 'path', attrs: { d: 'M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6' } },
+    { tag: 'path', attrs: { d: 'M10 11v6' } },
+    { tag: 'path', attrs: { d: 'M14 11v6' } },
+    { tag: 'path', attrs: { d: 'M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2' } },
+  ]);
 }
 
 /**

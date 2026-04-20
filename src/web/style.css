@@ -7671,17 +7671,55 @@ th.sortable.sort-desc .sort-icon::after {
     background: var(--color-bg-spotlight);
 }
 
-/* Holdings table action buttons - better integration */
+/* Holdings table action buttons - inline icon buttons */
 #holdings-table td:last-child {
     white-space: nowrap;
 }
 
-#holdings-table .btn-sm {
-    opacity: 0.6;
-    transition: opacity var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast);
+.actions-cell {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    justify-content: flex-end;
 }
 
-#holdings-table tr:hover .btn-sm {
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--border-radius-sm, 6px);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity var(--transition-fast), color var(--transition-fast),
+        background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.icon-btn:hover {
+    opacity: 1;
+    background: var(--color-bg-container);
+    border-color: var(--color-border);
+}
+
+.icon-btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+}
+
+.icon-btn-edit:hover {
+    color: var(--color-primary);
+}
+
+.icon-btn-delete:hover {
+    color: var(--color-danger, #d32f2f);
+}
+
+#holdings-table tr:hover .icon-btn {
     opacity: 1;
 }
 
