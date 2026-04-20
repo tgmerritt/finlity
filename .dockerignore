@@ -1,6 +1,7 @@
 # Git
 .git
 .gitignore
+.github/
 
 # Python
 __pycache__
@@ -30,17 +31,24 @@ data/
 .DS_Store
 Thumbs.db
 
-# Secrets
+# Secrets / credentials / real portfolio files
 .env
 .env.*
 *.pem
 *.key
+Investments*.xlsm
+Investments*.xlsx
 
 # Documentation
 *.md
 !README.md
 
-# Tests
+# Frontend artifacts (built inside the image)
+src/web/node_modules/
+src/web/dist/
+src/web/.turbo/
+
+# Tests / coverage
 .pytest_cache
 .coverage
 htmlcov
@@ -49,10 +57,20 @@ htmlcov
 *.log
 logs/
 
-# Cache
+# Caches
 .cache
 .mypy_cache
 .ruff_cache
 
 # Claude Code
 .claude/
+DESIGN_ITERATION_SESSION.md
+REFACTOR_PROGRESS.md
+
+# Dev-only tooling (not required in runtime image)
+.codesight/
+.harness/
+tests/
+*.test.ts
+src/web/test/
+src/web/coverage/

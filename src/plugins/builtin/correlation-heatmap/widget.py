@@ -5,10 +5,13 @@ Displays an interactive correlation matrix showing relationships
 between portfolio holdings based on actual price history correlations.
 """
 
+import logging
 from typing import Any, Optional
 
 from src.plugins.base import WidgetPlugin, WidgetContent, PluginManifest
 from src.data import PriceService
+
+logger = logging.getLogger(__name__)
 
 
 class CorrelationHeatmapWidget(WidgetPlugin):
@@ -190,7 +193,7 @@ class CorrelationHeatmapWidget(WidgetPlugin):
                 if history and len(history.returns) > 20:
                     returns_data[ticker] = history.returns[1:]
             except Exception:
-                pass
+                logger.debug("Failed to fetch price history for %s", ticker, exc_info=True)
 
         if len(returns_data) < 2:
             return None

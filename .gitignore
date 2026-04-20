@@ -128,3 +128,9 @@ screenshots/
 !src/web/images/*.jpg
 !docs/images/*.png
 !docs/images/*.jpg
+
+DESIGN_ITERATION_SESSION.md
+REFACTOR_PROGRESS.md
+
+# Local dev harness (parallel design-iteration worktrees, artifacts)
+.harness/

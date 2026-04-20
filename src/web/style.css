@@ -1,5 +1,45 @@
 /* GitHub Primer Dark Palette - Refined Financial Dashboard Theme */
 
+/* -----------------------------------------------------------------------------
+ * Design tokens (shared scale). New code should reference these instead of
+ * hard-coded values; existing rules will migrate incrementally.
+ * -------------------------------------------------------------------------- */
+:root {
+    /* Spacing scale (4px base) */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+
+    /* Font scale */
+    --font-xs: 11px;
+    --font-sm: 12px;
+    --font-md: 14px;
+    --font-lg: 16px;
+    --font-xl: 20px;
+    --font-2xl: 28px;
+
+    /* Radii */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
+
+    /* Motion */
+    --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+    --duration-fast: 120ms;
+    --duration-base: 200ms;
+}
+
+/* Utility helpers (opt-in — additive, no legacy rule removed) */
+.flex-center { display: flex; align-items: center; justify-content: center; }
+.gap-sm { gap: var(--space-2); }
+.gap-md { gap: var(--space-4); }
+.stack-sm { display: flex; flex-direction: column; gap: var(--space-2); }
+.text-muted { color: var(--color-text-muted, #8b949e); }
+
 /* CSS Variables for theming */
 :root {
     /* Dark Theme (default) - GitHub Primer inspired */

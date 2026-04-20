@@ -67,6 +67,15 @@ ruff check src/                    # Linter - must pass with no errors
 python -m pytest tests/ -x -q      # Tests - must pass
 ```
 
+### Regenerating requirements.txt
+`requirements.in` is the curated source of truth. Regenerate the pinned
+`requirements.txt` lockfile with:
+```bash
+pip install pip-tools
+pip-compile --resolver=backtracking --generate-hashes \
+    --output-file requirements.txt requirements.in
+```
+
 ### Heroku Deployment
 - App URL: `investment-dashboard-app-e0832c614c7f.herokuapp.com`
 - Build for AMD64: `docker build --platform linux/amd64 -t registry.heroku.com/investment-dashboard-app/web .`

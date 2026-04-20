@@ -18,9 +18,12 @@ import threading
 import uuid
 import traceback
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Optional
 from enum import Enum
+
+# Max age before a completed/failed task is evicted, independent of count cap.
+DEFAULT_MAX_TASK_AGE = timedelta(hours=1)
 
 
 class TaskStatus(str, Enum):
@@ -52,10 +55,15 @@ class BackgroundTaskManager:
     with multiple dynos, you'd want Redis + a worker dyno instead.
     """
 
-    def __init__(self, max_completed_tasks: int = 100):
+    def __init__(
+        self,
+        max_completed_tasks: int = 100,
+        max_task_age: timedelta = DEFAULT_MAX_TASK_AGE,
+    ):
         self._tasks: Dict[str, Task] = {}
         self._lock = threading.RLock()
         self._max_completed = max_completed_tasks
+        self._max_task_age = max_task_age
 
     def submit(
         self,
@@ -204,16 +212,29 @@ class BackgroundTaskManager:
 
         return result
 
-    def _cleanup_old_tasks(self):
-        """Remove old completed/failed tasks to prevent memory buildup."""
+    def _cleanup_old_tasks(self, now: Optional[datetime] = None):
+        """Remove old completed/failed tasks by count cap AND age."""
+        now = now or datetime.utcnow()
+        cutoff = now - self._max_task_age
+
+        # Age-based eviction — applies to any terminal task.
+        aged_out = [
+            tid
+            for tid, t in self._tasks.items()
+            if t.status in (TaskStatus.COMPLETED, TaskStatus.FAILED)
+            and t.completed_at
+            and t.completed_at < cutoff
+        ]
+        for tid in aged_out:
+            del self._tasks[tid]
+
+        # Count-cap eviction (keep most-recent N).
         completed = [
             (t.completed_at, tid)
             for tid, t in self._tasks.items()
             if t.status in (TaskStatus.COMPLETED, TaskStatus.FAILED) and t.completed_at
         ]
-
         if len(completed) > self._max_completed:
-            # Sort by completion time, remove oldest
             completed.sort()
             to_remove = completed[:-self._max_completed]
             for _, tid in to_remove:

@@ -31,10 +31,7 @@ def get_session_id(request: Request) -> str | None:
     return getattr(request.state, "session_id", None)
 
 
-def get_db() -> Database:
-    """Dependency to get database instance (profile-aware)."""
-    from src.database import get_database
-    return get_database()
+from src.api.dependencies import get_db  # noqa: E402  (public router dep)
 
 
 class AccountBalancesRequest(BaseModel):

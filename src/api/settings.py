@@ -12,14 +12,9 @@ import yaml
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from src.database import get_database, Database
+from src.database import get_database
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
-
-
-def get_db() -> Database:
-    """Dependency to get database instance."""
-    return get_database()
 
 CONFIG_PATH = Path("config.yaml")
 

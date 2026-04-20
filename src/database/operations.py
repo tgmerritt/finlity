@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, Session, selectinload
 
 from .models import (
     Base,
@@ -275,6 +275,19 @@ class Database:
         """Get all accounts."""
         with self.get_session() as session:
             return session.query(Account).all()
+
+    def get_all_accounts_with_positions(self) -> list[Account]:
+        """Get all accounts with positions eagerly loaded to avoid N+1."""
+        with self.get_session() as session:
+            accounts = (
+                session.query(Account)
+                .options(selectinload(Account.positions))
+                .all()
+            )
+            # Expunge so callers can access positions outside the session.
+            for account in accounts:
+                session.expunge(account)
+            return accounts
 
     def get_account_by_id(self, account_id: str) -> Optional[Account]:
         """Get account by ID."""

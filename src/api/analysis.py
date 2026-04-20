@@ -31,10 +31,7 @@ def get_session_id(request: Request) -> str | None:
     return getattr(request.state, "session_id", None)
 
 
-def get_db() -> Database:
-    """Dependency to get database instance (profile-aware)."""
-    from src.database import get_database
-    return get_database()
+from src.api.dependencies import get_db  # noqa: E402  (public router dep)
 
 
 def check_demo_mode_write():
@@ -51,9 +48,9 @@ def db_to_portfolio(db: Database) -> Portfolio:
     """Convert database data to Portfolio model for analysis."""
     accounts = []
 
-    for db_account in db.get_all_accounts():
+    for db_account in db.get_all_accounts_with_positions():
         positions = []
-        for db_pos in db.get_positions_by_account(db_account.id):
+        for db_pos in db_account.positions:
             # Skip positions without prices
             if not db_pos.current_price:
                 continue

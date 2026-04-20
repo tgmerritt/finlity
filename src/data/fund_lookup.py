@@ -1,10 +1,13 @@
 """Fund composition lookup service."""
 
+import logging
 from pathlib import Path
 from typing import Optional
 
 import yaml
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class FundComposition(BaseModel):
@@ -82,7 +85,7 @@ class FundLookupService:
                     **fund_data,
                 )
         except Exception:
-            pass
+            logger.warning("Failed to load funds from %s", self.funds_path, exc_info=True)
 
     def _create_default_funds_file(self) -> None:
         """Create default funds.yaml with common fund compositions."""

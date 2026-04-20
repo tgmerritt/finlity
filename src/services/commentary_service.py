@@ -809,7 +809,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
                     import json
                     config = json.loads(config_setting.value) if config_setting.value else {}
             except Exception:
-                pass
+                logger.warning("Failed to load config setting for commentary context", exc_info=True)
 
             # Monte Carlo settings
             monte_carlo = config.get("monte_carlo", {})

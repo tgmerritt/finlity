@@ -176,7 +176,7 @@ class SchwabCSVImporter(ImporterPlugin):
                 return f"Schwab {parts[0].strip()}" if parts else None
 
         except Exception:
-            pass
+            logger.warning("Failed to extract account name from %s", file_path, exc_info=True)
         return None
 
     def _map_columns(self, df: pd.DataFrame) -> dict[str, str]:

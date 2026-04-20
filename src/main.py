@@ -5,6 +5,7 @@ Provides a REST API and serves a web dashboard for managing and analyzing
 your investment portfolio.
 """
 
+import asyncio
 import logging
 import os
 import time
@@ -17,10 +18,10 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from src.middleware import RateLimitMiddleware
+from src.middleware import RateLimitMiddleware, SecurityHeadersMiddleware
 from src.api import (
     portfolio_router,
     imports_router,
@@ -131,64 +132,107 @@ def get_db_path():
     return "data/portfolio.db"
 
 
+async def _background_bootstrap(demo_mode: bool) -> None:
+    """Run heavy startup work off the hot path.
+
+    Scanning imports, refreshing stale prices, and snapshotting portfolio
+    value are expensive and network-bound. Running them inline in the
+    FastAPI lifespan serialises them before the dyno becomes ready, which
+    risks H20 timeouts on Heroku. Instead we kick them off after yield.
+    """
+    try:
+        db = get_database()
+        scanner = FolderScanner(db)
+
+        if not demo_mode:
+            pending = scanner.scan_for_new_files()
+            if pending:
+                logger.info("Importing %d new file(s)...", len(pending))
+                results = await asyncio.to_thread(
+                    scanner.process_all_pending, True
+                )
+                success_count = sum(1 for r in results if r.success)
+                total_positions = sum(
+                    r.positions_imported for r in results if r.success
+                )
+                logger.info(
+                    "  Imported %d positions from %d file(s)",
+                    total_positions,
+                    success_count,
+                )
+
+        stale_tickers = db.get_stale_tickers()
+        if stale_tickers:
+            logger.info("Refreshing %d stale price(s)...", len(stale_tickers))
+            await asyncio.to_thread(
+                scanner._fetch_and_update_prices, stale_tickers
+            )
+
+        await asyncio.to_thread(db.take_snapshot)
+    except Exception:  # noqa: BLE001 - background bootstrap must not crash app
+        logger.exception("Background bootstrap failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown events."""
+    """Startup and shutdown events.
+
+    Keeps the critical startup path minimal (under 1s on warm caches) so
+    the dyno is ready to serve requests before Heroku's 30s H20 timeout.
+    Non-critical work (import scanning, price refresh, snapshot) is
+    dispatched as a background task.
+    """
     from src.database import (
         check_database,
         create_seed_callback,
     )
 
-    # Store demo mode status in app state
     app.state.demo_mode = is_demo_mode()
     app.state.db_path = get_db_path()
 
     if app.state.demo_mode:
         print("*** DEMO MODE ENABLED ***")
 
-    # Check database status before loading
     db_path = app.state.db_path
     db_status = check_database(db_path)
 
-    # Log database status (no PII - just counts and status)
     print(f"Database status: {db_status.status.value}")
     if db_status.is_usable:
-        print(f"  Loaded: {db_status.account_count} accounts, {db_status.position_count} positions")
+        print(
+            f"  Loaded: {db_status.account_count} accounts, "
+            f"{db_status.position_count} positions"
+        )
 
-    # Get database through profile manager (handles lifecycle automatically)
-    # The profile manager now uses DatabaseManager internally
     db = get_database()
 
-    # If this is a new/empty database, seed with data from CSV/YAML
     if db_status.needs_initialization:
         print("First-time setup: importing seed data...")
         seed_callback = create_seed_callback()
         seed_callback(db)
 
-    # Scan for new imports on startup (incremental imports, not seed data)
-    # Skip in demo mode to prevent real data from contaminating the demo database
-    scanner = FolderScanner(db)
-    if not app.state.demo_mode:
-        pending = scanner.scan_for_new_files()
-        if pending:
-            print(f"Importing {len(pending)} new file(s)...")
-            results = scanner.process_all_pending(fetch_prices=True)
-            success_count = sum(1 for r in results if r.success)
-            total_positions = sum(r.positions_imported for r in results if r.success)
-            print(f"  Imported {total_positions} positions from {success_count} file(s)")
+    # Shared async HTTP client for any async code paths (e.g. streaming
+    # LLM providers). Sync endpoints continue to use `requests` in the
+    # threadpool FastAPI assigns to them.
+    import httpx
+    app.state.http = httpx.AsyncClient(
+        timeout=httpx.Timeout(10.0, connect=5.0),
+        follow_redirects=True,
+    )
 
-    # Refresh stale prices (>24 hours old) on startup
-    stale_tickers = db.get_stale_tickers()
-    if stale_tickers:
-        print(f"Refreshing {len(stale_tickers)} stale price(s)...")
-        scanner._fetch_and_update_prices(stale_tickers)
-
-    # Take a snapshot (don't log actual portfolio value - that's sensitive)
-    db.take_snapshot()
+    bootstrap_task = asyncio.create_task(
+        _background_bootstrap(app.state.demo_mode)
+    )
+    app.state.bootstrap_task = bootstrap_task
 
     yield
 
-    # Cleanup (nothing needed currently)
+    bootstrap_task.cancel()
+    try:
+        await bootstrap_task
+    except (asyncio.CancelledError, Exception):  # noqa: BLE001
+        pass
+
+    await app.state.http.aclose()
 
 
 app = FastAPI(
@@ -224,9 +268,36 @@ class NoCacheMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(NoCacheMiddleware)
 
+# Attach OWASP-recommended security headers (HSTS only on HTTPS).
+app.add_middleware(SecurityHeadersMiddleware)
+
 # Add rate limiting middleware for AI endpoints
 # Only active when RATE_LIMIT_ENABLED=true and valid RATE_LIMIT_SECRET_KEY is set
 app.add_middleware(RateLimitMiddleware)
+
+
+# Global exception handlers: keep stack traces in logs, out of client responses.
+@app.exception_handler(ValueError)
+async def _value_error_handler(_request: Request, exc: ValueError):
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(PermissionError)
+async def _permission_error_handler(_request: Request, exc: PermissionError):
+    return JSONResponse(status_code=403, content={"detail": "Forbidden"})
+
+
+@app.exception_handler(FileNotFoundError)
+async def _not_found_handler(_request: Request, exc: FileNotFoundError):
+    return JSONResponse(status_code=404, content={"detail": "Not found"})
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception(
+        "Unhandled exception on %s %s", request.method, request.url.path
+    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 # Add session middleware for multi-user deployments
 # Only active when running on Heroku (DYNO), MULTI_USER_MODE=true, or PROTECT_DEMO_DATA=true
@@ -624,12 +695,27 @@ Examples:
     if not args.no_browser:
         webbrowser.open(url)
 
-    uvicorn.run(
-        "src.main:app",
-        host=args.host,
-        port=args.port,
-        reload=args.reload,
-    )
+    uvicorn_kwargs: dict = {
+        "host": args.host,
+        "port": args.port,
+        "reload": args.reload,
+    }
+
+    # Production-tuned config when running on a Heroku dyno. These options are
+    # incompatible with --reload so they only apply to non-reload runs.
+    if os.environ.get("DYNO") and not args.reload:
+        uvicorn_kwargs.update({
+            "loop": "uvloop",
+            "http": "httptools",
+            "timeout_keep_alive": 65,
+            "timeout_graceful_shutdown": 30,
+            "server_header": False,
+            "date_header": False,
+            "proxy_headers": True,
+            "forwarded_allow_ips": "*",
+        })
+
+    uvicorn.run("src.main:app", **uvicorn_kwargs)
 
 
 if __name__ == "__main__":

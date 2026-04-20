@@ -22,10 +22,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/commentary", tags=["commentary"])
 
 
-def get_db() -> Database:
-    """Dependency to get database instance (profile-aware)."""
-    from src.database import get_database
-    return get_database()
+from src.api.dependencies import get_db  # noqa: E402  (public router dep)
 
 
 def get_commentary_service(db: Database = Depends(get_db)) -> CommentaryService:

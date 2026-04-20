@@ -1,6 +1,7 @@
 """Price data service with multiple API sources and round-robin fallbacks."""
 
 import json
+import logging
 import time
 import random
 import requests
@@ -13,6 +14,8 @@ from collections import deque
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class PriceData(BaseModel):
@@ -461,7 +464,7 @@ class PriceService:
                             if key and value and key not in os.environ:
                                 os.environ[key] = value
             except Exception:
-                pass
+                logger.warning("Failed to load .env file", exc_info=True)
 
     def _get_api_key(self, config_name: str, env_name: str) -> Optional[str]:
         """Get API key from config or environment variable."""
@@ -532,7 +535,7 @@ class PriceService:
             with open(cache_path, "w") as f:
                 json.dump(price_data.model_dump(mode="json"), f)
         except Exception:
-            pass
+            logger.warning("Failed to cache price data to %s", cache_path, exc_info=True)
 
     def _rotate_sources(self):
         """Rotate sources for round-robin load balancing."""
@@ -552,7 +555,7 @@ class PriceService:
                     data = json.load(f)
                 return PriceData(**data)
             except Exception:
-                pass
+                logger.warning("Corrupt price cache at %s; refetching", cache_path, exc_info=True)
 
         # Check if this ticker should skip price lookup
         should_skip = (
@@ -623,7 +626,7 @@ class PriceService:
                 print(f"Using expired cache for {original_ticker}")
                 return PriceData(**data)
             except Exception:
-                pass
+                logger.warning("Failed to read expired cache for %s", original_ticker, exc_info=True)
 
         # Cache successful result
         if price_data:
@@ -651,7 +654,7 @@ class PriceService:
                     data = json.load(f)
                 return PriceHistory(**data)
             except Exception:
-                pass
+                logger.warning("Corrupt history cache at %s; refetching", cache_path, exc_info=True)
 
         # Skip non-tradeable tickers
         if (

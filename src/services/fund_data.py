@@ -139,7 +139,7 @@ class FundDataService:
                         for sector, weight in sector_weights.items()
                     }
             except Exception:
-                pass
+                logger.debug("sector_weightings unavailable for %s", ticker, exc_info=True)
 
             return FundComposition(
                 ticker=ticker.upper(),

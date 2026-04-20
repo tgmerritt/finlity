@@ -14,10 +14,7 @@ from src.models.account_types import get_all_predefined_types
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
 
-def get_db() -> Database:
-    """Dependency to get database instance (profile-aware)."""
-    from src.database import get_database
-    return get_database()
+from src.api.dependencies import get_db  # noqa: E402  (public router dep)
 
 
 def check_demo_mode_write():

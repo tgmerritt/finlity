@@ -3,15 +3,62 @@
 import base64
 import logging
 import os
+import secrets as _pysecrets
 from pathlib import Path
 from typing import Optional
 
 import yaml
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 from src.database import Database
 
 logger = logging.getLogger(__name__)
+
+# Legacy hardcoded salt used by installations predating the per-install salt
+# file. Retained solely to decrypt existing ciphertext during migration.
+_LEGACY_SALT = b"investment_dashboard_salt"
+_SALT_BYTES = 16
+_PBKDF2_ITERATIONS = 200_000  # doubled from 100k legacy value
+
+
+def _salt_file() -> Path:
+    """Per-install salt file. Lives next to the encryption key file."""
+    return Path.home() / ".investment_dashboard_salt"
+
+
+def _load_or_create_salt() -> bytes:
+    """Load the per-install salt, generating it (mode 0o600) on first use."""
+    path = _salt_file()
+    if path.exists():
+        try:
+            data = path.read_bytes().strip()
+            if len(data) >= _SALT_BYTES:
+                return data
+            logger.warning("Salt file %s is truncated; regenerating.", path)
+        except OSError as exc:
+            logger.warning("Could not read salt file %s: %s", path, exc)
+
+    salt = _pysecrets.token_bytes(_SALT_BYTES)
+    try:
+        path.write_bytes(salt)
+        path.chmod(0o600)
+    except OSError as exc:
+        logger.warning("Could not persist salt file %s: %s", path, exc)
+    return salt
+
+
+def _derive_fernet_key(password: str, salt: bytes) -> bytes:
+    """Derive a URL-safe Fernet key from a password and salt via PBKDF2-SHA256."""
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=_PBKDF2_ITERATIONS,
+    )
+    return base64.urlsafe_b64encode(kdf.derive(password.encode()))
 
 
 def _get_or_create_encryption_key() -> bytes:
@@ -23,41 +70,39 @@ def _get_or_create_encryption_key() -> bytes:
     Returns:
         32-byte URL-safe base64-encoded Fernet key
     """
-    # Check environment variable first
     env_key = os.environ.get("SECRET_KEY")
     if env_key:
-        # If the env key is already a valid Fernet key (44 chars base64), use it
+        # Already a Fernet key – use directly.
         if len(env_key) == 44:
             return env_key.encode()
-        # Otherwise, derive a Fernet key from it using PBKDF2
-        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-        from cryptography.hazmat.primitives import hashes
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=b"investment_dashboard_salt",  # Static salt, key comes from env
-            iterations=100000,
-        )
-        return base64.urlsafe_b64encode(kdf.derive(env_key.encode()))
+        # Otherwise derive with the per-install salt.
+        return _derive_fernet_key(env_key, _load_or_create_salt())
 
-    # Fall back to local key file
+    # No env-var path: use a randomly-generated key persisted on disk.
     key_file = Path.home() / ".investment_dashboard_key"
 
     if key_file.exists():
         try:
             return key_file.read_bytes().strip()
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.warning("Could not read key file %s: %s", key_file, exc)
 
-    # Generate new key
     new_key = Fernet.generate_key()
     try:
         key_file.write_bytes(new_key)
-        key_file.chmod(0o600)  # Restrict permissions
-    except Exception as e:
-        logger.warning(f"Could not persist encryption key: {e}")
+        key_file.chmod(0o600)
+    except OSError as exc:
+        logger.warning(f"Could not persist encryption key: {exc}")
 
     return new_key
+
+
+def _get_legacy_fernet_key() -> Optional[bytes]:
+    """Return the legacy (pre-per-install-salt) Fernet key, if derivable."""
+    env_key = os.environ.get("SECRET_KEY")
+    if not env_key or len(env_key) == 44:
+        return None
+    return _derive_fernet_key(env_key, _LEGACY_SALT)
 
 
 class SecretsManager:
@@ -129,11 +174,23 @@ class SecretsManager:
         """Get environment variable name for a key."""
         return key.upper()
 
-    def _get_fernet(self) -> Fernet:
-        """Get or create the Fernet cipher instance."""
+    def _get_fernet(self):
+        """Get or create the Fernet cipher (with legacy fallback).
+
+        When a derived-from-password key is in use, a :class:`MultiFernet`
+        is returned that wraps the current per-install key *plus* the
+        legacy hardcoded-salt key. Decrypting existing ciphertext still
+        succeeds; new ciphertext is encrypted under the current key.
+        """
         if self._fernet is None:
-            key = _get_or_create_encryption_key()
-            self._fernet = Fernet(key)
+            current_key = _get_or_create_encryption_key()
+            legacy_key = _get_legacy_fernet_key()
+            if legacy_key and legacy_key != current_key:
+                self._fernet = MultiFernet(
+                    [Fernet(current_key), Fernet(legacy_key)]
+                )
+            else:
+                self._fernet = Fernet(current_key)
         return self._fernet
 
     def _encode(self, value: str) -> str:

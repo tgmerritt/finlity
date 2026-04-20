@@ -11,6 +11,7 @@ import difflib
 from src.database import Database
 from src.importers import FolderScanner
 from src.services.ai_config import CLAUDE_MODEL_HAIKU
+from src.utils.paths import UnsafePathError, safe_join
 
 router = APIRouter(prefix="/api/imports", tags=["imports"])
 import_router = APIRouter(prefix="/api/import", tags=["import"])
@@ -72,10 +73,7 @@ def _find_similar_existing_file(directory: Path, filename: str) -> Optional[Path
     return best_match
 
 
-def get_db() -> Database:
-    """Dependency to get database instance (profile-aware)."""
-    from src.database import get_database
-    return get_database()
+from src.api.dependencies import get_db  # noqa: E402  (public router dep)
 
 
 def check_demo_mode_write():
@@ -236,11 +234,17 @@ async def upload_file(
             detail="Invalid file type. Supported: .csv, .xlsx, .xls",
         )
 
-    # Save to import folder
+    # Save to import folder. safe_join() rejects path-traversal payloads
+    # (``../``, absolute paths, null bytes) so the resolved path is always a
+    # direct descendant of ``data/imports/<account_type>/``.
     import_dir = Path("data/imports") / account_type
     import_dir.mkdir(parents=True, exist_ok=True)
 
-    file_path = import_dir / file.filename
+    try:
+        file_path = safe_join(import_dir, Path(file.filename).name)
+    except UnsafePathError as exc:
+        logger.warning("Rejected unsafe upload filename: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid filename") from exc
 
     # Check if file already exists
     if file_path.exists():
