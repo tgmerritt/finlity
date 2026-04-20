@@ -20,8 +20,10 @@ requests==2.32.5
 aiohttp==3.12.15
 
 # Data processing
-numpy==2.0.0
-pandas==2.2.2
+# numpy 2.0.0 / pandas 2.2.2 do not ship Python 3.13 wheels and fail to build
+# from source under GCC 13. Pin to versions with cp313 wheels on PyPI.
+numpy==2.2.4
+pandas==2.2.3
 scipy==1.15.3
 scikit-learn==1.7.2
 openpyxl==3.1.5
