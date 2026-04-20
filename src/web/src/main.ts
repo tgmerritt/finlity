@@ -448,7 +448,9 @@ async function init(): Promise<void> {
   try {
     await loadProfiles();
     await populateAgeFromSettings();
-    await autoRefreshIfStale();
+    // Fire-and-forget: can take 30s+ when upstream price APIs are slow/flaky.
+    // Keeps the UI interactive while stale prices refresh in the background.
+    autoRefreshIfStale().then(updatePriceStatus).catch(console.warn);
     await updatePriceStatus();
     await checkDemoModeStatus();
     await loadDeploymentInfo();

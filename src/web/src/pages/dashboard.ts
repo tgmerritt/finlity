@@ -714,7 +714,6 @@ export async function autoRefreshIfStale(): Promise<void> {
       console.log(
         `Auto-refreshing ${status.stale_tickers} stale ticker(s) (timezone: ${tz})`
       );
-      showLoading('Updating stale prices...');
       const result = await apiCall<PriceRefreshResponse>(
         '/api/imports/refresh-prices',
         { method: 'POST' }
