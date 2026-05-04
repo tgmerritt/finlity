@@ -460,7 +460,7 @@ def generate_demo_data(db_path: Optional[str] = None) -> dict:
         with db.get_session() as session:
             session.add(deduction)
             session.commit()
-        match_str = f" + ${ded_data['employer_match']} match" if ded_data["employer_match"] > 0 else ""
+        match_str = f" + ${ded_data['employer_match']} match" if ded_data["employer_match"] > 0 else ""  # type: ignore[operator]  # DEMO_DEDUCTIONS literal always defines employer_match as int
         print(f"  {ded_data['label']}: ${ded_data['amount_per_period']}/period{match_str}")
 
     # Add expenses

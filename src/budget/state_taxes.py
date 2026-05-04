@@ -10,7 +10,7 @@ States without income tax return 0.
 # Format: [(bracket_max, rate), ...] where rate is applied to income in that bracket
 # Brackets are cumulative (like federal brackets)
 
-STATE_TAX_BRACKETS = {
+STATE_TAX_BRACKETS: dict[str, dict[str, list[tuple[float, float]]]] = {
     # California (2024) - 9 brackets
     "CA": {
         "single": [

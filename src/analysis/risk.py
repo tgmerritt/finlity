@@ -153,7 +153,7 @@ class RiskAnalyzer:
         returns = [r for r in returns if r != 0]
         if not returns:
             return 0.0
-        return -np.percentile(returns, (1 - confidence) * 100)
+        return float(-np.percentile(returns, (1 - confidence) * 100))
 
     def calculate_cvar(
         self,
@@ -173,7 +173,7 @@ class RiskAnalyzer:
         if not tail_returns:
             return var
 
-        return -np.mean(tail_returns)
+        return float(-np.mean(tail_returns))
 
     def get_position_risk(self, ticker: str, benchmark: str = "SPY") -> Optional[RiskMetrics]:
         """Get risk metrics for a single position."""

@@ -1,5 +1,7 @@
 """Predefined account types for the portfolio system."""
 
+from typing import cast
+
 # Predefined account types (used for UI dropdowns, folder suggestions)
 # Custom types are stored as "custom:{user_name}" in the database
 PREDEFINED_ACCOUNT_TYPES = {
@@ -83,12 +85,12 @@ def get_account_type_label(account_type: str) -> str:
     """Get human-readable label for an account type."""
     if account_type.startswith("custom:"):
         return account_type[7:]  # Strip "custom:" prefix
-    return PREDEFINED_ACCOUNT_TYPES.get(account_type, {}).get("label", account_type)
+    return cast(str, PREDEFINED_ACCOUNT_TYPES.get(account_type, {}).get("label", account_type))  # dict values are str at "label" key
 
 
 def is_retirement_account(account_type: str) -> bool:
     """Check if an account type is a retirement account."""
-    return PREDEFINED_ACCOUNT_TYPES.get(account_type, {}).get("is_retirement", False)
+    return cast(bool, PREDEFINED_ACCOUNT_TYPES.get(account_type, {}).get("is_retirement", False))  # dict values are bool at "is_retirement" key
 
 
 def get_folder_name(account_type: str) -> str:

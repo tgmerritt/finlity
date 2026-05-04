@@ -172,7 +172,7 @@ class CorrelationAnalyzer:
 
     def get_sector_correlations(
         self,
-        sectors: Optional[list[str]] = None,
+        sectors: Optional[dict[str, str]] = None,
         period: str = "1y",
     ) -> dict[str, dict[str, float]]:
         """Get correlations between sector ETFs."""
