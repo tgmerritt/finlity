@@ -5,7 +5,7 @@ clients, families, or use cases.
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
@@ -70,7 +70,7 @@ def _profile_to_response(profile: Profile, active_id: str) -> ProfileResponse:
 
 
 @router.get("", response_model=list[ProfileResponse])
-def list_profiles():
+def list_profiles() -> list[ProfileResponse]:
     """List all available profiles."""
     manager = get_profile_manager()
     profiles = manager.list_profiles()
@@ -80,7 +80,7 @@ def list_profiles():
 
 
 @router.get("/active", response_model=ProfileResponse)
-def get_active_profile():
+def get_active_profile() -> ProfileResponse:
     """Get the currently active profile."""
     manager = get_profile_manager()
     profile = manager.get_active_profile()
@@ -92,21 +92,21 @@ def get_active_profile():
 
 
 @router.get("/icons")
-def get_available_icons():
+def get_available_icons() -> dict[str, Any]:
     """Get list of available profile icons."""
     from src.database.profile_manager import ProfileManager
     return {"icons": ProfileManager.PROFILE_ICONS}
 
 
 @router.get("/colors")
-def get_available_colors():
+def get_available_colors() -> dict[str, Any]:
     """Get list of suggested profile colors."""
     from src.database.profile_manager import ProfileManager
     return {"colors": ProfileManager.PROFILE_COLORS}
 
 
 @router.post("", response_model=ProfileResponse)
-def create_profile(request: ProfileCreate):
+def create_profile(request: ProfileCreate) -> ProfileResponse:
     """Create a new profile."""
     manager = get_profile_manager()
 
@@ -125,7 +125,7 @@ def create_profile(request: ProfileCreate):
 
 
 @router.get("/{profile_id}", response_model=ProfileResponse)
-def get_profile(profile_id: str):
+def get_profile(profile_id: str) -> ProfileResponse:
     """Get a profile by ID."""
     manager = get_profile_manager()
     profile = manager.get_profile(profile_id)
@@ -137,7 +137,7 @@ def get_profile(profile_id: str):
 
 
 @router.put("/{profile_id}", response_model=ProfileResponse)
-def update_profile(profile_id: str, request: ProfileUpdate):
+def update_profile(profile_id: str, request: ProfileUpdate) -> ProfileResponse:
     """Update a profile's metadata."""
     manager = get_profile_manager()
 
@@ -156,7 +156,7 @@ def update_profile(profile_id: str, request: ProfileUpdate):
 
 
 @router.delete("/{profile_id}")
-def delete_profile(profile_id: str):
+def delete_profile(profile_id: str) -> dict[str, Any]:
     """Delete a profile and all its data.
 
     Cannot delete the active profile or the default profile.
@@ -177,7 +177,7 @@ def delete_profile(profile_id: str):
 
 
 @router.post("/{profile_id}/activate", response_model=ProfileResponse)
-def activate_profile(profile_id: str):
+def activate_profile(profile_id: str) -> ProfileResponse:
     """Switch to a different profile."""
     manager = get_profile_manager()
 
@@ -191,7 +191,7 @@ def activate_profile(profile_id: str):
 
 
 @router.post("/{profile_id}/duplicate", response_model=ProfileResponse)
-def duplicate_profile(profile_id: str, new_name: str):
+def duplicate_profile(profile_id: str, new_name: str) -> ProfileResponse:
     """Create a copy of an existing profile."""
     manager = get_profile_manager()
 
@@ -204,7 +204,7 @@ def duplicate_profile(profile_id: str, new_name: str):
 
 
 @router.get("/{profile_id}/stats", response_model=ProfileStatsResponse)
-def get_profile_stats(profile_id: str):
+def get_profile_stats(profile_id: str) -> ProfileStatsResponse:
     """Get statistics for a profile."""
     manager = get_profile_manager()
 
@@ -223,7 +223,7 @@ def get_profile_stats(profile_id: str):
 
 
 @router.post("/{profile_id}/export")
-def export_profile(profile_id: str):
+def export_profile(profile_id: str) -> FileResponse:
     """Export a profile to a ZIP file for backup or transfer."""
     manager = get_profile_manager()
 
@@ -243,7 +243,7 @@ def export_profile(profile_id: str):
 async def import_profile(
     file: UploadFile = File(...),
     name: Optional[str] = None,
-):
+) -> ProfileResponse:
     """Import a profile from a ZIP file."""
     manager = get_profile_manager()
 

@@ -12,12 +12,16 @@ starlette>=0.40.0
 uvicorn[standard]==0.38.0
 uvloop==0.21.0
 httptools==0.6.4
-gunicorn==21.2.0
+# Bumped 21.2.0 -> 23.0.0; clears CVE-2024-1135 (smuggling) + CVE-2024-6827 (TE/CL)
+gunicorn==23.0.0
 
 # HTTP clients
 httpx==0.28.1
-requests==2.32.5
-aiohttp==3.12.15
+# Bumped 2.32.5 -> 2.33.1; clears CVE-2026-25645 (.netrc auth leak)
+requests==2.33.1
+# Bumped 3.12.15 -> 3.13.5; clears CVE-2026-34513..520, 34525, 22815, 34514..515,
+# CVE-2025-69223..230 (HTTP smuggling / parser fixes in 3.13.x)
+aiohttp==3.13.5
 
 # Data processing
 # numpy 2.0.0 / pandas 2.2.2 do not ship Python 3.13 wheels and fail to build
@@ -40,19 +44,26 @@ sqlalchemy==2.0.36
 aiosqlite==0.21.0
 
 # Security
-cryptography==45.0.7
+# Bumped 45.0.7 -> 46.0.7; clears CVE-2026-26007, CVE-2026-34073, CVE-2026-39892
+cryptography==46.0.7
 bcrypt==5.0.0
-python-jose==3.3.0
-PyJWT==2.10.1
-Authlib==1.6.5
-# CVE-2024-50580/50581 fixed in 11.3.0
-pillow==11.3.0
+# python-jose 3.3.0 removed: unused in src/ and tests/. PyJWT covers JWT needs.
+# (Drops PYSEC-2024-232/233 plus transitive ecdsa/pyasn1 CVEs.)
+# Bumped 2.10.1 -> 2.12.1; clears CVE-2026-32597
+PyJWT==2.12.1
+# Bumped 1.6.5 -> 1.7.1; clears CVE-2025-68158, CVE-2026-28802, CVE-2026-27962,
+# CVE-2026-28490, GHSA-jj8c-mmj3-mmgv
+Authlib==1.7.1
+# Bumped 11.3.0 -> 12.2.0; clears CVE-2026-25990 + CVE-2026-40192
+# (CVE-2024-50580/50581 already fixed in 11.3.0)
+pillow==12.2.0
 
 # Validation / config
 pydantic==2.12.4
 pydantic-settings==2.12.0
 PyYAML==6.0.2
-python-dotenv==1.2.1
+# Bumped 1.2.1 -> 1.2.2; clears CVE-2026-28684
+python-dotenv==1.2.2
 jsonschema==4.25.1
 
 # CLI / display
@@ -61,24 +72,36 @@ typer==0.20.0
 
 # File handling
 watchfiles==1.1.0
-python-multipart==0.0.20
+# Bumped 0.0.20 -> 0.0.27; clears CVE-2026-24486, CVE-2026-40347
+python-multipart==0.0.27
 PyPDF2==3.0.1
 pypdfium2==4.30.1
-lxml==5.3.0
+# Bumped 5.3.0 -> 6.1.0; clears CVE-2026-41066 (5.4.0 still flagged; fix in 6.1.0)
+lxml==6.1.0
 
 # Streaming / SSE / WebSocket
 sse-starlette==3.0.3
 websockets==15.0.1
 
 # MCP
-mcp==1.22.0
-fastmcp==2.13.1
+# Bumped 1.22.0 -> 1.27.0; clears CVE-2025-66416 (fastmcp 2.14.7 requires mcp>=1.24)
+mcp==1.27.0
+# Bumped 2.13.1 -> 2.14.7; clears GHSA-rcfx-77hg-w2wv, CVE-2025-69196,
+# CVE-2025-64340, CVE-2026-27124 (stays in 2.x line; 3.x is a major rewrite)
+fastmcp==2.14.7
 
 # Testing
-pytest==8.3.4
+# Bumped 8.3.4 -> 8.4.2; clears CVE-2025-71176 (stays in 8.x line)
+pytest==8.4.2
 pytest-asyncio==0.24.0
 
 # Misc
 tenacity==9.1.2
-orjson==3.11.4
+# Bumped 3.11.4 -> 3.11.8; clears CVE-2025-67221
+orjson==3.11.8
 email-validator==2.3.0
+
+# Pin urllib3 directly (was transitive via requests at 2.3.0).
+# Bumped 2.3.0 -> 2.6.3; clears CVE-2025-50181/50182, CVE-2025-66418/66471,
+# CVE-2026-21441
+urllib3==2.6.3

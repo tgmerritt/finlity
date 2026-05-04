@@ -62,6 +62,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install playwright ruff mypy pip-audit bandit
+          # Type stubs for mypy (dev-only, not in runtime requirements)
+          pip install types-requests types-PyYAML types-python-dateutil
           playwright install chromium --with-deps
 
       - name: Set up Node.js
@@ -81,13 +83,29 @@ jobs:
         run: ruff check src/ --output-format=github
 
       - name: Type check (mypy, non-blocking)
+        # TODO: Mypy gating sprint -- the codebase currently has 632 mypy
+        # errors hiding behind `|| true`. Removing `|| true` would block all
+        # CI today. Tracked as follow-up: triage src/api/analysis.py and
+        # src/dashboard/charts.py first (highest-density files), then flip
+        # this step to blocking. See report attached to the security-gates PR.
         run: mypy src/ --ignore-missing-imports --no-strict-optional || true
 
-      - name: Security audit (pip-audit)
-        run: pip-audit -r requirements.txt --desc --ignore-vuln GHSA-xxxx || true
+      - name: Security audit (pip-audit, blocking)
+        # Reads .pip-audit-ignore at the repo root; each non-comment line is
+        # an allowlisted CVE/GHSA/PYSEC ID. Any new vuln NOT listed there
+        # fails the build. See scripts/ci-pip-audit.sh for the parsing rules.
+        run: bash scripts/ci-pip-audit.sh
 
-      - name: Static security scan (bandit)
-        run: bandit -r src/ -ll -ii --skip B101 || true
+      - name: Static security scan (bandit, blocking on src/)
+        # Two-pass scan:
+        #   1. src/  -- strict, medium+ severity / medium+ confidence (-ll -ii),
+        #               no skips. Findings here fail the build.
+        #   2. tests/ -- permissive, allows B101 (asserts) which is idiomatic.
+        # Configuration lives in .bandit.yaml at the repo root.
+        run: |
+          set -e
+          bandit -c .bandit.yaml -r src/ -ll -ii
+          bandit -c .bandit.yaml -r tests/ -ll -ii --skip B101
 
       - name: Run unit tests
         run: pytest tests/ -v --tb=short

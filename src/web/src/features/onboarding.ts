@@ -8,6 +8,7 @@ import { showToast } from '@/ui/toast';
 import { showLoading, hideLoading } from '@/ui/loading';
 import { getElementById, createSvgElement } from '@/utils/html';
 import { showTab } from '@/ui/tabs';
+import { emit } from '@/state/events';
 
 /**
  * Demo mode status.
@@ -144,6 +145,11 @@ export async function toggleDemoMode(enabled: boolean): Promise<void> {
     });
 
     showToast(enabled ? 'Demo mode enabled' : 'Restored personal portfolio', 'success');
+
+    // Notify subscribers before the reload kicks in. Most listeners won't get
+    // a chance to do anything async (we hard-reload below), but synchronous
+    // cleanup hooks (clearing in-memory caches, etc.) can still run.
+    emit({ type: 'demo:toggled', demoMode: enabled });
 
     // CRITICAL: Clear view ID from localStorage when switching databases
     // Views are stored per-database, so old view IDs become invalid

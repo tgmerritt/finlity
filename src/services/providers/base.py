@@ -72,6 +72,10 @@ class InferenceResponse:
     output_tokens: int = 0
     tool_calls: Optional[list[dict]] = None
     stop_reason: Optional[str] = None
+    # Anthropic prompt-caching metrics. Populated only by ClaudeProvider when
+    # cache_control breakpoints are in use; other providers leave these None.
+    cache_creation_input_tokens: Optional[int] = None
+    cache_read_input_tokens: Optional[int] = None
 
 
 @dataclass
@@ -84,6 +88,10 @@ class StreamEvent:
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
     error: Optional[str] = None
+    # Anthropic prompt-caching metrics. Populated on the message_start event by
+    # ClaudeProvider when cache_control is in use; None otherwise.
+    cache_creation_input_tokens: Optional[int] = None
+    cache_read_input_tokens: Optional[int] = None
 
 
 class InferenceProvider(ABC):
@@ -114,6 +122,8 @@ class InferenceProvider(ABC):
         system: Optional[str] = None,
         temperature: float = 1.0,
         tools: Optional[list[dict]] = None,
+        cache_system: bool = False,
+        cache_breakpoints: Optional[list[int]] = None,
     ) -> InferenceResponse:
         """
         Generate a completion for the given messages.
@@ -125,6 +135,14 @@ class InferenceProvider(ABC):
             system: System prompt
             temperature: Sampling temperature
             tools: List of tool definitions (in provider-native format)
+            cache_system: If True and the provider supports prompt caching
+                (currently only ClaudeProvider), mark the system prompt with a
+                cache_control breakpoint so subsequent calls within ~5 minutes
+                reuse the cached prefix at ~10% billing. Other providers
+                accept-and-ignore.
+            cache_breakpoints: Optional list of message indices whose last
+                content block should carry a cache_control marker. Only
+                ClaudeProvider acts on this; other providers ignore.
 
         Returns:
             InferenceResponse with the generated content
@@ -140,6 +158,8 @@ class InferenceProvider(ABC):
         system: Optional[str] = None,
         temperature: float = 1.0,
         tools: Optional[list[dict]] = None,
+        cache_system: bool = False,
+        cache_breakpoints: Optional[list[int]] = None,
     ) -> Iterator[StreamEvent]:
         """
         Stream a completion for the given messages.
@@ -151,6 +171,8 @@ class InferenceProvider(ABC):
             system: System prompt
             temperature: Sampling temperature
             tools: List of tool definitions (in provider-native format)
+            cache_system: See `complete()`. Anthropic-only; default off.
+            cache_breakpoints: See `complete()`. Anthropic-only; default off.
 
         Yields:
             StreamEvent objects as they are generated

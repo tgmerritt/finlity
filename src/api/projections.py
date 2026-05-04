@@ -3,7 +3,7 @@
 import os
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Any, Optional, cast
 
 from src.database import Database
 from src.services.background_tasks import task_manager
@@ -28,7 +28,8 @@ def is_hosted_environment() -> bool:
 
 def get_session_id(request: Request) -> str | None:
     """Get session ID from request state (set by SessionMiddleware)."""
-    return getattr(request.state, "session_id", None)
+    sid = getattr(request.state, "session_id", None)
+    return sid if isinstance(sid, str) else None
 
 
 from src.api.dependencies import get_db  # noqa: E402  (public router dep)
@@ -136,7 +137,7 @@ class SensitivityResponse(BaseModel):
 def _run_monte_carlo_task(
     request_dict: dict,
     db_path: str,
-    progress_callback=None,
+    progress_callback: Optional[Any] = None,
 ) -> dict:
     """
     Background task function for Monte Carlo simulation.
@@ -149,7 +150,7 @@ def _run_monte_carlo_task(
         db_path: Path to database file
         progress_callback: Optional callback(progress: float, message: str) for progress updates
     """
-    def report_progress(progress: float, message: str):
+    def report_progress(progress: float, message: str) -> None:
         if progress_callback:
             progress_callback(progress, message)
 
@@ -284,7 +285,7 @@ def run_monte_carlo(
         description="Run in background and return task_id. Defaults to True on Heroku, False locally."
     ),
     db: Database = Depends(get_db),
-):
+) -> Any:
     """
     Run Monte Carlo simulation for retirement projection.
 
@@ -599,13 +600,13 @@ def get_account_balances_by_type(
         if not pos.current_price:
             continue
 
-        value = pos.shares * pos.current_price
+        value = float(pos.shares * pos.current_price)
         account = account_map.get(pos.account_id)
         if not account:
             continue
 
         # Determine tax category
-        account_type = account.account_type.lower().replace(" ", "_").replace("-", "_")
+        account_type = cast(str, account.account_type).lower().replace(" ", "_").replace("-", "_")
         tax_category = TAX_CATEGORY_MAP.get(account_type, "taxable")
 
         # Check for retirement flag override
@@ -623,7 +624,7 @@ def get_account_balances_by_type(
                 "tax_category": tax_category,
                 "value": 0.0,
             }
-        account_totals[account.id]["value"] += value
+        account_totals[account.id]["value"] = cast(float, account_totals[account.id]["value"]) + value
 
     by_account = list(account_totals.values())
 
@@ -667,7 +668,7 @@ def run_sensitivity_analysis(
         description="Run in background. Defaults to True on Heroku, False locally."
     ),
     db: Database = Depends(get_db),
-):
+) -> Any:
     """
     Run sensitivity analysis on projection parameters.
 
@@ -727,7 +728,7 @@ def quick_projection(
     monthly_contribution: float,
     monthly_withdrawal: float,
     db: Database = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Quick projection endpoint with minimal parameters.
 
@@ -885,7 +886,7 @@ def compare_withdrawal_rates(
     end_age: int = 100,
     expected_return: float = 0.06,
     db: Database = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Compare multiple withdrawal rate scenarios.
 
@@ -1201,7 +1202,7 @@ def run_tax_projection(
         description="Run in background. Defaults to True on Heroku, False locally."
     ),
     db: Database = Depends(get_db),
-):
+) -> Any:
     """
     Run year-by-year tax-aware withdrawal projection.
 
@@ -1250,10 +1251,10 @@ def run_tax_projection(
 
             # Sum up all active income sources
             for source in income_sources:
-                pre_retirement_income += source.gross_annual
+                pre_retirement_income += float(cast(float, source.gross_annual))
                 # Use the first source's state if not specified
                 if state == "CA" and source.state:
-                    state = source.state
+                    state = cast(str, source.state)
 
             # Fetch pre-tax deductions linked to income sources
             for source in income_sources:
@@ -1262,20 +1263,21 @@ def run_tax_projection(
                 ).all()
                 for ded in deductions:
                     # Convert per-period to annual
-                    periods_per_year = PAY_FREQUENCIES.get(source.pay_frequency, 26)
+                    periods_per_year = PAY_FREQUENCIES.get(cast(str, source.pay_frequency), 26)
+                    annual_ded: float
                     if ded.is_percentage:
                         # Deduction is a percentage of gross
-                        annual_ded = source.gross_annual * (ded.amount_per_period / 100)
+                        annual_ded = float(cast(float, source.gross_annual)) * (float(cast(float, ded.amount_per_period)) / 100)
                     else:
-                        annual_ded = ded.amount_per_period * periods_per_year
+                        annual_ded = float(cast(float, ded.amount_per_period)) * periods_per_year
                     pre_retirement_deductions += annual_ded
 
             # Fetch tax config for filing status
             tax_config = session.query(BudgetTaxConfig).first()
             if tax_config:
-                filing_status = tax_config.filing_status
+                filing_status = cast(str, tax_config.filing_status)
                 if tax_config.state:
-                    state = tax_config.state
+                    state = cast(str, tax_config.state)
         finally:
             session.close()
     else:

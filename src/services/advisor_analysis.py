@@ -6,10 +6,27 @@ from dataclasses import dataclass, field
 from typing import Optional
 from datetime import datetime
 
+from src.services.commentary_prompts import build_portfolio_dossier
 from src.services.inference_provider import get_provider, InferenceProviderError
 from src.services.providers import InferenceMessage, ProviderNotConfiguredError
 
 logger = logging.getLogger(__name__)
+
+
+def _second_to_last_user_index(messages: list) -> Optional[int]:
+    """Return the index of the second-to-last user-role message, or None.
+
+    Used to set a `cache_breakpoints` marker for multi-turn chats: caching
+    through the second-to-last user turn lets the next request re-use
+    everything up to and including the previous assistant reply.
+    """
+    user_indices = [
+        i for i, m in enumerate(messages)
+        if getattr(m, "role", None) == "user"
+    ]
+    if len(user_indices) < 2:
+        return None
+    return user_indices[-2]
 
 
 @dataclass
@@ -312,10 +329,41 @@ Return ONLY valid JSON, no markdown or explanation."""
                 )
                 system_parts.append(f"Top holdings: {holdings_str}")
 
+                # Append the comprehensive portfolio dossier. This is the
+                # bulk of the cacheable prefix — see commentary_prompts.py.
+                # Map from this service's _get_portfolio_context() shape to
+                # the dossier helper's expected shape.
+                summary_for_dossier = {
+                    "total_value": portfolio.get("total_value", 0),
+                    "num_accounts": len(portfolio.get("accounts", {}) or {}),
+                }
+                positions_for_dossier = [
+                    {
+                        "ticker": h.get("ticker"),
+                        "name": h.get("name"),
+                        "value": h.get("value", 0),
+                        "account_type": (h.get("accounts") or [{}])[0].get(
+                            "type", "unknown"
+                        ) if h.get("accounts") else "unknown",
+                    }
+                    for h in (portfolio.get("holdings") or [])
+                ]
+                dossier = build_portfolio_dossier(
+                    summary=summary_for_dossier,
+                    positions=positions_for_dossier,
+                )
+                system_parts.append("")
+                system_parts.append(dossier)
+
         if ticker:
             system_parts.append(f"\nCurrently discussing: {ticker}")
 
         system_prompt = "\n".join(system_parts)
+
+        logger.info(
+            "Built system prompt for caching: ~%d estimated tokens",
+            len(system_prompt) // 4,
+        )
 
         # Build messages from chat history
         messages = []
@@ -357,6 +405,7 @@ Return ONLY valid JSON, no markdown or explanation."""
                 model=self.model_id,
                 max_tokens=1024,
                 system=system_prompt,
+                cache_system=True,
             )
 
             assistant_message = response.content
@@ -412,6 +461,7 @@ Return ONLY valid JSON, no markdown or explanation."""
                 model=self.model_id,
                 max_tokens=1024,
                 system=system_prompt,
+                cache_system=True,
             ):
                 if event.type == "text" and event.text:
                     full_response += event.text
@@ -583,7 +633,44 @@ Return ONLY valid JSON, no markdown or explanation."""
         if focus_ticker:
             parts.append(f"\n**Currently discussing:** {focus_ticker}")
 
-        return "\n".join(parts)
+        # Append the comprehensive portfolio dossier so the cacheable system
+        # prefix clears Anthropic's threshold (2048 tokens for Sonnet 4.6,
+        # 4096 for Opus/Haiku 4.7). The page-context block above is dynamic
+        # per page-load, but the dossier is stable across regenerations
+        # within ~5 minutes.
+        try:
+            portfolio = self._get_portfolio_context()
+        except Exception:
+            portfolio = {}
+        if portfolio:
+            summary_for_dossier = {
+                "total_value": portfolio.get("total_value", 0),
+                "num_accounts": len(portfolio.get("accounts", {}) or {}),
+            }
+            positions_for_dossier = [
+                {
+                    "ticker": h.get("ticker"),
+                    "name": h.get("name"),
+                    "value": h.get("value", 0),
+                    "account_type": (h.get("accounts") or [{}])[0].get(
+                        "type", "unknown"
+                    ) if h.get("accounts") else "unknown",
+                }
+                for h in (portfolio.get("holdings") or [])
+            ]
+            dossier = build_portfolio_dossier(
+                summary=summary_for_dossier,
+                positions=positions_for_dossier,
+            )
+            parts.append("")
+            parts.append(dossier)
+
+        system_prompt = "\n".join(parts)
+        logger.info(
+            "Built system prompt for caching: ~%d estimated tokens",
+            len(system_prompt) // 4,
+        )
+        return system_prompt
 
     def chat_stream_with_tools(
         self,
@@ -631,6 +718,12 @@ Return ONLY valid JSON, no markdown or explanation."""
         ]
         messages.append(InferenceMessage(role="user", content=user_message))
 
+        # Compute the cache breakpoint for the message tail. Caching through
+        # the second-to-last user message reuses the entire prior turn pair
+        # on the next request. Yields nothing the first turn (history empty).
+        breakpoint_idx = _second_to_last_user_index(messages)
+        cache_breakpoints = [breakpoint_idx] if breakpoint_idx is not None else None
+
         # Store user message immediately
         self._chat_history.append(ChatMessage(role="user", content=user_message))
 
@@ -648,6 +741,8 @@ Return ONLY valid JSON, no markdown or explanation."""
                     max_tokens=2048,
                     system=system_prompt,
                     tools=CHAT_TOOLS,
+                    cache_system=True,
+                    cache_breakpoints=cache_breakpoints,
                 ):
                     if event.type == "text" and event.text:
                         full_response += event.text
@@ -717,6 +812,11 @@ Return ONLY valid JSON, no markdown or explanation."""
         ]
         messages.append(InferenceMessage(role="user", content=user_message))
 
+        # See chat_stream_with_tools — cache through the second-to-last
+        # user turn so multi-turn chats reuse the entire prior turn pair.
+        breakpoint_idx = _second_to_last_user_index(messages)
+        cache_breakpoints = [breakpoint_idx] if breakpoint_idx is not None else None
+
         self._chat_history.append(ChatMessage(role="user", content=user_message))
         full_response = ""
 
@@ -726,6 +826,8 @@ Return ONLY valid JSON, no markdown or explanation."""
                 model=self.model_id,
                 max_tokens=2048,
                 system=system_prompt,
+                cache_system=True,
+                cache_breakpoints=cache_breakpoints,
             ):
                 if event.type == "text" and event.text:
                     full_response += event.text

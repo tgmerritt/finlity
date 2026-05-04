@@ -3,10 +3,10 @@
 This module provides a single source of truth for Claude model configuration,
 allowing the model to be configured via environment variable.
 
-Available Models (as of 2025):
-- claude-opus-4-5-20251101     : Most capable, best for complex analysis (expensive)
-- claude-sonnet-4-20250514     : Balanced performance and cost (recommended default)
-- claude-3-5-haiku-20241022    : Fastest, cheapest, good for simple tasks
+Current Claude 4.X family:
+- claude-opus-4-7              : Most capable, complex analysis (expensive)
+- claude-sonnet-4-6            : Balanced performance and cost (recommended default)
+- claude-haiku-4-5-20251001    : Fastest, cheapest, good for simple/parsing tasks
 
 Usage:
     from src.services.ai_config import get_claude_model, CLAUDE_MODEL_HAIKU
@@ -23,20 +23,27 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Available Claude models
-CLAUDE_MODEL_OPUS = "claude-opus-4-5-20251101"
-CLAUDE_MODEL_SONNET = "claude-sonnet-4-20250514"
-CLAUDE_MODEL_HAIKU = "claude-3-5-haiku-20241022"
+# Current Claude 4.X model IDs
+CLAUDE_MODEL_OPUS = "claude-opus-4-7"
+CLAUDE_MODEL_SONNET = "claude-sonnet-4-6"
+CLAUDE_MODEL_HAIKU = "claude-haiku-4-5-20251001"
 
 # Default model for general use
 DEFAULT_CLAUDE_MODEL = CLAUDE_MODEL_SONNET
 
-# Valid model identifiers for validation
+# Valid model identifiers for validation. Legacy IDs are preserved so
+# DB rows / saved settings written with prior versions continue to parse;
+# the API will reject any that are actually retired at request time.
 VALID_CLAUDE_MODELS = {
+    # Current
     CLAUDE_MODEL_OPUS,
     CLAUDE_MODEL_SONNET,
     CLAUDE_MODEL_HAIKU,
-    # Legacy model IDs that may still work
+    # Recent (still callable)
+    "claude-opus-4-5-20251101",
+    "claude-sonnet-4-20250514",
+    "claude-3-5-haiku-20241022",
+    # Legacy
     "claude-3-opus-20240229",
     "claude-3-5-sonnet-20241022",
     "claude-3-haiku-20240307",

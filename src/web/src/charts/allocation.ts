@@ -11,6 +11,7 @@ import {
 } from './plotly-utils';
 import { getChartColors } from '@/state/theme';
 import { store } from '@/state/store';
+import { setStateView, clearStateView } from '@/ui/state-view';
 import type { DashboardPosition, SnapshotHistory, PortfolioSummary } from '@/types/api';
 
 /**
@@ -31,16 +32,14 @@ function getHoverLabel(): Record<string, unknown> {
 }
 
 /**
- * Show empty state message in a container.
+ * Show empty-state message in a chart container. Thin wrapper over the
+ * shared state-view component so the look matches every other empty state.
  */
 function showEmptyState(container: HTMLElement, message: string): void {
-  container.textContent = '';
-  const p = document.createElement('p');
-  p.className = 'text-muted';
-  p.style.textAlign = 'center';
-  p.style.padding = '40px';
-  p.textContent = message;
-  container.appendChild(p);
+  setStateView(container, {
+    kind: 'empty',
+    title: message,
+  });
 }
 
 /**
@@ -52,6 +51,24 @@ export async function updateAllocationCharts(
   positions: DashboardPosition[],
   _summary?: PortfolioSummary
 ): Promise<void> {
+  // No positions → render an inline empty state in each chart container
+  // instead of an empty Plotly canvas. Without this both pie charts show
+  // up as blank squares on a fresh install.
+  if (!positions || positions.length === 0) {
+    const accountContainer = document.getElementById('chart-account-type');
+    const allocContainer = document.getElementById('chart-allocation');
+    if (accountContainer) showEmptyState(accountContainer, 'No allocation to chart yet');
+    if (allocContainer) showEmptyState(allocContainer, 'No allocation to chart yet');
+    return;
+  }
+
+  // We have data — clear any prior state-view before Plotly renders into
+  // the container.
+  const accountContainer = document.getElementById('chart-account-type');
+  const allocContainer = document.getElementById('chart-allocation');
+  if (accountContainer) clearStateView(accountContainer);
+  if (allocContainer) clearStateView(allocContainer);
+
   const chartLayout = {
     ...getBaseLayout(),
     margin: { t: 10, b: 10, l: 10, r: 10 },
@@ -183,6 +200,9 @@ export async function updateHistoryChart(
   const totals = filteredHistory.map((h) => h.total);
   const retirement = filteredHistory.map((h) => h.retirement);
   const taxable = filteredHistory.map((h) => h.taxable);
+
+  // Scrub any prior state-view before Plotly renders.
+  if (container) clearStateView(container);
 
   await renderChart(
     'chart-history',

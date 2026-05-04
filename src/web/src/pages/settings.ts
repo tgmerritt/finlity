@@ -7,6 +7,8 @@ import { apiCall, ApiError } from '@/api/client';
 import { showModal, closeModal } from '@/ui/modal';
 import { showToast } from '@/ui/toast';
 import { showLoading, hideLoading } from '@/ui/loading';
+import { withSubmitGuard } from '@/ui/with-submit-guard';
+import { emit } from '@/state/events';
 import { onTabChange } from '@/ui/tabs';
 import { formatCurrency } from '@/utils/format';
 import { escapeHtml } from '@/utils/html';
@@ -387,6 +389,7 @@ export async function deleteAccount(accountId: string, accountName: string): Pro
 
     showToast(`Account "${accountName}" deleted successfully`, 'success');
     await Promise.all([loadAccountsManagement(), refreshData(), loadViewsList()]);
+    emit({ type: 'accounts:changed', reason: 'deleted' });
   } catch (error) {
     console.error('Error deleting account:', error);
     showToast('Failed to delete account', 'error');
@@ -1173,6 +1176,9 @@ export async function runAutoDetectEntities(): Promise<void> {
 export async function savePersonalSettings(event: Event): Promise<void> {
   event.preventDefault();
 
+  const form = event.target as HTMLFormElement | null;
+  const submitBtn = form?.querySelector<HTMLButtonElement>('button[type="submit"]') ?? null;
+
   const withdrawalRate = parseInt(
     (document.getElementById('settings-withdrawal-rate') as HTMLInputElement | null)?.value || '4'
   );
@@ -1193,14 +1199,17 @@ export async function savePersonalSettings(event: Event): Promise<void> {
   };
 
   try {
-    await apiCall('/api/settings/config/personal', {
-      method: 'PUT',
-      body: data,
-    });
+    await withSubmitGuard(submitBtn, 'Saving...', () =>
+      apiCall('/api/settings/config/personal', {
+        method: 'PUT',
+        body: data,
+      })
+    );
     showToast('Personal settings saved', 'success');
     await loadRetirementMetrics();
 
-    // Notify other pages to update age fields from the new settings
+    // Notify other pages to update age fields from the new settings.
+    // Legacy event kept for the listener in main.ts; typed bus is additive.
     document.dispatchEvent(new CustomEvent('settings:personalUpdated'));
   } catch (error) {
     showToast('Failed to save settings', 'error');

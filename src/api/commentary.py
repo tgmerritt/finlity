@@ -3,7 +3,7 @@
 import json
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Any, Iterator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -91,7 +91,7 @@ class ElementListResponse(BaseModel):
 @router.get("/elements", response_model=ElementListResponse)
 def list_available_elements(
     tab: Optional[str] = Query(None, description="Filter by tab"),
-):
+) -> ElementListResponse:
     """List all available elements that can receive AI commentary.
 
     Args:
@@ -125,7 +125,7 @@ def list_available_elements(
 @router.get("/status", response_model=CommentaryStatusResponse)
 def get_commentary_status(
     service: CommentaryService = Depends(get_commentary_service),
-):
+) -> CommentaryStatusResponse:
     """Get status information about the commentary cache.
 
     Returns:
@@ -148,7 +148,7 @@ def get_batch_commentary(
     ids: str = Query(..., description="Comma-separated list of element IDs"),
     force_refresh: bool = Query(False, description="Force regeneration"),
     service: CommentaryService = Depends(get_commentary_service),
-):
+) -> BatchCommentaryResponse:
     """Get AI commentary for multiple elements.
 
     Args:
@@ -206,7 +206,7 @@ def get_tab_commentary(
     tab_name: str,
     force_refresh: bool = Query(False, description="Force regeneration"),
     service: CommentaryService = Depends(get_commentary_service),
-):
+) -> BatchCommentaryResponse:
     """Get all commentary for elements on a specific tab.
 
     Args:
@@ -278,7 +278,7 @@ class RefreshRequest(BaseModel):
 def refresh_commentary(
     request: RefreshRequest = None,
     service: CommentaryService = Depends(get_commentary_service),
-):
+) -> RefreshResponse:
     """Manually refresh commentary for specified elements or all.
 
     Args:
@@ -321,7 +321,7 @@ class InvalidateRequest(BaseModel):
 def invalidate_commentary(
     request: InvalidateRequest,
     service: CommentaryService = Depends(get_commentary_service),
-):
+) -> dict[str, Any]:
     """Invalidate commentary based on a trigger event.
 
     This marks commentary as stale, forcing regeneration on next access.
@@ -353,7 +353,7 @@ def stream_element_commentary(
     force_refresh: bool = Query(False, description="Force regeneration even if cached"),
     data: Optional[str] = Query(None, description="JSON-encoded current data from the page"),
     service: CommentaryService = Depends(get_commentary_service),
-):
+) -> StreamingResponse:
     """Stream AI commentary for a specific dashboard element using SSE.
 
     This endpoint streams the commentary as it's generated, allowing
@@ -386,7 +386,7 @@ def stream_element_commentary(
                 str(e),
             )
 
-    def event_generator():
+    def event_generator() -> Iterator[str]:
         yield from service.generate_commentary_streaming(
             element_id, force_refresh=force_refresh, current_data=current_data
         )
@@ -408,7 +408,7 @@ def get_element_commentary(
     element_id: str,
     force_refresh: bool = Query(False, description="Force regeneration even if cached"),
     service: CommentaryService = Depends(get_commentary_service),
-):
+) -> CommentaryResponse:
     """Get AI commentary for a specific dashboard element.
 
     Args:

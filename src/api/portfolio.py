@@ -6,7 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional, cast
 
 from src.database import Database
 from src.models.account_types import get_all_predefined_types
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 from src.api.dependencies import get_db  # noqa: E402  (public router dep)
 
 
-def check_demo_mode_write():
+def check_demo_mode_write() -> None:
     """Check if demo data modifications are protected.
 
     Uses centralized check from demo_mode service.
@@ -175,25 +175,25 @@ def get_accounts(db: Database = Depends(get_db)) -> list[AccountResponse]:
     result = []
 
     for account in accounts:
-        positions = db.get_positions_by_account(account.id)
-        value = sum(
+        positions = db.get_positions_by_account(cast(str, account.id))
+        value: float = float(sum(
             (p.shares * p.current_price) if p.current_price else 0
             for p in positions
-        )
-        cost_basis = sum(p.cost_basis for p in positions if p.cost_basis)
+        ))
+        cost_basis: float = float(sum(p.cost_basis for p in positions if p.cost_basis))
 
         result.append(AccountResponse(
-            id=account.id,
-            name=account.name,
-            account_type=account.account_type,
+            id=cast(str, account.id),
+            name=cast(str, account.name),
+            account_type=cast(str, account.account_type),
             display_type=account.display_type,
-            brokerage=account.brokerage,
+            brokerage=cast(str, account.brokerage),
             value=value,
             cost_basis=cost_basis if cost_basis else None,
             position_count=len(positions),
-            beneficiary=account.beneficiary,
+            beneficiary=cast(Optional[str], account.beneficiary),
             is_retirement=account.is_retirement,
-            entity_id=account.entity_id,
+            entity_id=cast(Optional[str], account.entity_id),
         ))
 
     return result
@@ -230,45 +230,46 @@ def get_all_positions(db: Database = Depends(get_db)) -> list[PositionResponse]:
 
         # For positions with interest, use accrued value as market value
         # For regular positions, use shares * price
+        market_value: float
         if pos.interest_rate and pos.interest_rate > 0:
-            market_value = accrued_value
+            market_value = float(accrued_value)
         else:
-            market_value = (pos.shares * pos.current_price) if pos.current_price else 0
+            market_value = float(pos.shares * pos.current_price) if pos.current_price else 0.0
 
-        gain_loss = None
-        gain_loss_pct = None
+        gain_loss: Optional[float] = None
+        gain_loss_pct: Optional[float] = None
 
         if pos.cost_basis and market_value:
-            gain_loss = market_value - pos.cost_basis
+            gain_loss = float(market_value - pos.cost_basis)
             if pos.cost_basis > 0:
-                gain_loss_pct = (gain_loss / pos.cost_basis) * 100
+                gain_loss_pct = (gain_loss / float(pos.cost_basis)) * 100
 
         result.append(PositionResponse(
-            id=pos.id,
-            account_id=pos.account_id,
-            account_name=account.name if account else "Unknown",
-            ticker=pos.ticker,
-            name=pos.name,
-            shares=pos.shares,
-            current_price=pos.current_price,
-            cost_basis=pos.cost_basis,
+            id=cast(str, pos.id),
+            account_id=cast(str, pos.account_id),
+            account_name=cast(str, account.name) if account else "Unknown",
+            ticker=cast(str, pos.ticker),
+            name=cast(Optional[str], pos.name),
+            shares=cast(float, pos.shares),
+            current_price=cast(Optional[float], pos.current_price),
+            cost_basis=cast(Optional[float], pos.cost_basis),
             market_value=market_value,
             accrued_value=accrued_value if pos.interest_rate else None,
             gain_loss=gain_loss,
             gain_loss_pct=gain_loss_pct,
-            is_fund=pos.is_fund,
-            asset_class=pos.asset_class or "equity",
-            position_type=pos.position_type or "equity",
+            is_fund=cast(bool, pos.is_fund),
+            asset_class=cast(str, pos.asset_class or "equity"),
+            position_type=cast(str, pos.position_type or "equity"),
             maturity_date=pos.maturity_date.isoformat() if pos.maturity_date else None,
             purchase_date=pos.purchase_date.isoformat() if pos.purchase_date else None,
-            interest_rate=pos.interest_rate,
+            interest_rate=cast(Optional[float], pos.interest_rate),
         ))
 
     return result
 
 
 @router.post("/snapshot")
-def take_snapshot(db: Database = Depends(get_db)):
+def take_snapshot(db: Database = Depends(get_db)) -> dict:
     """Take a snapshot of the current portfolio."""
     snapshot = db.take_snapshot()
     return {
@@ -279,7 +280,7 @@ def take_snapshot(db: Database = Depends(get_db)):
 
 
 @router.get("/snapshots")
-def get_snapshots(limit: int = 365, db: Database = Depends(get_db)):
+def get_snapshots(limit: int = 365, db: Database = Depends(get_db)) -> list[dict]:
     """Get historical snapshots."""
     snapshots = db.get_snapshots(limit)
     return [
@@ -295,7 +296,7 @@ def get_snapshots(limit: int = 365, db: Database = Depends(get_db)):
 
 
 @router.delete("/accounts/{account_id}")
-def delete_account(account_id: str, db: Database = Depends(get_db)):
+def delete_account(account_id: str, db: Database = Depends(get_db)) -> dict:
     """Delete an account and all its positions."""
     check_demo_mode_write()
     if db.delete_account(account_id):
@@ -304,7 +305,7 @@ def delete_account(account_id: str, db: Database = Depends(get_db)):
 
 
 @router.post("/accounts")
-def create_account(request: CreateAccountRequest, db: Database = Depends(get_db)):
+def create_account(request: CreateAccountRequest, db: Database = Depends(get_db)) -> dict:
     """Create a new account for manual position entry."""
     check_demo_mode_write()
     # For custom types, ensure the custom_type_name is set
@@ -337,7 +338,7 @@ def create_account(request: CreateAccountRequest, db: Database = Depends(get_db)
 
 
 @router.post("/positions")
-def create_position(request: CreatePositionRequest, db: Database = Depends(get_db)):
+def create_position(request: CreatePositionRequest, db: Database = Depends(get_db)) -> dict:
     """Manually add a position to an account."""
     check_demo_mode_write()
     # Verify account exists
@@ -368,7 +369,7 @@ def create_position(request: CreatePositionRequest, db: Database = Depends(get_d
 
 
 @router.post("/positions/cash")
-def create_cash_position(request: CreateCashPositionRequest, db: Database = Depends(get_db)):
+def create_cash_position(request: CreateCashPositionRequest, db: Database = Depends(get_db)) -> dict:
     """Add a cash position to an account."""
     check_demo_mode_write()
     # Verify account exists
@@ -404,7 +405,7 @@ def create_cash_position(request: CreateCashPositionRequest, db: Database = Depe
 
 
 @router.post("/positions/cd")
-def create_cd_position(request: CreateCDPositionRequest, db: Database = Depends(get_db)):
+def create_cd_position(request: CreateCDPositionRequest, db: Database = Depends(get_db)) -> dict:
     """Add a CD position to an account."""
     check_demo_mode_write()
     # Verify account exists
@@ -442,7 +443,7 @@ def create_cd_position(request: CreateCDPositionRequest, db: Database = Depends(
 
 
 @router.get("/positions/cd/upcoming")
-def get_upcoming_cd_maturities(days: int = 30, db: Database = Depends(get_db)):
+def get_upcoming_cd_maturities(days: int = 30, db: Database = Depends(get_db)) -> list[dict]:
     """Get CDs maturing within the specified number of days."""
     upcoming = db.get_upcoming_cd_maturities(days)
     return [
@@ -460,7 +461,7 @@ def get_upcoming_cd_maturities(days: int = 30, db: Database = Depends(get_db)):
 
 
 @router.post("/positions/cd/check-maturities")
-def check_cd_maturities(db: Database = Depends(get_db)):
+def check_cd_maturities(db: Database = Depends(get_db)) -> dict:
     """Check for matured CDs and convert them to cash."""
     check_demo_mode_write()
     matured = db.check_cd_maturities()
@@ -479,7 +480,7 @@ def check_cd_maturities(db: Database = Depends(get_db)):
 
 
 @router.post("/positions/real-estate")
-def create_real_estate_position(request: CreateRealEstateRequest, db: Database = Depends(get_db)):
+def create_real_estate_position(request: CreateRealEstateRequest, db: Database = Depends(get_db)) -> dict:
     """Add a real estate position to an account.
 
     Real estate positions track property equity:
@@ -537,14 +538,14 @@ class UpdatePositionRequest(BaseModel):
 
 
 @router.put("/positions/{position_id}")
-def update_position(position_id: str, request: UpdatePositionRequest, db: Database = Depends(get_db)):
+def update_position(position_id: str, request: UpdatePositionRequest, db: Database = Depends(get_db)) -> dict:
     """Update a position's shares, price, or other fields."""
     check_demo_mode_write()
     position = db.get_position_by_id(position_id)
     if not position:
         raise HTTPException(status_code=404, detail="Position not found")
 
-    updates = {}
+    updates: dict[str, Any] = {}
     if request.shares is not None:
         updates["shares"] = request.shares
     if request.current_price is not None:
@@ -571,7 +572,7 @@ def update_position(position_id: str, request: UpdatePositionRequest, db: Databa
 
 
 @router.delete("/positions/{position_id}")
-def delete_position(position_id: str, db: Database = Depends(get_db)):
+def delete_position(position_id: str, db: Database = Depends(get_db)) -> dict:
     """Delete a position."""
     check_demo_mode_write()
     if db.delete_position(position_id):
@@ -580,7 +581,7 @@ def delete_position(position_id: str, db: Database = Depends(get_db)):
 
 
 @router.get("/duplicates")
-def find_duplicates(db: Database = Depends(get_db)):
+def find_duplicates(db: Database = Depends(get_db)) -> dict:
     """Find potential duplicate positions across accounts.
 
     Detects positions with the SAME ticker and EXACT same shares in
@@ -599,7 +600,7 @@ def find_duplicates(db: Database = Depends(get_db)):
 
 
 @router.get("/export/{data_type}")
-def export_to_csv(data_type: str, db: Database = Depends(get_db)):
+def export_to_csv(data_type: str, db: Database = Depends(get_db)) -> Any:
     """Export portfolio data to CSV format.
 
     Args:
@@ -639,7 +640,7 @@ def export_to_csv(data_type: str, db: Database = Depends(get_db)):
     elif data_type == 'positions':
         # Export positions with account info
         positions = db.get_all_positions()
-        accounts = {a.id: a for a in db.get_all_accounts()}
+        accounts_by_id: dict[str, Any] = {cast(str, a.id): a for a in db.get_all_accounts()}
 
         writer.writerow([
             'id', 'account_id', 'account_name', 'ticker', 'name', 'shares',
@@ -648,7 +649,7 @@ def export_to_csv(data_type: str, db: Database = Depends(get_db)):
             'interest_rate'
         ])
         for pos in positions:
-            account = accounts.get(pos.account_id)
+            account = accounts_by_id.get(cast(str, pos.account_id))
             market_value = (pos.shares * pos.current_price) if pos.current_price else 0
             gain_loss = (market_value - pos.cost_basis) if pos.cost_basis else None
 
@@ -722,7 +723,7 @@ class DashboardMetricsResponse(BaseModel):
 def get_dashboard_metrics(
     entity_id: Optional[str] = None,
     db: Database = Depends(get_db),
-):
+) -> "DashboardMetricsResponse":
     """Get retirement planning metrics for dashboard display.
 
     Args:

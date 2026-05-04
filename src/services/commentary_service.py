@@ -14,7 +14,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Generator, Optional
+from typing import Any, Generator, Optional, cast
 
 from src.database import Database
 from src.database.models import AICommentary
@@ -26,7 +26,10 @@ from src.services.commentary_registry import (
     get_elements_by_tab,
     get_elements_by_trigger,
 )
-from src.services.commentary_prompts import SYSTEM_PROMPT, format_prompt
+from src.services.commentary_prompts import (
+    build_cacheable_system_prompt,
+    format_prompt,
+)
 
 # Constants
 MAX_CACHE_AGE_HOURS = 168  # 7 days
@@ -76,11 +79,11 @@ class CommentaryService:
         self.db = db
         self.provider_id = provider_id
         self.model_id = model_id
-        self._provider = None
-        self._client = None  # Legacy client for backward compatibility
-        self._api_key = None
+        self._provider: Any = None
+        self._client: Any = None  # Legacy client for backward compatibility
+        self._api_key: Optional[str] = None
 
-    def _get_provider(self):
+    def _get_provider(self) -> Any:
         """Get or create inference provider."""
         if self._provider is None:
             try:
@@ -90,6 +93,51 @@ class CommentaryService:
                 logger.warning("No AI providers configured")
                 return None
         return self._provider
+
+    def _build_cacheable_system_prompt(self) -> str:
+        """Build the persona + portfolio dossier system prompt for caching.
+
+        The result is intentionally large (target >2000 tokens for non-trivial
+        portfolios) so it clears Anthropic's prompt-caching threshold. Tiny or
+        empty portfolios will produce a smaller prompt that won't cache —
+        that's expected.
+        """
+        try:
+            summary = self._get_portfolio_summary()
+        except Exception:
+            summary = {}
+        try:
+            positions = self._get_positions()
+        except Exception:
+            positions = []
+        try:
+            allocation = self._get_allocation_data()
+        except Exception:
+            allocation = {}
+        try:
+            user_context = self._get_user_context()
+        except Exception:
+            user_context = {}
+        try:
+            settings_data = self._get_settings_data()
+        except Exception:
+            settings_data = {}
+
+        system_text = build_cacheable_system_prompt(
+            summary=summary,
+            positions=positions,
+            allocation=allocation,
+            user_context=user_context,
+            settings_data=settings_data,
+        )
+        # Operational visibility: pair this with the provider-side
+        # "Claude cache: created N tokens, read N tokens" log to confirm
+        # caching actually fires. Char/4 is a rough English-token proxy.
+        logger.info(
+            "Built system prompt for caching: ~%d estimated tokens",
+            len(system_text) // 4,
+        )
+        return system_text
 
     def _get_client(self):
         """Get client - now returns the provider for backward compatibility."""
@@ -275,7 +323,7 @@ class CommentaryService:
                 ).first()
                 if commentary:
                     # Set hash to dummy value to force refresh
-                    commentary.data_hash = f"invalidated_{trigger}_{datetime.utcnow().timestamp()}"
+                    commentary.data_hash = f"invalidated_{trigger}_{datetime.utcnow().timestamp()}"  # type: ignore[assignment]
                     count += 1
             session.commit()
         except Exception as e:
@@ -366,12 +414,12 @@ class CommentaryService:
         if cached["data_hash"] != current_hash:
             return True
         # Age check
-        return cached["age_hours"] > MAX_CACHE_AGE_HOURS
+        return bool(cached["age_hours"] > MAX_CACHE_AGE_HOURS)
 
     def _generate_and_cache_commentary(
         self,
         element_id: str,
-        config: dict,
+        config: Any,
         current_data: dict,
         current_hash: str,
     ) -> CommentaryResult:
@@ -428,12 +476,14 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
 
         # Call AI provider
         try:
+            system_text = self._build_cacheable_system_prompt()
             messages = [InferenceMessage(role="user", content=prompt)]
             response = provider.complete(
                 messages=messages,
                 model=self.model_id,
                 max_tokens=512,
-                system=SYSTEM_PROMPT,
+                system=system_text,
+                cache_system=True,
             )
 
             commentary = response.content
@@ -484,7 +534,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
         element_id: str,
         force_refresh: bool = False,
         current_data: Optional[dict] = None,
-    ) -> Generator[str, None, CommentaryResult]:
+    ) -> Generator[str, None, None]:
         """Generate commentary using streaming, yielding text chunks.
 
         This method streams the response and yields chunks as they arrive,
@@ -568,12 +618,14 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             output_tokens = 0
             model_version = provider.info.id
 
+            system_text = self._build_cacheable_system_prompt()
             messages = [InferenceMessage(role="user", content=prompt)]
             for event in provider.stream(
                 messages=messages,
                 model=self.model_id,
                 max_tokens=512,
-                system=SYSTEM_PROMPT,
+                system=system_text,
+                cache_system=True,
             ):
                 if event.type == "text" and event.text:
                     full_text += event.text
@@ -633,18 +685,18 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             ).first()
 
             if existing:
-                existing.element_type = element_type
-                existing.element_tab = element_tab
-                existing.commentary = commentary
-                existing.comparison_data = json.dumps(comparison_data) if comparison_data else None
-                existing.data_hash = data_hash
-                existing.data_snapshot = json.dumps(data_snapshot, default=str) if data_snapshot else None
-                existing.generated_at = datetime.utcnow()
-                existing.model_version = model_version
-                existing.generation_time_ms = generation_time_ms
-                existing.token_count = token_count
-                existing.web_search_used = web_search_used
-                existing.updated_at = datetime.utcnow()
+                existing.element_type = element_type  # type: ignore[assignment]
+                existing.element_tab = element_tab  # type: ignore[assignment]
+                existing.commentary = commentary  # type: ignore[assignment]
+                existing.comparison_data = json.dumps(comparison_data) if comparison_data else None  # type: ignore[assignment]
+                existing.data_hash = data_hash  # type: ignore[assignment]
+                existing.data_snapshot = json.dumps(data_snapshot, default=str) if data_snapshot else None  # type: ignore[assignment]
+                existing.generated_at = datetime.utcnow()  # type: ignore[assignment]
+                existing.model_version = model_version  # type: ignore[assignment]
+                existing.generation_time_ms = generation_time_ms  # type: ignore[assignment]
+                existing.token_count = token_count  # type: ignore[assignment]
+                existing.web_search_used = web_search_used  # type: ignore[assignment]
+                existing.updated_at = datetime.utcnow()  # type: ignore[assignment]
             else:
                 new_commentary = AICommentary(
                     element_id=element_id,
@@ -724,7 +776,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
         """
         # This will be called per-element - for efficiency, prefer _collect_all_element_data
         all_data = self._collect_all_element_data()
-        return all_data.get(element_id, {})
+        return dict(all_data.get(element_id, {}))
 
     def _collect_all_element_data(self) -> dict:
         """Collect current data for all elements.
@@ -732,7 +784,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
         Returns:
             Dictionary mapping element_id to its current data
         """
-        data = {}
+        data: dict[str, dict[str, Any]] = {}
 
         # Get portfolio summary
         summary = self._get_portfolio_summary()
@@ -748,7 +800,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
 
         # Build element-specific data
         for element_id in ELEMENT_REGISTRY.keys():
-            element_data = {
+            element_data: dict[str, Any] = {
                 "summary": summary,
                 "positions": positions,
                 "performance": performance,
@@ -802,12 +854,12 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             user_context = self._get_user_context()
 
             # Get config settings if available
-            config = {}
+            config: dict[str, Any] = {}
             try:
                 config_setting = self.db.get_setting("config")
                 if config_setting:
                     import json
-                    config = json.loads(config_setting.value) if config_setting.value else {}
+                    config = json.loads(cast(str, config_setting.value)) if config_setting.value else {}
             except Exception:
                 logger.warning("Failed to load config setting for commentary context", exc_info=True)
 
@@ -870,18 +922,18 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
 
             # Get account balances by type
             accounts = self.db.get_all_accounts()
-            taxable_balance = 0
-            traditional_balance = 0
-            roth_balance = 0
+            taxable_balance: float = 0.0
+            traditional_balance: float = 0.0
+            roth_balance: float = 0.0
 
             for account in accounts:
-                positions = self.db.get_positions_by_account(account.id)
-                account_value = sum(
+                positions = self.db.get_positions_by_account(cast(str, account.id))
+                account_value = float(sum(
                     (p.current_price or 0) * (p.shares or 0)
                     for p in positions
-                )
+                ))
 
-                account_type = account.account_type.lower()
+                account_type = cast(str, account.account_type).lower()
                 if account_type in ["traditional_ira", "traditional_401k"]:
                     traditional_balance += account_value
                 elif account_type in ["roth_ira", "roth_401k"]:
@@ -942,7 +994,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             total_cost_basis = 0
 
             for account in accounts:
-                positions = self.db.get_positions_by_account(account.id)
+                positions = self.db.get_positions_by_account(cast(str, account.id))
                 account_value = sum(
                     (p.current_price or 0) * (p.shares or 0)
                     for p in positions
@@ -952,13 +1004,13 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
                     for p in positions
                 )
 
-                total_value += account_value
-                total_cost_basis += account_cost
+                total_value += account_value  # type: ignore[assignment]
+                total_cost_basis += account_cost  # type: ignore[assignment]
 
                 if account.is_retirement:
-                    retirement_value += account_value
+                    retirement_value += account_value  # type: ignore[assignment]
                 else:
-                    taxable_value += account_value
+                    taxable_value += account_value  # type: ignore[assignment]
 
             total_gain_loss = total_value - total_cost_basis
             total_gain_loss_pct = (total_gain_loss / total_cost_basis * 100) if total_cost_basis else 0
@@ -981,7 +1033,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
         try:
             positions = []
             for account in self.db.get_all_accounts():
-                for pos in self.db.get_positions_by_account(account.id):
+                for pos in self.db.get_positions_by_account(cast(str, account.id)):
                     positions.append({
                         "ticker": pos.ticker,
                         "name": pos.name,
@@ -1059,7 +1111,10 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
         """Get user context for personalization."""
         # Try to get from settings
         try:
-            settings = self.db.get_settings()
+            settings_list = self.db.get_all_settings()
+            settings: dict[str, Any] = {
+                cast(str, s.key): cast(Any, s.value) for s in settings_list
+            }
             return {
                 "user_age": settings.get("current_age", 35),
                 "retirement_age": settings.get("retirement_age", 65),
@@ -1090,9 +1145,9 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             elif isinstance(value, str):
                 # Remove potentially dangerous characters and limit length
                 clean = re.sub(r'[{}\[\]<>|&;$`\\\'"]', '', str(value))[:100]
-                sanitized[key] = clean
+                sanitized[key] = clean  # type: ignore[assignment]
             else:
-                sanitized[key] = str(value)[:100]
+                sanitized[key] = str(value)[:100]  # type: ignore[assignment]
         return sanitized
 
     def _perform_web_searches(self, queries: list[str], user_context: dict) -> dict:
@@ -1105,7 +1160,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
         Returns:
             Dictionary of search results
         """
-        results = {}
+        results: dict[str, Any] = {}
 
         # Sanitize user context to prevent format string injection
         safe_context = self._sanitize_search_context(user_context)

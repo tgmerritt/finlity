@@ -5,7 +5,7 @@ import logging
 import os
 import secrets as _pysecrets
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, cast
 
 import yaml
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
@@ -127,8 +127,8 @@ class SecretsManager:
         """Initialize secrets manager with database connection."""
         self.db = db
         self._env_loaded = False
-        self._config_cache = None
-        self._fernet: Optional[Fernet] = None
+        self._config_cache: Optional[dict] = None
+        self._fernet: Optional[Any] = None
 
     def _load_env_file(self) -> None:
         """Load .env file if present."""
@@ -168,7 +168,8 @@ class SecretsManager:
         """Get an API key from config.yaml."""
         config = self._load_config_yaml()
         api_keys = config.get("api_keys", {})
-        return api_keys.get(name)
+        result = api_keys.get(name)
+        return cast(Optional[str], result)
 
     def _get_env_var_name(self, key: str) -> str:
         """Get environment variable name for a key."""
@@ -201,7 +202,7 @@ class SecretsManager:
         """
         fernet = self._get_fernet()
         encrypted = fernet.encrypt(value.encode())
-        return "fernet:" + encrypted.decode()
+        return "fernet:" + cast(str, encrypted.decode())
 
     def _decode(self, encoded: str) -> str:
         """Decrypt a value from database storage.
@@ -214,7 +215,7 @@ class SecretsManager:
             fernet = self._get_fernet()
             try:
                 encrypted_data = encoded[7:].encode()  # Remove 'fernet:' prefix
-                return fernet.decrypt(encrypted_data).decode()
+                return cast(str, fernet.decrypt(encrypted_data).decode())
             except InvalidToken:
                 logger.error("Failed to decrypt value - invalid token or wrong key")
                 raise
@@ -260,10 +261,10 @@ class SecretsManager:
         if setting and setting.value:
             if setting.encrypted:
                 try:
-                    return self._decode(setting.value)
+                    return self._decode(cast(str, setting.value))
                 except Exception:
                     return None
-            return setting.value
+            return cast(str, setting.value)
 
         return None
 

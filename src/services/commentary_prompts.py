@@ -921,3 +921,635 @@ def format_prompt(prompt_key: str, **kwargs) -> str:
     except KeyError as e:
         # Return template with placeholder note if formatting fails
         return f"{template}\n\n[Note: Missing data for {e}]"
+
+
+# =============================================================================
+# Portfolio dossier — stable, large, cacheable system-prompt extension.
+#
+# Anthropic prompt caching only delivers savings when the cached prefix
+# clears the model minimum (2048 tokens for Sonnet 4.6, 4096 for Opus/Haiku).
+# `SYSTEM_PROMPT` alone is ~150 tokens, so caching is a no-op without a real
+# stable block in front of the per-call user message.
+#
+# The dossier is intentionally redundant with the per-element user prompts —
+# the goal is a content-stable system prefix across calls within ~5 minutes,
+# not de-duplication. Per-element user templates remain unchanged so output
+# style/format is preserved exactly.
+# =============================================================================
+
+
+_GUIDANCE_REFERENCE = """## Reference Guidance for Commentary
+
+When discussing the user's portfolio, draw on these standard advisory frames of
+reference. They are stable across calls and do not need to be re-derived. They
+exist in the system prompt so the cached prefix has substantive content to
+amortize across many commentary requests within a session.
+
+### Concentration & Diversification
+- A single stock above 5-10% of a portfolio is typically considered
+  "concentrated." Broad index funds (VTI, VOO, VXUS, BND, etc.) are exempt
+  because they hold hundreds to thousands of underlying names.
+- "Top 5" and "Top 10" weights are the most common concentration metrics.
+  Top 10 above 60% is materially concentrated for an individual-stock
+  portfolio; for ETF-heavy portfolios the same number is unremarkable.
+- Sector concentration mirrors single-stock concentration. The S&P 500 is
+  roughly 30% information technology as of recent rebalances; 40%+ is
+  meaningfully overweight tech.
+- Geographic concentration is often overlooked. A pure S&P 500 allocation is
+  100% U.S.-domiciled; investors typically add an international fund (VXUS,
+  IXUS, VEU) to capture the ~40% of global equity market cap that sits
+  outside the U.S.
+- Style boxes (large/mid/small cap x value/blend/growth) provide an
+  orthogonal diversification axis. A portfolio dominated by large-cap growth
+  (think QQQ, large-cap tech) can look diversified by ticker but be highly
+  correlated underneath.
+- Correlation matters more than ticker count. Holding ten different
+  large-cap U.S. tech stocks is meaningfully less diversified than holding
+  one total-market ETF, even though the tech basket has ten line items.
+
+### Tax Treatment of Account Types
+- **Traditional 401(k)/IRA**: pre-tax contributions, withdrawals taxed as
+  ordinary income, RMDs begin at 73 (74 starting 2033 per SECURE 2.0).
+- **Roth 401(k)/IRA**: post-tax contributions, qualified withdrawals are
+  tax-free, no lifetime RMDs on Roth IRA, RMDs on Roth 401(k) at 73 (avoidable
+  via rollover to a Roth IRA before age 73).
+- **Taxable brokerage**: only realized gains taxed; long-term capital gains
+  rates (0%/15%/20%) typically beat ordinary income rates; tax-loss harvesting
+  available; step-up in basis at death; no contribution limits.
+- **HSA**: triple-tax-advantaged when used for qualified medical expenses
+  (deductible going in, tax-free growth, tax-free withdrawal for medical).
+  After 65 it functions like a traditional IRA for non-medical withdrawals.
+- **529**: state tax deduction (varies by state); tax-free growth for
+  qualified education expenses; SECURE 2.0 allows up to $35k lifetime rollover
+  to a Roth IRA for the beneficiary subject to conditions.
+- **I-Bonds / TIPS**: inflation-indexed; I-Bond purchase capped at $10k/year
+  per SSN ($15k with tax refund); state-tax-free.
+- 2024 contribution limits: 401(k) $23,000 (+$7,500 catch-up at 50+);
+  IRA $7,000 (+$1,000 catch-up); HSA $4,150 single / $8,300 family;
+  Roth IRA phase-out $146-161k single / $230-240k MFJ MAGI.
+
+### Withdrawal Sequence Heuristic
+The conventional tax-efficient order is taxable -> traditional -> Roth.
+Reality is more nuanced:
+- Retirees with large traditional balances often do strategic Roth
+  conversions during the gap years between retirement and Social Security /
+  age 73 to fill lower brackets and reduce future RMDs.
+- IRMAA (Medicare Part B/D surcharges) thresholds create stair-step costs
+  that interact with conversion sizing for retirees over 63.
+- Net Investment Income Tax (NIIT, 3.8%) applies above $200k single /
+  $250k MFJ MAGI on investment income, which can affect the optimal mix of
+  taxable vs. tax-deferred withdrawals.
+- Asset location: tax-inefficient assets (bonds paying ordinary-income
+  interest, REITs paying non-qualified dividends) are typically better held
+  in tax-advantaged accounts; tax-efficient assets (broad index funds,
+  individual stocks held long-term) work fine in taxable accounts.
+
+### Risk Metrics
+- **Volatility**: annualized standard deviation of returns. S&P 500 has run
+  roughly 15-20% historically; a 60/40 portfolio runs roughly 9-11%; a
+  bond-heavy portfolio (e.g., 30/70) runs roughly 5-7%.
+- **Sharpe ratio**: (return - risk-free) / volatility. Above 1.0 is good,
+  above 2.0 is excellent and rare for individual portfolios over long
+  horizons. The S&P 500's long-run Sharpe is roughly 0.4-0.5.
+- **Beta**: covariance with the market index, scaled. Beta = 1 means moves
+  in lockstep with the S&P 500; beta = 1.3 means 30% more volatile than the
+  market in either direction; beta = 0.7 means 30% less volatile.
+- **Max drawdown**: largest peak-to-trough decline. The S&P 500's worst
+  since WWII is roughly -57% (Oct 2007 - Mar 2009). Other notables:
+  COVID -34% (Feb-Mar 2020), dot-com -49% (Mar 2000 - Oct 2002).
+- **VaR 95%**: there is a 5% probability of losing more than this in the
+  stated period (typically one trading day or one year). Less reliable in
+  tail events than its statistical framing suggests; complement with stress
+  testing on historical drawdowns.
+- **Correlation to S&P 500**: most U.S.-equity-heavy portfolios run 0.85+;
+  meaningful diversification typically requires bonds, international,
+  alternatives, or trend strategies.
+
+### Retirement Math
+- **4% rule**: a portfolio with annual withdrawals of 4% of the starting
+  balance, adjusted for inflation, has historically supported 30 years with
+  high probability (Bengen 1994, Trinity Study). Early retirees with 40+
+  year horizons often use 3-3.5%.
+- **FIRE number**: 25 x annual expenses (the inverse of 4%). Lean FIRE,
+  Coast FIRE, and Barista FIRE are popular variants with different
+  underlying assumptions.
+- **Monte Carlo success rate**: probability the portfolio survives the full
+  retirement horizon across thousands of randomized return paths. 80%+ is
+  typically called "comfortable"; below 70% is concerning. The metric is
+  highly sensitive to expected-return and inflation assumptions.
+- **Sequence-of-returns risk**: poor returns in the first 5-10 years of
+  retirement disproportionately hurt long-term outcomes because withdrawals
+  lock in losses. Cash buffers and bond ladders mitigate this.
+- **Social Security**: full retirement age is 67 for those born 1960+;
+  delaying to 70 yields ~32% more in monthly benefits than claiming at
+  full retirement age, ~76% more than claiming at 62.
+
+### Allocation Heuristics
+- "(110 - age)% in stocks" is a common glide-path shorthand. "(120 - age)"
+  is sometimes used for higher-risk-tolerance investors; both are heuristics
+  rather than rigorous prescriptions.
+- 20-40% international equity allocation is typical for U.S. investors;
+  Vanguard's target-date funds run roughly 40% international in equity.
+- Cash above 5-10% is often considered a "drag" unless earmarked for
+  near-term spending, an emergency fund, or dry-powder during expensive
+  markets.
+- Bond allocation isn't just risk reduction - it's also rebalancing
+  optionality. A 60/40 investor selling bonds to buy stocks during a
+  drawdown captures returns that a 100/0 investor cannot.
+- Rebalancing bands (e.g., +/- 5% from target) typically beat calendar-based
+  rebalancing on after-tax outcomes; tax-loss harvesting compounds the
+  benefit in taxable accounts.
+
+### Common Pitfalls to Watch For
+- Not maxing employer 401(k) match before contributing to taxable accounts
+  (leaving free money on the table).
+- Holding bonds in taxable accounts at higher marginal rates instead of in
+  tax-deferred accounts (asset-location error).
+- Ignoring expense ratios; 0.5%+ annual fees compound to substantial drag
+  over decades, especially in tax-advantaged accounts where the drag isn't
+  even tax-deductible.
+- Performance-chasing: rotating into recently top-performing funds usually
+  buys at peaks and sells at troughs.
+- Concentration in employer stock from RSUs/ESPP creating both income risk
+  and portfolio risk in the same name.
+"""
+
+
+# ---------------------------------------------------------------------------
+# Metrics glossary — terse term:def lines for terminology the AI repeatedly
+# explains. Complementary (not duplicative) of the prose Risk Metrics block
+# in _GUIDANCE_REFERENCE: that section gives benchmarks ("S&P 500's long-run
+# Sharpe is roughly 0.4-0.5"); this section gives definitions ("Sharpe = excess
+# return per unit of total volatility") so the AI's vocabulary stays precise.
+# ---------------------------------------------------------------------------
+
+_METRICS_GLOSSARY = """## Metrics Glossary
+
+These short definitions exist so the AI uses terms consistently. They are
+intentionally definitional rather than evaluative; the Risk Metrics section
+above provides the "what is normal" benchmarks.
+
+- **Sharpe ratio**: (portfolio return - risk-free rate) / portfolio volatility.
+  Penalizes total volatility, including upside.
+- **Sortino ratio**: like Sharpe, but the denominator is downside deviation
+  only (volatility of negative-only returns). Preferred when investors care
+  about loss volatility specifically rather than two-sided variance.
+- **Information ratio**: (portfolio return - benchmark return) / tracking
+  error. Measures consistency of active outperformance vs. a benchmark.
+- **Treynor ratio**: (portfolio return - risk-free rate) / portfolio beta.
+  Useful only for diversified portfolios where idiosyncratic risk is small.
+- **Alpha**: return in excess of what beta-adjusted market exposure would
+  predict. Finlity reports a simplified alpha as portfolio_return -
+  benchmark_return; a regression-based alpha would also subtract beta * market
+  excess return.
+- **Beta**: covariance(portfolio_returns, benchmark_returns) / variance
+  (benchmark_returns). Beta of 1.0 = market-tracking; >1 = amplified moves.
+- **R-squared**: fraction of portfolio variance explained by the benchmark.
+  Above ~0.8 means alpha and beta are interpretable; below ~0.6 means the
+  benchmark is a poor reference point and risk-adjusted metrics get noisy.
+- **Tracking error**: standard deviation of (portfolio_return -
+  benchmark_return). Index funds run <0.5%; active funds 3-8%+.
+- **Volatility (sigma)**: standard deviation of returns. Annualized from
+  daily by multiplying by sqrt(252).
+- **Downside deviation**: like volatility but using only returns below the
+  minimum-acceptable-return (often 0 or the risk-free rate).
+- **Max drawdown (MDD)**: largest peak-to-trough percentage decline in the
+  series. Path-dependent; complements volatility, which is path-independent.
+- **Calmar ratio**: annualized return / |max drawdown|. Common in CTA /
+  managed-futures performance reporting; less common for retail portfolios.
+- **Ulcer Index**: RMS of drawdown depths over a window. Captures both depth
+  and duration of drawdowns; less common but more informative than MDD alone.
+- **VaR (Value at Risk, 95%)**: loss threshold such that worse outcomes occur
+  with 5% probability over the stated horizon. Reported here as a positive
+  loss number (e.g., 2.1% means "5% chance of losing more than 2.1%").
+- **CVaR (Conditional VaR / Expected Shortfall)**: average loss conditional
+  on losses exceeding the VaR threshold. Coherent risk measure (sub-additive)
+  in ways VaR is not; preferred by most modern risk frameworks.
+- **Expense ratio**: annual fund-level fee, expressed as a percent of
+  assets. Compounds yearly. A 0.5% vs. 0.05% gap on a $500k position is
+  ~$2,250/year in cost drag, growing with the balance.
+- **Cash drag**: opportunity cost of holding cash vs. invested assets.
+  Roughly (equity_return - cash_return) * cash_weight per year.
+- **Factor exposure**: tilt to systematic factors (size, value, momentum,
+  quality, low-vol). Two seemingly different funds can share substantial
+  factor overlap (e.g., a "dividend" fund is usually a value+quality bet).
+- **Yield**: dividend or interest income as a percent of price. Bond yields
+  are quoted as YTM (yield to maturity) for non-callable issues.
+- **Duration**: bond-price sensitivity to interest rates. A 7-year-duration
+  bond loses ~7% if rates rise 1 percentage point.
+- **Convexity**: second-order sensitivity of bond price to rate changes;
+  positive convexity benefits the holder when rates move sharply either way.
+- **Margin of safety**: buffer between price paid and conservative
+  fair-value estimate; Graham/Buffett vocabulary, not a quantitative metric.
+- **Dollar drag**: total dollar cost (in the user's portfolio) of a fee,
+  tax, or under-performance gap; useful framing because basis points feel
+  abstract while dollar amounts do not.
+"""
+
+
+# ---------------------------------------------------------------------------
+# Methodology notes — how Finlity actually computes the metrics it surfaces.
+# These are derived from src/analysis/risk.py and src/analysis/performance.py;
+# updates to those files should be reflected here so the AI's narrative
+# matches what the dashboard shows.
+# ---------------------------------------------------------------------------
+
+_METHODOLOGY_NOTES = """## Finlity Methodology Notes
+
+When the user asks "how is X computed?" or "why does X disagree with Y?",
+the answers below reflect Finlity's current implementation. Treat these as
+authoritative for narrating the dashboard; do not invent alternative formulas.
+
+### Return inputs
+- Daily price series are fetched per-ticker for a 1-year lookback window
+  (~252 trading days). Shorter histories produce less stable metrics; with
+  fewer than ~20 daily observations risk metrics are not reported at all.
+- Daily returns are simple percent changes: r_t = (P_t - P_{t-1}) / P_{t-1}.
+  The first observation (zero return) is dropped before statistics.
+- Portfolio-level returns are weighted by current market value of each
+  position, not by initial cost basis.
+
+### Risk-free rate
+- The default risk-free rate is 4.0% annually, configurable via Settings ->
+  Market Assumptions. It is converted to a daily rate as r_daily = r_annual
+  / 252 for use inside Sharpe and Sortino calculations.
+
+### Annualization
+- All annualized metrics use the trading-day convention: annual_volatility =
+  daily_std * sqrt(252); annual_sharpe = (mean_excess_daily_return /
+  std_excess_daily_return) * sqrt(252).
+- Returns are not de-meaned beyond the explicit risk-free subtraction.
+
+### Sharpe and Sortino
+- Sharpe: mean of (daily_return - daily_rf) divided by std of the same
+  excess-return series, scaled by sqrt(252).
+- Sortino: same numerator, but the denominator is the std of *only*
+  negative excess returns (downside deviation), again scaled by sqrt(252).
+  If there are no negative excess returns in the window, Sortino is reported
+  as 0 to avoid divide-by-zero.
+
+### Drawdown
+- Max drawdown walks the price series, tracking the running peak; for each
+  point below peak, drawdown = (peak - price) / peak. The reported figure
+  is the maximum such ratio over the window, rendered as a percentage.
+
+### VaR and CVaR
+- VaR (95%) is the negative of the 5th percentile of the daily-return
+  distribution. Reported as a positive loss percentage.
+- CVaR (95%) is the negative mean of returns at or below -VaR. If the tail
+  is empty (all returns above the threshold), CVaR falls back to VaR.
+- Both are historical / non-parametric. They are not normal-distribution
+  approximations and they do not assume i.i.d. returns. Limitation: a
+  one-year window cannot speak to ten-year tail events.
+
+### Alpha and beta
+- Alpha is reported as a simple return-difference (portfolio_return -
+  benchmark_return) for both YTD and 1-year horizons. This is *not* the
+  regression-based Jensen's alpha.
+- Beta is not currently computed by Finlity at the portfolio level; treat
+  it as an estimate when discussed.
+
+### Concentration
+- "Top N concentration" sums the position values of the N largest holdings
+  and divides by total portfolio value. Mutual funds and ETFs count as
+  single positions even though they hold many underliers; the dashboard
+  does not look through to underlying holdings.
+
+### Allocation by asset class / sector / geography
+- Asset-class, sector, and geographic breakdowns rely on per-position tags
+  in the database. Untagged positions default to "Unknown" / "Other". Where
+  funds are concerned, the breakdown reflects the fund's stated category,
+  not its constituent holdings.
+"""
+
+
+# ---------------------------------------------------------------------------
+# Tone and guardrails reinforcement — the SYSTEM_PROMPT block at the top is
+# brief by design (~150 tokens). These additional rules keep the AI's voice
+# stable across many calls and reduce the chance of stylistic drift between
+# commentary requests inside a session.
+# ---------------------------------------------------------------------------
+
+_TONE_AND_GUARDRAILS = """## Tone, Style, and Guardrails
+
+These rules apply to every commentary or chat reply. They reinforce, not
+override, the brief persona block at the top of this prompt.
+
+### What to do
+- Cite specific numbers from the dossier rather than vague descriptors.
+  "Top 5 holdings at 42.3%" beats "your portfolio is fairly concentrated."
+- When you give an evaluative judgment ("this is high", "this is reasonable"),
+  ground it in a benchmark from the Reference Guidance section. Benchmarks
+  are preferable to absolute thresholds, especially when a user's situation
+  may legitimately differ from typical.
+- Use markdown sparingly. Bold is for the load-bearing number or claim,
+  not decoration; bullet lists are for genuine enumerations, not for breaking
+  up prose. Headers are reserved for chat replies that span multiple topics.
+- Default to short, declarative sentences. Compound paragraphs are fine
+  when explaining a multi-step concept (e.g., the Roth conversion ladder).
+- Acknowledge when a user has done something well. Honest encouragement is
+  part of the persona; it should not crowd out honest concerns.
+
+### What not to do
+- Do not recommend specific securities by ticker, even when asked. You may
+  describe categories ("a broad U.S. total-market index fund") but not
+  individual issuers ("VTI is best").
+- Do not predict market direction or short-term price moves. Decline gently
+  ("I don't have a useful forecast there") and pivot to what is knowable
+  (allocation, fees, tax efficiency, behavioral guardrails).
+- Do not promise tax outcomes. Tax law changes; user circumstances vary.
+  Frame projections as scenarios, not guarantees.
+- Do not exceed the requested length. Per-element commentary is 2-4
+  sentences unless a template explicitly asks for "1-2 paragraphs". When in
+  doubt, err shorter.
+- Do not repeat the dossier back to the user. Reference figures from it,
+  but the user already sees them on the dashboard; commentary that recites
+  the data without interpretation is filler.
+- Do not invent precision. If the dossier says ~42% top-5, do not write
+  "42.3% concentration" unless that exact figure is present. Avoid
+  spurious decimal places.
+- Do not address the user by name unless the page-context includes one.
+
+### Disagreement and uncertainty
+- It is acceptable, and often valuable, to disagree with a user's framing
+  if the data warrants it. Do so directly but without scolding tone.
+- When you do not have data for a claim, say so. "Sector breakdown isn't
+  available in the provided dossier" is preferable to a guess.
+- When reasonable advisors would disagree (e.g., 4% vs. 3.5% withdrawal
+  rate for a 40-year horizon), acknowledge the disagreement rather than
+  picking a side as if it were settled.
+
+### What the dossier replaces
+The dossier above contains the user's portfolio snapshot, holdings,
+allocation targets, and (when configured) market assumptions and Monte Carlo
+parameters. Treat those as the authoritative state for the current session.
+If the user asks a question whose answer requires data not in the dossier
+(e.g., individual transaction history, exact cost basis per lot), say what
+is available and note what would require navigating to the relevant page.
+"""
+
+
+def build_portfolio_dossier(
+    summary: dict | None = None,
+    positions: list[dict] | None = None,
+    allocation: dict | None = None,
+    user_context: dict | None = None,
+    settings_data: dict | None = None,
+) -> str:
+    """Build a comprehensive, stable portfolio dossier suitable for caching.
+
+    The output is intentionally large (target 2500+ tokens for non-trivial
+    portfolios) so it clears Anthropic's caching threshold for Sonnet 4.6
+    (2048) and Opus/Haiku 4.7 (4096). The content is "stable" across calls
+    in the sense that all inputs are derived from the same database snapshot
+    and a regeneration of multiple commentaries within a ~5-minute window
+    will produce the same dossier text.
+
+    Tiny / empty portfolios will produce a small dossier and won't cache —
+    that's expected and acceptable. The savings target is users who have
+    real data and trigger many commentaries in sequence.
+
+    Args:
+        summary: Output of `_get_portfolio_summary()` (totals, gain/loss).
+        positions: Output of `_get_positions()` (list of holding dicts).
+        allocation: Output of `_get_allocation_data()` (concentration, cash).
+        user_context: Output of `_get_user_context()` (age, retirement_age).
+        settings_data: Output of `_get_settings_data()` (targets, MC config).
+
+    Returns:
+        Markdown-formatted dossier string.
+    """
+    summary = summary or {}
+    positions = positions or []
+    allocation = allocation or {}
+    user_context = user_context or {}
+    settings_data = settings_data or {}
+
+    parts: list[str] = []
+    parts.append("## Client Portfolio Dossier")
+    parts.append(
+        "The following snapshot describes the client whose portfolio you are "
+        "providing commentary on. It is stable across the current commentary "
+        "session; treat it as authoritative context."
+    )
+
+    # ---------- Demographics ----------
+    user_age = user_context.get("user_age")
+    retirement_age = user_context.get("retirement_age")
+    risk_tolerance = user_context.get("risk_tolerance")
+    if user_age or retirement_age:
+        parts.append("\n### Investor Profile")
+        if user_age:
+            parts.append(f"- Current age: {user_age}")
+        if retirement_age:
+            parts.append(f"- Target retirement age: {retirement_age}")
+            if user_age:
+                yrs = max(0, int(retirement_age) - int(user_age))
+                parts.append(f"- Years until target retirement: {yrs}")
+        if risk_tolerance:
+            parts.append(f"- Stated risk tolerance: {risk_tolerance}")
+
+    # ---------- Top-line balances ----------
+    total_value = summary.get("total_value") or 0
+    if total_value:
+        parts.append("\n### Portfolio Snapshot")
+        parts.append(f"- Total portfolio value: ${total_value:,.0f}")
+        retirement_value = summary.get("retirement_value") or 0
+        taxable_value = summary.get("taxable_value") or 0
+        if retirement_value:
+            pct = retirement_value / total_value * 100 if total_value else 0
+            parts.append(
+                f"- Retirement (tax-advantaged) accounts: "
+                f"${retirement_value:,.0f} ({pct:.1f}%)"
+            )
+        if taxable_value:
+            pct = taxable_value / total_value * 100 if total_value else 0
+            parts.append(
+                f"- Taxable accounts: ${taxable_value:,.0f} ({pct:.1f}%)"
+            )
+        cost_basis = summary.get("total_cost_basis") or 0
+        if cost_basis:
+            parts.append(f"- Aggregate cost basis: ${cost_basis:,.0f}")
+        gain_loss = summary.get("total_gain_loss")
+        gain_loss_pct = summary.get("total_gain_loss_pct")
+        if gain_loss is not None:
+            sign = "+" if gain_loss >= 0 else ""
+            pct_str = (
+                f" ({sign}{gain_loss_pct:.1f}%)"
+                if gain_loss_pct is not None
+                else ""
+            )
+            parts.append(
+                f"- Unrealized gain/loss: {sign}${gain_loss:,.0f}{pct_str}"
+            )
+        num_accounts = summary.get("num_accounts")
+        if num_accounts is not None:
+            parts.append(f"- Account count: {num_accounts}")
+
+    # ---------- Concentration ----------
+    if allocation:
+        parts.append("\n### Concentration & Cash")
+        top_5 = allocation.get("top_5_pct")
+        top_10 = allocation.get("top_10_pct")
+        cash_pct = allocation.get("cash_pct")
+        invested_pct = allocation.get("invested_pct")
+        if top_5 is not None:
+            parts.append(f"- Top 5 holdings: {top_5:.1f}% of portfolio")
+        if top_10 is not None:
+            parts.append(f"- Top 10 holdings: {top_10:.1f}% of portfolio")
+        if cash_pct is not None:
+            parts.append(f"- Cash / money-market: {cash_pct:.1f}%")
+        if invested_pct is not None:
+            parts.append(f"- Invested (non-cash): {invested_pct:.1f}%")
+
+    # ---------- Top holdings detail ----------
+    if positions:
+        sorted_positions = sorted(
+            positions, key=lambda p: p.get("value", 0) or 0, reverse=True
+        )[:15]
+        if sorted_positions:
+            parts.append("\n### Top Holdings (up to 15)")
+            tv = total_value or sum(
+                (p.get("value", 0) or 0) for p in positions
+            ) or 1
+            for pos in sorted_positions:
+                ticker = pos.get("ticker", "?")
+                name = pos.get("name") or ""
+                value = pos.get("value") or 0
+                shares = pos.get("shares")
+                price = pos.get("current_price")
+                acct = pos.get("account_type") or "unknown"
+                pct = (value / tv * 100) if tv else 0
+                detail_bits = []
+                if shares is not None:
+                    detail_bits.append(f"{shares} shares")
+                if price:
+                    detail_bits.append(f"@ ${price:,.2f}")
+                detail_bits.append(f"in {acct}")
+                detail = ", ".join(detail_bits)
+                name_part = f" — {name}" if name and name != ticker else ""
+                parts.append(
+                    f"- **{ticker}**{name_part}: ${value:,.0f} "
+                    f"({pct:.2f}%) [{detail}]"
+                )
+
+    # ---------- Allocation targets / market assumptions ----------
+    if settings_data:
+        target_eq = settings_data.get("target_equities")
+        target_bd = settings_data.get("target_bonds")
+        target_alt = settings_data.get("target_alternatives")
+        target_cash = settings_data.get("target_cash")
+        if any(v is not None for v in (target_eq, target_bd, target_alt, target_cash)):
+            parts.append("\n### Asset-Class Targets")
+            if target_eq is not None:
+                parts.append(f"- Equities target: {target_eq}%")
+            if target_bd is not None:
+                parts.append(f"- Bonds target: {target_bd}%")
+            if target_alt is not None:
+                parts.append(f"- Alternatives target: {target_alt}%")
+            if target_cash is not None:
+                parts.append(f"- Cash target: {target_cash}%")
+            typical_eq = settings_data.get("typical_equity")
+            typical_bd = settings_data.get("typical_bond")
+            if typical_eq is not None and typical_bd is not None:
+                parts.append(
+                    f"- Age-based heuristic for this client: "
+                    f"~{typical_eq}% equities / ~{typical_bd}% bonds"
+                )
+
+        market_keys = (
+            "stock_return", "stock_std", "bond_return", "bond_std",
+            "inflation", "risk_free",
+        )
+        if any(settings_data.get(k) is not None for k in market_keys):
+            parts.append("\n### Market Assumptions in Use")
+            sr = settings_data.get("stock_return")
+            ss = settings_data.get("stock_std")
+            br = settings_data.get("bond_return")
+            bs = settings_data.get("bond_std")
+            inf = settings_data.get("inflation")
+            rf = settings_data.get("risk_free")
+            if sr is not None:
+                std_part = f" (std dev {ss}%)" if ss is not None else ""
+                parts.append(f"- Expected stock return: {sr}%{std_part}")
+            if br is not None:
+                std_part = f" (std dev {bs}%)" if bs is not None else ""
+                parts.append(f"- Expected bond return: {br}%{std_part}")
+            if inf is not None:
+                parts.append(f"- Inflation assumption: {inf}%")
+            if rf is not None:
+                parts.append(f"- Risk-free rate: {rf}%")
+
+        mc_keys = (
+            "num_simulations", "black_swan_prob", "black_swan_impact",
+            "golden_swan_prob", "golden_swan_impact",
+        )
+        if any(settings_data.get(k) is not None for k in mc_keys):
+            parts.append("\n### Monte Carlo Configuration")
+            ns = settings_data.get("num_simulations")
+            if ns is not None:
+                parts.append(f"- Simulations per run: {ns}")
+            bsp = settings_data.get("black_swan_prob")
+            bsi = settings_data.get("black_swan_impact")
+            if bsp is not None:
+                parts.append(
+                    f"- Black-swan event: {bsp}% probability, "
+                    f"{bsi}% impact"
+                )
+            gsp = settings_data.get("golden_swan_prob")
+            gsi = settings_data.get("golden_swan_impact")
+            if gsp is not None:
+                parts.append(
+                    f"- Golden-swan event: {gsp}% probability, "
+                    f"+{gsi}% impact"
+                )
+
+        wr = settings_data.get("withdrawal_rate")
+        target_inc = settings_data.get("target_income")
+        if wr or target_inc:
+            parts.append("\n### Retirement Plan Settings")
+            if wr:
+                parts.append(f"- Configured withdrawal rate: {wr}%")
+            if target_inc:
+                parts.append(
+                    f"- Target monthly retirement income: ${target_inc:,.0f}"
+                )
+
+    # ---------- Reference guidance (always included) ----------
+    # Order: Reference Guidance -> Glossary -> Methodology -> Tone/Guardrails.
+    # The four blocks are logically distinct so they live as sibling constants;
+    # each is appended unconditionally so the cacheable prefix is identical
+    # across calls regardless of portfolio shape.
+    parts.append("")
+    parts.append(_GUIDANCE_REFERENCE)
+    parts.append("")
+    parts.append(_METRICS_GLOSSARY)
+    parts.append("")
+    parts.append(_METHODOLOGY_NOTES)
+    parts.append("")
+    parts.append(_TONE_AND_GUARDRAILS)
+
+    return "\n".join(parts)
+
+
+def build_cacheable_system_prompt(
+    summary: dict | None = None,
+    positions: list[dict] | None = None,
+    allocation: dict | None = None,
+    user_context: dict | None = None,
+    settings_data: dict | None = None,
+) -> str:
+    """Combine SYSTEM_PROMPT with the portfolio dossier into one cacheable block.
+
+    The returned string is what should be passed as `system=` to the provider
+    when `cache_system=True`. Anthropic will cache the entire prefix; the
+    per-call user message is what actually changes between requests.
+    """
+    dossier = build_portfolio_dossier(
+        summary=summary,
+        positions=positions,
+        allocation=allocation,
+        user_context=user_context,
+        settings_data=settings_data,
+    )
+    return f"{SYSTEM_PROMPT}\n\n{dossier}"

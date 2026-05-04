@@ -5,7 +5,10 @@
 
 import { apiCall } from '@/api/client';
 import { store, SortConfig } from '@/state/store';
+import { emit } from '@/state/events';
 import { showToast } from '@/ui/toast';
+import { setStateView, clearStateView } from '@/ui/state-view';
+import { withSubmitGuard } from '@/ui/with-submit-guard';
 import {
   showConfirmDialog,
   showAddPositionModal as showAddPositionModalUI,
@@ -51,6 +54,16 @@ function formatPrice(value: number | null | undefined, ticker?: string): string 
 }
 
 /**
+ * Close every currently open `.multi-select-dropdown`. Exported so the
+ * keyboard / outside-click handlers (and tests) can share one path.
+ */
+export function closeAllMultiSelects(): void {
+  document.querySelectorAll('.multi-select-dropdown.open').forEach((d) => {
+    d.classList.remove('open');
+  });
+}
+
+/**
  * Toggle multi-select dropdown open/closed.
  */
 export function toggleMultiSelect(dropdownId: string): void {
@@ -60,14 +73,39 @@ export function toggleMultiSelect(dropdownId: string): void {
   const wasOpen = dropdown.classList.contains('open');
 
   // Close all dropdowns first
-  document.querySelectorAll('.multi-select-dropdown.open').forEach((d) => {
-    d.classList.remove('open');
-  });
+  closeAllMultiSelects();
 
   // Toggle this one
   if (!wasOpen) {
     dropdown.classList.add('open');
   }
+}
+
+// Module-scoped flag so the global outside-click / Escape listeners are only
+// attached once, regardless of how many times init runs (e.g. in tests).
+let multiSelectGlobalListenersAttached = false;
+
+/**
+ * Wire up document-level handlers that close any open multi-select dropdown
+ * when the user clicks outside it or presses Escape. Idempotent.
+ */
+export function installMultiSelectAutoClose(): void {
+  if (multiSelectGlobalListenersAttached) return;
+  multiSelectGlobalListenersAttached = true;
+
+  document.addEventListener('click', (e) => {
+    // A click anywhere inside a `.multi-select-dropdown` (trigger or menu) is
+    // handled by the dropdown's own logic; only outside clicks close.
+    if (!(e.target as HTMLElement).closest('.multi-select-dropdown')) {
+      closeAllMultiSelects();
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeAllMultiSelects();
+    }
+  });
 }
 
 /**
@@ -79,6 +117,36 @@ export function selectAllAccounts(selectAll: boolean): void {
     (cb as HTMLInputElement).checked = selectAll;
   });
   handleAccountFilterChange();
+}
+
+/**
+ * Refresh the account-filter trigger button label to reflect the current
+ * selection. Without this the button stayed pinned at "All Accounts" even
+ * after the user picked a subset, which was the reported "checkboxes don't
+ * show selected" bug.
+ */
+export function updateAccountFilterLabel(): void {
+  const labelEl = document.getElementById('account-filter-label');
+  if (!labelEl) return;
+
+  const allBoxes = document.querySelectorAll<HTMLInputElement>(
+    '#account-filter-options input[type="checkbox"]'
+  );
+  const checkedBoxes = document.querySelectorAll<HTMLInputElement>(
+    '#account-filter-options input[type="checkbox"]:checked'
+  );
+  const total = allBoxes.length;
+  const selected = checkedBoxes.length;
+
+  if (total === 0 || selected === 0) {
+    labelEl.textContent = 'No Accounts';
+  } else if (selected === total) {
+    labelEl.textContent = 'All Accounts';
+  } else if (selected === 1) {
+    labelEl.textContent = checkedBoxes[0]?.value ?? 'Account';
+  } else {
+    labelEl.textContent = `${selected} of ${total} Accounts`;
+  }
 }
 
 /**
@@ -95,6 +163,9 @@ export function handleAccountFilterChange(): void {
   });
   store.set('selectedAccounts', selected);
 
+  // Update the trigger button label to reflect the new selection.
+  updateAccountFilterLabel();
+
   // Re-render holdings with new filter
   const positions = store.get('currentPositions');
   updateHoldings(positions);
@@ -104,8 +175,10 @@ export function handleAccountFilterChange(): void {
  * Update holdings table with positions.
  */
 export function updateHoldings(positions: DashboardPosition[]): void {
-  const tbody = document.querySelector('#holdings-table tbody');
-  if (!tbody) return;
+  const table = document.getElementById('holdings-table') as HTMLTableElement | null;
+  const tbody = table?.querySelector('tbody');
+  const tableContainer = table?.closest('.table-container') as HTMLElement | null;
+  if (!tbody || !table || !tableContainer) return;
 
   // Clear existing rows
   tbody.textContent = '';
@@ -116,6 +189,57 @@ export function updateHoldings(positions: DashboardPosition[]): void {
 
   // Apply filters
   const filtered = filterPositionsList(sorted);
+
+  // Decide which non-data state (if any) to render. Two distinct UX cases:
+  //  - No positions at all → onboarding empty state with "Add Position" CTA.
+  //  - Filter excludes everything → "Clear filter" CTA (positions exist).
+  if (positions.length === 0) {
+    table.style.display = 'none';
+    setStateView(tableContainer, {
+      kind: 'empty',
+      title: 'No holdings yet',
+      description: 'Import from a broker CSV or add a position manually to get started.',
+      action: {
+        label: 'Add Position',
+        onClick: () => {
+          showAddPositionModal().catch((err) => console.error('Failed to open modal:', err));
+        },
+      },
+    });
+    updateSortIndicators();
+    return;
+  }
+
+  if (filtered.length === 0) {
+    table.style.display = 'none';
+    setStateView(tableContainer, {
+      kind: 'empty',
+      title: 'No holdings match the current filter',
+      description: 'Try adjusting the search or account filter.',
+      action: {
+        label: 'Clear filter',
+        onClick: () => {
+          // Reset search input.
+          const searchEl = document.getElementById('holdings-search') as HTMLInputElement | null;
+          if (searchEl) searchEl.value = '';
+          // Reset account filter to "All Accounts" (everything checked).
+          const checkboxes = document.querySelectorAll<HTMLInputElement>(
+            '#account-filter-options input[type="checkbox"]'
+          );
+          checkboxes.forEach((cb) => {
+            cb.checked = true;
+          });
+          handleAccountFilterChange();
+        },
+      },
+    });
+    updateSortIndicators();
+    return;
+  }
+
+  // We have filtered rows — restore the table and scrub any prior state-view.
+  table.style.display = '';
+  clearStateView(tableContainer);
 
   filtered.forEach((pos) => {
     const gainLoss = pos.cost_basis ? pos.value - pos.cost_basis : null;
@@ -403,9 +527,11 @@ export async function deletePosition(positionId: string): Promise<void> {
       try {
         await apiCall(`/api/portfolio/positions/${positionId}`, { method: 'DELETE' });
         showToast('Position deleted', 'success');
-        // Trigger refresh
+        // Trigger refresh — legacy event kept for the chain in main.ts;
+        // typed bus is additive.
         const event = new CustomEvent('holdings:positionDeleted');
         document.dispatchEvent(event);
+        emit({ type: 'positions:changed', reason: 'deleted' });
       } catch (error) {
         console.error('Error deleting position:', error);
         showToast('Failed to delete position', 'error');
@@ -477,10 +603,22 @@ export function hideEditPositionModal(): void {
 }
 
 /**
+ * Locate a form's submit button. Forms in this codebase don't carry IDs on
+ * their submit buttons (they're styled by class), so reach for them via the
+ * form itself.
+ */
+function findSubmitButton(form: HTMLFormElement | null): HTMLButtonElement | null {
+  if (!form) return null;
+  return form.querySelector<HTMLButtonElement>('button[type="submit"]');
+}
+
+/**
  * Update position from edit form.
  */
 export async function updatePosition(event: Event): Promise<void> {
   event.preventDefault();
+
+  const submitBtn = findSubmitButton(event.target as HTMLFormElement | null);
 
   const positionId = (document.getElementById('edit-position-id') as HTMLInputElement | null)
     ?.value;
@@ -522,15 +660,18 @@ export async function updatePosition(event: Event): Promise<void> {
   }
 
   try {
-    await apiCall(`/api/portfolio/positions/${positionId}`, {
-      method: 'PUT',
-      body: data,
+    await withSubmitGuard(submitBtn, 'Saving...', async () => {
+      await apiCall(`/api/portfolio/positions/${positionId}`, {
+        method: 'PUT',
+        body: data,
+      });
     });
     showToast('Position updated', 'success');
     hideEditPositionModal();
     // Trigger refresh
     const refreshEvent = new CustomEvent('holdings:positionUpdated');
     document.dispatchEvent(refreshEvent);
+    emit({ type: 'positions:changed', reason: 'updated' });
   } catch (error) {
     console.error('Error updating position:', error);
     showToast('Failed to update position', 'error');
@@ -648,11 +789,18 @@ export function showNewAccountForm(): void {
 
 /**
  * Create a new account.
+ *
+ * The "Create Account" button in the inline form is `type="button"` (calls
+ * this function via onclick), so we resolve it from the nested-form scope
+ * rather than by ID. withSubmitGuard guards against rapid double-click.
  */
 export async function createNewAccount(): Promise<void> {
   const nameEl = document.getElementById('new-account-name') as HTMLInputElement | null;
   const typeEl = document.getElementById('new-account-type') as HTMLSelectElement | null;
   const brokerageEl = document.getElementById('new-account-brokerage') as HTMLInputElement | null;
+  const newAccountForm = document.getElementById('new-account-form');
+  const submitBtn =
+    newAccountForm?.querySelector<HTMLButtonElement>('button.btn.btn-default') ?? null;
 
   const name = nameEl?.value.trim() || '';
   const accountType = typeEl?.value || 'taxable';
@@ -664,10 +812,12 @@ export async function createNewAccount(): Promise<void> {
   }
 
   try {
-    const result = await apiCall<CreatePositionResponse>('/api/portfolio/accounts', {
-      method: 'POST',
-      body: { name, account_type: accountType, brokerage },
-    });
+    const result = await withSubmitGuard(submitBtn, 'Creating...', () =>
+      apiCall<CreatePositionResponse>('/api/portfolio/accounts', {
+        method: 'POST',
+        body: { name, account_type: accountType, brokerage },
+      })
+    );
 
     await loadAccountsForSelect();
     const select = document.getElementById('position-account') as HTMLSelectElement | null;
@@ -679,6 +829,7 @@ export async function createNewAccount(): Promise<void> {
     if (brokerageEl) brokerageEl.value = '';
 
     showToast(`Account "${name}" created`, 'success');
+    emit({ type: 'accounts:changed', reason: 'added' });
   } catch (error) {
     console.error('Error creating account:', error);
     showToast('Failed to create account', 'error');
@@ -690,6 +841,8 @@ export async function createNewAccount(): Promise<void> {
  */
 export async function addManualPosition(event: Event): Promise<void> {
   event.preventDefault();
+
+  const submitBtn = findSubmitButton(event.target as HTMLFormElement | null);
 
   let accountId =
     (document.getElementById('position-account') as HTMLSelectElement | null)?.value || '';
@@ -719,6 +872,11 @@ export async function addManualPosition(event: Event): Promise<void> {
       await loadAccountsForSelect();
       const select = document.getElementById('position-account') as HTMLSelectElement | null;
       if (select) select.value = accountId;
+      // Deliberately NOT emitting accounts:changed here — the
+      // positions:changed event below triggers the refresh, which
+      // re-fetches summary.accounts and surfaces the new account in the
+      // filter. Emitting both would cause two back-to-back refreshData()
+      // calls and a double loading-flash.
     } catch (error) {
       console.error('Error auto-creating account:', error);
       showToast('Failed to create account', 'error');
@@ -735,127 +893,146 @@ export async function addManualPosition(event: Event): Promise<void> {
     (document.getElementById('position-type') as HTMLSelectElement | null)?.value || 'equity';
 
   try {
-    let response: CreatePositionResponse;
-
-    if (posType === 'cash') {
-      const amount = parseFloat(
-        (document.getElementById('cash-amount') as HTMLInputElement | null)?.value || '0'
-      );
-      const name =
-        (document.getElementById('cash-name') as HTMLInputElement | null)?.value || 'Cash';
-      const apyInput = (document.getElementById('cash-apy') as HTMLInputElement | null)?.value;
-      const apy = apyInput ? parseFloat(apyInput) / 100 : null;
-
-      if (!amount) {
-        showToast('Please enter a cash amount', 'error');
-        return;
-      }
-
-      const cashData: Record<string, unknown> = { account_id: accountId, amount, name };
-      if (apy !== null) cashData.interest_rate = apy;
-
-      response = await apiCall<CreatePositionResponse>('/api/portfolio/positions/cash', {
-        method: 'POST',
-        body: cashData,
-      });
-    } else if (posType === 'cd') {
-      const amount = parseFloat(
-        (document.getElementById('cd-amount') as HTMLInputElement | null)?.value || '0'
-      );
-      const name = (document.getElementById('cd-name') as HTMLInputElement | null)?.value || '';
-      const rate =
-        parseFloat((document.getElementById('cd-rate') as HTMLInputElement | null)?.value || '0') /
-        100;
-      const maturity =
-        (document.getElementById('cd-maturity') as HTMLInputElement | null)?.value || '';
-
-      if (!amount || !name || !rate || !maturity) {
-        showToast('Please fill in all CD fields', 'error');
-        return;
-      }
-
-      response = await apiCall<CreatePositionResponse>('/api/portfolio/positions/cd', {
-        method: 'POST',
-        body: { account_id: accountId, amount, name, interest_rate: rate, maturity_date: maturity },
-      });
-    } else if (posType === 'real_estate') {
-      const name =
-        (document.getElementById('re-name') as HTMLInputElement | null)?.value.trim() || '';
-      const currentValue = parseFloat(
-        (document.getElementById('re-value') as HTMLInputElement | null)?.value || '0'
-      );
-      const costBasis = parseFloat(
-        (document.getElementById('re-cost') as HTMLInputElement | null)?.value || '0'
-      );
-      const purchaseDate =
-        (document.getElementById('re-purchase-date') as HTMLInputElement | null)?.value || null;
-
-      if (!name || !currentValue || !costBasis) {
-        showToast('Please fill in property name, current value, and cost basis', 'error');
-        return;
-      }
-
-      const reData: Record<string, unknown> = {
-        account_id: accountId,
-        name,
-        current_value: currentValue,
-        cost_basis: costBasis,
-      };
-      if (purchaseDate) reData.purchase_date = purchaseDate;
-
-      response = await apiCall<CreatePositionResponse>('/api/portfolio/positions/real-estate', {
-        method: 'POST',
-        body: reData,
-      });
-    } else {
-      // Stock/fund position
-      const ticker =
-        (document.getElementById('position-ticker') as HTMLInputElement | null)?.value
-          .trim()
-          .toUpperCase() || '';
-      const name =
-        (document.getElementById('position-name') as HTMLInputElement | null)?.value.trim() || null;
-      const shares = parseFloat(
-        (document.getElementById('position-shares') as HTMLInputElement | null)?.value || '0'
-      );
-      const priceInput = (document.getElementById('position-price') as HTMLInputElement | null)
-        ?.value;
-      const price = priceInput ? parseFloat(priceInput) : null;
-      const costBasisInput = (
-        document.getElementById('position-cost-basis') as HTMLInputElement | null
-      )?.value;
-      const costBasis = costBasisInput ? parseFloat(costBasisInput) : null;
-      const isFund = posType === 'fund';
-
-      if (!ticker || !shares) {
-        showToast('Please enter ticker and shares', 'error');
-        return;
-      }
-
-      response = await apiCall<CreatePositionResponse>('/api/portfolio/positions', {
-        method: 'POST',
-        body: {
-          account_id: accountId,
-          ticker,
-          shares,
-          name,
-          current_price: price,
-          cost_basis: costBasis,
-          is_fund: isFund,
-          position_type: posType,
-        },
-      });
-    }
+    const response = await withSubmitGuard<CreatePositionResponse>(
+      submitBtn,
+      'Adding...',
+      async () => buildAndSubmitPosition(posType, accountId)
+    );
 
     showToast(response.message || 'Position added', 'success');
     hideAddPositionModal();
     // Trigger refresh
     const refreshEvent = new CustomEvent('holdings:positionAdded');
     document.dispatchEvent(refreshEvent);
+    emit({ type: 'positions:changed', reason: 'added' });
   } catch (error) {
     console.error('Error adding position:', error);
-    showToast('Failed to add position', 'error');
+    // Surface validation errors thrown by buildAndSubmitPosition; fall back
+    // to a generic toast for API failures.
+    const message =
+      error instanceof Error && error.message ? error.message : 'Failed to add position';
+    showToast(message, 'error');
   }
+}
+
+/**
+ * Build the position payload and call the right /api/portfolio/positions
+ * endpoint based on position type. Extracted from `addManualPosition` so the
+ * submit-guard can wrap a single async unit instead of the whole function
+ * (which would also disable the button during local validation).
+ */
+async function buildAndSubmitPosition(
+  posType: string,
+  accountId: string
+): Promise<CreatePositionResponse> {
+  if (posType === 'cash') {
+    const amount = parseFloat(
+      (document.getElementById('cash-amount') as HTMLInputElement | null)?.value || '0'
+    );
+    const name =
+      (document.getElementById('cash-name') as HTMLInputElement | null)?.value || 'Cash';
+    const apyInput = (document.getElementById('cash-apy') as HTMLInputElement | null)?.value;
+    const apy = apyInput ? parseFloat(apyInput) / 100 : null;
+
+    if (!amount) {
+      throw new Error('Please enter a cash amount');
+    }
+
+    const cashData: Record<string, unknown> = { account_id: accountId, amount, name };
+    if (apy !== null) cashData.interest_rate = apy;
+
+    return apiCall<CreatePositionResponse>('/api/portfolio/positions/cash', {
+      method: 'POST',
+      body: cashData,
+    });
+  }
+
+  if (posType === 'cd') {
+    const amount = parseFloat(
+      (document.getElementById('cd-amount') as HTMLInputElement | null)?.value || '0'
+    );
+    const name = (document.getElementById('cd-name') as HTMLInputElement | null)?.value || '';
+    const rate =
+      parseFloat((document.getElementById('cd-rate') as HTMLInputElement | null)?.value || '0') /
+      100;
+    const maturity =
+      (document.getElementById('cd-maturity') as HTMLInputElement | null)?.value || '';
+
+    if (!amount || !name || !rate || !maturity) {
+      throw new Error('Please fill in all CD fields');
+    }
+
+    return apiCall<CreatePositionResponse>('/api/portfolio/positions/cd', {
+      method: 'POST',
+      body: { account_id: accountId, amount, name, interest_rate: rate, maturity_date: maturity },
+    });
+  }
+
+  if (posType === 'real_estate') {
+    const name =
+      (document.getElementById('re-name') as HTMLInputElement | null)?.value.trim() || '';
+    const currentValue = parseFloat(
+      (document.getElementById('re-value') as HTMLInputElement | null)?.value || '0'
+    );
+    const costBasis = parseFloat(
+      (document.getElementById('re-cost') as HTMLInputElement | null)?.value || '0'
+    );
+    const purchaseDate =
+      (document.getElementById('re-purchase-date') as HTMLInputElement | null)?.value || null;
+
+    if (!name || !currentValue || !costBasis) {
+      throw new Error('Please fill in property name, current value, and cost basis');
+    }
+
+    const reData: Record<string, unknown> = {
+      account_id: accountId,
+      name,
+      current_value: currentValue,
+      cost_basis: costBasis,
+    };
+    if (purchaseDate) reData.purchase_date = purchaseDate;
+
+    return apiCall<CreatePositionResponse>('/api/portfolio/positions/real-estate', {
+      method: 'POST',
+      body: reData,
+    });
+  }
+
+  // Stock/fund position
+  const ticker =
+    (document.getElementById('position-ticker') as HTMLInputElement | null)?.value
+      .trim()
+      .toUpperCase() || '';
+  const name =
+    (document.getElementById('position-name') as HTMLInputElement | null)?.value.trim() || null;
+  const shares = parseFloat(
+    (document.getElementById('position-shares') as HTMLInputElement | null)?.value || '0'
+  );
+  const priceInput = (document.getElementById('position-price') as HTMLInputElement | null)?.value;
+  const price = priceInput ? parseFloat(priceInput) : null;
+  const costBasisInput = (
+    document.getElementById('position-cost-basis') as HTMLInputElement | null
+  )?.value;
+  const costBasis = costBasisInput ? parseFloat(costBasisInput) : null;
+  const isFund = posType === 'fund';
+
+  if (!ticker || !shares) {
+    throw new Error('Please enter ticker and shares');
+  }
+
+  return apiCall<CreatePositionResponse>('/api/portfolio/positions', {
+    method: 'POST',
+    body: {
+      account_id: accountId,
+      ticker,
+      shares,
+      name,
+      current_price: price,
+      cost_basis: costBasis,
+      is_fund: isFund,
+      position_type: posType,
+    },
+  });
 }
 
 /**
@@ -905,14 +1082,9 @@ export function initHoldings(): void {
     positionTypeSelect.addEventListener('change', togglePositionTypeFields);
   }
 
-  // Close dropdowns when clicking outside
-  document.addEventListener('click', (e) => {
-    if (!(e.target as HTMLElement).closest('.multi-select-dropdown')) {
-      document.querySelectorAll('.multi-select-dropdown.open').forEach((d) => {
-        d.classList.remove('open');
-      });
-    }
-  });
+  // Close dropdowns on outside click or Escape (idempotent, single delegated
+  // pair of listeners regardless of how many dropdowns exist).
+  installMultiSelectAutoClose();
 
   // Listen for position updates from dashboard
   document.addEventListener('dashboard:positionsUpdated', ((e: CustomEvent) => {

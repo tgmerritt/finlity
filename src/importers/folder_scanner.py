@@ -8,7 +8,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import pandas as pd
 
@@ -404,6 +404,7 @@ class FolderScanner:
                 )
 
             # Get or create account
+            account_name: str
             if target_account_id:
                 account = self.db.get_account_by_id(target_account_id)
                 if not account:
@@ -413,7 +414,7 @@ class FolderScanner:
                         positions_imported=0,
                         error_message=f"Target account {target_account_id} not found",
                     )
-                account_name = account.name
+                account_name = cast(str, account.name)
             else:
                 account_name = plugin_result.account_name or self._generate_account_name(
                     pending.account_type, brokerage
@@ -435,7 +436,7 @@ class FolderScanner:
             )
 
             # Clear existing positions
-            cleared_count = self.db.clear_account_positions(account.id)
+            cleared_count = self.db.clear_account_positions(cast(str, account.id))
             if cleared_count > 0:
                 logger.info(f"Cleared {cleared_count} existing positions for {account_name}")
 
@@ -451,16 +452,22 @@ class FolderScanner:
                     price = pos_data.get("price")
                     cost_basis = pos_data.get("cost_basis")
                     is_fund = pos_data.get("is_fund", False)
+                    # Plugin importers may emit per-lot detail; pass it
+                    # through so the persistence layer can build real
+                    # PositionLot rows (Sprint 8 wire-up).
+                    pos_lots = pos_data.get("lots")
 
                     self.db.add_position(
-                        account_id=account.id,
+                        account_id=cast(str, account.id),
                         ticker=ticker,
                         shares=shares,
                         name=name,
                         cost_basis=cost_basis,
                         current_price=price if price and price > 0 else None,
                         is_fund=is_fund,
-                        import_id=file_import.id,
+                        import_id=cast(Optional[str], file_import.id),
+                        lots=pos_lots,
+                        brokerage=brokerage,
                     )
                     positions_imported += 1
 
@@ -479,7 +486,7 @@ class FolderScanner:
                 from src.database.models import FileImport
                 import_record = session.query(FileImport).filter_by(id=file_import.id).first()
                 if import_record:
-                    import_record.status = "completed"
+                    import_record.status = "completed"  # type: ignore[assignment]
                     session.commit()
 
             logger.info(
@@ -522,6 +529,7 @@ class FolderScanner:
                 )
 
             # Get or create account
+            account_name: str
             if target_account_id:
                 account = self.db.get_account_by_id(target_account_id)
                 if not account:
@@ -531,7 +539,7 @@ class FolderScanner:
                         positions_imported=0,
                         error_message=f"Target account {target_account_id} not found",
                     )
-                account_name = account.name
+                account_name = cast(str, account.name)
             else:
                 account_name = self._generate_account_name(pending.account_type, brokerage)
                 account = self.db.get_or_create_account(
@@ -551,7 +559,7 @@ class FolderScanner:
             )
 
             # Clear existing positions for this account (replace with new snapshot)
-            cleared_count = self.db.clear_account_positions(account.id)
+            cleared_count = self.db.clear_account_positions(cast(str, account.id))
             if cleared_count > 0:
                 logger.info(f"Cleared {cleared_count} existing positions for {account_name}")
 
@@ -570,14 +578,15 @@ class FolderScanner:
 
                     # Add as individual lot (each row is a separate position)
                     self.db.add_position(
-                        account_id=account.id,
+                        account_id=cast(str, account.id),
                         ticker=ticker,
                         shares=shares,
                         name=name,
                         cost_basis=cost_basis,
                         current_price=price if price > 0 else None,
                         is_fund=is_fund,
-                        import_id=file_import.id,
+                        import_id=cast(Optional[str], file_import.id),
+                        brokerage=brokerage,
                     )
                     positions_imported += 1
 
@@ -595,9 +604,9 @@ class FolderScanner:
             with self.db.get_session() as session:
                 import_record = session.query(type(file_import)).filter_by(id=file_import.id).first()
                 if import_record:
-                    import_record.status = "completed" if not errors else "completed_with_errors"
+                    import_record.status = "completed" if not errors else "completed_with_errors"  # type: ignore[assignment]
                     if errors:
-                        import_record.error_message = "; ".join(errors[:5])
+                        import_record.error_message = "; ".join(errors[:5])  # type: ignore[assignment]
                     session.commit()
 
             return ImportResult(
@@ -793,13 +802,29 @@ class FolderScanner:
 
         return created
 
-    def _fetch_and_update_prices(self, tickers: list[str]) -> None:
-        """Fetch prices using PriceService and update positions."""
+    def _fetch_and_update_prices(self, tickers: list[str]) -> dict[str, list[str]]:
+        """Fetch prices using PriceService and update positions.
+
+        Returns a dict reporting which tickers succeeded vs failed so callers can
+        give the user honest feedback (the previous version returned None and
+        callers reported the *attempted* count as the *updated* count, which is
+        why the "stale" badge wouldn't decrement after a failed batch).
+
+        Returns:
+            {
+                "success": [...],   # cache row was actually refreshed
+                "skipped": [...],   # non-market ticker (CASH/CD/MMF) — timestamp bumped
+                "failed":  [...],   # upstream returned None or threw — cache untouched
+            }
+        """
         from src.data.prices import PriceService
         from datetime import datetime
         from src.database.models import PriceCache, Position
 
         price_service = PriceService()
+        success: list[str] = []
+        skipped: list[str] = []
+        failed: list[str] = []
 
         for ticker in tickers:
             try:
@@ -817,6 +842,7 @@ class FolderScanner:
                     )
                     # Update positions
                     self._update_position_prices(ticker, price_data.current_price)
+                    success.append(ticker)
                     logger.debug(f"Fetched price for {ticker}: ${price_data.current_price:.2f}")
                 else:
                     # Check if it was skipped intentionally
@@ -831,13 +857,13 @@ class FolderScanner:
                         with self.db.get_session() as session:
                             cache = session.query(PriceCache).filter_by(ticker=ticker).first()
                             if cache:
-                                cache.last_updated = datetime.utcnow()
+                                cache.last_updated = datetime.utcnow()  # type: ignore[assignment]
                                 logger.debug(f"Refreshed timestamp for skipped ticker {ticker}")
                             else:
                                 # Create cache entry using existing position price or default 1.0
                                 position = session.query(Position).filter_by(ticker=ticker).first()
                                 price = position.current_price if position and position.current_price else 1.0
-                                
+
                                 cache = PriceCache(
                                     ticker=ticker,
                                     current_price=price,
@@ -846,12 +872,20 @@ class FolderScanner:
                                 session.add(cache)
                                 logger.debug(f"Created cache entry for skipped ticker {ticker} with price {price}")
                             session.commit()
+                        skipped.append(ticker)
                     else:
-                        # Price service returned None (failure or unknown ticker)
-                        logger.debug(f"Skipped price lookup for {ticker} (non-market ticker)")
+                        # Price service returned None (upstream rate limited / unknown
+                        # ticker / network error). Do NOT stamp the timestamp — the
+                        # badge should keep showing this ticker as stale so the user
+                        # knows something is wrong.
+                        failed.append(ticker)
+                        logger.info(f"Price lookup returned no data for {ticker}")
 
             except Exception as e:
+                failed.append(ticker)
                 logger.warning(f"Could not fetch price for {ticker}: {e}")
+
+        return {"success": success, "skipped": skipped, "failed": failed}
 
     def _update_position_prices(self, ticker: str, price: float) -> None:
         """Update all positions with this ticker to use the given price."""
@@ -859,7 +893,7 @@ class FolderScanner:
             from src.database.models import Position
             positions = session.query(Position).filter_by(ticker=ticker).all()
             for pos in positions:
-                pos.current_price = price
+                pos.current_price = price  # type: ignore[assignment]
             session.commit()
 
     def process_all_pending(

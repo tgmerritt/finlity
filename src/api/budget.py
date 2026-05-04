@@ -10,7 +10,7 @@ Provides endpoints for:
 - Income transition projections
 """
 
-from typing import Optional
+from typing import Optional, cast
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -161,7 +161,7 @@ class IncomeTransitionRequest(BaseModel):
 
 
 @router.get("/income")
-async def list_income_sources():
+async def list_income_sources() -> list[dict]:
     """List all income sources."""
     db = get_database()
     session = db.get_session()
@@ -179,7 +179,7 @@ async def list_income_sources():
                 "pay_frequency": s.pay_frequency,
                 "state": s.state,
                 "is_active": s.is_active,
-                "gross_per_period": s.gross_annual / PAY_FREQUENCIES.get(s.pay_frequency, 26),
+                "gross_per_period": s.gross_annual / PAY_FREQUENCIES.get(cast(str, s.pay_frequency), 26),
             }
             for s in sources
         ]
@@ -188,7 +188,7 @@ async def list_income_sources():
 
 
 @router.post("/income")
-async def create_income_source(data: IncomeSourceCreate):
+async def create_income_source(data: IncomeSourceCreate) -> dict:
     """Create a new income source."""
     from src.services.demo_mode import check_demo_data_protection
     check_demo_data_protection()
@@ -220,7 +220,7 @@ async def create_income_source(data: IncomeSourceCreate):
 
 
 @router.put("/income/{income_id}")
-async def update_income_source(income_id: str, data: IncomeSourceUpdate):
+async def update_income_source(income_id: str, data: IncomeSourceUpdate) -> dict:
     """Update an income source."""
     from src.services.demo_mode import check_demo_data_protection
     check_demo_data_protection()
@@ -235,17 +235,17 @@ async def update_income_source(income_id: str, data: IncomeSourceUpdate):
             raise HTTPException(status_code=404, detail="Income source not found")
 
         if data.name is not None:
-            source.name = data.name
+            source.name = data.name  # type: ignore[assignment]
         if data.income_type is not None:
-            source.income_type = data.income_type
+            source.income_type = data.income_type  # type: ignore[assignment]
         if data.gross_annual is not None:
-            source.gross_annual = data.gross_annual
+            source.gross_annual = data.gross_annual  # type: ignore[assignment]
         if data.pay_frequency is not None:
-            source.pay_frequency = data.pay_frequency
+            source.pay_frequency = data.pay_frequency  # type: ignore[assignment]
         if data.state is not None:
-            source.state = data.state
+            source.state = data.state  # type: ignore[assignment]
         if data.is_active is not None:
-            source.is_active = data.is_active
+            source.is_active = data.is_active  # type: ignore[assignment]
 
         session.commit()
 
@@ -255,7 +255,7 @@ async def update_income_source(income_id: str, data: IncomeSourceUpdate):
 
 
 @router.delete("/income/{income_id}")
-async def delete_income_source(income_id: str):
+async def delete_income_source(income_id: str) -> dict:
     """Delete an income source."""
     from src.services.demo_mode import check_demo_data_protection
     check_demo_data_protection()
@@ -283,7 +283,7 @@ async def delete_income_source(income_id: str):
 
 
 @router.get("/tax-config")
-async def get_tax_config():
+async def get_tax_config() -> dict:
     """Get current tax configuration."""
     db = get_database()
     session = db.get_session()
@@ -318,7 +318,7 @@ async def get_tax_config():
 
 
 @router.put("/tax-config")
-async def update_tax_config(data: TaxConfigUpdate):
+async def update_tax_config(data: TaxConfigUpdate) -> dict:
     """Update tax configuration."""
     from src.services.demo_mode import check_demo_data_protection
     check_demo_data_protection()
@@ -340,18 +340,18 @@ async def update_tax_config(data: TaxConfigUpdate):
             session.add(config)
         else:
             if data.tax_year is not None:
-                config.tax_year = data.tax_year
+                config.tax_year = data.tax_year  # type: ignore[assignment]
             if data.filing_status is not None:
-                config.filing_status = data.filing_status
+                config.filing_status = data.filing_status  # type: ignore[assignment]
             if data.state is not None:
-                config.state = data.state
+                config.state = data.state  # type: ignore[assignment]
             if data.ss_benefit_override is not None:
-                config.ss_benefit_override = data.ss_benefit_override
+                config.ss_benefit_override = data.ss_benefit_override  # type: ignore[assignment]
             if data.additional_withholding is not None:
-                config.additional_withholding = data.additional_withholding
+                config.additional_withholding = data.additional_withholding  # type: ignore[assignment]
             # Allow setting itemized_deduction to None
             if "itemized_deduction" in data.model_dump(exclude_unset=True):
-                config.itemized_deduction = data.itemized_deduction
+                config.itemized_deduction = data.itemized_deduction  # type: ignore[assignment]
 
         session.commit()
 
@@ -361,7 +361,7 @@ async def update_tax_config(data: TaxConfigUpdate):
 
 
 @router.get("/states")
-async def list_states():
+async def list_states() -> list[dict]:
     """Get list of all states with tax info."""
     return get_all_states()
 
@@ -372,7 +372,7 @@ async def list_states():
 
 
 @router.get("/expense-categories")
-async def list_expense_categories():
+async def list_expense_categories() -> list[dict]:
     """List all expense categories."""
     db = get_database()
     session = db.get_session()
@@ -412,7 +412,7 @@ async def list_expense_categories():
 
 
 @router.post("/expense-categories/repair-orphaned")
-async def repair_orphaned_expenses():
+async def repair_orphaned_expenses() -> dict:
     """
     Find and repair expenses with invalid/missing category references.
 
@@ -495,7 +495,7 @@ async def repair_orphaned_expenses():
 
 
 @router.get("/expenses")
-async def list_expenses():
+async def list_expenses() -> list[dict]:
     """List all expenses."""
     db = get_database()
     session = db.get_session()
@@ -543,7 +543,7 @@ async def list_expenses():
 
         result = []
         for e in expenses:
-            mult = freq_multiplier.get(e.frequency, 12)
+            mult = freq_multiplier.get(cast(str, e.frequency), 12)
             annual = e.amount * mult if mult > 0 else e.amount
 
             result.append({
@@ -568,7 +568,7 @@ async def list_expenses():
 
 
 @router.post("/expenses")
-async def create_expense(data: ExpenseCreate):
+async def create_expense(data: ExpenseCreate) -> dict:
     """Create a new expense."""
     from src.services.demo_mode import check_demo_data_protection
     check_demo_data_protection()
@@ -600,7 +600,7 @@ async def create_expense(data: ExpenseCreate):
 
 
 @router.put("/expenses/{expense_id}")
-async def update_expense(expense_id: str, data: ExpenseUpdate):
+async def update_expense(expense_id: str, data: ExpenseUpdate) -> dict:
     """Update an expense."""
     from src.services.demo_mode import check_demo_data_protection
     check_demo_data_protection()
@@ -615,23 +615,23 @@ async def update_expense(expense_id: str, data: ExpenseUpdate):
             raise HTTPException(status_code=404, detail="Expense not found")
 
         if data.category_id is not None:
-            expense.category_id = data.category_id
+            expense.category_id = data.category_id  # type: ignore[assignment]
         if data.name is not None:
-            expense.name = data.name
+            expense.name = data.name  # type: ignore[assignment]
         if data.amount is not None:
-            expense.amount = data.amount
+            expense.amount = data.amount  # type: ignore[assignment]
         if data.frequency is not None:
-            expense.frequency = data.frequency
+            expense.frequency = data.frequency  # type: ignore[assignment]
         if data.is_pretax is not None:
-            expense.is_pretax = data.is_pretax
+            expense.is_pretax = data.is_pretax  # type: ignore[assignment]
         if data.is_mortgage is not None:
-            expense.is_mortgage = data.is_mortgage
+            expense.is_mortgage = data.is_mortgage  # type: ignore[assignment]
         if data.principal_portion is not None:
-            expense.principal_portion = data.principal_portion
+            expense.principal_portion = data.principal_portion  # type: ignore[assignment]
         if data.interest_portion is not None:
-            expense.interest_portion = data.interest_portion
+            expense.interest_portion = data.interest_portion  # type: ignore[assignment]
         if data.is_active is not None:
-            expense.is_active = data.is_active
+            expense.is_active = data.is_active  # type: ignore[assignment]
 
         session.commit()
 
@@ -641,7 +641,7 @@ async def update_expense(expense_id: str, data: ExpenseUpdate):
 
 
 @router.delete("/expenses/{expense_id}")
-async def delete_expense(expense_id: str):
+async def delete_expense(expense_id: str) -> dict:
     """Delete an expense."""
     from src.services.demo_mode import check_demo_data_protection
     check_demo_data_protection()
@@ -669,7 +669,7 @@ async def delete_expense(expense_id: str):
 
 
 @router.get("/deductions")
-async def list_deductions():
+async def list_deductions() -> list[dict]:
     """List all pre-tax deductions with calculated annual amounts."""
     db = get_database()
     session = db.get_session()
@@ -718,7 +718,7 @@ async def list_deductions():
 
 
 @router.post("/deductions")
-async def create_deduction(data: DeductionCreate):
+async def create_deduction(data: DeductionCreate) -> dict:
     """Create a new pre-tax deduction."""
     from src.services.demo_mode import check_demo_data_protection
     check_demo_data_protection()
@@ -748,7 +748,7 @@ async def create_deduction(data: DeductionCreate):
 
 
 @router.put("/deductions/{deduction_id}")
-async def update_deduction(deduction_id: str, data: DeductionUpdate):
+async def update_deduction(deduction_id: str, data: DeductionUpdate) -> dict:
     """Update a pre-tax deduction."""
     from src.services.demo_mode import check_demo_data_protection
     check_demo_data_protection()
@@ -764,19 +764,19 @@ async def update_deduction(deduction_id: str, data: DeductionUpdate):
 
         # Update fields if provided
         if data.income_source_id is not None:
-            deduction.income_source_id = data.income_source_id
+            deduction.income_source_id = data.income_source_id  # type: ignore[assignment]
         if data.label is not None:
-            deduction.label = data.label
+            deduction.label = data.label  # type: ignore[assignment]
         if data.deduction_type is not None:
-            deduction.deduction_type = data.deduction_type
+            deduction.deduction_type = data.deduction_type  # type: ignore[assignment]
         if data.amount_per_period is not None:
-            deduction.amount_per_period = data.amount_per_period
+            deduction.amount_per_period = data.amount_per_period  # type: ignore[assignment]
         if data.employer_match is not None:
-            deduction.employer_match = data.employer_match
+            deduction.employer_match = data.employer_match  # type: ignore[assignment]
         if data.is_percentage is not None:
-            deduction.is_percentage = data.is_percentage
+            deduction.is_percentage = data.is_percentage  # type: ignore[assignment]
         if data.max_annual is not None:
-            deduction.max_annual = data.max_annual
+            deduction.max_annual = data.max_annual  # type: ignore[assignment]
 
         session.commit()
 
@@ -795,7 +795,7 @@ async def update_deduction(deduction_id: str, data: DeductionUpdate):
 
 
 @router.delete("/deductions/{deduction_id}")
-async def delete_deduction(deduction_id: str):
+async def delete_deduction(deduction_id: str) -> dict:
     """Delete a pre-tax deduction."""
     from src.services.demo_mode import check_demo_data_protection
     check_demo_data_protection()
@@ -823,7 +823,7 @@ async def delete_deduction(deduction_id: str):
 
 
 @router.post("/calculate-paycheck")
-async def calculate_paycheck(data: PaycheckRequest):
+async def calculate_paycheck(data: PaycheckRequest) -> dict:
     """Calculate a single paycheck's tax breakdown."""
     calculator = PayrollTaxCalculator(
         filing_status=data.filing_status,
@@ -849,7 +849,7 @@ async def calculate_paycheck(data: PaycheckRequest):
 
 
 @router.post("/calculate-annual")
-async def calculate_annual_summary(data: AnnualSummaryRequest):
+async def calculate_annual_summary(data: AnnualSummaryRequest) -> dict:
     """Calculate annual budget summary from stored income and expenses."""
     db = get_database()
     session = db.get_session()
@@ -879,32 +879,32 @@ async def calculate_annual_summary(data: AnnualSummaryRequest):
         deductions = session.query(BudgetPretaxDeduction).all()
 
         # Calculate totals
-        total_gross = sum(s.gross_annual for s in income_sources)
+        total_gross = float(sum(s.gross_annual for s in income_sources))
 
         # Calculate taxes for each income source
-        total_federal = 0
-        total_state = 0
-        total_ss = 0
-        total_medicare = 0
-        total_pretax = 0
+        total_federal: float = 0.0
+        total_state: float = 0.0
+        total_ss: float = 0.0
+        total_medicare: float = 0.0
+        total_pretax: float = 0.0
 
         for source in income_sources:
             # Get deductions for this source
             source_deductions = [d for d in deductions if d.income_source_id == source.id]
-            pretax_amount = sum(
-                d.amount_per_period * PAY_FREQUENCIES.get(source.pay_frequency, 26)
+            pretax_amount = float(sum(
+                d.amount_per_period * PAY_FREQUENCIES.get(cast(str, source.pay_frequency), 26)
                 for d in source_deductions
-            )
+            ))
             total_pretax += pretax_amount
 
             calculator = PayrollTaxCalculator(
                 filing_status=data.filing_status,
-                state=source.state,
+                state=cast(str, source.state),
                 tax_year=data.tax_year,
             )
 
             summary = calculator.calculate_annual_summary(
-                annual_gross=source.gross_annual,
+                annual_gross=cast(float, source.gross_annual),
                 pretax_deductions={"total": pretax_amount},
             )
 
@@ -926,15 +926,15 @@ async def calculate_annual_summary(data: AnnualSummaryRequest):
             "one_time": 0,
         }
 
-        expenses_by_category = {}
-        total_expenses = 0
+        expenses_by_category: dict[str, float] = {}
+        total_expenses: float = 0.0
 
         for expense in expenses:
             if expense.is_pretax:
                 continue  # Don't count pretax items as expenses
 
-            mult = freq_multiplier.get(expense.frequency, 12)
-            annual = expense.amount * mult if mult > 0 else expense.amount
+            mult = freq_multiplier.get(cast(str, expense.frequency), 12)
+            annual = float(expense.amount * mult if mult > 0 else expense.amount)
             total_expenses += annual
 
             cat_name = expense.category.name if expense.category else "Other"
@@ -968,7 +968,7 @@ async def calculate_annual_summary(data: AnnualSummaryRequest):
 
 
 @router.post("/social-security")
-async def calculate_social_security(data: SocialSecurityRequest):
+async def calculate_social_security(data: SocialSecurityRequest) -> dict:
     """Estimate Social Security benefits."""
     estimate = estimate_social_security_benefit(
         annual_income=data.annual_income,
@@ -990,7 +990,7 @@ async def calculate_social_security(data: SocialSecurityRequest):
 
 
 @router.post("/income-transition")
-async def get_income_transition(data: IncomeTransitionRequest):
+async def get_income_transition(data: IncomeTransitionRequest) -> dict:
     """Project income transition from working to retirement.
 
     Shows year-by-year income from:
@@ -1006,7 +1006,7 @@ async def get_income_transition(data: IncomeTransitionRequest):
             BudgetIncomeSource.is_active.is_(True)
         ).all()
 
-        total_annual_income = sum(s.gross_annual for s in sources)
+        total_annual_income: float = float(sum(s.gross_annual for s in sources))
 
         # Get expenses for retirement spending target
         expenses = session.query(BudgetExpense).filter(
@@ -1014,10 +1014,10 @@ async def get_income_transition(data: IncomeTransitionRequest):
         ).all()
 
         freq_to_annual = {"weekly": 52, "biweekly": 26, "monthly": 12, "quarterly": 4, "annual": 1}
-        annual_expenses = sum(
-            e.amount * freq_to_annual.get(e.frequency, 12)
+        annual_expenses: float = float(sum(
+            e.amount * freq_to_annual.get(cast(str, e.frequency), 12)
             for e in expenses
-        )
+        ))
 
         # Estimate Social Security benefit
         ss_estimate = estimate_social_security_benefit(
@@ -1039,24 +1039,27 @@ async def get_income_transition(data: IncomeTransitionRequest):
             inflation_factor = (1 + inflation_rate) ** years_from_now
 
             # Determine income sources based on age
+            employment_income: float
+            ss_income: float
+            withdrawal_needed: float
             if age < data.retirement_age:
                 # Still working
                 employment_income = total_annual_income * inflation_factor
-                ss_income = 0
-                withdrawal_needed = 0
+                ss_income = 0.0
+                withdrawal_needed = 0.0
             else:
                 # Retired
-                employment_income = 0
+                employment_income = 0.0
 
                 if age >= data.ss_claiming_age:
                     # Receiving Social Security (with COLA adjustments)
                     ss_income = annual_ss * inflation_factor
                 else:
-                    ss_income = 0
+                    ss_income = 0.0
 
                 # Calculate withdrawal needed to cover inflation-adjusted expenses
                 target_spending = annual_expenses * inflation_factor
-                withdrawal_needed = max(0, target_spending - ss_income)
+                withdrawal_needed = max(0.0, target_spending - ss_income)
 
             total_income = employment_income + ss_income + withdrawal_needed
 
@@ -1091,7 +1094,7 @@ async def get_income_transition(data: IncomeTransitionRequest):
 
 
 @router.get("/paycheck-chart-data")
-async def get_paycheck_chart_data():
+async def get_paycheck_chart_data() -> dict:
     """Get cumulative YTD data for paycheck stacked bar chart.
 
     Returns cumulative (running total) amounts for each pay period,
@@ -1103,8 +1106,8 @@ async def get_paycheck_chart_data():
     try:
         # Get tax config
         config = session.query(BudgetTaxConfig).first()
-        filing_status = config.filing_status if config else "single"
-        state = config.state if config else "CA"
+        filing_status: str = cast(str, config.filing_status) if config else "single"
+        state: str = cast(str, config.state) if config else "CA"
 
         # Get income sources
         sources = session.query(BudgetIncomeSource).filter(
@@ -1116,21 +1119,21 @@ async def get_paycheck_chart_data():
 
         # Use primary income source (first one)
         source = sources[0]
-        periods_per_year = PAY_FREQUENCIES.get(source.pay_frequency, 26)
-        gross_per_period = source.gross_annual / periods_per_year
+        periods_per_year: int = PAY_FREQUENCIES.get(cast(str, source.pay_frequency), 26)
+        gross_per_period: float = float(cast(float, source.gross_annual) / periods_per_year)
 
         # Get deductions for this source
         deductions = session.query(BudgetPretaxDeduction).filter(
             BudgetPretaxDeduction.income_source_id == source.id
         ).all()
 
-        pretax_per_period = {
-            "401k": sum(d.amount_per_period for d in deductions if d.deduction_type == "401k"),
-            "hsa": sum(d.amount_per_period for d in deductions if d.deduction_type == "hsa"),
-            "fsa": sum(d.amount_per_period for d in deductions if d.deduction_type == "fsa"),
-            "other": sum(d.amount_per_period for d in deductions if d.deduction_type == "other"),
+        pretax_per_period: dict[str, float] = {
+            "401k": float(sum(d.amount_per_period for d in deductions if d.deduction_type == "401k")),
+            "hsa": float(sum(d.amount_per_period for d in deductions if d.deduction_type == "hsa")),
+            "fsa": float(sum(d.amount_per_period for d in deductions if d.deduction_type == "fsa")),
+            "other": float(sum(d.amount_per_period for d in deductions if d.deduction_type == "other")),
         }
-        total_pretax_per_period = sum(pretax_per_period.values())
+        total_pretax_per_period: float = float(sum(pretax_per_period.values()))
 
         # Get expenses and convert to per-period
         expenses = session.query(BudgetExpense).filter(
@@ -1139,11 +1142,11 @@ async def get_paycheck_chart_data():
         ).all()
 
         freq_to_annual = {"weekly": 52, "biweekly": 26, "monthly": 12, "quarterly": 4, "annual": 1}
-        total_annual_expenses = sum(
-            e.amount * freq_to_annual.get(e.frequency, 12)
+        total_annual_expenses: float = float(sum(
+            e.amount * freq_to_annual.get(cast(str, e.frequency), 12)
             for e in expenses
-        )
-        expenses_per_period = total_annual_expenses / periods_per_year
+        ))
+        expenses_per_period: float = total_annual_expenses / periods_per_year
 
         calculator = PayrollTaxCalculator(
             filing_status=filing_status,
@@ -1213,9 +1216,10 @@ async def get_paycheck_chart_data():
 
             # Calculate Social Security with wage cap
             prev_ytd_gross = ytd_gross - gross_per_period
+            period_ss: float
             if prev_ytd_gross >= ss_wage_base:
                 # Already at cap, no more SS tax
-                period_ss = 0
+                period_ss = 0.0
             elif ytd_gross > ss_wage_base:
                 # Partial period hits cap
                 taxable_ss = ss_wage_base - prev_ytd_gross
@@ -1241,11 +1245,11 @@ async def get_paycheck_chart_data():
             # Calculate federal and state taxes (use calculator for brackets)
             # Approximate per-period by calculating annual and dividing
             annual_federal = calculator.calculate_federal_income_tax(
-                source.gross_annual,
+                cast(float, source.gross_annual),
                 pretax_deductions=total_pretax_per_period * periods_per_year
             )
             annual_state = calculator.calculate_state_tax(
-                source.gross_annual,
+                cast(float, source.gross_annual),
                 total_pretax_per_period * periods_per_year
             )
 

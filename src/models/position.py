@@ -1,5 +1,11 @@
 """Data models for portfolio positions and accounts."""
 
+# mypy: disable-error-code="prop-decorator"
+# Pydantic's @computed_field stacked on @property is the documented pattern;
+# mypy 1.x flags this combination but the pydantic mypy plugin (or runtime
+# behavior) is correct. Re-enable when mypy supports stacked decorators on
+# properties (tracked in python/mypy#1362).
+
 from datetime import date, datetime
 from enum import Enum
 from typing import Optional

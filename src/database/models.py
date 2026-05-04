@@ -2,12 +2,12 @@
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional, cast
 
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, String, Text, Boolean, text
 from sqlalchemy.orm import declarative_base, relationship
 
-Base = declarative_base()
+Base: Any = declarative_base()
 
 
 def generate_uuid() -> str:
@@ -100,7 +100,7 @@ class Account(Base):
     @property
     def total_value(self) -> float:
         """Calculate total value of all positions."""
-        return sum(p.market_value for p in self.positions if p.current_price)
+        return float(sum(p.market_value for p in self.positions if p.current_price))
 
     @property
     def is_retirement(self) -> bool:
@@ -118,9 +118,10 @@ class Account(Base):
     def display_type(self) -> str:
         """Return human-readable account type."""
         from src.models.account_types import PREDEFINED_ACCOUNT_TYPES
-        if self.account_type.startswith("custom:"):
-            return self.custom_type_name or self.account_type[7:]
-        return PREDEFINED_ACCOUNT_TYPES.get(self.account_type, {}).get("label", self.account_type)
+        account_type_str = cast(str, self.account_type)
+        if account_type_str.startswith("custom:"):
+            return cast(str, self.custom_type_name) or account_type_str[7:]
+        return str(PREDEFINED_ACCOUNT_TYPES.get(account_type_str, {}).get("label", account_type_str))
 
 
 class Position(Base):
@@ -148,26 +149,31 @@ class Position(Base):
     # Relationships
     account = relationship("Account", back_populates="positions")
     last_import = relationship("FileImport", back_populates="positions")
+    lots = relationship(
+        "PositionLot",
+        back_populates="position",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def market_value(self) -> float:
         """Calculate market value."""
         if self.current_price and self.shares:
-            return self.shares * self.current_price
+            return float(self.shares * self.current_price)
         return 0.0
 
     @property
     def gain_loss(self) -> Optional[float]:
         """Calculate unrealized gain/loss."""
         if self.cost_basis and self.market_value:
-            return self.market_value - self.cost_basis
+            return float(self.market_value - self.cost_basis)
         return None
 
     @property
     def gain_loss_pct(self) -> Optional[float]:
         """Calculate gain/loss percentage."""
         if self.cost_basis and self.cost_basis > 0 and self.gain_loss is not None:
-            return (self.gain_loss / self.cost_basis) * 100
+            return float((self.gain_loss / self.cost_basis) * 100)
         return None
 
 
@@ -202,14 +208,14 @@ class PriceCache(Base):
         if not self.last_updated:
             return True
         age = datetime.utcnow() - self.last_updated
-        return age.total_seconds() > (max_age_hours * 3600)
+        return bool(age.total_seconds() > (max_age_hours * 3600))
 
     def age_hours(self) -> float:
         """Return age of cache entry in hours."""
         if not self.last_updated:
             return float('inf')
         age = datetime.utcnow() - self.last_updated
-        return age.total_seconds() / 3600
+        return float(age.total_seconds() / 3600)
 
 
 class AppSettings(Base):
@@ -259,14 +265,14 @@ class PortfolioView(Base):
         if not self.account_ids:
             return []
         try:
-            return json.loads(self.account_ids)
+            return list(json.loads(cast(str, self.account_ids)))
         except json.JSONDecodeError:
             return []
 
-    def set_account_ids(self, ids: list[str]):
+    def set_account_ids(self, ids: list[str]) -> None:
         """Set account IDs as JSON."""
         import json
-        self.account_ids = json.dumps(ids)
+        self.account_ids = json.dumps(ids)  # type: ignore[assignment]
 
 
 class MonteCarloResult(Base):
@@ -441,7 +447,7 @@ class AICommentary(Base):
     generated_at = Column(DateTime, default=datetime.utcnow)
     # Note: model_version is set explicitly when saving; default is fallback only
     # See src/services/ai_config.py for centralized model configuration
-    model_version = Column(String, default="claude-sonnet-4-20250514")
+    model_version = Column(String, default="claude-sonnet-4-6")
     generation_time_ms = Column(Float, nullable=True)
     token_count = Column(Float, nullable=True)
     web_search_used = Column(Boolean, default=False)
@@ -466,11 +472,63 @@ class AICommentary(Base):
         if not self.generated_at:
             return True
         age = datetime.utcnow() - self.generated_at
-        return age.total_seconds() > (max_age_hours * 3600)
+        return bool(age.total_seconds() > (max_age_hours * 3600))
 
     def age_hours(self) -> float:
         """Return age of commentary in hours."""
         if not self.generated_at:
             return float('inf')
         age = datetime.utcnow() - self.generated_at
-        return age.total_seconds() / 3600
+        return float(age.total_seconds() / 3600)
+
+
+# =============================================================================
+# Tax-Lot Tracking (for tax-loss harvesting, wash-sale rule, ST/LT distinction)
+# =============================================================================
+
+
+class PositionLot(Base):
+    """An individual purchase lot within a position.
+
+    Enables proper tax accounting: cost basis per lot, holding period for
+    short-term vs long-term distinction, and wash-sale rule lookback.
+
+    A Position with zero PositionLot rows is treated by the tax-loss
+    harvester as a single synthetic lot using Position.cost_basis,
+    Position.purchase_date, and Position.shares (backward-compat).
+    """
+
+    __tablename__ = "position_lots"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    position_id = Column(String, ForeignKey("positions.id"), nullable=False)
+    purchase_date = Column(DateTime, nullable=False)
+    shares = Column(Float, nullable=False)       # qty for this lot
+    cost_basis = Column(Float, nullable=False)   # total cost for this lot (not per-share)
+    notes = Column(String, nullable=True)        # optional, e.g., "imported from CSV"
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    position = relationship("Position", back_populates="lots")
+
+
+class RealizedSale(Base):
+    """A completed sale of a security.
+
+    Used by the tax-loss harvester for wash-sale rule lookback: a recent sale
+    of the same ticker means a buy-back today would be a wash-sale (the IRS
+    rule is symmetric within the 61-day window).
+    """
+
+    __tablename__ = "realized_sales"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    account_id = Column(String, ForeignKey("accounts.id"), nullable=False)
+    ticker = Column(String, nullable=False, index=True)
+    sale_date = Column(DateTime, nullable=False, index=True)
+    shares_sold = Column(Float, nullable=False)
+    proceeds = Column(Float, nullable=False)
+    cost_basis_realized = Column(Float, nullable=False)
+    gain_loss = Column(Float, nullable=False)  # proceeds - cost_basis_realized
+    is_short_term = Column(Boolean, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -51,7 +51,7 @@ class MockProvider(InferenceProvider):
     def get_api_key(self):
         return "mock-key" if self._available else None
 
-    def complete(self, messages, model=None, max_tokens=1024, system=None, temperature=1.0, tools=None):
+    def complete(self, messages, model=None, max_tokens=1024, system=None, temperature=1.0, tools=None, cache_system=False, cache_breakpoints=None):
         return InferenceResponse(
             content="Mock response",
             model="mock-model",
@@ -59,7 +59,7 @@ class MockProvider(InferenceProvider):
             output_tokens=5,
         )
 
-    def stream(self, messages, model=None, max_tokens=1024, system=None, temperature=1.0, tools=None):
+    def stream(self, messages, model=None, max_tokens=1024, system=None, temperature=1.0, tools=None, cache_system=False, cache_breakpoints=None):
         yield StreamEvent(type="text", text="Mock ")
         yield StreamEvent(type="text", text="response")
         yield StreamEvent(type="message_stop", output_tokens=5)

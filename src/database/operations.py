@@ -4,7 +4,7 @@ import hashlib
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session, selectinload
@@ -15,6 +15,7 @@ from .models import (
     FileImport,
     Account,
     Position,
+    PositionLot,
     PortfolioSnapshot,
     PriceCache,
     AppSettings,
@@ -241,14 +242,14 @@ class Database:
             )
 
             if account:
-                account.updated_at = datetime.utcnow()
+                account.updated_at = datetime.utcnow()  # type: ignore[assignment]
                 # Update optional fields if provided
                 if beneficiary is not None:
-                    account.beneficiary = beneficiary
+                    account.beneficiary = beneficiary  # type: ignore[assignment]
                 if custom_type_name is not None:
-                    account.custom_type_name = custom_type_name
+                    account.custom_type_name = custom_type_name  # type: ignore[assignment]
                 if is_retirement_account is not None:
-                    account.is_retirement_account = is_retirement_account
+                    account.is_retirement_account = is_retirement_account  # type: ignore[assignment]
                 session.commit()
                 session.refresh(account)
                 return account
@@ -341,20 +342,20 @@ class Database:
 
             if position:
                 # Update existing
-                position.shares = shares
+                position.shares = shares  # type: ignore[assignment]
                 if name:
-                    position.name = name
+                    position.name = name  # type: ignore[assignment]
                 if cost_basis is not None:
-                    position.cost_basis = cost_basis
+                    position.cost_basis = cost_basis  # type: ignore[assignment]
                 if current_price is not None:
-                    position.current_price = current_price
+                    position.current_price = current_price  # type: ignore[assignment]
                 if sector:
-                    position.sector = sector
-                position.is_fund = is_fund
-                position.asset_class = asset_class
+                    position.sector = sector  # type: ignore[assignment]
+                position.is_fund = is_fund  # type: ignore[assignment]
+                position.asset_class = asset_class  # type: ignore[assignment]
                 if import_id:
-                    position.last_import_id = import_id
-                position.updated_at = datetime.utcnow()
+                    position.last_import_id = import_id  # type: ignore[assignment]
+                position.updated_at = datetime.utcnow()  # type: ignore[assignment]
             else:
                 # Create new
                 position = Position(
@@ -399,8 +400,8 @@ class Database:
 
         # For CDs, bonds, treasuries, and cash with interest rates
         if position.interest_rate and position.interest_rate > 0:
-            principal = position.current_price  # For CDs/cash, price IS the principal
-            apy = position.interest_rate
+            principal = float(position.current_price)  # For CDs/cash, price IS the principal
+            apy = float(position.interest_rate)
 
             # Calculate time held
             if position.purchase_date:
@@ -409,18 +410,31 @@ class Database:
 
                 # Simple interest formula: Principal * (1 + APY * Time)
                 accrued_value = principal * (1 + apy * years_held)
-                return accrued_value
+                return float(accrued_value)
 
             # No purchase date, just return principal
             return principal
 
         # Regular positions: shares * price
-        return position.shares * position.current_price
+        return float(position.shares * position.current_price)
 
     def get_positions_by_account(self, account_id: str) -> list[Position]:
-        """Get all positions for an account."""
+        """Get all positions for an account.
+
+        Lots are eagerly loaded so callers (e.g., the analysis API) can
+        access ``position.lots`` after the session has closed without
+        hitting a DetachedInstanceError.
+        """
         with self.get_session() as session:
-            return session.query(Position).filter_by(account_id=account_id).all()
+            positions = (
+                session.query(Position)
+                .options(selectinload(Position.lots))
+                .filter_by(account_id=account_id)
+                .all()
+            )
+            for pos in positions:
+                session.expunge(pos)
+            return positions
 
     def add_position(
         self,
@@ -438,8 +452,32 @@ class Database:
         interest_rate: Optional[float] = None,
         purchase_date: Optional[datetime] = None,
         import_id: Optional[str] = None,
+        lots: Optional[list[dict]] = None,
+        brokerage: Optional[str] = None,
     ) -> Position:
         """Add a new position (always creates new, never updates existing).
+
+        Also creates PositionLot rows when lot data is available so the
+        tax-loss harvester can use real lot-level cost basis instead of
+        falling back to the synthetic single-lot view.
+
+        Lot creation logic (Sprint 8 wire-up):
+          1. If ``lots`` is provided and non-empty, each entry becomes a
+             ``PositionLot`` row. Entries missing ``cost_basis`` are
+             skipped (PositionLot.cost_basis is NOT NULL).
+          2. Otherwise, if the position has a non-None ``cost_basis``, a
+             single aggregate ``PositionLot`` is created. Its
+             ``purchase_date`` is the explicit ``purchase_date`` argument
+             when provided, else falls back to the import timestamp
+             (PositionLot.purchase_date is NOT NULL).
+          3. If the position has no cost_basis and no lot data, no lot is
+             created — the analyzer's synthetic-lot fallback handles it.
+
+        Re-import de-dupe: ``clear_account_positions`` is called by both
+        plugin and legacy import paths before re-adding positions.
+        Combined with ``cascade="all, delete-orphan"`` on
+        ``Position.lots``, that wipes the old lots wholesale, so this
+        method always sees a clean slate.
 
         Args:
             account_id: Account to add position to
@@ -456,6 +494,11 @@ class Database:
             interest_rate: Annual interest rate for CDs/bonds
             purchase_date: When the position was purchased (for CD tracking)
             import_id: ID of the import that created this position
+            lots: Optional list of lot dicts with purchase_date, shares,
+                cost_basis (and optional notes). When provided, each entry
+                becomes a PositionLot row.
+            brokerage: Optional brokerage source name; included in the
+                default lot ``notes`` text.
         """
         with self.get_session() as session:
             position = Position(
@@ -475,9 +518,72 @@ class Database:
                 last_import_id=import_id,
             )
             session.add(position)
+            session.flush()  # populate position.id without committing yet
+
+            # Build PositionLot rows. PositionLot has NOT NULL constraints
+            # on purchase_date and cost_basis; we honour them here.
+            now = datetime.utcnow()
+            default_notes = (
+                f"imported from {brokerage} on {now.date().isoformat()}"
+                if brokerage
+                else f"imported on {now.date().isoformat()}"
+            )
+
+            lot_rows: list[PositionLot] = []
+            if lots:
+                # Multi-lot path: importer parsed per-lot detail.
+                for lot in lots:
+                    lot_cost = lot.get("cost_basis")
+                    if lot_cost is None:
+                        # Without cost basis there's nothing useful to track.
+                        continue
+                    lot_shares = lot.get("shares")
+                    if lot_shares is None:
+                        lot_shares = shares
+                    raw_pdate = lot.get("purchase_date")
+                    pdate = self._coerce_lot_date(raw_pdate) or purchase_date or now
+                    lot_rows.append(
+                        PositionLot(
+                            position_id=position.id,
+                            purchase_date=pdate,
+                            shares=float(lot_shares),
+                            cost_basis=float(lot_cost),
+                            notes=lot.get("notes") or default_notes,
+                        )
+                    )
+            elif cost_basis is not None:
+                # Single-lot fallback: the importer only gave us aggregate
+                # data, but cost_basis is enough to anchor a real lot.
+                lot_rows.append(
+                    PositionLot(
+                        position_id=position.id,
+                        purchase_date=purchase_date or now,
+                        shares=float(shares),
+                        cost_basis=float(cost_basis),
+                        notes=default_notes,
+                    )
+                )
+
+            for lot in lot_rows:
+                session.add(lot)
+
             session.commit()
             session.refresh(position)
             return position
+
+    @staticmethod
+    def _coerce_lot_date(value) -> Optional[datetime]:
+        """Coerce a lot purchase_date (datetime or ISO string) into datetime."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        return None
 
     def delete_position(self, position_id: str) -> bool:
         """Delete a position."""
@@ -521,16 +627,37 @@ class Database:
             return updated
 
     def clear_positions_by_import(self, import_id: str) -> int:
-        """Clear all positions from a specific import. Returns count deleted."""
+        """Clear all positions from a specific import. Returns count deleted.
+
+        Uses per-row ``session.delete`` (rather than bulk delete) so that
+        ``cascade="all, delete-orphan"`` on ``Position.lots`` fires and
+        removes the associated PositionLot rows along with each parent
+        Position.
+        """
         with self.get_session() as session:
-            count = session.query(Position).filter_by(last_import_id=import_id).delete()
+            positions = session.query(Position).filter_by(last_import_id=import_id).all()
+            count = len(positions)
+            for pos in positions:
+                session.delete(pos)
             session.commit()
             return count
 
     def clear_account_positions(self, account_id: str) -> int:
-        """Clear all positions for an account. Returns count deleted."""
+        """Clear all positions for an account. Returns count deleted.
+
+        Uses per-row ``session.delete`` (rather than bulk delete) so that
+        ``cascade="all, delete-orphan"`` on ``Position.lots`` fires and
+        removes the associated PositionLot rows along with each parent
+        Position. This is the de-dupe mechanism for re-imports — old lots
+        get wiped when their parent positions are cleared, so a re-import
+        of the same file produces the same lot count rather than
+        duplicating.
+        """
         with self.get_session() as session:
-            count = session.query(Position).filter_by(account_id=account_id).delete()
+            positions = session.query(Position).filter_by(account_id=account_id).all()
+            count = len(positions)
+            for pos in positions:
+                session.delete(pos)
             session.commit()
             return count
 
@@ -554,7 +681,7 @@ class Database:
             accounts = {a.id: a for a in session.query(Account).all()}
 
             # Group by ticker + shares
-            groups = {}
+            groups: dict = {}
             for pos in all_positions:
                 # Round to 6 decimal places for comparison
                 key = (pos.ticker.upper(), round(pos.shares, 6))
@@ -574,7 +701,10 @@ class Database:
                     continue  # Same account, not a duplicate issue
 
                 # This is suspicious - same ticker, exact shares, different accounts
-                account_names = [accounts.get(p.account_id).name if accounts.get(p.account_id) else "Unknown" for p in positions]
+                account_names: list[str] = [
+                    str(accounts.get(p.account_id).name) if accounts.get(p.account_id) else "Unknown"
+                    for p in positions
+                ]
 
                 duplicates.append({
                     "ticker": ticker,
@@ -611,12 +741,12 @@ class Database:
                 positions = session.query(Position).filter_by(account_id=account.id).all()
                 for pos in positions:
                     value = (pos.shares * pos.current_price) if pos.current_price else 0.0
-                    total_value += value
+                    total_value += value  # type: ignore[assignment]
 
                     if account.is_retirement:
-                        retirement_value += value
+                        retirement_value += value  # type: ignore[assignment]
                     else:
-                        taxable_value += value
+                        taxable_value += value  # type: ignore[assignment]
 
                     positions_data.append({
                         "account_id": account.id,
@@ -636,10 +766,10 @@ class Database:
 
             if existing:
                 # Update existing snapshot
-                existing.total_value = total_value
-                existing.retirement_value = retirement_value
-                existing.taxable_value = taxable_value
-                existing.positions_json = json.dumps(positions_data)
+                existing.total_value = total_value  # type: ignore[assignment]
+                existing.retirement_value = retirement_value  # type: ignore[assignment]
+                existing.taxable_value = taxable_value  # type: ignore[assignment]
+                existing.positions_json = json.dumps(positions_data)  # type: ignore[assignment]
                 session.commit()
                 session.refresh(existing)
                 return existing
@@ -674,7 +804,7 @@ class Database:
         with self.get_session() as session:
             cache = session.query(PriceCache).filter_by(ticker=ticker).first()
             if cache and not cache.is_stale(max_age_hours):
-                return cache.current_price
+                return float(cache.current_price) if cache.current_price is not None else None
             return None
 
     def update_price_cache(
@@ -690,14 +820,14 @@ class Database:
             cache = session.query(PriceCache).filter_by(ticker=ticker).first()
 
             if cache:
-                cache.current_price = current_price
+                cache.current_price = current_price  # type: ignore[assignment]
                 if previous_close is not None:
-                    cache.previous_close = previous_close
+                    cache.previous_close = previous_close  # type: ignore[assignment]
                 if year_high is not None:
-                    cache.year_high = year_high
+                    cache.year_high = year_high  # type: ignore[assignment]
                 if year_low is not None:
-                    cache.year_low = year_low
-                cache.last_updated = datetime.utcnow()
+                    cache.year_low = year_low  # type: ignore[assignment]
+                cache.last_updated = datetime.utcnow()  # type: ignore[assignment]
             else:
                 cache = PriceCache(
                     ticker=ticker,
@@ -716,7 +846,7 @@ class Database:
         """Get all cached prices as a dict."""
         with self.get_session() as session:
             caches = session.query(PriceCache).all()
-            return {c.ticker: c.current_price for c in caches if c.current_price}
+            return {str(c.ticker): float(c.current_price) for c in caches if c.current_price}
 
     def get_stale_tickers(self, max_age_hours: int = 24) -> list[str]:
         """Get list of tickers with stale or missing prices (default 24 hours)."""
@@ -788,9 +918,9 @@ class Database:
 
                 for pos in positions:
                     value = (pos.shares * pos.current_price) if pos.current_price else 0.0
-                    account_value += value
+                    account_value += value  # type: ignore[assignment]
                     if pos.cost_basis:
-                        account_cost += pos.cost_basis
+                        account_cost += pos.cost_basis  # type: ignore[assignment]
                     position_count += 1
 
                 total_value += account_value
@@ -807,7 +937,7 @@ class Database:
                     "id": account.id,
                     "name": account.name,
                     "account_type": account.account_type,
-                    "display_type": get_account_type_label(account.account_type),
+                    "display_type": get_account_type_label(str(account.account_type)),
                     "brokerage": account.brokerage,
                     "value": account_value,
                     "cost_basis": account_cost,
@@ -838,9 +968,9 @@ class Database:
         with self.get_session() as session:
             setting = session.query(AppSettings).filter_by(key=key).first()
             if setting:
-                setting.value = value
-                setting.encrypted = encrypted
-                setting.updated_at = datetime.utcnow()
+                setting.value = value  # type: ignore[assignment]
+                setting.encrypted = encrypted  # type: ignore[assignment]
+                setting.updated_at = datetime.utcnow()  # type: ignore[assignment]
             else:
                 setting = AppSettings(key=key, value=value, encrypted=encrypted)
                 session.add(setting)
@@ -916,7 +1046,7 @@ class Database:
                 for key, value in kwargs.items():
                     if hasattr(trigger, key):
                         setattr(trigger, key, value)
-                trigger.updated_at = datetime.utcnow()
+                trigger.updated_at = datetime.utcnow()  # type: ignore[assignment]
                 session.commit()
                 session.refresh(trigger)
             return trigger
@@ -952,10 +1082,10 @@ class Database:
                     cd.current_price = cd.current_price + accrued_interest
 
                 # Convert to cash
-                cd.position_type = "cash"
-                cd.asset_class = "cash"
-                cd.name = f"Matured CD - {cd.name or cd.ticker}"
-                cd.ticker = "CASH"
+                cd.position_type = "cash"  # type: ignore[assignment]
+                cd.asset_class = "cash"  # type: ignore[assignment]
+                cd.name = f"Matured CD - {cd.name or cd.ticker}"  # type: ignore[assignment]
+                cd.ticker = "CASH"  # type: ignore[assignment]
                 cd.maturity_date = None
                 cd.interest_rate = None
                 matured_positions.append(cd)
@@ -985,7 +1115,7 @@ class Database:
     def export_database(self, path: str) -> dict:
         """Export database to JSON for backup."""
         with self.get_session() as session:
-            data = {
+            data: dict[str, Any] = {
                 "accounts": [],
                 "positions": [],
                 "file_imports": [],
@@ -1130,9 +1260,9 @@ class Database:
                 return None
 
             if name is not None:
-                view.name = name
+                view.name = name  # type: ignore[assignment]
             if account_ids is not None:
-                view.account_ids = json.dumps(account_ids)
+                view.account_ids = json.dumps(account_ids)  # type: ignore[assignment]
             if is_default is not None:
                 if is_default:
                     # Unset other defaults first
@@ -1140,7 +1270,7 @@ class Database:
                         PortfolioView.is_default.is_(True),
                         PortfolioView.id != view_id
                     ).update({PortfolioView.is_default: False})
-                view.is_default = is_default
+                view.is_default = is_default  # type: ignore[assignment]
 
             session.commit()
             session.refresh(view)
@@ -1164,7 +1294,7 @@ class Database:
         """
         with self.get_session() as session:
             # Get all current account IDs
-            all_account_ids = [a.id for a in session.query(Account).all()]
+            all_account_ids: list[str] = [str(a.id) for a in session.query(Account).all()]
 
             # Check if "All Accounts" view exists
             all_view = session.query(PortfolioView).filter(
@@ -1339,9 +1469,9 @@ class Database:
             entity = session.query(Entity).filter_by(id=entity_id).first()
             if entity:
                 if name is not None:
-                    entity.name = name
+                    entity.name = name  # type: ignore[assignment]
                 if entity_type is not None:
-                    entity.entity_type = entity_type
+                    entity.entity_type = entity_type  # type: ignore[assignment]
                 if is_default is not None:
                     if is_default:
                         # Unset other defaults first
@@ -1349,12 +1479,12 @@ class Database:
                             Entity.is_default.is_(True),
                             Entity.id != entity_id
                         ).update({Entity.is_default: False})
-                    entity.is_default = is_default
+                    entity.is_default = is_default  # type: ignore[assignment]
                 if color is not None:
-                    entity.color = color
+                    entity.color = color  # type: ignore[assignment]
                 if icon is not None:
-                    entity.icon = icon
-                entity.updated_at = datetime.utcnow()
+                    entity.icon = icon  # type: ignore[assignment]
+                entity.updated_at = datetime.utcnow()  # type: ignore[assignment]
                 session.commit()
                 session.refresh(entity)
             return entity
@@ -1460,7 +1590,7 @@ class Database:
                 account_cost = sum(p.cost_basis or 0 for p in positions)
 
                 total_value += account_value
-                total_cost += account_cost
+                total_cost += account_cost  # type: ignore[assignment]
 
                 if account.is_retirement:
                     retirement_value += account_value
@@ -1549,8 +1679,8 @@ class Database:
         with self.get_session() as session:
             account = session.query(Account).filter_by(id=account_id).first()
             if account:
-                account.entity_id = entity_id
-                account.updated_at = datetime.utcnow()
+                account.entity_id = entity_id  # type: ignore[assignment]
+                account.updated_at = datetime.utcnow()  # type: ignore[assignment]
                 session.commit()
                 return True
             return False
@@ -1560,8 +1690,8 @@ class Database:
         with self.get_session() as session:
             income = session.query(BudgetIncomeSource).filter_by(id=income_id).first()
             if income:
-                income.entity_id = entity_id
-                income.updated_at = datetime.utcnow()
+                income.entity_id = entity_id  # type: ignore[assignment]
+                income.updated_at = datetime.utcnow()  # type: ignore[assignment]
                 session.commit()
                 return True
             return False
@@ -1571,8 +1701,8 @@ class Database:
         with self.get_session() as session:
             expense = session.query(BudgetExpense).filter_by(id=expense_id).first()
             if expense:
-                expense.entity_id = entity_id
-                expense.updated_at = datetime.utcnow()
+                expense.entity_id = entity_id  # type: ignore[assignment]
+                expense.updated_at = datetime.utcnow()  # type: ignore[assignment]
                 session.commit()
                 return True
             return False

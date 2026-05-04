@@ -1,10 +1,11 @@
 """Analysis API endpoints."""
 
 import os
+from typing import TYPE_CHECKING, Any, Optional, cast
+
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from src.services.advisor_analysis import AdvisorAnalysisService
@@ -28,13 +29,14 @@ def is_hosted_environment() -> bool:
 
 def get_session_id(request: Request) -> str | None:
     """Get session ID from request state (set by SessionMiddleware)."""
-    return getattr(request.state, "session_id", None)
+    sid = getattr(request.state, "session_id", None)
+    return sid if sid is None else str(sid)
 
 
 from src.api.dependencies import get_db  # noqa: E402  (public router dep)
 
 
-def check_demo_mode_write():
+def check_demo_mode_write() -> None:
     """Check if demo data modifications are protected.
 
     Uses centralized check from demo_mode service.
@@ -49,6 +51,10 @@ def db_to_portfolio(db: Database) -> Portfolio:
     accounts = []
 
     for db_account in db.get_all_accounts_with_positions():
+        # SQLAlchemy ORM attributes are typed as Column[T] by mypy, but on an
+        # instance they are the underlying T at runtime. Cast where needed.
+        account_name = cast(str, db_account.name)
+        account_brokerage = cast(Optional[str], db_account.brokerage)
         positions = []
         for db_pos in db_account.positions:
             # Skip positions without prices
@@ -56,20 +62,20 @@ def db_to_portfolio(db: Database) -> Portfolio:
                 continue
 
             positions.append(PydanticPosition(
-                ticker=db_pos.ticker,
-                name=db_pos.name or db_pos.ticker,
-                shares=db_pos.shares,
-                current_price=db_pos.current_price,
-                cost_basis=db_pos.cost_basis,
-                account_name=db_account.name,
-                brokerage=Brokerage(db_account.brokerage) if db_account.brokerage in [b.value for b in Brokerage] else Brokerage.OTHER,
-                sector=db_pos.sector,
-                is_fund=db_pos.is_fund,
+                ticker=cast(str, db_pos.ticker),
+                name=cast(str, db_pos.name or db_pos.ticker),
+                shares=cast(float, db_pos.shares),
+                current_price=cast(float, db_pos.current_price),
+                cost_basis=cast(Optional[float], db_pos.cost_basis),
+                account_name=account_name,
+                brokerage=Brokerage(account_brokerage) if account_brokerage in [b.value for b in Brokerage] else Brokerage.OTHER,
+                sector=cast(Optional[str], db_pos.sector),
+                is_fund=cast(bool, db_pos.is_fund),
             ))
 
         if positions:
             # Map account type
-            account_type_map = {
+            account_type_map: dict[str, AccountType] = {
                 "roth_ira": AccountType.ROTH_IRA,
                 "traditional_ira": AccountType.TRADITIONAL_IRA,
                 "traditional_401k": AccountType.TRADITIONAL_401K,
@@ -77,12 +83,12 @@ def db_to_portfolio(db: Database) -> Portfolio:
                 "taxable": AccountType.TAXABLE,
                 "hsa": AccountType.HSA,
             }
-            account_type = account_type_map.get(db_account.account_type, AccountType.TAXABLE)
+            account_type = account_type_map.get(cast(str, db_account.account_type), AccountType.TAXABLE)
 
             accounts.append(PydanticAccount(
-                name=db_account.name,
+                name=account_name,
                 account_type=account_type,
-                brokerage=Brokerage(db_account.brokerage) if db_account.brokerage in [b.value for b in Brokerage] else Brokerage.OTHER,
+                brokerage=Brokerage(account_brokerage) if account_brokerage in [b.value for b in Brokerage] else Brokerage.OTHER,
                 positions=positions,
             ))
 
@@ -140,6 +146,30 @@ class CorrelationResponse(BaseModel):
     low_correlations: list[CorrelationEntry]
 
 
+class ExpenseDragHolding(BaseModel):
+    """A single holding's contribution to expense drag."""
+    ticker: str
+    position_value: float
+    expense_ratio: float
+    annual_drag_dollars: float
+
+
+class ExpenseDragResponse(BaseModel):
+    """Portfolio expense ratio drag vs SPY benchmark."""
+    portfolio_expense_ratio: float        # weighted, decimal (e.g., 0.0032 = 0.32%)
+    benchmark_expense_ratio: float        # decimal (e.g., 0.0004 = 0.04%)
+    annual_drag_dollars: float            # covered_value * (portfolio_ER - benchmark_ER)
+    annual_drag_basis_points: float       # (portfolio_ER - benchmark_ER) * 10000
+    covered_value: float                  # sum of position values that had an ER
+    uncovered_value: float                # positions with no ER (stocks, cash, missing)
+    top_drag_holdings: list[ExpenseDragHolding]
+
+
+# SPY/VOO target expense ratio used as the cheap-passive baseline.
+# 0.0004 = 0.04% — the iShares/Vanguard low-cost equivalent.
+BENCHMARK_ER: float = 0.0004
+
+
 def _sanitize_float(value: float, default: float = 0.0) -> float:
     """Sanitize float values for JSON serialization (handle NaN, Inf)."""
     import math
@@ -152,19 +182,18 @@ def _run_performance_task(portfolio_dict: dict, benchmark: str) -> dict:
     """Background task for performance analysis."""
     import math
 
-    def sanitize(value, default=0.0):
+    def sanitize(value: Any, default: float = 0.0) -> float:
         if value is None or math.isnan(value) or math.isinf(value):
             return default
-        return value
+        return cast(float, value)
 
     # Reconstruct portfolio from dict
     portfolio = Portfolio(
         accounts=[
             PydanticAccount(
-                id=a["id"],
                 name=a["name"],
                 account_type=AccountType(a["account_type"]),
-                brokerage=Brokerage(a["brokerage"]) if a.get("brokerage") else None,
+                brokerage=Brokerage(a["brokerage"]) if a.get("brokerage") else Brokerage.OTHER,
                 positions=[
                     PydanticPosition(**p) for p in a.get("positions", [])
                 ]
@@ -199,7 +228,7 @@ def get_performance(
         description="Run in background. Defaults to True on Heroku, False locally."
     ),
     db: Database = Depends(get_db),
-):
+) -> Any:
     """Get portfolio performance metrics. Supports async mode for hosted platforms."""
     portfolio = db_to_portfolio(db)
 
@@ -265,19 +294,18 @@ def _run_risk_task(portfolio_dict: dict, benchmark: str) -> dict:
     """Background task for risk analysis."""
     import math
 
-    def sanitize(value, default=0.0):
+    def sanitize(value: Any, default: float = 0.0) -> float:
         if value is None or math.isnan(value) or math.isinf(value):
             return default
-        return value
+        return cast(float, value)
 
     # Reconstruct portfolio from dict
     portfolio = Portfolio(
         accounts=[
             PydanticAccount(
-                id=a["id"],
                 name=a["name"],
                 account_type=AccountType(a["account_type"]),
-                brokerage=Brokerage(a["brokerage"]) if a.get("brokerage") else None,
+                brokerage=Brokerage(a["brokerage"]) if a.get("brokerage") else Brokerage.OTHER,
                 positions=[
                     PydanticPosition(**p) for p in a.get("positions", [])
                 ]
@@ -310,7 +338,7 @@ def get_risk(
         description="Run in background. Defaults to True on Heroku, False locally."
     ),
     db: Database = Depends(get_db),
-):
+) -> Any:
     """Get portfolio risk metrics. Supports async mode for hosted platforms."""
     portfolio = db_to_portfolio(db)
 
@@ -368,6 +396,141 @@ def get_risk(
     )
 
 
+def _compute_expense_drag(
+    positions_with_er: list[tuple[str, float, Optional[float]]],
+    benchmark_er: float = BENCHMARK_ER,
+    top_n: int = 5,
+) -> dict:
+    """Compute weighted expense ratio drag for a portfolio.
+
+    Pure helper so the math can be tested without any DB / network setup.
+
+    Args:
+        positions_with_er: list of (ticker, position_value, expense_ratio_or_none).
+            Positions with er=None are tallied as "uncovered" and excluded from
+            the weighted-ER numerator/denominator.
+        benchmark_er: comparison baseline ER (decimal, e.g., 0.0004).
+        top_n: how many top-drag holdings to include in the response list.
+
+    Returns:
+        Dict matching the ExpenseDragResponse shape.
+    """
+    covered_value = 0.0
+    uncovered_value = 0.0
+    weighted_er_numerator = 0.0
+    holdings: list[dict] = []
+
+    for ticker, value, er in positions_with_er:
+        if value is None or value <= 0:
+            continue
+        if er is None:
+            uncovered_value += value
+            continue
+        covered_value += value
+        weighted_er_numerator += value * er
+        holdings.append({
+            "ticker": ticker,
+            "position_value": value,
+            "expense_ratio": er,
+            "annual_drag_dollars": value * max(0.0, er - benchmark_er),
+        })
+
+    if covered_value > 0:
+        portfolio_er = weighted_er_numerator / covered_value
+    else:
+        portfolio_er = 0.0
+
+    annual_drag_dollars = max(0.0, (portfolio_er - benchmark_er)) * covered_value
+    annual_drag_bps = (portfolio_er - benchmark_er) * 10000
+
+    # Sort by per-holding drag dollars descending (what the user actually cares about).
+    holdings.sort(key=lambda h: h["annual_drag_dollars"], reverse=True)
+
+    return {
+        "portfolio_expense_ratio": portfolio_er,
+        "benchmark_expense_ratio": benchmark_er,
+        "annual_drag_dollars": annual_drag_dollars,
+        "annual_drag_basis_points": annual_drag_bps,
+        "covered_value": covered_value,
+        "uncovered_value": uncovered_value,
+        "top_drag_holdings": holdings[:top_n],
+    }
+
+
+@router.get("/expense-drag", response_model=ExpenseDragResponse)
+def get_expense_drag(
+    view_id: Optional[str] = Query(default=None, description="Reserved; full portfolio is used."),
+    db: Database = Depends(get_db),
+) -> ExpenseDragResponse:
+    """Portfolio expense-ratio drag vs SPY/VOO benchmark.
+
+    Looks up cached fund data (no live network calls) for each held fund,
+    aggregates a value-weighted ER, and reports the dollar drag relative to
+    the cheap-passive baseline (BENCHMARK_ER).
+
+    Positions with no ER (individual stocks, cash, funds missing from the
+    cache) are tallied separately as `uncovered_value` and excluded from
+    the weighted ER numerator/denominator.
+    """
+    # view_id is accepted but not yet wired (matches /performance and /risk
+    # which also operate on the full portfolio).
+    _ = view_id
+
+    from src.services.fund_data import FundDataService
+    from src.services.secrets import SecretsManager
+
+    positions = db.get_all_positions()
+
+    # Initialize fund service with FMP key if available — but we only call
+    # the local cache lookups (get_from_cache / get_fund_raw_data), no network.
+    secrets = SecretsManager(db)
+    fmp_key = secrets.get_api_key(secrets.FMP_API_KEY)
+    fund_service = FundDataService(cache_path="funds.yaml", fmp_api_key=fmp_key)
+
+    positions_with_er: list[tuple[str, float, Optional[float]]] = []
+    for pos in positions:
+        if not pos.current_price or not pos.shares:
+            continue
+        value = float(pos.shares) * float(pos.current_price)
+        if value <= 0:
+            continue
+
+        ticker_str = cast(str, pos.ticker)
+        er: Optional[float] = None
+        if pos.is_fund and ticker_str:
+            cached = fund_service.get_from_cache(ticker_str)
+            if cached and cached.expense_ratio is not None:
+                er = float(cached.expense_ratio)
+            else:
+                # Fallback: raw cache dict (some entries may store it under
+                # a slightly different key in legacy yaml files).
+                raw = fund_service.get_fund_raw_data(ticker_str)
+                if raw and raw.get("expense_ratio") is not None:
+                    er = float(raw["expense_ratio"])
+
+        positions_with_er.append((ticker_str, value, er))
+
+    result = _compute_expense_drag(positions_with_er, benchmark_er=BENCHMARK_ER, top_n=5)
+
+    return ExpenseDragResponse(
+        portfolio_expense_ratio=_sanitize_float(result["portfolio_expense_ratio"]),
+        benchmark_expense_ratio=_sanitize_float(result["benchmark_expense_ratio"]),
+        annual_drag_dollars=_sanitize_float(result["annual_drag_dollars"]),
+        annual_drag_basis_points=_sanitize_float(result["annual_drag_basis_points"]),
+        covered_value=_sanitize_float(result["covered_value"]),
+        uncovered_value=_sanitize_float(result["uncovered_value"]),
+        top_drag_holdings=[
+            ExpenseDragHolding(
+                ticker=h["ticker"],
+                position_value=_sanitize_float(h["position_value"]),
+                expense_ratio=_sanitize_float(h["expense_ratio"]),
+                annual_drag_dollars=_sanitize_float(h["annual_drag_dollars"]),
+            )
+            for h in result["top_drag_holdings"]
+        ],
+    )
+
+
 @router.get("/allocation", response_model=AllocationResponse)
 def get_allocation(db: Database = Depends(get_db)) -> AllocationResponse:
     """Get portfolio allocation breakdown."""
@@ -389,7 +552,7 @@ def get_allocation(db: Database = Depends(get_db)) -> AllocationResponse:
     by_brokerage = {k.value: v * 100 for k, v in portfolio.get_allocation_by_brokerage().items()}
 
     # Account type allocation
-    by_account_type = {}
+    by_account_type: dict[str, float] = {}
     total = portfolio.total_value
     if total > 0:
         for account in portfolio.accounts:
@@ -476,7 +639,7 @@ def get_correlation(
 
 
 @router.get("/suggestions")
-def get_rebalancing_suggestions(db: Database = Depends(get_db)):
+def get_rebalancing_suggestions(db: Database = Depends(get_db)) -> dict:
     """Get rebalancing suggestions based on target allocations."""
     portfolio = db_to_portfolio(db)
 
@@ -489,12 +652,12 @@ def get_rebalancing_suggestions(db: Database = Depends(get_db)):
     return {
         "suggestions": [
             {
-                "ticker": s.ticker,
+                "ticker": s.subcategory,
                 "current_allocation": s.current_pct,
                 "target_allocation": s.target_pct,
-                "deviation": s.deviation,
+                "deviation": s.deviation_pct,
                 "action": s.action,
-                "amount": s.amount,
+                "amount": s.deviation_dollars,
             }
             for s in suggestions
         ],
@@ -546,10 +709,10 @@ def get_detailed_allocation(db: Database = Depends(get_db)) -> DetailedAllocatio
     from src.services.secrets import SecretsManager
 
     positions = db.get_all_positions()
-    total_value = sum(
+    total_value: float = float(sum(
         (p.shares * p.current_price) if p.current_price else 0
         for p in positions
-    )
+    ))
 
     if total_value == 0:
         return DetailedAllocationResponse(
@@ -570,18 +733,18 @@ def get_detailed_allocation(db: Database = Depends(get_db)) -> DetailedAllocatio
     fund_service = FundDataService(cache_path="funds.yaml", fmp_api_key=fmp_key)
 
     # Build position list for weighted allocation calculation
-    position_list = []
-    asset_class_values = {}
-    position_type_values = {}
-    cash_value = 0
-    stock_sector_values = {}  # For individual stocks
-    stock_value = 0
-    fund_value = 0
+    position_list: list[tuple[str, float, bool]] = []
+    asset_class_values: dict[str, float] = {}
+    position_type_values: dict[str, float] = {}
+    cash_value: float = 0.0
+    stock_sector_values: dict[str, float] = {}  # For individual stocks
+    stock_value: float = 0.0
+    fund_value: float = 0.0
 
     for pos in positions:
-        value = (pos.shares * pos.current_price) if pos.current_price else 0
-        is_fund = pos.is_fund or (pos.position_type == "fund")
-        pos_type = pos.position_type or "equity"
+        value = float(pos.shares * pos.current_price) if pos.current_price else 0.0
+        is_fund = bool(pos.is_fund or (pos.position_type == "fund"))
+        pos_type = cast(str, pos.position_type or "equity")
 
         # Track by position type
         position_type_values[pos_type] = position_type_values.get(pos_type, 0) + value
@@ -592,7 +755,7 @@ def get_detailed_allocation(db: Database = Depends(get_db)) -> DetailedAllocatio
             continue
 
         # Track by asset class
-        asset_class = pos.asset_class or "equity"
+        asset_class = cast(str, pos.asset_class or "equity")
         asset_class_values[asset_class] = asset_class_values.get(asset_class, 0) + value
 
         # Track stock vs fund values
@@ -601,11 +764,11 @@ def get_detailed_allocation(db: Database = Depends(get_db)) -> DetailedAllocatio
         else:
             stock_value += value
             # Track stock sectors
-            sector = pos.sector or "Other"
+            sector = cast(str, pos.sector or "Other")
             stock_sector_values[sector] = stock_sector_values.get(sector, 0) + value
 
         # Add to position list for fund allocation calculation
-        position_list.append((pos.ticker, value, is_fund))
+        position_list.append((cast(str, pos.ticker), value, is_fund))
 
     # Calculate weighted allocations using fund data
     sector_allocation = fund_service.calculate_weighted_allocation(position_list, 'sector')
@@ -639,7 +802,7 @@ def get_detailed_allocation(db: Database = Depends(get_db)) -> DetailedAllocatio
     cap_rows = build_allocation_rows(cap_allocation, total_value)
 
     # Calculate style allocation based on fund metadata
-    style_allocation = {}
+    style_allocation: dict[str, float] = {}
     for ticker, value, is_fund in position_list:
         if value <= 0 or not is_fund:
             continue
@@ -735,8 +898,27 @@ class TriggerResultResponse(BaseModel):
     message: str
 
 
+def _trigger_to_response(t: Any) -> "TriggerResponse":
+    """Convert an ORM AllocationTrigger row to a TriggerResponse.
+
+    SQLAlchemy attributes are typed as Column[T] by mypy but are the underlying
+    Python type at runtime; cast to satisfy the response model.
+    """
+    return TriggerResponse(
+        id=cast(str, t.id),
+        name=cast(str, t.name),
+        condition_type=cast(str, t.condition_type),
+        operator=cast(str, t.operator),
+        threshold=cast(float, t.threshold),
+        ticker=cast(Optional[str], t.ticker),
+        account_type=cast(Optional[str], t.account_type),
+        sector=cast(Optional[str], t.sector),
+        is_active=cast(bool, t.is_active),
+    )
+
+
 @router.get("/triggers/types")
-def get_trigger_types():
+def get_trigger_types() -> dict:
     """Get available trigger condition types."""
     from src.services.triggers import CONDITION_TYPES, TriggerEvaluator
     return {
@@ -746,27 +928,14 @@ def get_trigger_types():
 
 
 @router.get("/triggers", response_model=list[TriggerResponse])
-def get_triggers(active_only: bool = False, db: Database = Depends(get_db)):
+def get_triggers(active_only: bool = False, db: Database = Depends(get_db)) -> list["TriggerResponse"]:
     """Get all configured triggers."""
     triggers = db.get_all_triggers(active_only=active_only)
-    return [
-        TriggerResponse(
-            id=t.id,
-            name=t.name,
-            condition_type=t.condition_type,
-            operator=t.operator,
-            threshold=t.threshold,
-            ticker=t.ticker,
-            account_type=t.account_type,
-            sector=t.sector,
-            is_active=t.is_active,
-        )
-        for t in triggers
-    ]
+    return [_trigger_to_response(t) for t in triggers]
 
 
 @router.post("/triggers", response_model=TriggerResponse)
-def create_trigger(request: TriggerRequest, db: Database = Depends(get_db)):
+def create_trigger(request: TriggerRequest, db: Database = Depends(get_db)) -> "TriggerResponse":
     """Create a new allocation trigger."""
     check_demo_mode_write()
     trigger = db.create_trigger(
@@ -778,21 +947,11 @@ def create_trigger(request: TriggerRequest, db: Database = Depends(get_db)):
         account_type=request.account_type,
         sector=request.sector,
     )
-    return TriggerResponse(
-        id=trigger.id,
-        name=trigger.name,
-        condition_type=trigger.condition_type,
-        operator=trigger.operator,
-        threshold=trigger.threshold,
-        ticker=trigger.ticker,
-        account_type=trigger.account_type,
-        sector=trigger.sector,
-        is_active=trigger.is_active,
-    )
+    return _trigger_to_response(trigger)
 
 
 @router.delete("/triggers/{trigger_id}")
-def delete_trigger(trigger_id: str, db: Database = Depends(get_db)):
+def delete_trigger(trigger_id: str, db: Database = Depends(get_db)) -> dict:
     """Delete a trigger."""
     check_demo_mode_write()
     if db.delete_trigger(trigger_id):
@@ -802,7 +961,7 @@ def delete_trigger(trigger_id: str, db: Database = Depends(get_db)):
 
 
 @router.put("/triggers/{trigger_id}/toggle")
-def toggle_trigger(trigger_id: str, db: Database = Depends(get_db)):
+def toggle_trigger(trigger_id: str, db: Database = Depends(get_db)) -> dict:
     """Toggle a trigger's active status."""
     check_demo_mode_write()
     trigger = db.get_trigger_by_id(trigger_id)
@@ -811,11 +970,11 @@ def toggle_trigger(trigger_id: str, db: Database = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Trigger not found")
 
     updated = db.update_trigger(trigger_id, is_active=not trigger.is_active)
-    return {"id": updated.id, "is_active": updated.is_active}
+    return {"id": cast(str, updated.id), "is_active": cast(bool, updated.is_active)}
 
 
 @router.get("/triggers/evaluate", response_model=list[TriggerResultResponse])
-def evaluate_triggers(active_only: bool = True, db: Database = Depends(get_db)):
+def evaluate_triggers(active_only: bool = True, db: Database = Depends(get_db)) -> list["TriggerResultResponse"]:
     """Evaluate all triggers and return results."""
     from src.services.triggers import TriggerEvaluator
 
@@ -838,7 +997,7 @@ def evaluate_triggers(active_only: bool = True, db: Database = Depends(get_db)):
 
 
 @router.get("/triggers/triggered", response_model=list[TriggerResultResponse])
-def get_triggered_alerts(db: Database = Depends(get_db)):
+def get_triggered_alerts(db: Database = Depends(get_db)) -> list["TriggerResultResponse"]:
     """Get only triggers that are currently triggered (alerts)."""
     from src.services.triggers import TriggerEvaluator
 
@@ -885,7 +1044,7 @@ class FundAnalysisResponse(BaseModel):
 
 
 @router.get("/fund/status")
-def get_claude_status(db: Database = Depends(get_db)):
+def get_claude_status(db: Database = Depends(get_db)) -> dict:
     """Check if Claude API is available for fund analysis."""
     from src.services.secrets import SecretsManager
 
@@ -905,7 +1064,7 @@ def get_claude_status(db: Database = Depends(get_db)):
 
 
 @router.post("/fund/analyze", response_model=FundAnalysisResponse)
-def analyze_fund(request: FundAnalysisRequest, db: Database = Depends(get_db)):
+def analyze_fund(request: FundAnalysisRequest, db: Database = Depends(get_db)) -> "FundAnalysisResponse":
     """Analyze a fund using yfinance and optionally Claude API."""
     from src.services.secrets import SecretsManager
     from src.services.fund_data import FundDataService
@@ -950,13 +1109,13 @@ def analyze_fund(request: FundAnalysisRequest, db: Database = Depends(get_db)):
 
 
 @router.get("/fund/{ticker}", response_model=FundAnalysisResponse)
-def get_fund_analysis(ticker: str, use_claude: bool = True, db: Database = Depends(get_db)):
+def get_fund_analysis(ticker: str, use_claude: bool = True, db: Database = Depends(get_db)) -> "FundAnalysisResponse":
     """Get fund analysis (GET endpoint for convenience)."""
     return analyze_fund(FundAnalysisRequest(ticker=ticker, use_claude=use_claude), db)
 
 
 @router.post("/fund/analyze-portfolio")
-def analyze_portfolio_funds(db: Database = Depends(get_db)):
+def analyze_portfolio_funds(db: Database = Depends(get_db)) -> dict:
     """Analyze all funds in the portfolio using Claude API."""
     from src.services.secrets import SecretsManager
     from src.services.fund_data import FundDataService
@@ -1063,7 +1222,7 @@ def _get_sector_from_yfinance(ticker: str) -> Optional[str]:
 
         sector = info.get("sector")
         if sector:
-            return sector
+            return str(sector)
 
         # For ETFs/funds, try to determine from category
         category = info.get("category", "")
@@ -1139,7 +1298,7 @@ def _get_sector_from_finnhub(ticker: str, api_key: str) -> Optional[str]:
             elif "material" in sector_lower or "chemical" in sector_lower or "mining" in sector_lower:
                 return "Materials"
             else:
-                return sector.title()  # Return as-is
+                return str(sector.title())  # Return as-is
         return None
     except Exception:
         return None
@@ -1168,7 +1327,7 @@ def _get_sector_from_alphavantage(ticker: str, api_key: str) -> Optional[str]:
 
         sector = data.get("Sector")
         if sector and sector != "None":
-            return sector
+            return str(sector)
         return None
     except Exception:
         return None
@@ -1208,7 +1367,7 @@ def _get_sector_multi_source(ticker: str, db: Database) -> tuple[Optional[str], 
 
 
 @router.post("/positions/update-sectors")
-def update_position_sectors(db: Database = Depends(get_db)):
+def update_position_sectors(db: Database = Depends(get_db)) -> dict:
     """Update sector data for all positions using multiple data sources."""
     check_demo_mode_write()
     positions = db.get_all_positions()
@@ -1333,7 +1492,7 @@ class EnhancedChatRequest(BaseModel):
 
 
 @router.post("/advisor/analyze", response_model=AdvisorAnalysisResponse)
-def get_advisor_analysis(request: AdvisorAnalysisRequest, db: Database = Depends(get_db)):
+def get_advisor_analysis(request: AdvisorAnalysisRequest, db: Database = Depends(get_db)) -> "AdvisorAnalysisResponse":
     """Get financial advisor-style analysis of a fund.
 
     This provides comprehensive analysis from a financial advisor's perspective,
@@ -1392,7 +1551,7 @@ _chat_api_keys: dict[str, str] = {}  # Track which API key was used
 
 
 @router.post("/advisor/chat", response_model=ChatResponse)
-def chat_with_advisor(request: ChatRequest, db: Database = Depends(get_db)):
+def chat_with_advisor(request: ChatRequest, db: Database = Depends(get_db)) -> "ChatResponse":
     """Have a conversation with the AI advisor about investments.
 
     The advisor has context about your portfolio and can answer follow-up
@@ -1436,7 +1595,7 @@ def chat_with_advisor(request: ChatRequest, db: Database = Depends(get_db)):
 
 
 @router.post("/advisor/chat/stream")
-def chat_with_advisor_stream(request: ChatRequest, db: Database = Depends(get_db)):
+def chat_with_advisor_stream(request: ChatRequest, db: Database = Depends(get_db)) -> StreamingResponse:
     """Stream a conversation with the AI advisor about investments.
 
     Returns a Server-Sent Events stream with text chunks as they arrive.
@@ -1449,7 +1608,7 @@ def chat_with_advisor_stream(request: ChatRequest, db: Database = Depends(get_db
     claude_key = secrets.get_api_key(secrets.ANTHROPIC_API_KEY)
 
     if not claude_key:
-        def error_stream():
+        def error_stream() -> Any:
             yield "data: Claude API key not configured. Please add your API key in Settings to use the advisor chat.\n\n"
             yield "data: [DONE]\n\n"
         return StreamingResponse(error_stream(), media_type="text/event-stream")
@@ -1464,7 +1623,7 @@ def chat_with_advisor_stream(request: ChatRequest, db: Database = Depends(get_db
 
     advisor = _chat_services[session_key]
 
-    def generate():
+    def generate() -> Any:
         """Generate SSE stream from advisor response."""
         try:
             for chunk in advisor.chat_stream(
@@ -1492,7 +1651,7 @@ def chat_with_advisor_stream(request: ChatRequest, db: Database = Depends(get_db
 
 
 @router.post("/advisor/chat/clear")
-def clear_chat_history():
+def clear_chat_history() -> dict:
     """Clear the advisor chat history."""
     global _chat_services
     _chat_services = {}
@@ -1500,7 +1659,7 @@ def clear_chat_history():
 
 
 @router.post("/advisor/chat/stream/v2")
-def chat_with_advisor_stream_v2(request: EnhancedChatRequest, db: Database = Depends(get_db)):
+def chat_with_advisor_stream_v2(request: EnhancedChatRequest, db: Database = Depends(get_db)) -> StreamingResponse:
     """Enhanced streaming chat with tool support and page context.
 
     This endpoint provides context-aware chat that:
@@ -1524,7 +1683,7 @@ def chat_with_advisor_stream_v2(request: EnhancedChatRequest, db: Database = Dep
     claude_key = secrets.get_api_key(secrets.ANTHROPIC_API_KEY)
 
     if not claude_key:
-        def error_stream():
+        def error_stream() -> Any:
             yield f'data: {json.dumps({"type": "error", "message": "Claude API key not configured. Please add your API key in Settings."})}\n\n'
         return StreamingResponse(error_stream(), media_type="text/event-stream")
 
@@ -1547,7 +1706,7 @@ def chat_with_advisor_stream_v2(request: EnhancedChatRequest, db: Database = Dep
             "selected_ticker": request.page_context.selected_ticker,
         }
 
-    def generate():
+    def generate() -> Any:
         """Generate SSE stream from advisor response with tool support."""
         try:
             for event in advisor.chat_stream_with_tools(
@@ -1575,8 +1734,49 @@ def chat_with_advisor_stream_v2(request: EnhancedChatRequest, db: Database = Dep
 # Plugin Analysis API
 # ====================
 
+
+def _position_to_analysis_dict(db_pos: Any, db_account: Any) -> dict:
+    """Convert a Position ORM row into the dict shape analysis plugins expect.
+
+    Surfaces the per-position ``lots`` list (from Sprint 8 lot tracking)
+    and the legacy ``purchase_date`` so the tax-loss harvester can pick
+    real PositionLot rows when present and fall back to the synthetic
+    single-lot view otherwise.
+    """
+    lots_payload: list[dict] = []
+    # ``lots`` is eagerly loaded by Database.get_positions_by_account.
+    raw_lots = getattr(db_pos, "lots", None) or []
+    for lot in raw_lots:
+        lots_payload.append({
+            "id": lot.id,
+            "purchase_date": lot.purchase_date.isoformat() if lot.purchase_date else None,
+            "shares": lot.shares,
+            "cost_basis": lot.cost_basis,
+            "notes": lot.notes,
+        })
+
+    return {
+        "ticker": db_pos.ticker,
+        "name": db_pos.name,
+        "shares": db_pos.shares,
+        "current_price": db_pos.current_price,
+        "cost_basis": db_pos.cost_basis,
+        "is_fund": db_pos.is_fund,
+        "sector": db_pos.sector,
+        "account_id": db_account.id,
+        "account_name": db_account.name,
+        "account_type": db_account.account_type,
+        # New (Sprint 8 wire-up): real per-lot tracking when populated by
+        # importers; analyzer falls back to a synthetic single-lot view
+        # using ``purchase_date`` + ``cost_basis`` + ``shares`` when this
+        # list is empty.
+        "purchase_date": db_pos.purchase_date.isoformat() if db_pos.purchase_date else None,
+        "lots": lots_payload,
+    }
+
+
 @router.get("/plugins")
-def run_plugin_analysis(db: Database = Depends(get_db)):
+def run_plugin_analysis(db: Database = Depends(get_db)) -> dict:
     """
     Run all enabled analysis plugins on the current portfolio.
 
@@ -1610,19 +1810,8 @@ def run_plugin_analysis(db: Database = Depends(get_db)):
         })
 
         # Add positions for this account
-        for db_pos in db.get_positions_by_account(db_account.id):
-            positions.append({
-                "ticker": db_pos.ticker,
-                "name": db_pos.name,
-                "shares": db_pos.shares,
-                "current_price": db_pos.current_price,
-                "cost_basis": db_pos.cost_basis,
-                "is_fund": db_pos.is_fund,
-                "sector": db_pos.sector,
-                "account_id": db_account.id,
-                "account_name": db_account.name,
-                "account_type": db_account.account_type,
-            })
+        for db_pos in db.get_positions_by_account(cast(str, db_account.id)):
+            positions.append(_position_to_analysis_dict(db_pos, db_account))
 
     # Run analysis plugins
     result = pipeline.run_all(positions, accounts)
@@ -1653,7 +1842,7 @@ def run_plugin_analysis(db: Database = Depends(get_db)):
 
 
 @router.get("/plugins/{plugin_id}")
-def run_single_plugin_analysis(plugin_id: str, db: Database = Depends(get_db)):
+def run_single_plugin_analysis(plugin_id: str, db: Database = Depends(get_db)) -> dict:
     """
     Run a specific analysis plugin on the current portfolio.
 
@@ -1686,19 +1875,8 @@ def run_single_plugin_analysis(plugin_id: str, db: Database = Depends(get_db)):
             ],
         })
 
-        for db_pos in db.get_positions_by_account(db_account.id):
-            positions.append({
-                "ticker": db_pos.ticker,
-                "name": db_pos.name,
-                "shares": db_pos.shares,
-                "current_price": db_pos.current_price,
-                "cost_basis": db_pos.cost_basis,
-                "is_fund": db_pos.is_fund,
-                "sector": db_pos.sector,
-                "account_id": db_account.id,
-                "account_name": db_account.name,
-                "account_type": db_account.account_type,
-            })
+        for db_pos in db.get_positions_by_account(cast(str, db_account.id)):
+            positions.append(_position_to_analysis_dict(db_pos, db_account))
 
     # Run specific plugin
     result = pipeline.run_plugin(plugin_id, positions, accounts)
@@ -1751,12 +1929,12 @@ def _get_widget_portfolio_data(db: Database) -> tuple[list[dict], list[dict]]:
             ],
         })
 
-        for db_pos in db.get_positions_by_account(db_account.id):
+        for db_pos in db.get_positions_by_account(cast(str, db_account.id)):
             sector = db_pos.sector or "Other"
             # For funds with no sector, try FundDataService cache (fast local lookup)
             if sector.lower() == "other" and db_pos.is_fund:
                 try:
-                    fund_data = fund_service.get_fund_raw_data(db_pos.ticker)
+                    fund_data = fund_service.get_fund_raw_data(cast(str, db_pos.ticker))
                     if fund_data:
                         sector_breakdown = fund_data.get("sector_breakdown", {})
                         if sector_breakdown:
@@ -1784,7 +1962,7 @@ def _get_widget_portfolio_data(db: Database) -> tuple[list[dict], list[dict]]:
 
 
 @router.get("/widgets")
-def render_widgets(db: Database = Depends(get_db)):
+def render_widgets(db: Database = Depends(get_db)) -> dict:
     """
     Render all enabled widget plugins with current portfolio data.
 
@@ -1806,7 +1984,7 @@ def render_widgets(db: Database = Depends(get_db)):
 
 
 @router.get("/widgets/{plugin_id}")
-def render_single_widget(plugin_id: str, db: Database = Depends(get_db)):
+def render_single_widget(plugin_id: str, db: Database = Depends(get_db)) -> dict:
     """
     Render a specific widget plugin with current portfolio data.
 

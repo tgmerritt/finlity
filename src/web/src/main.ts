@@ -39,6 +39,7 @@ import {
   refreshPrices,
   showDuplicateDetails,
   autoRefreshIfStale,
+  updatePriceStatus,
 } from '@/pages/dashboard';
 import {
   initHoldings,
@@ -283,28 +284,6 @@ async function populateAgeFromSettings(): Promise<void> {
   } catch (error) {
     // Non-critical — fields keep their HTML defaults
     console.warn('Could not load personal settings for age fields:', error);
-  }
-}
-
-/**
- * Update price status display.
- */
-async function updatePriceStatus(): Promise<void> {
-  try {
-    const data = await apiCall<{ last_update: string | null; prices_stale: boolean }>(
-      '/api/imports/price-status'
-    );
-    const statusEl = document.getElementById('price-status');
-    if (statusEl && data.last_update) {
-      const lastUpdate = new Date(data.last_update);
-      const timeStr = lastUpdate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      statusEl.textContent = data.prices_stale
-        ? `Prices from ${timeStr} (stale)`
-        : `Prices as of ${timeStr}`;
-      statusEl.className = data.prices_stale ? 'price-status stale' : 'price-status';
-    }
-  } catch (error) {
-    console.error('Failed to check price status:', error);
   }
 }
 

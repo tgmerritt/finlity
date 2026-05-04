@@ -424,3 +424,35 @@ export interface PriceStatus {
   stale_count: number;
   total_count: number;
 }
+
+// Expense ratio drag (Cost & Tax Efficiency card on Analysis page)
+export interface ExpenseDragHolding {
+  ticker: string;
+  position_value: number;
+  expense_ratio: number;
+  annual_drag_dollars: number;
+}
+
+export interface ExpenseDragResponse {
+  portfolio_expense_ratio: number;     // decimal, e.g. 0.0032 = 0.32%
+  benchmark_expense_ratio: number;     // decimal, e.g. 0.0004 = 0.04%
+  annual_drag_dollars: number;
+  annual_drag_basis_points: number;
+  covered_value: number;
+  uncovered_value: number;
+  top_drag_holdings: ExpenseDragHolding[];
+}
+
+// Position correlation (heatmap on Analysis page)
+export interface CorrelationEntry {
+  ticker1: string;
+  ticker2: string;
+  correlation: number;
+}
+
+export interface CorrelationResponse {
+  tickers: string[];
+  matrix: number[][];
+  high_correlations: CorrelationEntry[];
+  low_correlations: CorrelationEntry[];
+}

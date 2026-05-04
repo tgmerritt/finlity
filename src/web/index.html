@@ -26,7 +26,7 @@
 </head>
 <body>
     <!-- Global Loading Overlay -->
-    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+    <div id="loading-overlay" class="loading-overlay hidden">
         <div class="loading-content">
             <div class="spinner"></div>
             <div class="loading-text">Loading...</div>
@@ -58,7 +58,7 @@
                             <polyline points="6 9 12 15 18 9"></polyline>
                         </svg>
                     </button>
-                    <div id="profile-dropdown" class="profile-dropdown" style="display: none;">
+                    <div id="profile-dropdown" class="profile-dropdown hidden">
                         <div id="profile-list" class="profile-list">
                             <!-- Populated by JS -->
                         </div>
@@ -238,7 +238,7 @@
             <div class="mobile-nav-overlay" onclick="toggleMobileNav()"></div>
 
             <!-- Demo Mode Banner (hidden by default) -->
-            <div id="demo-mode-banner" class="demo-mode-banner" style="display: none;">
+            <div id="demo-mode-banner" class="demo-mode-banner hidden">
                 <span class="demo-icon">🎭</span>
                 <span>DEMO MODE - Using fake portfolio data</span>
                 <button onclick="window.location.href='#settings'" class="demo-settings-link">Settings</button>
@@ -408,7 +408,7 @@
             <!-- Dashboard Tab -->
             <div id="tab-dashboard" class="tab-content active">
                 <!-- Duplicate Warning Banner -->
-                <div id="duplicate-warning" class="alert alert-warning" style="display: none;">
+                <div id="duplicate-warning" class="alert alert-warning hidden">
                     <div class="alert-icon">
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
@@ -475,7 +475,9 @@
                 </section>
 
                 <!-- Retirement Planning Metrics (Row 2) -->
-                <section class="stats-row retirement-metrics">
+                <!-- Inline error host for retirement metrics row. Hidden by default; populated by loadRetirementMetrics() on failure. -->
+                <div id="retirement-metrics-error" class="hidden" style="margin-bottom: 16px;"></div>
+                <section class="stats-row retirement-metrics" id="retirement-metrics-row">
                     <div class="stat-card">
                         <div class="stat-icon teal">
                             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
@@ -670,6 +672,8 @@
 
             <!-- Analysis Tab -->
             <div id="tab-analysis" class="tab-content">
+                <!-- First-time / no-data inline state. Populated by loadAnalysisData(). -->
+                <div id="analysis-empty-state" class="hidden"></div>
                 <!-- Data Enrichment Section -->
                 <div class="card" id="data-enrichment-card" style="margin-bottom: 1.5rem;">
                     <div class="card-header">
@@ -745,6 +749,12 @@
                                     </span>
                                     <span class="metric-value" id="sharpe-ratio">-</span>
                                 </div>
+                                <div class="metric-row metric-clickable" onclick="showMetricDetail('sortino')" title="Click for details">
+                                    <span class="metric-label">Sortino Ratio
+                                        <span class="metric-desc">Risk-adjusted return penalizing only downside volatility - higher is better</span>
+                                    </span>
+                                    <span class="metric-value" id="sortino-ratio">-</span>
+                                </div>
                                 <div class="metric-row metric-clickable" onclick="showMetricDetail('max-drawdown')" title="Click for details">
                                     <span class="metric-label">Max Drawdown
                                         <span class="metric-desc">Largest peak-to-trough decline</span>
@@ -762,6 +772,12 @@
                                         <span class="metric-desc">Max daily loss 95% of the time</span>
                                     </span>
                                     <span class="metric-value" id="var-95">-</span>
+                                </div>
+                                <div class="metric-row metric-clickable" onclick="showMetricDetail('cvar')" title="Click for details">
+                                    <span class="metric-label">CVaR (95%)
+                                        <span class="metric-desc">Average loss in the worst 5% of scenarios - more conservative than VaR</span>
+                                    </span>
+                                    <span class="metric-value" id="cvar-95">-</span>
                                 </div>
                             </div>
                         </div>
@@ -817,6 +833,68 @@
                     </div>
                 </section>
 
+                <!-- Cost & Tax Efficiency (expense ratio drag) -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Cost &amp; Tax Efficiency</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="expense-drag-content">
+                            <div class="metrics-list">
+                                <div class="metric-row">
+                                    <span class="metric-label">Weighted Portfolio ER
+                                        <span class="metric-desc">Value-weighted average expense ratio of your funds</span>
+                                    </span>
+                                    <span class="metric-value" id="expense-drag-portfolio-er">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Benchmark ER (SPY/VOO)
+                                        <span class="metric-desc">Cheap-passive baseline for comparison</span>
+                                    </span>
+                                    <span class="metric-value" id="expense-drag-benchmark-er">-</span>
+                                </div>
+                                <div class="metric-row">
+                                    <span class="metric-label">Annual Dollar Drag
+                                        <span class="metric-desc" id="expense-drag-annual-context">Excess cost vs benchmark</span>
+                                    </span>
+                                    <span class="metric-value" id="expense-drag-annual-dollars">-</span>
+                                </div>
+                            </div>
+                            <div id="expense-drag-empty" class="text-muted hidden">
+                                No expense ratios available &mdash; add funds to see fee drag.
+                            </div>
+                            <table class="allocation-table" id="expense-drag-top-holdings-table" class="hidden">
+                                <thead>
+                                    <tr>
+                                        <th>Ticker</th>
+                                        <th class="text-right">Expense Ratio</th>
+                                        <th class="text-right">Position Value</th>
+                                        <th class="text-right">Annual Drag</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Position Correlation (heatmap of pairwise return correlations) -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Position Correlation</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">
+                            Pairwise correlations of position returns over the past year. Red = high
+                            positive correlation (potential redundancy); blue = negative correlation
+                            (good diversification).
+                        </p>
+                        <div id="correlation-heatmap" style="min-height: 480px;"></div>
+                        <div id="correlation-heatmap-empty" class="text-muted hidden" style="text-align: center; padding: 40px;"></div>
+                        <div id="correlation-redundancy-list" class="redundancy-list"></div>
+                    </div>
+                </div>
+
                 <!-- Detailed Allocation Breakdown -->
                 <div class="card">
                     <div class="card-header">
@@ -866,7 +944,7 @@
                         <button class="btn btn-sm btn-default" onclick="loadPluginAnalysis()">Refresh</button>
                     </div>
                     <div class="card-body">
-                        <div id="plugin-insights-loading" style="display: none;">
+                        <div id="plugin-insights-loading" class="hidden">
                             <p class="text-muted">Analyzing portfolio...</p>
                         </div>
                         <div id="plugin-insights-container">
@@ -881,7 +959,7 @@
                         <h3>Dashboard Widgets</h3>
                     </div>
                     <div class="card-body">
-                        <div id="widget-loading" style="display: none;">
+                        <div id="widget-loading" class="hidden">
                             <p class="text-muted">Loading widgets...</p>
                         </div>
                         <div id="widget-grid" class="widget-grid">
@@ -918,7 +996,7 @@
                         </div>
 
                         <!-- Basic Analysis Result -->
-                        <div id="fund-analysis-result" style="display: none;">
+                        <div id="fund-analysis-result" class="hidden">
                             <h4>Quick Analysis</h4>
                             <div class="fund-analysis-details">
                                 <div class="metric-row">
@@ -950,14 +1028,14 @@
                                     <span class="metric-value" id="fa-source">-</span>
                                 </div>
                             </div>
-                            <div id="fa-sectors" style="display: none;">
+                            <div id="fa-sectors" class="hidden">
                                 <h5>Sector Breakdown</h5>
                                 <div id="fa-sectors-list" class="holdings-compact-list"></div>
                             </div>
                         </div>
 
                         <!-- Advisor Analysis Result -->
-                        <div id="advisor-analysis-result" style="display: none;">
+                        <div id="advisor-analysis-result" class="hidden">
                             <h4>Advisor Analysis</h4>
                             <div class="advisor-analysis-content">
                                 <div class="advisor-section">
@@ -972,7 +1050,7 @@
                                     <h5>Portfolio Fit</h5>
                                     <p id="advisor-portfolio-fit" class="advisor-text"></p>
                                 </div>
-                                <div class="advisor-section" id="advisor-overlaps-section" style="display: none;">
+                                <div class="advisor-section" id="advisor-overlaps-section" class="hidden">
                                     <h5>Potential Overlaps</h5>
                                     <div id="advisor-overlaps" class="overlaps-list"></div>
                                 </div>
@@ -984,7 +1062,7 @@
                                     <h5>Risk Notes</h5>
                                     <p id="advisor-risk" class="advisor-text"></p>
                                 </div>
-                                <div class="advisor-section" id="advisor-recommendations-section" style="display: none;">
+                                <div class="advisor-section" id="advisor-recommendations-section" class="hidden">
                                     <h5>Recommendations</h5>
                                     <ul id="advisor-recommendations" class="recommendations-list"></ul>
                                 </div>
@@ -998,7 +1076,7 @@
             <!-- Projections Tab -->
             <div id="tab-projections" class="tab-content">
                 <!-- Projection Results - At Top -->
-                <div class="card" id="projection-results" style="display: none;">
+                <div class="card" id="projection-results" class="hidden">
                     <div class="card-header">
                         <h3>Projection Results</h3>
                     </div>
@@ -1082,7 +1160,7 @@
                                 </label>
                             </div>
 
-                            <div id="tax-aware-settings" style="display: none;">
+                            <div id="tax-aware-settings" class="hidden">
                                 <!-- Three Column Layout: Balances | Tax Rates | Contribution Split -->
                                 <div class="mc-form-row">
                                     <!-- Column 1: Account Balances -->
@@ -1171,7 +1249,7 @@
                                 </div>
                             </div>
                         </form>
-                        <div id="fire-results" class="projection-stats-row" style="display: none;">
+                        <div id="fire-results" class="projection-stats-row hidden">
                             <div class="projection-stat">
                                 <span class="stat-label">FIRE Number</span>
                                 <span class="stat-value" id="fire-calc-number">-</span>
@@ -1735,7 +1813,7 @@
                             </p>
 
                             <!-- Warning banner for Heroku storage restriction -->
-                            <div id="heroku-storage-banner" class="warning-banner" style="display: none; margin-bottom: 1rem;">
+                            <div id="heroku-storage-banner" class="warning-banner hidden" style="margin-bottom: 1rem;">
                                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
                                     <line x1="12" y1="9" x2="12" y2="13"></line>
@@ -1778,7 +1856,7 @@
                             </div>
 
                             <!-- Browser storage options (hidden by default) -->
-                            <div id="local-storage-options" style="display: none; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+                            <div id="local-storage-options" class="hidden" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
                                 <h4 style="margin-bottom: 0.5rem;">Browser Storage Options</h4>
 
                                 <!-- Security warning -->
@@ -2075,7 +2153,7 @@
                                     </svg>
                                     Import Profile
                                 </button>
-                                <input type="file" id="profile-import-input" accept=".zip" style="display: none;" onchange="handleProfileImport(event)">
+                                <input type="file" id="profile-import-input" accept=".zip" class="hidden" onchange="handleProfileImport(event)">
                             </div>
                         </div>
                     </div>
@@ -2196,7 +2274,7 @@
                             </p>
 
                             <!-- Updates Available Banner -->
-                            <div id="updates-available-banner" class="alert alert-info" style="display: none;">
+                            <div id="updates-available-banner" class="alert alert-info hidden">
                                 <div class="alert-icon">
                                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                                         <circle cx="12" cy="12" r="10"></circle>
@@ -2324,7 +2402,7 @@
                             <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--color-border);">
                                 <p class="settings-description" style="margin-bottom: 12px;">Generate or regenerate demo portfolio data with ~50 positions, realistic prices, and multiple account types.</p>
                                 <button type="button" id="generate-demo-btn" class="btn btn-secondary" onclick="generateDemoData()">
-                                    <span id="generate-demo-spinner" class="spinner-sm" style="display: none;"></span>
+                                    <span id="generate-demo-spinner" class="spinner-sm hidden"></span>
                                     <span id="generate-demo-text">Generate Demo Data</span>
                                 </button>
                                 <span id="generate-demo-result" style="margin-left: 12px; font-size: 0.9em;"></span>
@@ -2341,7 +2419,7 @@
     </div>
 
     <!-- Add Position Modal -->
-    <div id="add-position-modal" class="modal" style="display: none;">
+    <div id="add-position-modal" class="modal hidden">
         <div class="modal-backdrop" onclick="hideAddPositionModal()"></div>
         <div class="modal-content">
             <div class="modal-header">
@@ -2355,7 +2433,7 @@
                          ondragover="handleDragOver(event)"
                          ondragleave="handleDragLeave(event)"
                          ondrop="handleFileDrop(event)">
-                        <input type="file" id="file-import-input" accept=".csv,.xls,.xlsx" onchange="handleFileSelect(event)" style="display: none;">
+                        <input type="file" id="file-import-input" accept=".csv,.xls,.xlsx" onchange="handleFileSelect(event)" class="hidden">
                         <div class="file-import-content">
                             <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -2367,7 +2445,7 @@
                             <p class="file-import-formats">Supports CSV, XLS, XLSX files</p>
                         </div>
                     </div>
-                    <div id="file-import-status" class="file-import-status" style="display: none;">
+                    <div id="file-import-status" class="file-import-status hidden">
                         <div class="file-import-progress">
                             <div class="spinner"></div>
                             <span id="file-import-status-text">Processing file...</span>
@@ -2388,7 +2466,7 @@
                         <button type="button" onclick="showNewAccountForm()" class="btn-link">+ Create New Account</button>
                     </div>
 
-                    <div id="new-account-form" class="nested-form" style="display: none;">
+                    <div id="new-account-form" class="nested-form hidden">
                         <h4>Create New Account</h4>
                         <div class="form-group">
                             <label for="new-account-name">Account Name</label>
@@ -2448,7 +2526,7 @@
                     </div>
 
                     <!-- Cash fields -->
-                    <div id="cash-fields" style="display: none;">
+                    <div id="cash-fields" class="hidden">
                         <div class="form-group">
                             <label for="cash-name">Description</label>
                             <input type="text" id="cash-name" placeholder="e.g., High-Yield Savings" value="Cash">
@@ -2466,7 +2544,7 @@
                     </div>
 
                     <!-- CD fields -->
-                    <div id="cd-fields" style="display: none;">
+                    <div id="cd-fields" class="hidden">
                         <div class="form-group">
                             <label for="cd-name">CD Name</label>
                             <input type="text" id="cd-name" placeholder="e.g., Marcus 12-month CD">
@@ -2488,7 +2566,7 @@
                     </div>
 
                     <!-- Real Estate fields -->
-                    <div id="real-estate-fields" style="display: none;">
+                    <div id="real-estate-fields" class="hidden">
                         <div class="form-group">
                             <label for="re-name">Property Name/Address</label>
                             <input type="text" id="re-name" placeholder="e.g., Primary Residence or 123 Main St">
@@ -2523,7 +2601,7 @@
     </div>
 
     <!-- Edit Position Modal -->
-    <div id="edit-position-modal" class="modal" style="display: none;">
+    <div id="edit-position-modal" class="modal hidden">
         <div class="modal-backdrop" onclick="hideEditPositionModal()"></div>
         <div class="modal-content">
             <div class="modal-header">
@@ -2551,7 +2629,7 @@
                         <input type="number" id="edit-position-cost-basis" step="0.01">
                     </div>
                     <!-- Interest/APY fields for cash, CD, bond positions -->
-                    <div id="edit-interest-fields" style="display: none;">
+                    <div id="edit-interest-fields" class="hidden">
                         <div class="form-group">
                             <label for="edit-position-apy">APY (%) <span class="text-muted">(for cash/CD/bond)</span></label>
                             <input type="number" id="edit-position-apy" step="0.01" placeholder="e.g., 4.5">
@@ -2577,7 +2655,7 @@
     </div>
 
     <!-- Add Trigger/Alert Modal -->
-    <div id="add-trigger-modal" class="modal" style="display: none;">
+    <div id="add-trigger-modal" class="modal hidden">
         <div class="modal-backdrop" onclick="hideAddTriggerModal()"></div>
         <div class="modal-content">
             <div class="modal-header">
@@ -2628,7 +2706,7 @@
     </div>
 
     <!-- Create/Edit View Modal -->
-    <div id="view-modal" class="modal" style="display: none;">
+    <div id="view-modal" class="modal hidden">
         <div class="modal-backdrop" onclick="hideViewModal()"></div>
         <div class="modal-content modal-lg">
             <div class="modal-header">
@@ -2665,7 +2743,7 @@
     </div>
 
     <!-- Create/Edit Entity Modal -->
-    <div id="entity-modal" class="modal" style="display: none;">
+    <div id="entity-modal" class="modal hidden">
         <div class="modal-backdrop" onclick="hideEntityModal()"></div>
         <div class="modal-content">
             <div class="modal-header">
@@ -2708,7 +2786,7 @@
     </div>
 
     <!-- Generic Modal -->
-    <div id="generic-modal" class="modal" style="display: none;">
+    <div id="generic-modal" class="modal hidden">
         <div class="modal-backdrop" onclick="closeModal()"></div>
         <div class="modal-content">
             <div class="modal-header">
@@ -2722,7 +2800,7 @@
     </div>
 
     <!-- Create/Edit Profile Modal -->
-    <div id="profile-modal" class="modal" style="display: none;">
+    <div id="profile-modal" class="modal hidden">
         <div class="modal-backdrop" onclick="hideProfileModal()"></div>
         <div class="modal-content">
             <div class="modal-header">
@@ -2774,7 +2852,7 @@
     </div>
 
     <!-- Install Plugin Modal -->
-    <div id="install-plugin-modal" class="modal" style="display: none;">
+    <div id="install-plugin-modal" class="modal hidden">
         <div class="modal-backdrop" onclick="hideInstallPluginModal()"></div>
         <div class="modal-content">
             <div class="modal-header">
@@ -2820,7 +2898,7 @@
                             <button type="button" class="btn btn-default" onclick="hideInstallPluginModal()">Cancel</button>
                             <button type="submit" class="btn btn-primary" id="git-install-btn">
                                 <span class="btn-text">Install</span>
-                                <span class="btn-loading" style="display: none;">
+                                <span class="btn-loading hidden">
                                     <svg class="spinner-icon" viewBox="0 0 24 24" width="16" height="16">
                                         <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="32" stroke-linecap="round"></circle>
                                     </svg>
@@ -2832,7 +2910,7 @@
                 </div>
 
                 <!-- Upload Install Form -->
-                <div id="install-tab-upload" class="install-tab-content" style="display: none;">
+                <div id="install-tab-upload" class="install-tab-content hidden">
                     <form id="upload-install-form" onsubmit="installFromUpload(event)">
                         <div class="form-group">
                             <label for="plugin-file">Plugin ZIP File</label>
@@ -2852,7 +2930,7 @@
                             <button type="button" class="btn btn-default" onclick="hideInstallPluginModal()">Cancel</button>
                             <button type="submit" class="btn btn-primary" id="upload-install-btn">
                                 <span class="btn-text">Install</span>
-                                <span class="btn-loading" style="display: none;">
+                                <span class="btn-loading hidden">
                                     <svg class="spinner-icon" viewBox="0 0 24 24" width="16" height="16">
                                         <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="32" stroke-linecap="round"></circle>
                                     </svg>
@@ -2867,7 +2945,7 @@
     </div>
 
     <!-- File Import Confirmation Modal -->
-    <div id="import-confirm-modal" class="modal" style="display: none;">
+    <div id="import-confirm-modal" class="modal hidden">
         <div class="modal-backdrop" onclick="hideImportModal()"></div>
         <div class="modal-content modal-lg">
             <div class="modal-header">
@@ -2882,7 +2960,7 @@
                 <!-- Account Selection -->
                 <div class="form-group">
                     <label for="import-account">Destination Account</label>
-                    <div id="import-account-suggestion" class="import-suggestion" style="display: none;">
+                    <div id="import-account-suggestion" class="import-suggestion hidden">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="10"></circle>
                             <path d="m9 12 2 2 4-4"></path>
@@ -2895,7 +2973,7 @@
                     <button type="button" onclick="showImportNewAccountForm()" class="btn-link">+ Create New Account</button>
                 </div>
 
-                <div id="import-new-account-form" class="nested-form" style="display: none;">
+                <div id="import-new-account-form" class="nested-form hidden">
                     <h4>Create New Account</h4>
                     <div class="form-group">
                         <label for="import-new-account-name">Account Name</label>
@@ -2953,7 +3031,7 @@
                     <button type="button" onclick="hideImportModal()" class="btn btn-default">Cancel</button>
                     <button type="button" onclick="confirmImport()" class="btn btn-primary" id="confirm-import-btn">
                         <span class="btn-text">Import Positions</span>
-                        <span class="btn-loading" style="display: none;">
+                        <span class="btn-loading hidden">
                             <svg class="spinner-icon" viewBox="0 0 24 24" width="16" height="16">
                                 <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="32" stroke-linecap="round"></circle>
                             </svg>
@@ -2969,7 +3047,7 @@
     <div id="toast-container"></div>
 
     <!-- Global Chat Modal (accessible from any page) -->
-    <div id="global-chat-modal" class="modal chat-modal" style="display: none;">
+    <div id="global-chat-modal" class="modal chat-modal hidden">
         <div class="modal-backdrop" onclick="hideGlobalChat()"></div>
         <div class="modal-content modal-lg chat-modal-content">
             <div class="modal-header">
@@ -3016,7 +3094,7 @@
     </div>
 
     <!-- Guided Tour Overlay -->
-    <div id="tour-overlay" class="tour-overlay" style="display: none;">
+    <div id="tour-overlay" class="tour-overlay hidden">
         <div class="tour-backdrop"></div>
         <div id="tour-spotlight" class="tour-spotlight"></div>
         <div id="tour-card" class="tour-card">
@@ -3046,7 +3124,7 @@
     </div>
 
     <!-- Profile Setup Modal -->
-    <div id="profile-setup-modal" class="modal-overlay" style="display: none;">
+    <div id="profile-setup-modal" class="modal-overlay hidden">
         <div class="modal profile-setup-modal">
             <div class="modal-header">
                 <h2>

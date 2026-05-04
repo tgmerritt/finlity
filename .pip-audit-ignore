@@ -1,0 +1,43 @@
+# pip-audit allowlist for Finlity
+#
+# Format:
+#   - One CVE / GHSA / PYSEC ID per line.
+#   - `#` lines are comments and are skipped.
+#   - Blank lines are skipped.
+#   - Each ID MUST be preceded by a `# reason: ...` comment on the line above.
+#
+# CI loads this file via scripts/ci-pip-audit.sh and turns each ID into a
+# `--ignore-vuln <id>` argument to `pip-audit`. Any vuln NOT in this file
+# fails the build. Keep this list as small as possible; prefer bumping the
+# offending dependency in requirements.in (then re-pinning requirements.txt)
+# over allowlisting.
+#
+# ---------------------------------------------------------------------------
+# 2026-04-30 dependency-refresh sprint
+# ---------------------------------------------------------------------------
+# The 59-entry baseline was triaged by bumping direct deps in requirements.in
+# (see commit history) and dropping `python-jose` (unused; removed entirely,
+# which also dropped its transitive `ecdsa` and `pyasn1` CVEs). The four
+# entries below are all transitive-only with no clean top-down fix yet, or
+# require a major version bump that is out-of-scope for this sprint.
+# ---------------------------------------------------------------------------
+
+# reason: transitive via fastmcp; no upstream fix released for diskcache.
+# fastmcp 2.x still depends on diskcache 5.6.3. Re-evaluate when fastmcp
+# bumps the diskcache pin or when diskcache cuts a fixed release.
+CVE-2025-69872
+
+# reason: transitive via keyring (jsonschema dependency chain). Fix is in
+# jaraco-context 6.1.0 but keyring 25.7.0 still constrains <= 6.0.x. Track
+# upstream keyring release that loosens the pin.
+CVE-2026-23949
+
+# reason: transitive via fastmcp / rich. Fix is in pygments 2.20.0; drop
+# this entry when fastmcp loosens its pygments pin (currently <2.20).
+CVE-2026-4539
+
+# reason: pytest 8.4.2 is the latest 8.x line. Fix is in 9.0.3, which is a
+# major bump (collect/fixture API changes). Local-only DoS via predictable
+# /tmp/pytest-of-{user} dirs — not exploitable in CI containers. Deferred
+# to a follow-up "pytest 8 -> 9" migration ticket.
+CVE-2025-71176

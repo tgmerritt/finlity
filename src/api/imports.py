@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional, cast
 from pathlib import Path
 import re
 import logging
@@ -76,7 +76,7 @@ def _find_similar_existing_file(directory: Path, filename: str) -> Optional[Path
 from src.api.dependencies import get_db  # noqa: E402  (public router dep)
 
 
-def check_demo_mode_write():
+def check_demo_mode_write() -> None:
     """Raise error if demo mode is enabled (prevents data pollution).
 
     Demo mode should be read-only with pre-generated data.
@@ -184,14 +184,14 @@ def get_import_history(
 
     return [
         ImportHistoryResponse(
-            id=h.id,
-            file_name=h.file_name,
-            file_path=h.file_path,
-            account_type=h.account_type,
+            id=cast(str, h.id),
+            file_name=cast(str, h.file_name),
+            file_path=cast(str, h.file_path),
+            account_type=cast(str, h.account_type),
             import_date=h.import_date.isoformat() if h.import_date else "",
             row_count=int(h.row_count) if h.row_count else None,
-            status=h.status or "unknown",
-            error_message=h.error_message,
+            status=cast(str, h.status or "unknown"),
+            error_message=cast(str, h.error_message),
         )
         for h in history
     ]
@@ -204,7 +204,7 @@ async def upload_file(
     brokerage: str = "other",
     fetch_prices: bool = True,
     db: Database = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Upload a file directly and import it.
 
@@ -281,7 +281,7 @@ async def upload_file(
             logger.info(f"Found linked account for upload: {target_account.name} (ID: {target_account.id})")
             # Use the account's brokerage setting if available
             if target_account.brokerage and target_account.brokerage != "other":
-                brokerage = target_account.brokerage
+                brokerage = cast(str, target_account.brokerage)
 
     pending = scanner.scan_for_new_files()
 
@@ -289,7 +289,7 @@ async def upload_file(
     for p in pending:
         if p.path == file_path:
             # Pass target_account_id if we found one
-            target_id = target_account.id if target_account else None
+            target_id: Optional[str] = cast(Optional[str], target_account.id) if target_account else None
 
             result = scanner.import_file(
                 p,
@@ -313,7 +313,7 @@ async def upload_file(
 
 
 @router.get("/price-status")
-def get_price_status(timezone: str = "UTC", db: Database = Depends(get_db)):
+def get_price_status(timezone: str = "UTC", db: Database = Depends(get_db)) -> dict[str, Any]:
     """Get status of price cache - freshness, last update times.
 
     Args:
@@ -326,16 +326,19 @@ def get_price_status(timezone: str = "UTC", db: Database = Depends(get_db)):
 
 
 @router.post("/refresh-prices")
-def refresh_prices(force: bool = False, db: Database = Depends(get_db)):
+def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[str, Any]:
     """Refresh prices for all positions with stale data.
+
+    Returns honest success / failure counts so the UI can decrement the
+    "X stale" badge to the *actually-fresh* count, not the *attempted* count.
 
     Args:
         force: If True, refresh all prices regardless of staleness.
     """
+    stale_tickers: list[str]
     if force:
-        # Get all tickers
         positions = db.get_all_positions()
-        all_tickers = list({p.ticker for p in positions if p.ticker not in ("CASH", "CD")})
+        all_tickers = list({cast(str, p.ticker) for p in positions if p.ticker not in ("CASH", "CD")})
         stale_tickers = all_tickers
     else:
         stale_tickers = db.get_stale_tickers()
@@ -345,25 +348,44 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)):
         return {
             "message": "All prices are up to date (less than 24 hours old)",
             "updated": 0,
+            "attempted": 0,
+            "failed": 0,
+            "failed_tickers": [],
             "all_fresh": True,
             "newest_update": status.get("newest_update"),
         }
 
     scanner = FolderScanner(db)
-    scanner._fetch_and_update_prices(stale_tickers)
+    result = scanner._fetch_and_update_prices(stale_tickers)
+    success = result.get("success", [])
+    skipped = result.get("skipped", [])
+    failed = result.get("failed", [])
 
+    fresh_now = len(success) + len(skipped)
     status = db.get_price_cache_status()
+
+    if failed:
+        message = (
+            f"Updated {fresh_now} of {len(stale_tickers)} tickers; "
+            f"{len(failed)} failed (rate limit, delisted, or unknown)."
+        )
+    else:
+        message = f"Updated prices for {fresh_now} tickers"
+
     return {
-        "message": f"Updated prices for {len(stale_tickers)} tickers",
-        "updated": len(stale_tickers),
-        "tickers": stale_tickers,
+        "message": message,
+        "updated": fresh_now,
+        "attempted": len(stale_tickers),
+        "failed": len(failed),
+        "failed_tickers": failed,
+        "tickers": success,
         "all_fresh": status.get("all_fresh", False),
         "newest_update": status.get("newest_update"),
     }
 
 
 @router.get("/price-sources")
-def get_price_source_status():
+def get_price_source_status() -> dict[str, Any]:
     """Get status of all configured price data sources."""
     from src.data.prices import PriceService
 
@@ -521,7 +543,7 @@ def _suggest_account_with_ai(
 
     # Try Claude AI if available (optional enhancement)
     try:
-        from src.services.secrets import get_anthropic_api_key
+        from src.services.secrets import get_anthropic_api_key  # type: ignore[attr-defined]
         api_key = get_anthropic_api_key()
         if api_key and accounts:
             import anthropic
@@ -605,7 +627,7 @@ SUGGESTED_BROKERAGE: <brokerage name>"""
 async def parse_file(
     file: UploadFile = File(...),
     db: Database = Depends(get_db),
-):
+) -> ParseFileResponse:
     """
     Parse a brokerage export file and return positions for review.
 
@@ -727,7 +749,7 @@ async def parse_file(
 async def import_positions(
     request: ImportPositionsRequest,
     db: Database = Depends(get_db),
-):
+) -> ImportPositionsResponse:
     """
     Import positions to an account.
 
@@ -777,7 +799,7 @@ async def import_positions(
 
         return ImportPositionsResponse(
             imported_count=imported_count,
-            account_name=account.name,
+            account_name=cast(str, account.name),
             message=f"Successfully imported {imported_count} positions to {account.name}",
         )
 

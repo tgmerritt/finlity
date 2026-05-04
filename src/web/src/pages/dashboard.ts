@@ -5,12 +5,16 @@
 
 import { apiCall } from '@/api/client';
 import { store } from '@/state/store';
+import { emit, on } from '@/state/events';
 import { showLoading, hideLoading } from '@/ui/loading';
 import { showToast } from '@/ui/toast';
+import { setStateView, clearStateView } from '@/ui/state-view';
+import { withSubmitGuard } from '@/ui/with-submit-guard';
 import { closeModal, showConfirmDialog, createDynamicModal } from '@/ui/modal';
 import { formatCurrency, formatNumber } from '@/utils/format';
 import { updateAllocationCharts, updateHistoryChart } from '@/charts/allocation';
 import { loadWidgets } from '@/features/plugins';
+import { updateAccountFilterLabel } from '@/pages/holdings';
 import type {
   DashboardData,
   DashboardPosition,
@@ -56,6 +60,10 @@ interface PriceStatusResponse {
 interface PriceRefreshResponse {
   all_fresh: boolean;
   updated: number;
+  attempted?: number;
+  failed?: number;
+  failed_tickers?: string[];
+  message?: string;
 }
 
 /**
@@ -150,6 +158,10 @@ export async function refreshData(): Promise<void> {
     // This is called from main.ts after import
     const event = new CustomEvent('dashboard:dataLoaded');
     document.dispatchEvent(event);
+    // Mirror onto the typed bus. Dashboard re-renders are downstream of
+    // position changes; the existing string event keeps firing alongside for
+    // legacy listeners.
+    emit({ type: 'commentary:invalidated' });
   } catch (error) {
     console.error('Error loading data:', error);
     showToast('Failed to load portfolio data', 'error');
@@ -165,6 +177,8 @@ export async function refreshData(): Promise<void> {
  * @returns true if metrics loaded successfully, false on error
  */
 export async function loadRetirementMetrics(): Promise<boolean> {
+  const errorHost = document.getElementById('retirement-metrics-error');
+
   try {
     // Build URL with entity filter if one is selected
     const currentEntityId = store.get('currentEntityId');
@@ -174,6 +188,12 @@ export async function loadRetirementMetrics(): Promise<boolean> {
     }
 
     const metrics = await apiCall<DashboardMetrics>(url);
+
+    // Success — scrub any prior inline error.
+    if (errorHost) {
+      clearStateView(errorHost);
+      errorHost.style.display = 'none';
+    }
 
     // Update Monthly Retirement Income
     const monthlyIncomeEl = document.getElementById('monthly-retirement-income');
@@ -256,6 +276,24 @@ export async function loadRetirementMetrics(): Promise<boolean> {
     return true;
   } catch (error) {
     console.error('Error loading retirement metrics:', error);
+    // Surface the failure inline above the metrics row so users see it
+    // even after the toast disappears, with a one-click retry.
+    if (errorHost) {
+      errorHost.style.display = '';
+      setStateView(errorHost, {
+        kind: 'error',
+        title: 'Could not load retirement metrics',
+        description: error instanceof Error ? error.message : 'Unknown error.',
+        action: {
+          label: 'Retry',
+          onClick: () => {
+            loadRetirementMetrics().catch((err) =>
+              console.error('Retirement metrics retry failed:', err)
+            );
+          },
+        },
+      });
+    }
     showToast('Unable to load retirement metrics', 'error');
     return false;
   }
@@ -443,15 +481,22 @@ export function updateAccountTotalsTable(accounts: AccountResponse[]): void {
 
   if (!tbody || !accounts || accounts.length === 0) {
     if (tbody) {
+      // Render the empty state inside a single tr/td to stay valid table HTML
+      // (a state-view div can't be a direct child of <tbody>). The state-view
+      // itself is the same component used elsewhere — just hosted in a cell.
       tbody.textContent = '';
       const row = document.createElement('tr');
       const cell = document.createElement('td');
       cell.colSpan = 4;
-      cell.className = 'text-center';
-      cell.textContent = 'No accounts';
       row.appendChild(cell);
       tbody.appendChild(row);
+      setStateView(cell, {
+        kind: 'empty',
+        title: 'No accounts yet',
+        description: 'Add your first account from the Holdings tab to populate this table.',
+      });
     }
+    if (sumEl) sumEl.textContent = '';
     return;
   }
 
@@ -539,6 +584,9 @@ export function updateAccountFilter(positions: DashboardPosition[]): void {
   if (currentSelection.size === 0) {
     store.set('selectedAccounts', new Set(accounts));
   }
+
+  // Render the trigger label for the current selection.
+  updateAccountFilterLabel();
 }
 
 /**
@@ -554,9 +602,30 @@ function handleAccountFilterChange(): void {
   });
   store.set('selectedAccounts', selected);
 
+  // Update the trigger button label so the user sees what's selected.
+  updateAccountFilterLabel();
+
   // Trigger holdings update
   const event = new CustomEvent('accountFilter:changed');
   document.dispatchEvent(event);
+}
+
+/**
+ * Refresh the account filter dropdown options from the current positions
+ * snapshot. Wired as a subscriber to `accounts:changed` so a newly-created
+ * account shows up in the filter without a page reload.
+ *
+ * NOTE: `updateAccountFilter` derives accounts from the positions array, so
+ * an account with zero positions still won't appear here — the right path
+ * for that is a full `refreshData()` which re-fetches both. We do that in
+ * the main subscriber (see initDashboard) and call this directly only for
+ * cases where positions are already up to date.
+ */
+function refreshAccountFilterFromState(): void {
+  const positions = store.get('currentPositions');
+  if (positions.length > 0) {
+    updateAccountFilter(positions);
+  }
 }
 
 /**
@@ -568,20 +637,44 @@ export async function refreshPrices(force = false): Promise<void> {
     const url = force ? '/api/imports/refresh-prices?force=true' : '/api/imports/refresh-prices';
     const result = await apiCall<PriceRefreshResponse>(url, { method: 'POST' });
 
-    // Reload data
-    await refreshData();
+    // Update the badge first so the "X stale" indicator reflects the new
+    // truth even if the broader dashboard refresh below fails. Without this
+    // ordering, a failure in refreshData() left the badge showing the old
+    // stale count, which is the bug reported by the user.
+    await updatePriceStatus();
 
+    // Honest user feedback based on actual server-reported counts.
+    const attempted = result.attempted ?? result.updated ?? 0;
+    const failedCount = result.failed ?? 0;
     if (result.all_fresh && result.updated === 0) {
       showToast('Prices are fresh (less than 24 hours old)', 'info');
+    } else if (failedCount > 0) {
+      const sample = (result.failed_tickers ?? []).slice(0, 3).join(', ');
+      const more = (result.failed_tickers ?? []).length > 3 ? '…' : '';
+      showToast(
+        `Updated ${result.updated} of ${attempted}; ${failedCount} failed${sample ? ` (${sample}${more})` : ''}`,
+        'warning'
+      );
     } else {
-      showToast(`Prices updated: ${result.updated || 0} tickers`, 'success');
+      showToast(`Prices updated: ${result.updated} tickers`, 'success');
     }
 
-    // Update price status display
-    await updatePriceStatus();
+    // Refresh the rest of the dashboard (positions, charts, history) last.
+    await refreshData();
+
+    // Notify subscribers with actual server-reported counts. This is the
+    // event that closes the bug class behind 55eb50c — dependents that need
+    // to react to prices having moved (badges, charts, AI commentary cache)
+    // now have a single, type-checked hook.
+    emit({
+      type: 'prices:refreshed',
+      updated: result.updated ?? 0,
+      failed: failedCount,
+    });
   } catch (error) {
     console.error('Error refreshing prices:', error);
     showToast('Failed to refresh prices', 'error');
+  } finally {
     hideLoading();
   }
 }
@@ -667,7 +760,10 @@ function updateDemoModeUI(isDemoMode: boolean): void {
  * This function is imported/called but defined elsewhere.
  */
 function updateHoldings(positions: DashboardPosition[]): void {
-  // Dispatch event for holdings page to handle
+  // Dispatch event for holdings page to handle. The legacy string event
+  // carries the positions array as `detail` — keep it in place; the typed
+  // bus is additive and intentionally does not duplicate that payload here
+  // (positions are already in the store when this fires).
   const event = new CustomEvent('dashboard:positionsUpdated', { detail: positions });
   document.dispatchEvent(event);
 }
@@ -676,16 +772,28 @@ function updateHoldings(positions: DashboardPosition[]): void {
  * Initialize dashboard event handlers.
  */
 export function initDashboard(): void {
-  // Price refresh button
-  const refreshPricesBtn = document.getElementById('refresh-prices-btn');
+  // Price refresh button — guard against double-click. The endpoint is
+  // idempotent server-side but the UX feedback was inconsistent.
+  const refreshPricesBtn = document.getElementById(
+    'refresh-prices-btn'
+  ) as HTMLButtonElement | null;
   if (refreshPricesBtn) {
-    refreshPricesBtn.addEventListener('click', () => refreshPrices(false));
+    refreshPricesBtn.addEventListener('click', () => {
+      withSubmitGuard(refreshPricesBtn, 'Refreshing...', () => refreshPrices(false)).catch(
+        console.error
+      );
+    });
   }
 
-  // Force refresh button
-  const forceRefreshBtn = document.getElementById('force-refresh-btn');
+  // Force refresh button (HTML id: update-prices-btn). Same guard.
+  const forceRefreshBtn = (document.getElementById('force-refresh-btn') ??
+    document.getElementById('update-prices-btn')) as HTMLButtonElement | null;
   if (forceRefreshBtn) {
-    forceRefreshBtn.addEventListener('click', () => refreshPrices(true));
+    forceRefreshBtn.addEventListener('click', () => {
+      withSubmitGuard(forceRefreshBtn, 'Updating...', () => refreshPrices(true)).catch(
+        console.error
+      );
+    });
   }
 
   // Duplicate details button
@@ -696,6 +804,30 @@ export function initDashboard(): void {
 
   // Initial price status update
   updatePriceStatus();
+
+  // --- Typed bus subscribers ------------------------------------------------
+  // These close real bugs where a mutation happened but the dependent view
+  // didn't auto-refresh. Each is intentionally narrow to avoid double-fetch.
+
+  // 1. Account filter dropdown should refresh when accounts change so a
+  //    newly-created account appears in the filter without a page reload.
+  //    We re-derive from the positions snapshot when possible; for 'added'
+  //    a full refresh is needed because new accounts have zero positions.
+  on('accounts:changed', (event) => {
+    if (event.reason === 'added') {
+      // New account has no positions yet — refetch to surface it.
+      refreshData().catch(console.error);
+    } else {
+      refreshAccountFilterFromState();
+    }
+  });
+
+  // 2. Plugin widget grid should reload when a plugin is installed/enabled/
+  //    disabled. `loadWidgets` has its own concurrency mutex so back-to-back
+  //    fires are safe.
+  on('plugin:changed', () => {
+    loadWidgets().catch(console.error);
+  });
 }
 
 /**

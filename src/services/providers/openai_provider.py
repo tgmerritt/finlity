@@ -22,14 +22,30 @@ logger = logging.getLogger(__name__)
 class OpenAIProvider(InferenceProvider):
     """OpenAI inference provider."""
 
-    # OpenAI models
+    # Current OpenAI lineup (Aug 2025 cutoff). GPT-5 is the new flagship; gpt-4o
+    # tier kept for cost-sensitive callers. o1 family superseded by o3 reasoning
+    # models, but o1-mini left in for back-compat with saved settings.
     MODELS = [
+        ModelInfo(
+            id="gpt-5",
+            display_name="GPT-5",
+            context_length=400000,
+            capabilities=["streaming", "tools", "vision"],
+            is_default=True,
+        ),
+        ModelInfo(
+            id="gpt-5-mini",
+            display_name="GPT-5 Mini",
+            context_length=400000,
+            capabilities=["streaming", "tools", "vision"],
+            is_default=False,
+        ),
         ModelInfo(
             id="gpt-4o",
             display_name="GPT-4o",
             context_length=128000,
             capabilities=["streaming", "tools", "vision"],
-            is_default=True,
+            is_default=False,
         ),
         ModelInfo(
             id="gpt-4o-mini",
@@ -39,23 +55,16 @@ class OpenAIProvider(InferenceProvider):
             is_default=False,
         ),
         ModelInfo(
-            id="gpt-4-turbo",
-            display_name="GPT-4 Turbo",
-            context_length=128000,
-            capabilities=["streaming", "tools", "vision"],
-            is_default=False,
-        ),
-        ModelInfo(
-            id="o1",
-            display_name="o1",
+            id="o3-mini",
+            display_name="o3 Mini (reasoning)",
             context_length=200000,
             capabilities=["streaming"],
             is_default=False,
         ),
         ModelInfo(
-            id="o1-mini",
-            display_name="o1 Mini",
-            context_length=128000,
+            id="o1",
+            display_name="o1 (reasoning, legacy)",
+            context_length=200000,
             capabilities=["streaming"],
             is_default=False,
         ),
@@ -158,6 +167,8 @@ class OpenAIProvider(InferenceProvider):
         system: Optional[str] = None,
         temperature: float = 1.0,
         tools: Optional[list[dict]] = None,
+        cache_system: bool = False,  # Anthropic-only; ignored here.
+        cache_breakpoints: Optional[list[int]] = None,  # Anthropic-only; ignored here.
     ) -> InferenceResponse:
         """Generate a completion using OpenAI."""
         self._validate_messages(messages)
@@ -225,6 +236,8 @@ class OpenAIProvider(InferenceProvider):
         system: Optional[str] = None,
         temperature: float = 1.0,
         tools: Optional[list[dict]] = None,
+        cache_system: bool = False,  # Anthropic-only; ignored here.
+        cache_breakpoints: Optional[list[int]] = None,  # Anthropic-only; ignored here.
     ) -> Iterator[StreamEvent]:
         """Stream a completion using OpenAI."""
         self._validate_messages(messages)

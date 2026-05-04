@@ -12,9 +12,11 @@ import { store } from '@/state/store';
 import { showLoading, hideLoading } from '@/ui/loading';
 import { onTabChange } from '@/ui/tabs';
 import { showToast } from '@/ui/toast';
+import { setStateView, clearStateView } from '@/ui/state-view';
 import { loadPluginAnalysis, loadWidgets } from '@/features/plugins';
 import { showGlobalChatModal, hideGlobalChatModal } from '@/ui/modal';
-import type { DashboardPosition } from '@/types/api';
+import { loadCorrelationHeatmap } from '@/charts/correlation';
+import type { DashboardPosition, ExpenseDragResponse } from '@/types/api';
 
 // Declare marked as global (loaded via CDN)
 declare const marked:
@@ -1209,6 +1211,28 @@ function setElementText(id: string, text: string): void {
  * Load and display analysis metrics (performance, risk, allocation).
  */
 export async function loadAnalysisData(): Promise<void> {
+  const emptyHost = document.getElementById('analysis-empty-state');
+
+  // First-time / no-positions check: if the user has no positions, show one
+  // big inline empty state at the top instead of a half-rendered grid full
+  // of dashes.
+  const positions = store.get('currentPositions');
+  if (emptyHost) {
+    if (!positions || positions.length === 0) {
+      emptyHost.style.display = '';
+      setStateView(emptyHost, {
+        kind: 'empty',
+        title: 'No portfolio data to analyze yet',
+        description:
+          'Add positions from the Holdings tab to see performance, risk, allocation and correlation insights here.',
+      });
+      return;
+    }
+    // We have data — clear any prior empty/error state and hide the host.
+    clearStateView(emptyHost);
+    emptyHost.style.display = 'none';
+  }
+
   try {
     // Load all data in parallel
     const [performance, risk, allocation] = await Promise.all([
@@ -1226,9 +1250,11 @@ export async function loadAnalysisData(): Promise<void> {
     // Update risk metrics
     setElementText('volatility', formatPercent(risk.volatility));
     setElementText('sharpe-ratio', risk.sharpe_ratio?.toFixed(2) || '-');
+    setElementText('sortino-ratio', risk.sortino_ratio?.toFixed(2) || '-');
     setElementText('max-drawdown', formatPercent(risk.max_drawdown));
     setElementText('beta', risk.beta?.toFixed(2) || '-');
     setElementText('var-95', formatPercent(risk.var_95));
+    setElementText('cvar-95', formatPercent(risk.cvar_95));
 
     // Update concentration metrics
     setElementText('concentration-top5', formatPercent(allocation.concentration_top5));
@@ -1251,10 +1277,123 @@ export async function loadAnalysisData(): Promise<void> {
     // Load top holdings
     await loadTopHoldings();
 
+    // Load expense ratio drag (Cost & Tax Efficiency card)
+    await loadExpenseDrag();
+
+    // Load position correlation heatmap (handles its own errors)
+    await loadCorrelationHeatmap();
+
     // Load default allocation tab (asset-class)
     await showAllocationTab('asset-class');
   } catch (error) {
     console.error('Error loading analysis data:', error);
+    // Surface the failure inline at the top of the analysis page so the user
+    // sees something actionable rather than just a transient toast.
+    if (emptyHost) {
+      emptyHost.style.display = '';
+      setStateView(emptyHost, {
+        kind: 'error',
+        title: 'Could not load analysis data',
+        description: error instanceof Error ? error.message : 'Unknown error.',
+        action: {
+          label: 'Retry',
+          onClick: () => {
+            loadAnalysisData().catch((err) => console.error('Retry failed:', err));
+          },
+        },
+      });
+    }
+    showToast('Failed to load analysis data', 'error');
+  }
+}
+
+/**
+ * Load and display the Cost & Tax Efficiency card (expense ratio drag vs SPY).
+ *
+ * ER values come back as decimals (e.g., 0.0032 = 0.32%) and are formatted
+ * for display. If `covered_value === 0` (no funds with cached ER) we show a
+ * friendly empty-state instead of "$0/yr".
+ */
+export async function loadExpenseDrag(): Promise<void> {
+  try {
+    const drag = await apiCall<ExpenseDragResponse>('/api/analysis/expense-drag');
+
+    const portfolioErEl = document.getElementById('expense-drag-portfolio-er');
+    const benchmarkErEl = document.getElementById('expense-drag-benchmark-er');
+    const annualDollarsEl = document.getElementById('expense-drag-annual-dollars');
+    const annualContextEl = document.getElementById('expense-drag-annual-context');
+    const emptyEl = document.getElementById('expense-drag-empty');
+    const table = document.getElementById(
+      'expense-drag-top-holdings-table'
+    ) as HTMLTableElement | null;
+
+    const hasCoverage = drag.covered_value > 0;
+
+    if (!hasCoverage) {
+      // Empty state — no funds with cached expense ratios
+      if (portfolioErEl) portfolioErEl.textContent = '-';
+      if (benchmarkErEl) benchmarkErEl.textContent = formatPercent(drag.benchmark_expense_ratio * 100);
+      if (annualDollarsEl) annualDollarsEl.textContent = '-';
+      if (emptyEl) emptyEl.style.display = '';
+      if (table) table.style.display = 'none';
+      return;
+    }
+
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    if (portfolioErEl) {
+      portfolioErEl.textContent = formatPercent(drag.portfolio_expense_ratio * 100);
+    }
+    if (benchmarkErEl) {
+      benchmarkErEl.textContent = formatPercent(drag.benchmark_expense_ratio * 100);
+    }
+    if (annualDollarsEl) {
+      annualDollarsEl.textContent = `${formatCurrencyValue(drag.annual_drag_dollars)}/yr`;
+    }
+    if (annualContextEl) {
+      annualContextEl.textContent =
+        `Excess cost on ${formatCurrencyValue(drag.covered_value)} of fund holdings`;
+    }
+
+    // Top-drag holdings table
+    if (table) {
+      const tbody = table.querySelector('tbody');
+      if (tbody) {
+        tbody.textContent = '';
+        const rows = drag.top_drag_holdings.slice(0, 3);
+        if (rows.length === 0) {
+          table.style.display = 'none';
+        } else {
+          table.style.display = '';
+          for (const h of rows) {
+            const tr = document.createElement('tr');
+
+            const tickerCell = document.createElement('td');
+            tickerCell.textContent = h.ticker;
+            tr.appendChild(tickerCell);
+
+            const erCell = document.createElement('td');
+            erCell.className = 'text-right';
+            erCell.textContent = formatPercent(h.expense_ratio * 100);
+            tr.appendChild(erCell);
+
+            const valueCell = document.createElement('td');
+            valueCell.className = 'text-right';
+            valueCell.textContent = formatCurrencyValue(h.position_value);
+            tr.appendChild(valueCell);
+
+            const dragCell = document.createElement('td');
+            dragCell.className = 'text-right';
+            dragCell.textContent = `${formatCurrencyValue(h.annual_drag_dollars)}/yr`;
+            tr.appendChild(dragCell);
+
+            tbody.appendChild(tr);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error loading expense drag:', error);
   }
 }
 
@@ -1269,9 +1408,11 @@ export function showMetricDetail(metricId: string): void {
     'alpha': 'Excess return compared to the S&P 500 benchmark.',
     'volatility': 'Annualized standard deviation of returns - higher means more price swings.',
     'sharpe': 'Risk-adjusted return (return per unit of risk). Higher is better.',
+    'sortino': 'Risk-adjusted return penalizing only downside volatility. Higher is better.',
     'max-drawdown': 'Largest peak-to-trough decline in portfolio value.',
     'beta': 'Sensitivity to market movements. 1.0 = moves with market.',
     'var': 'Value at Risk - maximum expected daily loss 95% of the time.',
+    'cvar': 'Conditional VaR - average loss in the worst 5% of scenarios. More conservative than VaR.',
   };
 
   const description = descriptions[metricId] || 'No additional information available.';
@@ -1322,10 +1463,11 @@ export async function loadTopHoldings(): Promise<void> {
     container.textContent = '';
 
     if (topHoldings.length === 0) {
-      const emptyMsg = document.createElement('div');
-      emptyMsg.className = 'text-muted';
-      emptyMsg.textContent = 'No holdings found';
-      container.appendChild(emptyMsg);
+      setStateView(container, {
+        kind: 'empty',
+        title: 'No holdings to rank',
+        description: 'Top holdings appear here once you have positions with non-zero value.',
+      });
       return;
     }
 
@@ -1350,10 +1492,17 @@ export async function loadTopHoldings(): Promise<void> {
   } catch (error) {
     console.error('Error loading top holdings:', error);
     container.textContent = '';
-    const errorMsg = document.createElement('div');
-    errorMsg.className = 'text-muted';
-    errorMsg.textContent = 'Failed to load top holdings';
-    container.appendChild(errorMsg);
+    setStateView(container, {
+      kind: 'error',
+      title: 'Could not load top holdings',
+      description: error instanceof Error ? error.message : 'Unknown error.',
+      action: {
+        label: 'Retry',
+        onClick: () => {
+          loadTopHoldings().catch((err) => console.error('Top holdings retry failed:', err));
+        },
+      },
+    });
   }
 }
 

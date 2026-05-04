@@ -40,7 +40,7 @@ def create_allocation_pie(breakdown: AllocationBreakdown) -> str:
         height=350,
     )
 
-    return fig.to_html(full_html=False, include_plotlyjs=False)
+    return str(fig.to_html(full_html=False, include_plotlyjs=False))
 
 
 def create_sector_chart(breakdown: AllocationBreakdown) -> str:
@@ -70,7 +70,13 @@ def create_sector_chart(breakdown: AllocationBreakdown) -> str:
 
     # Sort by value
     sorted_pairs = sorted(zip(sectors, values), key=lambda x: x[1], reverse=True)
-    sectors, values = zip(*sorted_pairs) if sorted_pairs else ([], [])
+    if sorted_pairs:
+        sorted_sectors, sorted_values = zip(*sorted_pairs)
+        sectors = list(sorted_sectors)
+        values = list(sorted_values)
+    else:
+        sectors = []
+        values = []
 
     fig = go.Figure(
         data=[
@@ -93,7 +99,7 @@ def create_sector_chart(breakdown: AllocationBreakdown) -> str:
         height=350,
     )
 
-    return fig.to_html(full_html=False, include_plotlyjs=False)
+    return str(fig.to_html(full_html=False, include_plotlyjs=False))
 
 
 def create_geography_chart(breakdown: AllocationBreakdown) -> str:
@@ -126,7 +132,7 @@ def create_geography_chart(breakdown: AllocationBreakdown) -> str:
         height=300,
     )
 
-    return fig.to_html(full_html=False, include_plotlyjs=False)
+    return str(fig.to_html(full_html=False, include_plotlyjs=False))
 
 
 def create_deviation_chart(deviations: list[AllocationDeviation]) -> str:
@@ -175,7 +181,7 @@ def create_deviation_chart(deviations: list[AllocationDeviation]) -> str:
         ],
     )
 
-    return fig.to_html(full_html=False, include_plotlyjs=False)
+    return str(fig.to_html(full_html=False, include_plotlyjs=False))
 
 
 def create_correlation_heatmap(corr_matrix: Optional[CorrelationMatrix]) -> str:
@@ -204,7 +210,7 @@ def create_correlation_heatmap(corr_matrix: Optional[CorrelationMatrix]) -> str:
         height=400,
     )
 
-    return fig.to_html(full_html=False, include_plotlyjs=False)
+    return str(fig.to_html(full_html=False, include_plotlyjs=False))
 
 
 def create_risk_gauge(risk: PortfolioRisk) -> str:
@@ -281,7 +287,7 @@ def create_risk_gauge(risk: PortfolioRisk) -> str:
         height=250,
     )
 
-    return fig.to_html(full_html=False, include_plotlyjs=False)
+    return str(fig.to_html(full_html=False, include_plotlyjs=False))
 
 
 def create_holdings_table(portfolio: Portfolio) -> str:
@@ -357,4 +363,4 @@ def create_account_breakdown(portfolio: Portfolio) -> str:
         height=350,
     )
 
-    return fig.to_html(full_html=False, include_plotlyjs=False)
+    return str(fig.to_html(full_html=False, include_plotlyjs=False))

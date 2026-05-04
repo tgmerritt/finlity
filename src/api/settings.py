@@ -6,7 +6,7 @@ config.yaml provides initial defaults for first-time setup.
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import yaml
 from fastapi import APIRouter, HTTPException
@@ -42,7 +42,7 @@ def load_config() -> dict:
     personal_json = db.get_setting("personal_settings")
     if personal_json and personal_json.value:
         try:
-            db_personal = json.loads(personal_json.value)
+            db_personal = json.loads(cast(str, personal_json.value))
             if "personal" not in config:
                 config["personal"] = {}
             config["personal"].update(db_personal)
@@ -53,7 +53,7 @@ def load_config() -> dict:
     targets_json = db.get_setting("target_allocations")
     if targets_json and targets_json.value:
         try:
-            db_targets = json.loads(targets_json.value)
+            db_targets = json.loads(cast(str, targets_json.value))
             if "targets" not in config:
                 config["targets"] = {}
             # Deep merge targets
@@ -69,7 +69,7 @@ def load_config() -> dict:
     market_json = db.get_setting("market_assumptions")
     if market_json and market_json.value:
         try:
-            db_market = json.loads(market_json.value)
+            db_market = json.loads(cast(str, market_json.value))
             if "market" not in config:
                 config["market"] = {}
             config["market"].update(db_market)
@@ -80,7 +80,7 @@ def load_config() -> dict:
     mc_json = db.get_setting("monte_carlo_settings")
     if mc_json and mc_json.value:
         try:
-            db_mc = json.loads(mc_json.value)
+            db_mc = json.loads(cast(str, mc_json.value))
             if "monte_carlo" not in config:
                 config["monte_carlo"] = {}
             config["monte_carlo"].update(db_mc)
@@ -91,7 +91,7 @@ def load_config() -> dict:
     withdrawal_json = db.get_setting("withdrawal_settings")
     if withdrawal_json and withdrawal_json.value:
         try:
-            db_withdrawal = json.loads(withdrawal_json.value)
+            db_withdrawal = json.loads(cast(str, withdrawal_json.value))
             if "withdrawal" not in config:
                 config["withdrawal"] = {}
             config["withdrawal"].update(db_withdrawal)
@@ -239,7 +239,7 @@ def _update_targets_in_db(section: str, data: dict) -> dict:
     targets_json = db.get_setting("target_allocations")
     if targets_json and targets_json.value:
         try:
-            targets = json.loads(targets_json.value)
+            targets = json.loads(cast(str, targets_json.value))
         except json.JSONDecodeError:
             targets = {}
     else:
@@ -406,10 +406,10 @@ def get_all_views() -> list[ViewResponse]:
     views = db.get_all_views()
     return [
         ViewResponse(
-            id=v.id,
-            name=v.name,
+            id=cast(str, v.id),
+            name=cast(str, v.name),
             account_ids=v.get_account_ids(),
-            is_default=v.is_default,
+            is_default=cast(bool, v.is_default),
         )
         for v in views
     ]
@@ -444,10 +444,10 @@ def create_view(request: ViewCreateRequest) -> ViewResponse:
         is_default=request.is_default,
     )
     return ViewResponse(
-        id=view.id,
-        name=view.name,
+        id=cast(str, view.id),
+        name=cast(str, view.name),
         account_ids=view.get_account_ids(),
-        is_default=view.is_default,
+        is_default=cast(bool, view.is_default),
     )
 
 
@@ -466,10 +466,10 @@ def update_view(view_id: str, request: ViewUpdateRequest) -> ViewResponse:
         raise HTTPException(status_code=404, detail="View not found")
 
     return ViewResponse(
-        id=view.id,
-        name=view.name,
+        id=cast(str, view.id),
+        name=cast(str, view.name),
         account_ids=view.get_account_ids(),
-        is_default=view.is_default,
+        is_default=cast(bool, view.is_default),
     )
 
 

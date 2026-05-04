@@ -8,7 +8,9 @@ import { generateSignatureHeaders, isSigningRequired } from '@/state/session';
 import { showToast } from '@/ui/toast';
 import { closeModal, createDynamicModal } from '@/ui/modal';
 import { getElementById, setVisible, clearElement, createSvgElement } from '@/utils/html';
+import { setStateView } from '@/ui/state-view';
 import { formatNumber } from '@/utils/format';
+import { emit } from '@/state/events';
 
 /**
  * Plugin information from API.
@@ -480,6 +482,7 @@ export async function togglePlugin(pluginId: string, enable: boolean): Promise<v
 
     showToast(enable ? 'Plugin enabled' : 'Plugin disabled', 'success');
     await loadPlugins();
+    emit({ type: 'plugin:changed', reason: enable ? 'enabled' : 'disabled' });
   } catch (error) {
     console.error('Error toggling plugin:', error);
     showToast(error instanceof Error ? error.message : 'Failed to toggle plugin', 'error');
@@ -864,10 +867,12 @@ export async function loadWidgets(): Promise<void> {
     if (!container) return;
 
     if (!data.widgets || data.widgets.length === 0) {
-      const p = document.createElement('p');
-      p.className = 'text-muted';
-      p.textContent = 'No widget plugins available.';
-      container.appendChild(p);
+      setStateView(container, {
+        kind: 'empty',
+        title: 'No widget plugins available',
+        description:
+          'Install or enable widget plugins from the Plugins tab to see custom dashboard insights here.',
+      });
       return;
     }
 
@@ -951,11 +956,17 @@ export async function loadWidgets(): Promise<void> {
     console.error('Error loading widgets:', error);
     setVisible(loading, false);
     if (container) {
-      const p = document.createElement('p');
-      p.className = 'text-muted';
-      p.textContent =
-        'Failed to load widgets. ' + (error instanceof Error ? error.message : 'Unknown error');
-      container.appendChild(p);
+      setStateView(container, {
+        kind: 'error',
+        title: 'Could not load widgets',
+        description: error instanceof Error ? error.message : 'Unknown error.',
+        action: {
+          label: 'Retry',
+          onClick: () => {
+            loadWidgets().catch((err) => console.error('Widget retry failed:', err));
+          },
+        },
+      });
     }
   } finally {
     isLoadingWidgets = false;
@@ -1527,6 +1538,7 @@ export async function installFromGit(event: Event): Promise<void> {
     hideInstallPluginModal();
     await loadInstalledPlugins();
     await loadPluginSecurity();
+    emit({ type: 'plugin:changed', reason: 'installed' });
   } catch (error) {
     showToast(
       'Installation failed: ' + (error instanceof Error ? error.message : 'Unknown error'),
@@ -1586,6 +1598,7 @@ export async function installFromUpload(event: Event): Promise<void> {
     hideInstallPluginModal();
     await loadInstalledPlugins();
     await loadPluginSecurity();
+    emit({ type: 'plugin:changed', reason: 'installed' });
   } catch (error) {
     showToast(
       'Installation failed: ' + (error instanceof Error ? error.message : 'Unknown error'),
@@ -1614,6 +1627,7 @@ export async function uninstallPlugin(pluginId: string): Promise<void> {
     showToast('Plugin uninstalled successfully', 'success');
     await loadInstalledPlugins();
     await loadPluginSecurity();
+    emit({ type: 'plugin:changed', reason: 'uninstalled' });
   } catch (error) {
     showToast('Error: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
   }

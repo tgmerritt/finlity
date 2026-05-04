@@ -9,7 +9,7 @@ Provides endpoints for:
 
 import logging
 import re
-from typing import Literal, Optional
+from typing import Any, Literal, Optional, cast
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
@@ -24,6 +24,32 @@ logger = logging.getLogger(__name__)
 VALID_ENTITY_TYPES = ("individual", "household", "trust", "llc")
 
 router = APIRouter(prefix="/api/entities", tags=["entities"])
+
+
+def _entity_to_response(
+    entity: Any,
+    *,
+    account_count: int = 0,
+    income_count: int = 0,
+    expense_count: int = 0,
+) -> "EntityResponse":
+    """Convert an ORM Entity row to an EntityResponse.
+
+    SQLAlchemy attributes are typed as Column[T] by mypy but are the underlying
+    Python type at runtime; cast to satisfy the response model.
+    """
+    return EntityResponse(
+        id=cast(str, entity.id),
+        name=cast(str, entity.name),
+        entity_type=cast(Any, entity.entity_type),
+        is_default=cast(bool, entity.is_default),
+        is_household=cast(bool, entity.is_household),
+        color=cast(str, entity.color or "#4A90D9"),
+        icon=cast(str, entity.icon or "user"),
+        account_count=account_count,
+        income_count=income_count,
+        expense_count=expense_count,
+    )
 
 
 # =============================================================================
@@ -120,19 +146,14 @@ async def list_entities() -> list[EntityResponse]:
 
         result = []
         for entity in entities:
+            entity_id = cast(str, entity.id)
             # Count associated records
-            accounts = db.get_accounts_by_entity(entity.id)
-            income_sources = db.get_income_sources_by_entity(entity.id)
-            expenses = db.get_expenses_by_entity(entity.id)
+            accounts = db.get_accounts_by_entity(entity_id)
+            income_sources = db.get_income_sources_by_entity(entity_id)
+            expenses = db.get_expenses_by_entity(entity_id)
 
-            result.append(EntityResponse(
-                id=entity.id,
-                name=entity.name,
-                entity_type=entity.entity_type,
-                is_default=entity.is_default,
-                is_household=entity.is_household,
-                color=entity.color or "#4A90D9",
-                icon=entity.icon or "user",
+            result.append(_entity_to_response(
+                entity,
                 account_count=len(accounts),
                 income_count=len(income_sources),
                 expense_count=len(expenses),
@@ -158,15 +179,7 @@ async def create_entity(data: EntityCreate) -> EntityResponse:
             icon=data.icon,
         )
 
-        return EntityResponse(
-            id=entity.id,
-            name=entity.name,
-            entity_type=entity.entity_type,
-            is_default=entity.is_default,
-            is_household=entity.is_household,
-            color=entity.color or "#4A90D9",
-            icon=entity.icon or "user",
-        )
+        return _entity_to_response(entity)
     except SQLAlchemyError as e:
         logger.error(f"Database error in create_entity: {e}")
         raise HTTPException(status_code=500, detail="Unable to create entity")
@@ -182,18 +195,13 @@ async def get_entity(entity_id: str) -> EntityResponse:
         if not entity:
             raise HTTPException(status_code=404, detail="Entity not found")
 
-        accounts = db.get_accounts_by_entity(entity.id)
-        income_sources = db.get_income_sources_by_entity(entity.id)
-        expenses = db.get_expenses_by_entity(entity.id)
+        entity_id_str = cast(str, entity.id)
+        accounts = db.get_accounts_by_entity(entity_id_str)
+        income_sources = db.get_income_sources_by_entity(entity_id_str)
+        expenses = db.get_expenses_by_entity(entity_id_str)
 
-        return EntityResponse(
-            id=entity.id,
-            name=entity.name,
-            entity_type=entity.entity_type,
-            is_default=entity.is_default,
-            is_household=entity.is_household,
-            color=entity.color or "#4A90D9",
-            icon=entity.icon or "user",
+        return _entity_to_response(
+            entity,
             account_count=len(accounts),
             income_count=len(income_sources),
             expense_count=len(expenses),
@@ -223,18 +231,13 @@ async def update_entity(entity_id: str, data: EntityUpdate) -> EntityResponse:
         if not entity:
             raise HTTPException(status_code=404, detail="Entity not found")
 
-        accounts = db.get_accounts_by_entity(entity.id)
-        income_sources = db.get_income_sources_by_entity(entity.id)
-        expenses = db.get_expenses_by_entity(entity.id)
+        entity_id_str = cast(str, entity.id)
+        accounts = db.get_accounts_by_entity(entity_id_str)
+        income_sources = db.get_income_sources_by_entity(entity_id_str)
+        expenses = db.get_expenses_by_entity(entity_id_str)
 
-        return EntityResponse(
-            id=entity.id,
-            name=entity.name,
-            entity_type=entity.entity_type,
-            is_default=entity.is_default,
-            is_household=entity.is_household,
-            color=entity.color or "#4A90D9",
-            icon=entity.icon or "user",
+        return _entity_to_response(
+            entity,
             account_count=len(accounts),
             income_count=len(income_sources),
             expense_count=len(expenses),
@@ -336,7 +339,7 @@ async def auto_detect_entities() -> dict:
         with db.get_session() as session:
             accounts = session.query(Account).all()
             for account in accounts:
-                match = name_pattern.match(account.name)
+                match = name_pattern.match(cast(str, account.name))
                 if match:
                     name = match.group(1)
                     if name not in excluded_names:
@@ -348,7 +351,7 @@ async def auto_detect_entities() -> dict:
             # Scan income source names
             income_sources = session.query(BudgetIncomeSource).all()
             for income in income_sources:
-                match = name_pattern.match(income.name)
+                match = name_pattern.match(cast(str, income.name))
                 if match:
                     name = match.group(1)
                     if name not in excluded_names:
@@ -386,16 +389,17 @@ async def auto_detect_entities() -> dict:
                 entity = existing
 
             # Assign records to entity, tracking failures
+            entity_id_for_assignment = cast(str, entity.id)
             for record_ref in associations.get(name, []):
                 record_type, record_id = record_ref.split(":", 1)
                 try:
                     if record_type == "account":
-                        if db.assign_account_to_entity(record_id, entity.id):
+                        if db.assign_account_to_entity(record_id, entity_id_for_assignment):
                             assigned_accounts += 1
                         else:
                             failed_assignments.append(f"{record_ref} (not found)")
                     elif record_type == "income":
-                        if db.assign_income_source_to_entity(record_id, entity.id):
+                        if db.assign_income_source_to_entity(record_id, entity_id_for_assignment):
                             assigned_income += 1
                         else:
                             failed_assignments.append(f"{record_ref} (not found)")

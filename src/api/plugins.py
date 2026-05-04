@@ -55,7 +55,7 @@ class PluginEnableRequest(BaseModel):
 def list_plugins(
     plugin_type: Optional[str] = Query(None, description="Filter by plugin type"),
     enabled_only: bool = Query(False, description="Only show enabled plugins"),
-):
+) -> list[PluginResponse]:
     """
     List all discovered plugins.
 
@@ -116,7 +116,7 @@ def list_plugins(
 
 # Note: This route MUST come before /{plugin_id} to prevent route conflict
 @router.get("/installed")
-def list_installed_plugins():
+def list_installed_plugins() -> dict[str, Any]:
     """
     List all installed (non-builtin) plugins.
 
@@ -132,7 +132,7 @@ def list_installed_plugins():
 
 
 @router.get("/{plugin_id}", response_model=PluginResponse)
-def get_plugin(plugin_id: str):
+def get_plugin(plugin_id: str) -> PluginResponse:
     """Get details for a specific plugin."""
     registry = get_plugin_registry()
     manifest = registry.get_manifest(plugin_id)
@@ -168,7 +168,7 @@ def get_plugin(plugin_id: str):
 
 
 @router.post("/{plugin_id}/enable", response_model=PluginResponse)
-def enable_plugin(plugin_id: str, request: PluginEnableRequest):
+def enable_plugin(plugin_id: str, request: PluginEnableRequest) -> PluginResponse:
     """
     Enable or disable a plugin.
 
@@ -227,7 +227,7 @@ def enable_plugin(plugin_id: str, request: PluginEnableRequest):
 
 
 @router.get("/{plugin_id}/settings")
-def get_plugin_settings(plugin_id: str):
+def get_plugin_settings(plugin_id: str) -> dict[str, Any]:
     """Get current settings for a plugin."""
     registry = get_plugin_registry()
     manifest = registry.get_manifest(plugin_id)
@@ -261,7 +261,7 @@ def get_plugin_settings(plugin_id: str):
 
 
 @router.put("/{plugin_id}/settings")
-def update_plugin_settings(plugin_id: str, request: PluginSettingsUpdate):
+def update_plugin_settings(plugin_id: str, request: PluginSettingsUpdate) -> dict[str, Any]:
     """Update settings for a plugin."""
     registry = get_plugin_registry()
     manifest = registry.get_manifest(plugin_id)
@@ -315,7 +315,7 @@ def update_plugin_settings(plugin_id: str, request: PluginSettingsUpdate):
 
 
 @router.post("/discover")
-def discover_plugins():
+def discover_plugins() -> dict[str, Any]:
     """
     Trigger plugin discovery.
 
@@ -340,7 +340,7 @@ def discover_plugins():
 
 
 @router.post("/reload")
-def reload_plugins():
+def reload_plugins() -> dict[str, Any]:
     """
     Reload all enabled plugins.
 
@@ -368,7 +368,7 @@ def reload_plugins():
 
 
 @router.get("/types")
-def get_plugin_types():
+def get_plugin_types() -> dict[str, Any]:
     """Get available plugin types."""
     return {
         "types": [
@@ -394,7 +394,7 @@ def get_plugin_types():
 
 
 @router.get("/analysis/metrics")
-def get_analysis_metrics():
+def get_analysis_metrics() -> dict[str, Any]:
     """
     Get all available analysis metrics from enabled plugins.
 
@@ -418,7 +418,7 @@ def get_analysis_metrics():
 def run_analysis_plugins(
     positions: list[dict],
     accounts: list[dict],
-):
+) -> dict[str, Any]:
     """
     Run all analysis plugins on portfolio data.
 
@@ -461,7 +461,7 @@ def run_analysis_plugin(
     plugin_id: str,
     positions: list[dict],
     accounts: list[dict],
-):
+) -> dict[str, Any]:
     """
     Run a specific analysis plugin.
 
@@ -495,7 +495,7 @@ def run_analysis_plugin(
 
 
 @router.get("/analysis/plugins")
-def list_analysis_plugins():
+def list_analysis_plugins() -> dict[str, Any]:
     """List all enabled analysis plugins."""
     # Ensure plugins are loaded
     registry = get_plugin_registry()
@@ -535,7 +535,7 @@ def list_analysis_plugins():
 
 
 @router.get("/widgets")
-def list_widget_plugins():
+def list_widget_plugins() -> dict[str, Any]:
     """List all enabled widget plugins."""
     # Ensure plugins are loaded
     registry = get_plugin_registry()
@@ -555,7 +555,7 @@ def list_widget_plugins():
 def render_all_widgets(
     positions: list[dict],
     accounts: list[dict],
-):
+) -> dict[str, Any]:
     """
     Render all enabled widget plugins.
 
@@ -581,7 +581,7 @@ def render_widget(
     plugin_id: str,
     positions: list[dict],
     accounts: list[dict],
-):
+) -> dict[str, Any]:
     """
     Render a specific widget plugin.
 
@@ -638,7 +638,7 @@ class PermissionApprovalRequest(BaseModel):
 def get_audit_log(
     plugin_id: Optional[str] = Query(None, description="Filter by plugin ID"),
     limit: int = Query(100, description="Maximum entries to return"),
-):
+) -> dict[str, Any]:
     """
     Get the security audit log.
 
@@ -657,7 +657,7 @@ def get_audit_log(
 @router.get("/security/violations")
 def get_security_violations(
     limit: int = Query(50, description="Maximum entries to return"),
-):
+) -> dict[str, Any]:
     """
     Get recent security violations.
 
@@ -673,7 +673,7 @@ def get_security_violations(
 
 
 @router.get("/security/permissions")
-def get_all_permissions():
+def get_all_permissions() -> dict[str, Any]:
     """
     Get permissions for all plugins.
 
@@ -707,7 +707,7 @@ def get_all_permissions():
 
 
 @router.get("/security/permissions/{plugin_id}")
-def get_plugin_permissions(plugin_id: str):
+def get_plugin_permissions(plugin_id: str) -> dict[str, Any]:
     """
     Get permission details for a specific plugin.
 
@@ -736,7 +736,7 @@ def get_plugin_permissions(plugin_id: str):
 
 
 @router.post("/security/permissions/{plugin_id}/approve")
-def approve_plugin_permissions(plugin_id: str, request: PermissionApprovalRequest):
+def approve_plugin_permissions(plugin_id: str, request: PermissionApprovalRequest) -> dict[str, Any]:
     """
     Approve or deny permissions for a plugin.
 
@@ -775,7 +775,7 @@ def approve_plugin_permissions(plugin_id: str, request: PermissionApprovalReques
 
 
 @router.post("/security/permissions/{plugin_id}/revoke")
-def revoke_plugin_permissions(plugin_id: str):
+def revoke_plugin_permissions(plugin_id: str) -> dict[str, Any]:
     """
     Revoke all approved permissions for a plugin.
 
@@ -807,7 +807,7 @@ def revoke_plugin_permissions(plugin_id: str):
 
 
 @router.get("/security/pending")
-def get_pending_approvals():
+def get_pending_approvals() -> dict[str, Any]:
     """
     Get plugins that need permission approval.
 
@@ -847,7 +847,7 @@ def get_pending_approvals():
 
 
 @router.get("/security/validate/{plugin_id}")
-def validate_plugin_security(plugin_id: str):
+def validate_plugin_security(plugin_id: str) -> dict[str, Any]:
     """
     Validate a plugin's security configuration.
 
@@ -888,7 +888,7 @@ class GitInstallRequest(BaseModel):
 
 
 @router.post("/install/git")
-def install_from_git(request: GitInstallRequest):
+def install_from_git(request: GitInstallRequest) -> Any:
     """
     Install a plugin from a Git repository.
 
@@ -928,7 +928,7 @@ def install_from_git(request: GitInstallRequest):
 
 
 @router.post("/install/upload")
-async def install_from_upload(file: UploadFile = File(...)):
+async def install_from_upload(file: UploadFile = File(...)) -> Any:
     """
     Install a plugin from an uploaded ZIP file.
 
@@ -972,7 +972,7 @@ async def install_from_upload(file: UploadFile = File(...)):
 
 
 @router.delete("/installed/{plugin_id}")
-def uninstall_plugin(plugin_id: str):
+def uninstall_plugin(plugin_id: str) -> Any:
     """
     Uninstall an installed plugin.
 
@@ -1012,7 +1012,7 @@ def uninstall_plugin(plugin_id: str):
 
 
 @router.get("/installed/{plugin_id}/updates")
-def check_plugin_updates(plugin_id: str):
+def check_plugin_updates(plugin_id: str) -> dict[str, Any]:
     """
     Check if a plugin has updates available.
 
@@ -1032,7 +1032,7 @@ def check_plugin_updates(plugin_id: str):
 
 
 @router.post("/installed/{plugin_id}/update")
-def update_plugin(plugin_id: str):
+def update_plugin(plugin_id: str) -> Any:
     """
     Update a plugin to the latest version.
 
@@ -1075,7 +1075,7 @@ def update_plugin(plugin_id: str):
 
 
 @router.post("/installed/check-updates")
-def check_all_updates():
+def check_all_updates() -> dict[str, Any]:
     """
     Check for updates on all installed plugins.
 

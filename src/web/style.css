@@ -1,10 +1,41 @@
 /* GitHub Primer Dark Palette - Refined Financial Dashboard Theme */
 
 /* -----------------------------------------------------------------------------
+ * Z-index scale.
+ *
+ * One unified layering scale for the entire app. New code must use these
+ * tokens instead of arbitrary numbers. Stacking-context-local literals
+ * (e.g. `z-index: 1` on a pseudo-element to sit above its parent, or a
+ * sticky table thead inside a scroll container) are intentionally kept
+ * as small integers and commented inline.
+ *
+ * Token         | Value | Owners
+ * --------------|-------|------------------------------------------------------
+ * --z-base      | 1     | local stacking-context resets
+ * --z-sticky    | 100   | sidebar (desktop), sticky mobile header
+ * --z-dropdown  | 1000  | profile dropdown, multi-select menu, actions menu,
+ *               |       | chat FAB
+ * --z-modal     | 1500  | .modal, .modal-overlay, mobile nav overlay/sidebar,
+ *               |       | ai-popover-backdrop
+ * --z-popover   | 1600  | ai-popover-container
+ * --z-toast     | 1700  | toast container
+ * --z-overlay   | 2000  | global loading-overlay, tour overlay
+ * -------------------------------------------------------------------------- */
+
+/* -----------------------------------------------------------------------------
  * Design tokens (shared scale). New code should reference these instead of
  * hard-coded values; existing rules will migrate incrementally.
  * -------------------------------------------------------------------------- */
 :root {
+    /* Z-index layer scale */
+    --z-base: 1;
+    --z-sticky: 100;
+    --z-dropdown: 1000;
+    --z-modal: 1500;
+    --z-popover: 1600;
+    --z-toast: 1700;
+    --z-overlay: 2000;
+
     /* Spacing scale (4px base) */
     --space-1: 4px;
     --space-2: 8px;
@@ -39,6 +70,21 @@
 .gap-md { gap: var(--space-4); }
 .stack-sm { display: flex; flex-direction: column; gap: var(--space-2); }
 .text-muted { color: var(--color-text-muted, #8b949e); }
+
+/* Visibility helper. !important so it defeats lingering inline display
+   styles toggled imperatively elsewhere in the codebase. */
+.hidden { display: none !important; }
+
+/* Global disabled-button affordance. Applies to any .btn variant or any
+   <button> with the disabled attribute. Uses pointer-events: auto so the
+   not-allowed cursor still shows; click is gated by the disabled attr. */
+.btn:disabled,
+.btn[disabled],
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+    pointer-events: auto;
+}
 
 /* CSS Variables for theming */
 :root {
@@ -235,7 +281,7 @@ body {
     height: 100vh;
     left: 0;
     top: 0;
-    z-index: 100;
+    z-index: var(--z-sticky); /* sidebar */
     contain: layout style;
 }
 
@@ -395,7 +441,7 @@ body {
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius-sm);
     box-shadow: var(--shadow-lg);
-    z-index: 1000;
+    z-index: var(--z-dropdown);
     max-height: 300px;
     overflow-y: auto;
 }
@@ -2014,6 +2060,9 @@ th {
     letter-spacing: 0.8px;
     position: sticky;
     top: 0;
+    /* Local stacking-context literal: lifts thead above tbody rows within
+       the same scroll container; intentionally NOT --z-sticky so it stays
+       contained to the table. */
     z-index: 5;
 }
 
@@ -2059,6 +2108,7 @@ td.text-right {
 .table-container-sticky thead {
     position: sticky;
     top: 0;
+    /* Local stacking-context literal — see note on the global `th` rule. */
     z-index: 10;
 }
 
@@ -2538,7 +2588,7 @@ td.text-right {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: var(--z-modal);
 }
 
 .modal-backdrop {
@@ -2553,6 +2603,8 @@ td.text-right {
 
 .modal-content {
     position: relative;
+    /* Local: lifts the content above the sibling .modal-backdrop within the
+       same .modal stacking context. Not part of the global scale. */
     z-index: 1;
     background: var(--color-bg-elevated);
     border-radius: var(--border-radius-lg);
@@ -2694,7 +2746,7 @@ td.text-right {
     bottom: 24px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 10000;
+    z-index: var(--z-toast);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -2815,6 +2867,23 @@ td.text-right {
     to {
         transform: translateY(0);
         opacity: 1;
+    }
+}
+
+/* On narrow viewports the bottom-anchored toast can overlap a focused
+   keyboard / input. Move toasts to the top of the viewport, stack
+   downward, and clamp their width so they don't clip. */
+@media (max-width: 768px) {
+    .toast-container,
+    #toast-container {
+        top: 16px;
+        bottom: auto;
+        flex-direction: column;
+        width: clamp(280px, calc(100vw - 32px), 480px);
+    }
+
+    .toast {
+        max-width: 100%;
     }
 }
 
@@ -3173,13 +3242,9 @@ td.text-right {
     }
 }
 
-/* Empty state styling */
-.empty-state {
-    text-align: center;
-    color: var(--color-text-secondary);
-    padding: 24px;
-    font-style: italic;
-}
+/* Empty state styling — consolidated definition lives at the bottom of this
+   file (see `.empty-state` near the legacy "Improved empty state" block).
+   The `text-align: center` from this earlier rule was merged into that one. */
 
 /* Budget card specific */
 .paycheck-preview-card {
@@ -3197,7 +3262,7 @@ td.text-right {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: var(--z-modal);
     opacity: 0;
     visibility: hidden;
     transition: all 0.3s ease;
@@ -3300,7 +3365,7 @@ td.text-right {
         border-bottom: 1px solid var(--color-border);
         position: sticky;
         top: 0;
-        z-index: 100;
+        z-index: var(--z-sticky);
     }
 
     .mobile-menu-toggle,
@@ -3356,7 +3421,7 @@ td.text-right {
         right: 0;
         bottom: 0;
         background: rgba(0, 0, 0, 0.5);
-        z-index: 998;
+        z-index: var(--z-modal);
     }
 
     .mobile-nav-overlay.active {
@@ -3373,7 +3438,8 @@ td.text-right {
         width: 280px;
         transform: translateX(-100%);
         transition: transform 0.3s ease;
-        z-index: 999;
+        /* +1 so the slide-out sits above its own backdrop overlay. */
+        z-index: calc(var(--z-modal) + 1);
     }
 
     .sidebar.mobile-open {
@@ -3689,7 +3755,7 @@ td.text-right {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 9999;
+    z-index: var(--z-overlay);
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.2s ease, visibility 0.2s ease;
@@ -3905,7 +3971,7 @@ th.sortable.sort-desc .sort-icon::after {
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-lg);
     min-width: 140px;
-    z-index: 100;
+    z-index: var(--z-dropdown);
     display: none;
 }
 
@@ -4717,13 +4783,20 @@ th.sortable.sort-desc .sort-icon::after {
     position: absolute;
     top: 100%;
     left: 0;
-    right: 0;
-    min-width: 200px;
+    /* right: 0 was here — it forced the menu to span the trigger width and
+       could be clipped by the .tab-content { overflow-x: hidden } ancestor.
+       Unsetting lets the menu grow to fit its longest option. */
+    right: auto;
+    min-width: 220px;
+    /* Cap so we don't blow past the viewport on very long account names. */
+    max-width: min(420px, calc(100vw - 32px));
     background: var(--color-bg-elevated);
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius-sm);
     box-shadow: var(--shadow-lg);
-    z-index: 100;
+    /* Unified scale: dropdowns sit at --z-dropdown. Modals (1500) and
+       toasts (1700) now correctly outrank this without the old 1100 hack. */
+    z-index: var(--z-dropdown);
     display: none;
     margin-top: 4px;
 }
@@ -4754,9 +4827,18 @@ th.sortable.sort-desc .sort-icon::after {
 }
 
 .multi-select-options {
-    max-height: 200px;
+    /* Generous vertical scroll budget; horizontal scroll suppressed so long
+       option labels grow the menu width (capped above) instead of forcing
+       a tiny inner scrollbar inside the dropdown. */
+    max-height: 280px;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 4px 0;
+}
+
+.multi-select-option label {
+    /* Don't wrap account names — let the menu width grow to fit. */
+    white-space: nowrap;
 }
 
 .multi-select-option {
@@ -5496,7 +5578,8 @@ th.sortable.sort-desc .sort-icon::after {
     justify-content: center;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     transition: all var(--transition-fast);
-    z-index: 1000;
+    /* Sits at the dropdown layer; modals/toasts/loading still cover it. */
+    z-index: var(--z-dropdown);
 }
 
 .chat-fab:hover {
@@ -6259,7 +6342,7 @@ th.sortable.sort-desc .sort-icon::after {
 /* Popover Container */
 .ai-popover-container {
     position: fixed;
-    z-index: 10000;
+    z-index: var(--z-popover);
     pointer-events: none;
 }
 
@@ -6271,7 +6354,9 @@ th.sortable.sort-desc .sort-icon::after {
 .ai-popover-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 9999;
+    /* Sits just below the popover but above modals so a click outside the
+       popover dismisses it. */
+    z-index: calc(var(--z-popover) - 1);
     background: transparent;
 }
 
@@ -7312,7 +7397,7 @@ th.sortable.sort-desc .sort-icon::after {
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 10000;
+    z-index: var(--z-overlay);
     pointer-events: none;
 }
 
@@ -7886,11 +7971,74 @@ html {
 .budget-stats-row .stat-card:nth-child(5) { border-left: 3px solid var(--color-primary); }
 .budget-stats-row .stat-card:nth-child(6) { border-left: 3px solid var(--color-purple); }
 
-/* Improved empty state */
+/* Empty state — single canonical definition (the duplicate near line 3177
+   was removed; `text-align: center` was merged in from there so callers
+   that relied on it keep working). */
 .empty-state {
     padding: 40px 24px;
     color: var(--color-text-tertiary);
     font-size: 14px;
+    text-align: center;
+}
+
+/* ---------------------------------------------------------------- */
+/* Inline state view (loading / empty / error) — used by ui/state-view.ts */
+/* ---------------------------------------------------------------- */
+.state-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 32px 24px;
+    gap: 8px;
+    color: var(--color-text-secondary);
+    min-height: 120px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.state-view-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
+    color: var(--color-text-tertiary);
+}
+
+.state-view--error .state-view-icon {
+    color: var(--color-warning);
+}
+
+.state-view-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.state-view-description {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+    max-width: 480px;
+}
+
+.state-view-action {
+    margin-top: 12px;
+}
+
+/* Spinner — single keyframe + currentColor stroke so it adapts to the
+   surrounding text color in either theme. */
+.state-view-spinner {
+    animation: state-view-spin 1s linear infinite;
+    transform-origin: 50% 50%;
+}
+
+@keyframes state-view-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 /* Sidebar nav item active state enhancement */

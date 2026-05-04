@@ -2,74 +2,84 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Status
+
+**Project rename in flight.** The codebase is being rebranded from "Investment Dashboard" / "portfolio-analyzer" to **Finlity**. Production is live at `app.finlity.net`, but the GitHub repo, Docker image names, and Heroku app retain the legacy slugs. Don't be surprised by the inconsistency — both names refer to the same project.
+
 ## Claude Code Features (v2.1+)
 
-This project leverages modern Claude Code capabilities:
-
-### Skills & Agents
-- Use `/skills` to see available skills
-- Use `@agent-name` to invoke custom agents (e.g., `@markdown-expert`)
-- Skills auto-reload when modified - no restart needed
-
-### Useful Commands
-- `/plan` - Enter plan mode for complex tasks
-- `/context` - View current context window usage
-- `/permissions` - Manage tool permissions (supports wildcards like `Bash(npm *)`)
-- `/rewind` - Undo code changes
-- `Alt+T` - Toggle thinking mode (sticky across sessions)
-- `Ctrl+R` - Search command history
-- `Ctrl+B` - Background long-running tasks
-
-### Background Agents
-Long-running tasks can be backgrounded with `Ctrl+B`. Use `&` prefix to run tasks in background from the start.
+- `/skills` — list available skills
+- `@agent-name` — invoke custom agents (e.g., `@markdown-expert`)
+- `/plan`, `/context`, `/permissions`, `/rewind`
+- `Alt+T` (toggle thinking), `Ctrl+R` (history), `Ctrl+B` (background long-running task)
+- Skills auto-reload when modified — no restart needed
 
 ## Security
 
-Always scan code and REMOVE any PII from files checked in to git - WARN the user about any other security issues during your scan.
+Always scan code and REMOVE any PII from files checked into git. WARN the user about other security issues during your scan. Do not log account names, balances, or personal identifiers. Never commit `.env`, `data/*.db`, CSV exports, or API keys.
 
 ## Project Identity
 
 | Item | Value |
 |------|-------|
-| **GitHub Repo** | `tgmerritt/investment_dashboard` |
-| **Docker Container (dev)** | `portfolio-analyzer-dev` |
-| **Heroku App** | `investment-dashboard-app` |
+| **Public name** | Finlity |
+| **Production URL** | `https://app.finlity.net` |
+| **GitHub repo** | `tgmerritt/investment_dashboard` (legacy slug) |
+| **Heroku app** | `investment-dashboard-app` (legacy slug) |
+| **Docker images** | `portfolio-analyzer:latest` (prod), `portfolio-analyzer-dev` (dev container) |
 | **Author** | Tyler Merritt (tgmerritt@gmail.com) |
 
 ## Quick Reference
 
 ```bash
-# Development (hot reload - use this for active development)
+# Backend dev (hot reload via Docker bind-mount on src/)
 docker compose --profile dev up portfolio-dev
 
-# Production (rebuild required for changes)
+# Production-style local
 docker compose down && docker compose build && docker compose up -d
 
-# Run commands in container (use portfolio-analyzer-dev for dev mode)
+# Run a one-off in the dev container
 docker exec -it portfolio-analyzer-dev python -m pytest tests/ -v
 docker exec -it portfolio-analyzer-dev python scripts/generate_demo.py
 
-# View logs
+# Frontend dev (TypeScript / Vite — runs on :5173, proxies /api → :8000)
+cd src/web && npm install && npm run dev
+
+# Logs
 docker compose logs -f
 ```
 
 ## Important Workflows
 
-### GitHub Actions
-- **Repo**: `tgmerritt/investment_dashboard`
-- **Cancel running workflows before pushing** if making frequent changes
-- Use: `gh run list --repo tgmerritt/investment_dashboard --status in_progress` then `gh run cancel <run_id>`
-
 ### Pre-commit Checks (REQUIRED before pushing)
+
+Backend:
 ```bash
-# ALWAYS run these before git push:
-ruff check src/                    # Linter - must pass with no errors
-python -m pytest tests/ -x -q      # Tests - must pass
+ruff check src/                    # lint — must pass with no errors
+python -m pytest tests/ -x -q      # 133 tests; must pass
+mypy src/                          # type checks (config: mypy.ini, py3.11 target)
 ```
 
-### Regenerating requirements.txt
-`requirements.in` is the curated source of truth. Regenerate the pinned
-`requirements.txt` lockfile with:
+Frontend:
+```bash
+cd src/web
+npm run typecheck                  # tsc --noEmit
+npm test                           # vitest — 50 tests; must pass
+npm run lint                       # eslint
+NODE_ENV=production npm run build  # ~240ms; smoke-check chunk splitting
+```
+
+### GitHub Actions
+Repo is `tgmerritt/investment_dashboard`. CI runs ruff, mypy, pip-audit, bandit, pytest, vitest, vite build, and SBOM generation.
+
+Cancel running workflows before pushing if iterating quickly:
+```bash
+gh run list --repo tgmerritt/investment_dashboard --status in_progress
+gh run cancel <run_id>
+```
+
+### Regenerating `requirements.txt`
+`requirements.in` is the curated source of truth (pip-tools).
 ```bash
 pip install pip-tools
 pip-compile --resolver=backtracking --generate-hashes \
@@ -78,50 +88,85 @@ pip-compile --resolver=backtracking --generate-hashes \
 
 ### Heroku Deployment
 - App URL: `investment-dashboard-app-e0832c614c7f.herokuapp.com`
-- Build for AMD64: `docker build --platform linux/amd64 -t registry.heroku.com/investment-dashboard-app/web .`
-- Push: `docker push registry.heroku.com/investment-dashboard-app/web`
-- Release: `heroku container:release web --app investment-dashboard-app`
-- Logs: `heroku logs -n 100 --app investment-dashboard-app`
-
-### Development vs Production Docker
-- **Dev mode**: `docker compose --profile dev up portfolio-dev` - mounts `src/` for hot reload
-- **Prod mode**: `docker compose up -d` - files baked into image, requires rebuild
+- Heroku requires AMD64 images:
+  ```bash
+  docker build --platform linux/amd64 -t registry.heroku.com/investment-dashboard-app/web .
+  docker push registry.heroku.com/investment-dashboard-app/web
+  heroku container:release web --app investment-dashboard-app
+  heroku logs -n 100 --app investment-dashboard-app
+  ```
+- **Provenance/SBOM**: disabled on the Heroku container push (recent commit `4502fb2`); Heroku registry rejects them.
 
 ## Project Overview
 
-Investment portfolio tracking and analysis system with:
-- **Portfolio Management** - Multi-account support (retirement, taxable, 529, HYSA, custom types)
-- **Budget & Income** - Paycheck calculations, expense tracking, cash flow analysis
-- **Tax Projections** - Lifetime tax burden analysis with withdrawal strategies
-- **Monte Carlo Simulations** - Retirement probability analysis (async on Heroku)
-- **Plugin System** - Extensible importers, analyzers, and dashboard widgets
-- **Demo Mode** - Toggle between real/demo data without restart
+Investment portfolio tracking and analysis system:
+- **Portfolio Management** — multi-account (retirement, taxable, 529, HYSA, custom)
+- **Budget & Income** — paycheck calc, expenses, cash flow
+- **Tax Projections** — lifetime burden, withdrawal strategies
+- **Monte Carlo** — retirement probability (async on Heroku)
+- **Plugin System** — extensible importers, analyzers, dashboard widgets
+- **Multi-profile** — separate databases per profile/family
+- **Multi-user mode** — session-based (gated by `MULTI_USER_MODE` / `DYNO`)
+- **Demo Mode** — toggle real/demo data without restart
+- **AI Commentary** — optional Claude-generated insights stored in DB
 
 ## Architecture
 
-### Key Directories
+### Source Tree
+
 ```
 src/
-├── api/           # FastAPI endpoints (portfolio, analysis, budget, projections, etc.)
-├── budget/        # Tax calculator, Social Security estimator
-├── database/      # SQLAlchemy models, operations, profile manager
-├── plugins/       # Plugin system (importers, analyzers, widgets)
+├── api/           # FastAPI routers
+├── analysis/      # allocation, performance, risk, correlation
+├── budget/        # tax_calculator, payroll, social security
+├── dashboard/     # generator + chart helpers (server-side)
+├── data/          # prices, fund_lookup
+├── database/      # SQLAlchemy models, operations, profile_manager
+├── history/       # snapshot tracker
+├── importers/     # FolderScanner, FileImporter
+├── middleware/    # rate_limit, security_headers, session
+├── models/        # account_types, position_types, targets
+├── plugins/       # plugin pipelines (import/analysis/widget) + builtin/
 ├── projections/   # Monte Carlo engine
-├── services/      # AI config, secrets, fund data, triggers
-└── web/           # Frontend (index.html, app.js, style.css)
+├── services/      # background_tasks, commentary_service, fund_data, secrets, session, providers/
+├── utils/         # paths.safe_join (path-traversal guard)
+└── web/           # TypeScript frontend (see below)
 ```
 
-### API Structure
+### API Routers (`src/api/`)
+
 | Module | Purpose |
 |--------|---------|
 | `portfolio.py` | Accounts, positions, cash/CD/real-estate |
 | `analysis.py` | Performance, risk, allocation, triggers |
-| `budget.py` | Income sources, expenses, paycheck calculations |
+| `budget.py` | Income sources, expenses, paycheck |
 | `projections.py` | Monte Carlo, FIRE, withdrawal tables, tax projections |
+| `imports.py` | File ingestion, folder scanning |
+| `entities.py` | Real-world entities (companies, funds) |
+| `profiles.py` | Multi-profile management (create/switch DBs) |
+| `plugins.py` | Plugin lifecycle (install, enable, configure) |
+| `tasks.py` | Background task polling endpoint |
+| `commentary.py` | AI-generated commentary cache |
+| `inference.py` | Claude API proxy (uses `app.state.http`) |
+| `session.py` | Multi-user session management |
 | `settings.py` | Config, demo mode, API keys |
+| `dependencies.py` | Shared FastAPI deps — use `get_db()` here, never construct `Database()` |
 
-### Background Task System (Heroku)
-Heroku has a 30-second request timeout. Long-running operations use async tasks:
+### Database Models (`src/database/models.py`)
+
+`Entity`, `FileImport`, `Account`, `Position`, `PortfolioSnapshot`, `PriceCache`, `AppSettings`, `AllocationTrigger`, `PortfolioView`, `MonteCarloResult`, `BudgetIncomeSource`, `BudgetTaxConfig`, `BudgetExpenseCategory`, `BudgetExpense`, `BudgetPretaxDeduction`, `AICommentary`.
+
+- **Profile-aware**: always use `get_database()` from `src.database`, never `Database()` directly.
+- **Demo mode**: separate database at `data/demo/demo.db`.
+- **Profiles**: each profile has its own DB under `data/databases/<profile>/`.
+
+### Middleware (`src/middleware/`)
+
+- `RateLimitMiddleware` — per-IP rate limiting
+- `SecurityHeadersMiddleware` — OWASP headers, HSTS only on HTTPS
+- `SessionMiddleware` — multi-user session cookies (only when `MULTI_USER_MODE` / `DYNO`)
+
+### Background Task System (Heroku 30s timeout)
 
 ```python
 # In API endpoint
@@ -134,68 +179,121 @@ return {"task_id": task_id, "status": "running"}
 # Frontend polls GET /api/tasks/{task_id} until complete
 ```
 
-### Database
-- **Profile-aware**: Always use `get_database()` from `src.database`, never `Database()` directly
-- **Source of truth**: Database is authoritative once it exists
-- **Demo mode**: Separate database at `data/demo/demo.db`
+Age-based cleanup runs in `src/services/background_tasks.py`.
 
-### Frontend Patterns
-- **Vanilla JS + Plotly.js** - No framework, direct DOM manipulation
-- **Dark mode**: Check `document.documentElement.getAttribute('data-theme') === 'dark'`
-- **CSS CONTRAST RULE**: All UI elements MUST have proper contrast in both light and dark modes. Test hover states, tooltips, and chart elements in both themes.
-- **API field mapping**: Some API responses use different field names than frontend expects (e.g., `gross` vs `gross_pay`)
+## Frontend (TypeScript + Vite)
+
+**Stack:** TypeScript (ES2022, strict), Vite, Vitest, ESLint + Prettier. Plotly.js loaded via CDN. No React/Vue framework — direct DOM manipulation through typed UI helpers.
+
+```
+src/web/
+├── src/
+│   ├── api/        # client.ts, with-api-call.ts (DRY API wrapper)
+│   ├── charts/     # allocation, budget, projections, plotly-utils
+│   ├── database/   # client-database, local-api (browser-side storage)
+│   ├── features/   # commentary, entities, import-export, onboarding, plugins, profiles, social-feed, views
+│   ├── pages/      # dashboard, holdings, analysis, budget, projections, settings
+│   ├── state/      # session, store, theme
+│   ├── types/      # api.d.ts, external.d.ts
+│   ├── ui/         # tabs, modal, table, template, toast, loading
+│   └── utils/      # format, html
+├── test/           # vitest specs (mirror src/ layout)
+├── package.json    # scripts: dev, build, typecheck, test, test:watch, lint
+├── tsconfig.json
+├── vite.config.ts  # manualChunks split by page/feature/shared
+└── vitest.config.ts
+```
+
+**Module aliases:** import from `@/...` which resolves to `src/web/src/`.
+
+**Build behavior:**
+- Output goes to `src/web/dist/` (entry: `app.js`, chunks under `chunks/`).
+- Sourcemaps **only in dev** (production strips ~744 KB of `.map` files).
+- `manualChunks` splits the bundle into `page-*`, `feature-*`, and `shared` chunks so changing one page does not bust the cache for the rest. Production `app.js` is ~8 KB (gzip ~3.25 KB).
+- Dockerfile builds the frontend in a separate Node 20 stage, then copies `dist/` into the Python image.
+
+**Design system:** GitHub Primer color palette (commit `07b1b09` redesign). All UI must have proper contrast in **both** light and dark modes — test hover states, tooltips, and chart elements in each theme. Dark mode flag: `document.documentElement.getAttribute('data-theme') === 'dark'`.
+
+**API field gotcha:** API responses sometimes use shorter names than the frontend expects (e.g., API returns `gross`, some legacy frontend code expects `gross_pay`). Check `src/api/*.py` against `src/web/src/types/api.d.ts`.
+
+## Plugin System
+
+See `docs/PLUGIN_ARCHITECTURE.md` for the full design.
+
+**Builtin plugins** (`src/plugins/builtin/`):
+- Importers: `schwab-csv`, `fidelity-csv`, `generic-csv`
+- Analyzers: `tax-loss-harvester`, `dividend-tracker`
+- Widgets: `sector-treemap`, `correlation-heatmap`
+
+**Plugin manifest** (`manifest.yaml` per plugin):
+```yaml
+name, version, description, author, license
+plugin_type: importer | analyzer | widget
+main: <module>.py
+class: <ClassName>
+permissions:
+  file_read: bool
+  file_write: bool
+  network: bool
+  database: read_only | read_write | none
+```
+
+**Pipelines** in `src/plugins/`: `import_pipeline.py`, `analysis_pipeline.py`, `widget_pipeline.py`. Plugin discovery and registration via `registry.py`; permissions enforced in `security.py`.
+
+## Multi-Profile / Multi-User
+
+- **Profile manager** (`src/database/profile_manager.py`): each profile gets its own SQLite DB under `data/databases/<profile>/`. Switch via `/api/profiles`.
+- **Multi-user mode**: gated by `MULTI_USER_MODE=true` (auto-on with `DYNO` Heroku env). Adds `SessionMiddleware` and login-required gating; demo data is protected via `PROTECT_DEMO_DATA`.
+- Always use `get_database()` so the profile-active DB is selected.
+
+## Tooling Notes
+
+- **Python 3.13** in the Dockerfile (slim-bookworm). `mypy.ini` still targets 3.11 — bump if you touch typing.
+- **Path-traversal guard:** every file write/read against user-supplied paths must go through `safe_join()` in `src/utils/paths.py`.
+- **Async HTTP:** the FastAPI lifespan creates a single shared `httpx.AsyncClient` on `app.state.http`; reuse it instead of creating per-request clients.
+- **CORS:** `get_allowed_origins()` in `src/main.py` — production adds `*.finlity.net`; override with `CORS_ALLOWED_ORIGINS`.
 
 ## Budget/Paycheck System
 
-### API Response Fields (PaycheckBreakdown)
+### `PaycheckBreakdown` API fields
+
 ```python
 {
-    "gross": float,              # Frontend may expect "gross_pay"
+    "gross": float,                     # frontend may expect "gross_pay"
     "federal_income_tax": float,
-    "social_security": float,    # Frontend may expect "social_security_tax"
-    "medicare": float,           # Frontend may expect "medicare_tax"
+    "social_security": float,           # frontend may expect "social_security_tax"
+    "medicare": float,                  # frontend may expect "medicare_tax"
     "additional_medicare": float,
     "state_income_tax": float,
-    "total_pretax_deductions": float,  # Frontend may expect "pretax_deductions"
+    "total_pretax_deductions": float,   # frontend may expect "pretax_deductions"
     "net_pay": float,
     "total_taxes": float,
-    "total_fica": float
+    "total_fica": float,
 }
 ```
 
-### Tax Calculator (`src/budget/tax_calculator.py`)
-- `PayrollTaxCalculator`: Federal/state/FICA tax calculations
-- `PaycheckBreakdown`: Dataclass with all paycheck details
-- Supports 2024 tax brackets for single/married_jointly/married_separately/head_of_household
+`PayrollTaxCalculator` in `src/budget/tax_calculator.py` supports 2024 brackets for `single`, `married_jointly`, `married_separately`, `head_of_household`.
 
 ## Common Issues & Fixes
 
-### Docker Architecture Mismatch
-Heroku requires AMD64 images. If app crashes on Heroku:
+### Docker architecture mismatch on Heroku
+Heroku rejects ARM64 images. Always:
 ```bash
 docker build --platform linux/amd64 -t registry.heroku.com/investment-dashboard-app/web .
 ```
 
-### CSS Not Updating
-In production Docker mode, files are baked in. Use dev mode or rebuild:
-```bash
-docker compose --profile dev up portfolio-dev  # For development
-```
+### Frontend changes not appearing
+- Production Docker bakes `dist/` into the image — rebuild after a frontend change.
+- Dev container does **not** hot-reload TypeScript automatically. Run `npm run dev` in `src/web/` separately and let Vite proxy `/api` to the FastAPI dev container.
 
-### API Field Name Mismatches
-Frontend code may expect different field names than API returns. Check both:
-- API: `src/api/*.py` and related models
-- Frontend: `src/web/app.js`
+### API field name mismatches
+Cross-check the API model in `src/api/*.py` against `src/web/src/types/api.d.ts`.
 
-### NaN/Undefined Errors
-Add null checks: `value || 0` and validate API responses before accessing nested properties.
+### NaN / undefined in charts
+Add null guards (`value || 0`) and validate API responses before accessing nested properties.
 
-## Security
-
-- **Never commit**: API keys, database files, CSV exports
-- **Never log**: Account names, balances, personal identifiers
-- **Local storage**: All data stays local except optional Claude API calls
-- **API keys**: Use `ANTHROPIC_API_KEY` env var or encrypted database storage
+### Stale prices blocking dashboard init
+Recent fix (`55eb50c`): the stale-price refresh runs in the background — do not re-block dashboard init on it.
 
 ## Claude API Configuration
 
@@ -204,25 +302,28 @@ ANTHROPIC_API_KEY=your-api-key
 ANTHROPIC_MODEL=sonnet  # or opus, haiku
 ```
 
-| Alias | Model | Use Case |
+| Alias | Model | Use case |
 |-------|-------|----------|
 | `opus` | claude-opus-4-5-20251101 | Complex analysis, deep reasoning |
-| `sonnet` | claude-sonnet-4-20250514 | Default, balanced performance |
-| `haiku` | claude-haiku-4-5-20250929 | Fast tasks, cost-effective |
+| `sonnet` | claude-sonnet-4-20250514 | Default, balanced |
+| `haiku` | claude-haiku-4-5-20250929 | Fast, cost-effective |
 
-**Claude Code Model Selection:**
-- Use `/model` to change models during a session
-- "Opus Plan Mode" runs Opus for planning, Sonnet for execution
-- Thinking mode is enabled by default for Opus 4.5
+Inference goes through `src/api/inference.py` using the shared `app.state.http` client.
 
 ## Testing
 
+Backend (133 tests):
 ```bash
-# Run all tests
-docker exec portfolio-analyzer python -m pytest tests/ -v
-
-# Run specific test file
-docker exec portfolio-analyzer python -m pytest tests/test_api_budget.py -v
+docker exec portfolio-analyzer-dev python -m pytest tests/ -v
+docker exec portfolio-analyzer-dev python -m pytest tests/test_api_budget.py -v
 ```
 
-All tests should pass before committing
+Frontend (50 tests):
+```bash
+cd src/web && npm test
+cd src/web && npm run test:coverage
+```
+
+`tests/conftest.py` sets `PORTFOLIO_DATA_DIR` to a temp dir and forces `PORTFOLIO_DEMO_MODE=true` / `PORTFOLIO_TEST_MODE=true` for the session.
+
+All tests must pass before committing.

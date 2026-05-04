@@ -7,6 +7,7 @@ import { apiCall } from '@/api/client';
 import { showToast } from '@/ui/toast';
 import { showLoading, hideLoading } from '@/ui/loading';
 import { store } from '@/state/store';
+import { emit } from '@/state/events';
 import { refreshData } from '@/pages/dashboard';
 import { clearCommentaryCache } from '@/features/commentary';
 import { showTab } from '@/ui/tabs';
@@ -264,6 +265,12 @@ export async function switchProfile(profileId: string): Promise<void> {
 
       // Clear AI commentary cache when switching databases
       clearCommentaryCache();
+
+      // Notify the typed bus before refresh so subscribers can do per-profile
+      // setup that needs to run before data lands. `refreshData()` is called
+      // unconditionally below so we deliberately do NOT add a subscriber that
+      // also calls refreshData — that would double-fetch.
+      emit({ type: 'profile:switched', profileId: profile.id });
 
       // Reload all data for new profile
       await refreshData();

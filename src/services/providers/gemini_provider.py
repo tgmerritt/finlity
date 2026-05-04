@@ -24,27 +24,29 @@ class GeminiProvider(InferenceProvider):
 
     BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
-    # Gemini models
+    # Current Gemini 2.5 family (released April 2025) plus 2.0 Flash for cost tier.
+    # 1.5 IDs are dropped from the picker; legacy DB rows fall back to default at
+    # request time if Google retires the ID.
     MODELS = [
         ModelInfo(
-            id="gemini-1.5-flash",
-            display_name="Gemini 1.5 Flash",
+            id="gemini-2.5-flash",
+            display_name="Gemini 2.5 Flash",
             context_length=1048576,
-            capabilities=["streaming", "tools"],
+            capabilities=["streaming", "tools", "vision"],
             is_default=True,
         ),
         ModelInfo(
-            id="gemini-1.5-pro",
-            display_name="Gemini 1.5 Pro",
+            id="gemini-2.5-pro",
+            display_name="Gemini 2.5 Pro",
             context_length=2097152,
-            capabilities=["streaming", "tools"],
+            capabilities=["streaming", "tools", "vision"],
             is_default=False,
         ),
         ModelInfo(
-            id="gemini-2.0-flash-exp",
-            display_name="Gemini 2.0 Flash (Experimental)",
+            id="gemini-2.0-flash",
+            display_name="Gemini 2.0 Flash",
             context_length=1048576,
-            capabilities=["streaming", "tools"],
+            capabilities=["streaming", "tools", "vision"],
             is_default=False,
         ),
     ]
@@ -150,6 +152,8 @@ class GeminiProvider(InferenceProvider):
         system: Optional[str] = None,
         temperature: float = 1.0,
         tools: Optional[list[dict]] = None,
+        cache_system: bool = False,  # Anthropic-only; ignored here.
+        cache_breakpoints: Optional[list[int]] = None,  # Anthropic-only; ignored here.
     ) -> InferenceResponse:
         """Generate a completion using Gemini."""
         self._validate_messages(messages)
@@ -218,6 +222,8 @@ class GeminiProvider(InferenceProvider):
         system: Optional[str] = None,
         temperature: float = 1.0,
         tools: Optional[list[dict]] = None,
+        cache_system: bool = False,  # Anthropic-only; ignored here.
+        cache_breakpoints: Optional[list[int]] = None,  # Anthropic-only; ignored here.
     ) -> Iterator[StreamEvent]:
         """Stream a completion using Gemini."""
         self._validate_messages(messages)

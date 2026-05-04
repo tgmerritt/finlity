@@ -366,7 +366,10 @@ class DatabaseManager:
         if not self.db_path.exists():
             return None
 
-        md5 = hashlib.md5()
+        # MD5 is used here only for file-content fingerprinting (change detection
+        # and backup integrity), NOT for security. usedforsecurity=False satisfies
+        # FIPS-mode interpreters and bandit B324.
+        md5 = hashlib.md5(usedforsecurity=False)
         with open(self.db_path, "rb") as f:
             for chunk in iter(lambda: f.read(8192), b""):
                 md5.update(chunk)

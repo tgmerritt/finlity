@@ -22,25 +22,26 @@ logger = logging.getLogger(__name__)
 class ClaudeProvider(InferenceProvider):
     """Anthropic Claude AI provider."""
 
-    # Claude models with capabilities
+    # Current Claude 4.X family. Display order matches expected UI: cheapest first
+    # (Haiku) → balanced default (Sonnet) → most capable (Opus).
     MODELS = [
         ModelInfo(
-            id="claude-3-5-haiku-20241022",
-            display_name="Claude Haiku 3.5",
+            id="claude-haiku-4-5-20251001",
+            display_name="Claude Haiku 4.5",
             context_length=200000,
             capabilities=["streaming", "tools", "vision"],
             is_default=False,
         ),
         ModelInfo(
-            id="claude-sonnet-4-20250514",
-            display_name="Claude Sonnet 4",
+            id="claude-sonnet-4-6",
+            display_name="Claude Sonnet 4.6",
             context_length=200000,
             capabilities=["streaming", "tools", "vision"],
             is_default=True,
         ),
         ModelInfo(
-            id="claude-opus-4-5-20251101",
-            display_name="Claude Opus 4.5",
+            id="claude-opus-4-7",
+            display_name="Claude Opus 4.7",
             context_length=200000,
             capabilities=["streaming", "tools", "vision"],
             is_default=False,
@@ -115,6 +116,63 @@ class ClaudeProvider(InferenceProvider):
                 )
         return self._client
 
+    @staticmethod
+    def _build_system_param(system, cache_system: bool):
+        """Build the `system` kwarg for the Anthropic SDK.
+
+        - If `system` is already a list (caller-supplied content blocks), pass
+          through unchanged. The caller is responsible for any cache_control.
+        - If `system` is a string and `cache_system=True`, wrap it in a single
+          ephemeral content block so the system prompt (and tools, which render
+          before it) are cacheable.
+        - If `system` is a string and `cache_system=False`, return it as-is —
+          preserves existing behavior.
+        """
+        if isinstance(system, list):
+            return system
+        if cache_system:
+            return [
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        return system
+
+    @staticmethod
+    def _apply_message_cache_breakpoints(
+        anthropic_messages: list[dict],
+        cache_breakpoints: Optional[list[int]],
+    ) -> None:
+        """Mutate `anthropic_messages` in place, marking the last content block
+        of each indexed message with cache_control: ephemeral.
+
+        Anthropic's API requires content to be a list of blocks for
+        cache_control to attach; if the message content is a plain string we
+        wrap it in a single text block before marking it.
+        """
+        if not cache_breakpoints:
+            return
+        for idx in cache_breakpoints:
+            if idx < 0 or idx >= len(anthropic_messages):
+                continue
+            msg = anthropic_messages[idx]
+            content = msg.get("content")
+            if isinstance(content, str):
+                msg["content"] = [
+                    {
+                        "type": "text",
+                        "text": content,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+            elif isinstance(content, list) and content:
+                # Mark the last block. Copy to avoid mutating shared block dicts.
+                last = dict(content[-1])
+                last["cache_control"] = {"type": "ephemeral"}
+                content[-1] = last
+
     def complete(
         self,
         messages: list[InferenceMessage],
@@ -123,6 +181,8 @@ class ClaudeProvider(InferenceProvider):
         system: Optional[str] = None,
         temperature: float = 1.0,
         tools: Optional[list[dict]] = None,
+        cache_system: bool = False,
+        cache_breakpoints: Optional[list[int]] = None,
     ) -> InferenceResponse:
         """Generate a completion using Claude."""
         self._validate_messages(messages)
@@ -135,6 +195,7 @@ class ClaudeProvider(InferenceProvider):
             for msg in messages
             if msg.role != "system"
         ]
+        self._apply_message_cache_breakpoints(anthropic_messages, cache_breakpoints)
 
         # Build request kwargs
         kwargs = {
@@ -145,7 +206,7 @@ class ClaudeProvider(InferenceProvider):
         }
 
         if system:
-            kwargs["system"] = system
+            kwargs["system"] = self._build_system_param(system, cache_system)
 
         if tools:
             kwargs["tools"] = tools
@@ -169,6 +230,18 @@ class ClaudeProvider(InferenceProvider):
                         }
                     )
 
+            cache_creation = getattr(
+                response.usage, "cache_creation_input_tokens", None
+            )
+            cache_read = getattr(response.usage, "cache_read_input_tokens", None)
+            if cache_system or cache_breakpoints:
+                logger.info(
+                    "Claude cache: created %s tokens, read %s tokens, model %s",
+                    cache_creation or 0,
+                    cache_read or 0,
+                    response.model,
+                )
+
             return InferenceResponse(
                 content=content,
                 model=response.model,
@@ -176,6 +249,8 @@ class ClaudeProvider(InferenceProvider):
                 output_tokens=response.usage.output_tokens,
                 tool_calls=tool_calls if tool_calls else None,
                 stop_reason=response.stop_reason,
+                cache_creation_input_tokens=cache_creation,
+                cache_read_input_tokens=cache_read,
             )
 
         except Exception as e:
@@ -192,6 +267,8 @@ class ClaudeProvider(InferenceProvider):
         system: Optional[str] = None,
         temperature: float = 1.0,
         tools: Optional[list[dict]] = None,
+        cache_system: bool = False,
+        cache_breakpoints: Optional[list[int]] = None,
     ) -> Iterator[StreamEvent]:
         """Stream a completion using Claude."""
         self._validate_messages(messages)
@@ -204,6 +281,7 @@ class ClaudeProvider(InferenceProvider):
             for msg in messages
             if msg.role != "system"
         ]
+        self._apply_message_cache_breakpoints(anthropic_messages, cache_breakpoints)
 
         # Build request kwargs
         kwargs = {
@@ -214,7 +292,7 @@ class ClaudeProvider(InferenceProvider):
         }
 
         if system:
-            kwargs["system"] = system
+            kwargs["system"] = self._build_system_param(system, cache_system)
 
         if tools:
             kwargs["tools"] = tools
@@ -229,9 +307,25 @@ class ClaudeProvider(InferenceProvider):
                     if event_type == "message_start":
                         usage = getattr(event.message, "usage", None)
                         if usage:
+                            cache_creation = getattr(
+                                usage, "cache_creation_input_tokens", None
+                            )
+                            cache_read = getattr(
+                                usage, "cache_read_input_tokens", None
+                            )
+                            if cache_system or cache_breakpoints:
+                                logger.info(
+                                    "Claude cache (stream): created %s tokens, "
+                                    "read %s tokens, model %s",
+                                    cache_creation or 0,
+                                    cache_read or 0,
+                                    model_info.id,
+                                )
                             yield StreamEvent(
                                 type="message_start",
                                 input_tokens=usage.input_tokens,
+                                cache_creation_input_tokens=cache_creation,
+                                cache_read_input_tokens=cache_read,
                             )
 
                     elif event_type == "content_block_start":

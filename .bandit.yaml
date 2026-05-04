@@ -1,0 +1,30 @@
+# Bandit configuration for Finlity
+#
+# CI runs bandit in two passes (see .github/workflows/test.yml):
+#   1. Strict pass on src/  -> -ll -ii (medium+ severity, medium+ confidence),
+#      no test-only skips. This is the blocking gate.
+#   2. Permissive pass on tests/ -> --skip B101 (assert is fine in tests).
+#
+# Severity threshold: medium+ blocks the build (-ll). Low findings are
+# informational only and do not fail CI.
+
+# No global `skips:` list. We deliberately keep B101 (assert_used) enabled
+# for src/ scans -- asserts in production code can be optimized away at
+# runtime under `python -O` and silently drop security checks. The tests/
+# pass disables B101 via the CLI (`--skip B101`) instead, since asserts are
+# idiomatic there. Reach for inline `# nosec BXXX  # reason: ...` annotations
+# before adding global skips here.
+
+# Exclude directories that bandit should never scan, regardless of which
+# path the user passes on the CLI. NOTE: `tests/` is intentionally NOT in
+# this list -- the second CI pass invokes `bandit -r tests/` and depends on
+# tests being scannable. Per-pass skips (e.g. B101 for tests) are applied
+# via the CLI, not here.
+exclude_dirs:
+  - .venv
+  - venv
+  - node_modules
+  - src/web
+  - data
+  - exports
+  - output

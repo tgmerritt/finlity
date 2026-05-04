@@ -143,6 +143,8 @@ class CerebrasProvider(InferenceProvider):
         system: Optional[str] = None,
         temperature: float = 1.0,
         tools: Optional[list[dict]] = None,
+        cache_system: bool = False,  # Anthropic-only; ignored here.
+        cache_breakpoints: Optional[list[int]] = None,  # Anthropic-only; ignored here.
     ) -> InferenceResponse:
         """Generate a completion using Cerebras."""
         self._validate_messages(messages)
@@ -211,6 +213,8 @@ class CerebrasProvider(InferenceProvider):
         system: Optional[str] = None,
         temperature: float = 1.0,
         tools: Optional[list[dict]] = None,
+        cache_system: bool = False,  # Anthropic-only; ignored here.
+        cache_breakpoints: Optional[list[int]] = None,  # Anthropic-only; ignored here.
     ) -> Iterator[StreamEvent]:
         """Stream a completion using Cerebras."""
         self._validate_messages(messages)

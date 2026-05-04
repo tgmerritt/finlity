@@ -420,7 +420,8 @@ class PriceService:
 
     # Tickers that don't have market prices (state-specific funds, etc.)
     SKIP_PRICE_LOOKUP = {
-        "CASH", "CD", "MONEY", "SPAXX", "FDRXX", "VMFXX",  # Cash/money market
+        "CASH", "CD", "MONEY", "SPAXX", "FDRXX",  # Cash/money market
+        "VMFXX", "VUSXX", "VMRXX", "VFFXX",  # Vanguard money-market sweeps
         "UTVTX", "UTVNX", "UTVYX", "UTVIX",  # Utah 529 funds (state-specific)
     }
 
