@@ -15,6 +15,7 @@ import { formatCurrency, formatNumber } from '@/utils/format';
 import { updateAllocationCharts, updateHistoryChart } from '@/charts/allocation';
 import { loadWidgets } from '@/features/plugins';
 import { updateAccountFilterLabel } from '@/pages/holdings';
+import { updateDemoModeUI } from '@/features/onboarding';
 import type {
   DashboardData,
   DashboardPosition,
@@ -737,21 +738,6 @@ export async function updatePriceStatus(): Promise<void> {
       statusEl.appendChild(document.createTextNode(' Status unavailable'));
       statusEl.title = 'Unable to check price freshness';
     }
-  }
-}
-
-/**
- * Update demo mode UI state.
- */
-function updateDemoModeUI(isDemoMode: boolean): void {
-  const indicator = document.getElementById('demo-mode-indicator');
-  if (indicator) {
-    indicator.style.display = isDemoMode ? 'flex' : 'none';
-  }
-
-  const toggle = document.getElementById('demo-mode-toggle') as HTMLInputElement | null;
-  if (toggle) {
-    toggle.checked = isDemoMode;
   }
 }
 

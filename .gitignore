@@ -134,3 +134,9 @@ REFACTOR_PROGRESS.md
 
 # Local dev harness (parallel design-iteration worktrees, artifacts)
 .harness/
+
+# super-architect artifacts
+orchestrator.py
+plan.jsonl*
+*.state.json
+*.builder.log
