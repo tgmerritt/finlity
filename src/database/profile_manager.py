@@ -435,10 +435,16 @@ class ProfileManager:
         if result.is_usable:
             # Database exists and is valid - use as source of truth
             self._active_db = manager.get_database()
-        elif result.needs_initialization:
-            # First-time setup or empty database
+        elif result.status == DatabaseStatus.NOT_EXISTS:
+            # True first-time setup: file doesn't exist yet
             self._active_db = manager.initialize(seed_callback=seed_callback)
             logger.info(f"Initialized new database for profile_id={profile_id}")
+        elif result.status == DatabaseStatus.EMPTY:
+            # Schema exists but no data (newly created profile) — just open it
+            self._active_db = manager.get_database()
+            if seed_callback:
+                seed_callback(self._active_db)
+            logger.info(f"Opened empty database for profile_id={profile_id}")
         elif result.needs_recovery:
             # Corrupt database - backup and re-initialize
             logger.warning(f"Database corrupt for profile_id={profile_id}: {result.error_message}")
