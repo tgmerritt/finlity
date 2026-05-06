@@ -17,7 +17,11 @@ export function showLoading(message = 'Loading...'): void {
   const textElement = overlay?.querySelector('.loading-text');
 
   if (overlay) {
-    overlay.style.display = 'flex';
+    // The HTML markup starts with the `hidden` utility class, which is
+    // `display: none !important` globally. That !important beats any inline
+    // style we set, so the overlay would never appear unless we strip the
+    // class. Toggle it explicitly here (and re-add in hideLoading).
+    overlay.classList.remove('hidden');
     overlay.classList.add('visible');
   }
 
@@ -35,7 +39,7 @@ export function hideLoading(): void {
   const overlay = getElementById('loading-overlay');
   if (overlay) {
     overlay.classList.remove('visible');
-    overlay.style.display = 'none';
+    overlay.classList.add('hidden');
   }
 }
 
