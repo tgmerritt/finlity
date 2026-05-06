@@ -10,6 +10,7 @@ import difflib
 
 from src.database import Database
 from src.importers import FolderScanner
+from src.models.position_types import is_updatable_position
 from src.services.ai_config import CLAUDE_MODEL_HAIKU
 from src.utils.paths import UnsafePathError, safe_join
 
@@ -338,8 +339,10 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[
     stale_tickers: list[str]
     if force:
         positions = db.get_all_positions()
-        all_tickers = list({cast(str, p.ticker) for p in positions if p.ticker not in ("CASH", "CD")})
-        stale_tickers = all_tickers
+        stale_tickers = list({
+            cast(str, p.ticker) for p in positions
+            if is_updatable_position(cast(Optional[str], p.position_type), cast(Optional[str], p.ticker))
+        })
     else:
         stale_tickers = db.get_stale_tickers()
 

@@ -848,46 +848,79 @@ class Database:
             caches = session.query(PriceCache).all()
             return {str(c.ticker): float(c.current_price) for c in caches if c.current_price}
 
+    def _get_updatable_tickers(self, session: Session) -> set[str]:
+        """Tickers from active positions whose price can be refreshed via API.
+
+        Skips cash, CDs, real estate, and other user-managed holdings — their
+        prices are entered by hand and must not show up in stale-count flows.
+        See `is_updatable_position` for the full rule set.
+        """
+        from src.models.position_types import is_updatable_position
+
+        rows = session.query(Position.ticker, Position.position_type).distinct().all()
+        return {
+            row.ticker for row in rows
+            if is_updatable_position(row.position_type, row.ticker)
+        }
+
     def get_stale_tickers(self, max_age_hours: int = 24) -> list[str]:
-        """Get list of tickers with stale or missing prices (default 24 hours)."""
+        """Get list of updatable tickers with stale or missing prices (default 24 hours)."""
         with self.get_session() as session:
-            # Get all unique tickers from positions
-            positions = session.query(Position.ticker).distinct().all()
-            all_tickers = {p.ticker for p in positions}
+            updatable = self._get_updatable_tickers(session)
 
             # Get cached tickers that are not stale
             fresh_caches = session.query(PriceCache).all()
             fresh_tickers = {c.ticker for c in fresh_caches if not c.is_stale(max_age_hours)}
 
-            # Return tickers that need updating
-            return list(all_tickers - fresh_tickers)
+            return list(updatable - fresh_tickers)
 
     def get_price_cache_status(self, max_age_hours: int = 24) -> dict:
-        """Get status information about the price cache."""
+        """Get status of the price cache, scoped to updatable positions only.
+
+        Counts ignore cash/CD/real-estate holdings (user-managed prices) and
+        orphaned PriceCache rows whose ticker is no longer held in any
+        position — neither should ever surface as "stale" to the user.
+        """
         with self.get_session() as session:
-            caches = session.query(PriceCache).all()
-            positions = session.query(Position.ticker).distinct().all()
-            all_tickers = {p.ticker for p in positions}
+            updatable = self._get_updatable_tickers(session)
+
+            if not updatable:
+                return {
+                    "total_tickers": 0,
+                    "cached_tickers": 0,
+                    "fresh_tickers": 0,
+                    "stale_tickers": 0,
+                    "oldest_update": None,
+                    "newest_update": None,
+                    "all_fresh": True,
+                }
+
+            caches = (
+                session.query(PriceCache)
+                .filter(PriceCache.ticker.in_(updatable))
+                .all()
+            )
 
             if not caches:
                 return {
-                    "total_tickers": len(all_tickers),
+                    "total_tickers": len(updatable),
                     "cached_tickers": 0,
                     "fresh_tickers": 0,
-                    "stale_tickers": len(all_tickers),
+                    "stale_tickers": len(updatable),
                     "oldest_update": None,
                     "newest_update": None,
                     "all_fresh": False,
                 }
 
             fresh_count = sum(1 for c in caches if not c.is_stale(max_age_hours))
-            stale_count = len(caches) - fresh_count + len(all_tickers - {c.ticker for c in caches})
+            uncached_count = len(updatable - {c.ticker for c in caches})
+            stale_count = (len(caches) - fresh_count) + uncached_count
 
             oldest = min((c.last_updated for c in caches if c.last_updated), default=None)
             newest = max((c.last_updated for c in caches if c.last_updated), default=None)
 
             return {
-                "total_tickers": len(all_tickers),
+                "total_tickers": len(updatable),
                 "cached_tickers": len(caches),
                 "fresh_tickers": fresh_count,
                 "stale_tickers": stale_count,

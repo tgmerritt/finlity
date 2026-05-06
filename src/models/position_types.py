@@ -1,6 +1,7 @@
 """Position type classifications for the portfolio system."""
 
 from enum import Enum
+from typing import Optional
 
 
 class PositionType(str, Enum):
@@ -62,3 +63,43 @@ def is_fixed_income(position_type: str) -> bool:
 def is_real_estate(position_type: str) -> bool:
     """Check if a position type is real estate."""
     return position_type == PositionType.REAL_ESTATE.value
+
+
+# Position types whose price is user-managed (manually entered) and which
+# never need an external API lookup.
+NON_UPDATABLE_POSITION_TYPES = frozenset({
+    PositionType.CASH.value,
+    PositionType.CD.value,
+    PositionType.REAL_ESTATE.value,
+})
+
+# Sentinel ticker values used internally for non-market positions
+# (set by the Add Cash / Add CD / Add Real Estate API endpoints) plus the
+# Schwab CSV placeholder for pending positions.
+_PLACEHOLDER_TICKERS = frozenset({"", "CASH", "CD", "RE", "NO NUMBER", "PENDING"})
+
+
+def is_updatable_position(position_type: Optional[str], ticker: Optional[str]) -> bool:
+    """Whether a position should participate in price-refresh / stale-count flows.
+
+    A position is "updatable" iff it represents a market-tradeable holding
+    whose price can be fetched from an external data provider. Cash, CDs, and
+    real estate are user-managed; their prices must not be counted as stale.
+
+    Excludes:
+      - position_type in {cash, cd, real_estate}
+      - ticker matching internal sentinels (CASH, CD, RE)
+      - empty / placeholder tickers (Schwab "NO NUMBER", "PENDING")
+      - tickers prefixed "CD-" — defensive workaround for CDs imported via
+        CSV with the wrong position_type (e.g. "CD-MARCUS-1" tagged as equity).
+    """
+    if position_type and position_type in NON_UPDATABLE_POSITION_TYPES:
+        return False
+    if not ticker:
+        return False
+    normalized = ticker.strip().upper()
+    if normalized in _PLACEHOLDER_TICKERS:
+        return False
+    if normalized.startswith("CD-"):
+        return False
+    return True
