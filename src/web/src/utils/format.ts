@@ -65,7 +65,10 @@ export function formatPercent(value: number | null | undefined): string {
  */
 export function formatNumber(value: number | null | undefined, decimals = 2): string {
   if (value === null || value === undefined) return '-';
-  return value.toFixed(decimals);
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
 }
 
 /**

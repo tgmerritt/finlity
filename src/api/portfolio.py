@@ -808,8 +808,7 @@ def get_dashboard_metrics(
         # Calculate FIRE number
         if target_monthly_income > 0:
             # FIRE number = annual target income / withdrawal rate
-            target_annual = target_monthly_income * 12
-            fire_number = target_annual / (withdrawal_rate / 100)
+            fire_number = target_monthly_income / (withdrawal_rate / 100)
         elif monthly_retirement_income:
             # No specific target - calculate what they'd need for their projected income
             fire_number = conservative_value_at_retirement

@@ -117,7 +117,7 @@ class PersonalSettings(BaseModel):
     dob: str = Field(..., description="Date of birth (YYYY-MM-DD)")
     retirement_age: int = Field(65, ge=30, le=100, description="Target retirement age")
     withdrawal_rate: int = Field(4, ge=1, le=100, description="Withdrawal rate in retirement (%)")
-    target_monthly_income: float = Field(0, ge=0, description="Target monthly income in retirement ($)")
+    target_monthly_income: float = Field(0, ge=0, description="Target annual income in retirement ($)")
 
 
 class AssetClassTargets(BaseModel):

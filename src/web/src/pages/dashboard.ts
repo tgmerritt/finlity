@@ -262,7 +262,7 @@ export async function loadRetirementMetrics(): Promise<boolean> {
         fireNumberEl.textContent = formatCurrency(metrics.fire_number);
         if (fireSublabel) {
           if (metrics.target_monthly_income) {
-            fireSublabel.textContent = `for $${formatNumber(metrics.target_monthly_income, 0)}/mo target`;
+            fireSublabel.textContent = `for $${formatNumber(metrics.target_monthly_income, 0)}/yr target`;
           } else {
             fireSublabel.textContent = `projected at age ${metrics.target_retirement_age}`;
           }
