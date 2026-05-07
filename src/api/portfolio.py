@@ -709,6 +709,7 @@ class DashboardMetricsResponse(BaseModel):
     success_probability: Optional[float]  # From latest Monte Carlo
     earliest_retirement_age: Optional[int]  # Age to reach target income with 80%+ success
     fire_number: Optional[float]  # Amount needed for target monthly income
+    coast_number: Optional[float]  # Portfolio value needed today to coast to FIRE without further contributions
     current_age: Optional[int]
     target_retirement_age: Optional[int]
     target_monthly_income: Optional[float]
@@ -815,12 +816,29 @@ def get_dashboard_metrics(
         else:
             fire_number = None
 
+        # Calculate coast_number
+        coast_number = None
+        if current_age is not None and retirement_age is not None:
+            years_to_retirement = retirement_age - current_age
+            if years_to_retirement <= 0:
+                coast_number = None
+            else:
+                avg_annual_growth_real = personal.get('avg_annual_growth_real', 0.06)
+                if fire_number is not None and years_to_retirement > 0:
+                    coast_number = fire_number / ((1 + avg_annual_growth_real) ** years_to_retirement)
+                elif fire_number is None and target_monthly_income > 0:
+                    fire_number_temp = (target_monthly_income * 12) / (withdrawal_rate / 100)
+                    coast_number = fire_number_temp / ((1 + avg_annual_growth_real) ** years_to_retirement)
+                else:
+                    coast_number = None
+
     return DashboardMetricsResponse(
         monthly_retirement_income=round(monthly_retirement_income, 2) if monthly_retirement_income else None,
         withdrawal_rate=withdrawal_rate,
         success_probability=round(success_probability * 100, 1) if success_probability is not None else None,
         earliest_retirement_age=earliest_retirement_age,
         fire_number=round(fire_number, 2) if fire_number else None,
+        coast_number=round(coast_number, 2) if coast_number else None,
         current_age=current_age,
         target_retirement_age=retirement_age,
         target_monthly_income=target_monthly_income if target_monthly_income > 0 else None,

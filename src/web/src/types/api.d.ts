@@ -413,6 +413,9 @@ export interface RetirementMetrics {
   retirement_age: number | null;
   years_to_retirement: number | null;
   fire_number: number | null;
+  coast_number: number | null;
+  current_age: number | null;
+  target_retirement_age: number | null;
   current_savings_rate: number | null;
   safe_withdrawal_amount: number | null;
   social_security_estimate: number | null;

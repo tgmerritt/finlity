@@ -6,6 +6,7 @@ personal:
   retirement_age: 65
   withdrawal_rate: 4  # Safe withdrawal rate in retirement (integer 1-100)
   target_monthly_income: 0  # Target monthly income in retirement (0 = calculate from withdrawal rate)
+  avg_annual_growth_real: 0.06  # Average annual real growth rate after inflation (8% nominal - 2% inflation = 6%). Used for coast number calculation.
 
 # Target allocations (these adjust with age)
 # Formula: if age <= 60, use base_target, else shift toward bonds

@@ -78,7 +78,9 @@ interface DashboardMetrics {
   fire_number: number | null;
   target_monthly_income: number | null;
   target_retirement_age: number | null;
+  current_age: number | null;
   simulation_required: boolean;
+  coast_number: number | null;
 }
 
 // Module-level state for duplicates
@@ -271,6 +273,26 @@ export async function loadRetirementMetrics(): Promise<boolean> {
         fireNumberEl.textContent = '--';
         if (fireSublabel) {
           fireSublabel.textContent = 'Run Monte Carlo simulation';
+        }
+      }
+    }
+
+    // Update Coast Number
+    const coastNumberEl = document.getElementById('coast-number');
+    const coastSublabel = document.getElementById('coast-sublabel');
+    if (coastNumberEl) {
+      if (metrics.coast_number !== null && metrics.coast_number !== undefined) {
+        coastNumberEl.textContent = formatCurrency(metrics.coast_number);
+        if (coastSublabel && metrics.current_age != null && metrics.target_retirement_age != null) {
+          const yearsLeft = metrics.target_retirement_age - metrics.current_age;
+          coastSublabel.textContent = `needed today to coast ${yearsLeft > 0 ? `${yearsLeft} yrs` : ''} to FIRE`;
+        } else if (coastSublabel) {
+          coastSublabel.textContent = 'today\'s value to coast to FIRE';
+        }
+      } else {
+        coastNumberEl.textContent = '--';
+        if (coastSublabel) {
+          coastSublabel.textContent = 'Set DOB and retirement age in Settings';
         }
       }
     }
@@ -618,8 +640,8 @@ function handleAccountFilterChange(): void {
  *
  * NOTE: `updateAccountFilter` derives accounts from the positions array, so
  * an account with zero positions still won't appear here — the right path
- * for that is a full `refreshData()` which re-fetches both. We do that in
- * the main subscriber (see initDashboard) and call this directly only for
+ * for that is a full `refreshData()` which re-fetches both. We do that in the
+ * main subscriber (see initDashboard) and call this directly only for
  * cases where positions are already up to date.
  */
 function refreshAccountFilterFromState(): void {
