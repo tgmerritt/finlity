@@ -127,9 +127,10 @@ export function updateDemoModeUI(isEnabled: boolean): void {
     statusBadge.className = `status-badge ${isEnabled ? 'active' : 'inactive'}`;
   }
 
-  // Show/hide demo mode banner
+  // Show/hide demo mode banner — toggle class instead of inline style
+  // because style.css defines .hidden { display: none !important; }
   const banner = getElementById<HTMLElement>('demo-mode-banner');
-  if (banner) banner.style.display = isEnabled ? 'flex' : 'none';
+  if (banner) banner.classList.toggle('hidden', !isEnabled);
 }
 
 /**
