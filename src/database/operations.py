@@ -139,6 +139,43 @@ class Database:
                             conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN entity_id TEXT REFERENCES entities(id)"))
                             conn.commit()
 
+
+                # Create bank_statement_imports table if it does not exist
+                if "bank_statement_imports" not in inspector.get_table_names():
+                    logger.info("Creating bank_statement_imports table")
+                    conn.execute(text("""
+                        CREATE TABLE bank_statement_imports (
+                            id TEXT PRIMARY KEY,
+                            entity_id TEXT REFERENCES entities(id),
+                            file_name TEXT NOT NULL,
+                            content_hash TEXT NOT NULL UNIQUE,
+                            row_count REAL DEFAULT 0,
+                            status TEXT DEFAULT 'pending',
+                            error_message TEXT,
+                            uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            analyzed_at DATETIME
+                        )
+                    """))
+                    conn.commit()
+
+                # Create recurring_candidates table if it does not exist
+                if "recurring_candidates" not in inspector.get_table_names():
+                    logger.info("Creating recurring_candidates table")
+                    conn.execute(text("""
+                        CREATE TABLE recurring_candidates (
+                            id TEXT PRIMARY KEY,
+                            import_id TEXT NOT NULL REFERENCES bank_statement_imports(id),
+                            name TEXT NOT NULL,
+                            amount REAL NOT NULL,
+                            frequency TEXT NOT NULL DEFAULT 'monthly',
+                            occurrences REAL NOT NULL DEFAULT 1,
+                            status TEXT NOT NULL DEFAULT 'pending',
+                            created_expense_id TEXT REFERENCES budget_expenses(id),
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """))
+                    conn.commit()
+
         except SQLAlchemyError as e:
             logger.error(f"Schema migration failed: {e}", exc_info=True)
             raise RuntimeError(f"Database schema migration failed: {e}")

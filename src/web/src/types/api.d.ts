@@ -459,3 +459,33 @@ export interface CorrelationResponse {
   high_correlations: CorrelationEntry[];
   low_correlations: CorrelationEntry[];
 }
+
+// Bank Statement import types
+export interface RecurringCandidateResponse {
+  id: string;
+  import_id: string;
+  name: string;
+  amount: number;
+  frequency: string;
+  occurrences: number;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_expense_id: string | null;
+}
+
+export interface BankStatementImportResponse {
+  id: string;
+  file_name: string;
+  row_count: number;
+  status: string;
+  error_message: string | null;
+  uploaded_at: string;
+  analyzed_at: string | null;
+  candidates: RecurringCandidateResponse[];
+}
+
+export interface BankStatementBatchResponse {
+  files_imported: number;
+  files_skipped: number;
+  total_rows: number;
+  candidates: RecurringCandidateResponse[];
+}
