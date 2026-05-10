@@ -208,6 +208,67 @@ export async function runAsyncApiCall<T>(
  * @returns Response data
  * @throws ApiError on upload failure or timeout
  */
+export async function uploadFiles<T>(
+  endpoint: string,
+  files: File[],
+  fieldName = 'files',
+  timeout = 120000
+): Promise<T> {
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append(fieldName, file);
+  }
+
+  let signatureHeaders: Record<string, string> = {};
+  if (isSigningRequired()) {
+    signatureHeaders = await generateSignatureHeaders('POST', endpoint);
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      body: formData,
+      headers: signatureHeaders,
+      credentials: 'include',
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (typeof errorData === 'object' && errorData !== null && 'detail' in errorData) {
+          errorMessage = String((errorData as { detail: unknown }).detail);
+        }
+      } catch (parseError) {
+        console.debug(`Upload error response is not JSON for ${endpoint}:`, parseError);
+        errorMessage = response.statusText || errorMessage;
+      }
+      throw new ApiError(response.status, errorMessage);
+    }
+
+    return (await response.json()) as T;
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiError(0, 'Upload timeout');
+    }
+
+    throw new ApiError(0, error instanceof Error ? error.message : 'Upload failed');
+  }
+}
+
+
 export async function uploadFile<T>(
   endpoint: string,
   file: File,

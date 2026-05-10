@@ -6,6 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Project rename in flight.** The codebase is being rebranded from "Investment Dashboard" / "portfolio-analyzer" to **Finlity**. Production is live at `app.finlity.net`, but the GitHub repo, Docker image names, and Heroku app retain the legacy slugs. Don't be surprised by the inconsistency — both names refer to the same project.
 
+## Codesight
+
+This project uses **codesight** for codebase intelligence. Always consult codesight context before writing or modifying code:
+
+1. Read `.codesight/wiki/index.md` first (orientation map)
+2. Read `.codesight/wiki/overview.md` (architecture overview)
+3. Read the relevant domain wiki article, then verify by reading the actual source files listed in it
+
+After making significant changes (new routes, models, major refactors), regenerate codesight:
+
+```bash
+npx codesight
+```
+
+The wiki articles show routes, models, and file locations extracted by AST. They do **not** show full function logic — always read source files before writing code. Routes marked `[inferred]` should be verified against source.
+
 ## Claude Code Features (v2.1+)
 
 - `/skills` — list available skills

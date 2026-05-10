@@ -2935,6 +2935,14 @@ td.text-right {
     gap: 16px;
 }
 
+.budget-grid--expenses {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.budget-grid--expenses .card--full-width {
+    grid-column: 1 / -1;
+}
+
 .budget-stats-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

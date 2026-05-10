@@ -1671,8 +1671,34 @@
 
                 <!-- Expenses Sub-tab -->
                 <div id="budget-expenses" class="budget-subtab">
-                    <div class="budget-grid">
-                        <!-- Add Expense Card -->
+                    <div class="budget-grid budget-grid--expenses">
+                        
+                        <!-- Bank Statement Import Card -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Import Bank Statements</h3>
+                                <button class="btn btn-secondary btn-sm" id="bank-statement-upload-btn" type="button">Upload Statements</button>
+                                <input type="file" id="bank-statement-file" accept=".csv,.pdf" multiple style="display:none">
+                            </div>
+                            <div class="card-body">
+                                <div id="bank-statement-drop-zone" class="drop-zone">
+                                    <p>Drop one or more CSV or PDF bank statements here, or click <strong>Upload Statements</strong> above. Upload multiple months at once to detect recurring transactions.</p>
+                                </div>
+                                <div id="bank-statement-status" class="bank-statement-status" style="display:none"></div>
+                            </div>
+                        </div>
+
+                        <!-- Recurring Candidates Review Panel -->
+                        <div class="card" id="recurring-candidates-panel" style="display:none">
+                            <div class="card-header">
+                                <h3>Detected Recurring Transactions</h3>
+                                <span class="text-muted">Review and accept to add as expenses</span>
+                            </div>
+                            <div class="card-body">
+                                <div id="recurring-candidates-list"></div>
+                            </div>
+                        </div>
+<!-- Add Expense Card -->
                         <div class="card">
                             <div class="card-header">
                                 <h3>Expenses</h3>
@@ -1688,7 +1714,7 @@
                         </div>
 
                         <!-- Expenses by Category Card -->
-                        <div class="card">
+                        <div class="card card--full-width">
                             <div class="card-header">
                                 <h3>Expenses by Category</h3>
                             </div>

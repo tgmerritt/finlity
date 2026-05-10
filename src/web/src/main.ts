@@ -99,6 +99,7 @@ import {
   runTransitionProjection,
   updateBudgetCalc,
 } from '@/pages/budget';
+import { initBankStatementUpload, acceptRecurringCandidate, rejectRecurringCandidate } from '@/features/bank-statements';
 import {
   initSettings,
   loadAIProviders,
@@ -410,6 +411,7 @@ async function init(): Promise<void> {
   initAnalysis();
   initProjections();
   initBudget();
+  initBankStatementUpload();
   initSettings();
 
   // Listen for holdings refresh requests (from position CRUD operations)
@@ -553,6 +555,8 @@ window.finlity = {
   showAddDeductionModal,
   runTransitionProjection,
   updateBudgetCalc,
+  acceptRecurringCandidate,
+  rejectRecurringCandidate,
 
   // Settings
   loadAIProviders,
@@ -668,3 +672,5 @@ window.finlity = {
 
 // Also expose all finlity functions directly on window for HTML onclick handlers
 Object.assign(window, window.finlity);
+(window as unknown as Record<string, unknown>).acceptRecurringCandidate = acceptRecurringCandidate;
+(window as unknown as Record<string, unknown>).rejectRecurringCandidate = rejectRecurringCandidate;

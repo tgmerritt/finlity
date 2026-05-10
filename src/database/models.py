@@ -532,3 +532,33 @@ class RealizedSale(Base):
     gain_loss = Column(Float, nullable=False)  # proceeds - cost_basis_realized
     is_short_term = Column(Boolean, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+# Bank Statement Module Tables
+class BankStatementImport(Base):
+    """Tracks an uploaded bank statement CSV file."""
+    __tablename__ = 'bank_statement_imports'
+    id = Column(String, primary_key=True, default=generate_uuid)
+    entity_id = Column(String, ForeignKey('entities.id'), nullable=True)
+    file_name = Column(String, nullable=False)
+    content_hash = Column(String, nullable=False, unique=True)
+    row_count = Column(Float, default=0)
+    status = Column(String, default='pending')  # pending, analyzed, error
+    error_message = Column(Text, nullable=True)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    analyzed_at = Column(DateTime, nullable=True)
+    candidates = relationship('RecurringCandidate', back_populates='import_record', cascade='all, delete-orphan')
+
+class RecurringCandidate(Base):
+    """A recurring transaction candidate detected in a bank statement."""
+    __tablename__ = 'recurring_candidates'
+    id = Column(String, primary_key=True, default=generate_uuid)
+    import_id = Column(String, ForeignKey('bank_statement_imports.id'), nullable=False)
+    name = Column(String, nullable=False)
+    amount = Column(Float, nullable=False)
+    frequency = Column(String, nullable=False, default='monthly')
+    occurrences = Column(Float, nullable=False, default=1)
+    status = Column(String, nullable=False, default='pending')  # pending, accepted, rejected
+    created_expense_id = Column(String, ForeignKey('budget_expenses.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    import_record = relationship('BankStatementImport', back_populates='candidates')
+    created_expense = relationship('BudgetExpense', foreign_keys='RecurringCandidate.created_expense_id')

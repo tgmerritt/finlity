@@ -33,6 +33,7 @@ from src.api import (
     plugins_router,
 )
 from src.api.budget import router as budget_router
+from src.api.bank_statements import router as bank_statements_router
 from src.api.commentary import router as commentary_router
 from src.api.inference import router as inference_router
 from src.api.tasks import router as tasks_router
@@ -316,6 +317,7 @@ app.include_router(settings_router)
 app.include_router(profiles_router)
 app.include_router(plugins_router)
 app.include_router(budget_router)
+app.include_router(bank_statements_router)
 app.include_router(commentary_router)
 app.include_router(inference_router)
 app.include_router(tasks_router)
