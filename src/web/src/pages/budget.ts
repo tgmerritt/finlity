@@ -16,6 +16,7 @@ import {
   updateExpensesCategoryChart,
   renderTransitionChart,
   renderSSComparison,
+  renderIncomeTransitionTable,
   type CashFlowSummary,
   type TransitionYear,
   type SSComparisonRow,
@@ -186,6 +187,11 @@ export async function loadTaxConfig(): Promise<void> {
       }
       if (stateEl && data.state) {
         stateEl.value = data.state;
+      }
+      const ssAgeEl = document.getElementById('transition-ss-age') as HTMLInputElement | null;
+      const ssAge = (data as unknown as Record<string, unknown>)['ss_claiming_age'];
+      if (ssAgeEl && ssAge != null) {
+        ssAgeEl.value = String(ssAge);
       }
     }
   } catch (error) {
@@ -748,6 +754,7 @@ export async function runTransitionProjection(): Promise<void> {
     if (data && data.years) {
       await renderTransitionChart(data.years);
       renderSSComparison(data.ss_comparison);
+      renderIncomeTransitionTable(data.years);
     }
   } catch (error) {
     console.error('Error running transition projection:', error);

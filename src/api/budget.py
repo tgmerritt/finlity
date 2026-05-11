@@ -68,6 +68,7 @@ class TaxConfigUpdate(BaseModel):
     ss_benefit_override: Optional[float] = None
     additional_withholding: Optional[float] = None
     itemized_deduction: Optional[float] = None
+    ss_claiming_age: Optional[int] = None
 
 
 class ExpenseCreate(BaseModel):
@@ -301,6 +302,7 @@ async def get_tax_config() -> dict:
                 "additional_withholding": 0,
                 "itemized_deduction": None,
                 "use_standard_deduction": True,
+                "ss_claiming_age": 67,
             }
 
         return {
@@ -312,6 +314,7 @@ async def get_tax_config() -> dict:
             "additional_withholding": config.additional_withholding,
             "itemized_deduction": config.itemized_deduction,
             "use_standard_deduction": config.itemized_deduction is None,
+            "ss_claiming_age": config.ss_claiming_age if config.ss_claiming_age is not None else 67,
         }
     finally:
         session.close()
@@ -336,6 +339,7 @@ async def update_tax_config(data: TaxConfigUpdate) -> dict:
                 ss_benefit_override=data.ss_benefit_override,
                 additional_withholding=data.additional_withholding or 0,
                 itemized_deduction=data.itemized_deduction,
+                ss_claiming_age=data.ss_claiming_age if data.ss_claiming_age is not None else 67,
             )
             session.add(config)
         else:
@@ -352,6 +356,8 @@ async def update_tax_config(data: TaxConfigUpdate) -> dict:
             # Allow setting itemized_deduction to None
             if "itemized_deduction" in data.model_dump(exclude_unset=True):
                 config.itemized_deduction = data.itemized_deduction  # type: ignore[assignment]
+            if data.ss_claiming_age is not None:
+                config.ss_claiming_age = data.ss_claiming_age  # type: ignore[assignment]
 
         session.commit()
 

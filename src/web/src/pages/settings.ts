@@ -921,8 +921,10 @@ function createEntityItem(entity: EntityResponse): HTMLElement {
   const details = document.createElement('div');
   details.className = 'entity-details';
   const counts: string[] = [];
-  if (entity.account_count > 0) counts.push(`${entity.account_count} account${entity.account_count !== 1 ? 's' : ''}`);
-  if (entity.income_count > 0) counts.push(`${entity.income_count} income source${entity.income_count !== 1 ? 's' : ''}`);
+  if (entity.account_count > 0)
+    counts.push(`${entity.account_count} account${entity.account_count !== 1 ? 's' : ''}`);
+  if (entity.income_count > 0)
+    counts.push(`${entity.income_count} income source${entity.income_count !== 1 ? 's' : ''}`);
   details.textContent = counts.length > 0 ? counts.join(', ') : 'No accounts assigned';
   info.appendChild(details);
 
@@ -974,7 +976,8 @@ export async function loadEntitiesList(): Promise<void> {
     if (entities.length === 0) {
       const emptyMsg = document.createElement('p');
       emptyMsg.className = 'text-muted';
-      emptyMsg.textContent = 'No entities configured. Click "Auto-Detect" to create entities from your account names, or click "New Entity" to create one manually.';
+      emptyMsg.textContent =
+        'No entities configured. Click "Auto-Detect" to create entities from your account names, or click "New Entity" to create one manually.';
       container.appendChild(emptyMsg);
       return;
     }
@@ -1128,7 +1131,8 @@ export async function setDefaultEntity(entityId: string): Promise<void> {
  * Delete entity.
  */
 export async function deleteEntity(entityId: string): Promise<void> {
-  if (!confirm('Delete this entity? Accounts assigned to this entity will become unassigned.')) return;
+  if (!confirm('Delete this entity? Accounts assigned to this entity will become unassigned.'))
+    return;
 
   try {
     await apiCall(`/api/entities/${entityId}`, { method: 'DELETE' });
@@ -1196,6 +1200,10 @@ export async function savePersonalSettings(event: Event): Promise<void> {
     target_monthly_income: parseFloat(
       (document.getElementById('settings-target-income') as HTMLInputElement | null)?.value || '0'
     ),
+    ss_claiming_age: parseInt(
+      (document.getElementById('settings-ss-claiming-age') as HTMLInputElement | null)?.value ||
+        '67'
+    ),
   };
 
   try {
@@ -1257,12 +1265,15 @@ export async function saveAssetClassTargets(event: Event): Promise<void> {
  */
 export async function loadPersonalSettings(): Promise<void> {
   try {
-    const data = await apiCall<{ personal?: {
-      dob?: string;
-      retirement_age?: number;
-      withdrawal_rate?: number;
-      target_monthly_income?: number;
-    } }>('/api/settings/config/personal');
+    const data = await apiCall<{
+      personal?: {
+        dob?: string;
+        retirement_age?: number;
+        withdrawal_rate?: number;
+        target_monthly_income?: number;
+        ss_claiming_age?: number;
+      };
+    }>('/api/settings/config/personal');
 
     if (!data?.personal) return;
 
@@ -1271,14 +1282,26 @@ export async function loadPersonalSettings(): Promise<void> {
     const dob = document.getElementById('settings-dob') as HTMLInputElement | null;
     if (dob && p.dob) dob.value = p.dob;
 
-    const retirementAge = document.getElementById('settings-retirement-age') as HTMLInputElement | null;
+    const retirementAge = document.getElementById(
+      'settings-retirement-age'
+    ) as HTMLInputElement | null;
     if (retirementAge && p.retirement_age) retirementAge.value = String(p.retirement_age);
 
-    const withdrawalRate = document.getElementById('settings-withdrawal-rate') as HTMLInputElement | null;
+    const withdrawalRate = document.getElementById(
+      'settings-withdrawal-rate'
+    ) as HTMLInputElement | null;
     if (withdrawalRate && p.withdrawal_rate) withdrawalRate.value = String(p.withdrawal_rate);
 
-    const targetIncome = document.getElementById('settings-target-income') as HTMLInputElement | null;
-    if (targetIncome && p.target_monthly_income != null) targetIncome.value = String(p.target_monthly_income);
+    const targetIncome = document.getElementById(
+      'settings-target-income'
+    ) as HTMLInputElement | null;
+    if (targetIncome && p.target_monthly_income != null)
+      targetIncome.value = String(p.target_monthly_income);
+
+    const ssClaimingAge = document.getElementById(
+      'settings-ss-claiming-age'
+    ) as HTMLInputElement | null;
+    if (ssClaimingAge && p.ss_claiming_age != null) ssClaimingAge.value = String(p.ss_claiming_age);
   } catch (error) {
     console.error('Error loading personal settings:', error);
   }
@@ -1289,12 +1312,16 @@ export async function loadPersonalSettings(): Promise<void> {
  */
 export async function loadAssetClassTargets(): Promise<void> {
   try {
-    const data = await apiCall<{ targets?: { asset_class?: {
-      equities?: number;
-      bonds?: number;
-      alternatives?: number;
-      cash?: number;
-    } } }>('/api/settings/config/targets');
+    const data = await apiCall<{
+      targets?: {
+        asset_class?: {
+          equities?: number;
+          bonds?: number;
+          alternatives?: number;
+          cash?: number;
+        };
+      };
+    }>('/api/settings/config/targets');
 
     if (!data?.targets?.asset_class) return;
 
@@ -1321,14 +1348,16 @@ export async function loadAssetClassTargets(): Promise<void> {
  */
 export async function loadMarketAssumptions(): Promise<void> {
   try {
-    const data = await apiCall<{ market: {
-      stock_mean_return: number;
-      stock_std_dev: number;
-      bond_mean_return: number;
-      bond_std_dev: number;
-      inflation_rate: number;
-      risk_free_rate: number;
-    } }>('/api/settings/config/market');
+    const data = await apiCall<{
+      market: {
+        stock_mean_return: number;
+        stock_std_dev: number;
+        bond_mean_return: number;
+        bond_std_dev: number;
+        inflation_rate: number;
+        risk_free_rate: number;
+      };
+    }>('/api/settings/config/market');
 
     if (!data?.market) return;
 
@@ -1446,13 +1475,15 @@ export async function saveMonteCarloSettings(event: Event): Promise<void> {
  */
 export async function loadMonteCarloSettings(): Promise<void> {
   try {
-    const data = await apiCall<{ monte_carlo: {
-      num_simulations: number;
-      black_swan_probability: number;
-      black_swan_impact: number;
-      golden_swan_probability: number;
-      golden_swan_impact: number;
-    } }>('/api/settings/config/monte_carlo');
+    const data = await apiCall<{
+      monte_carlo: {
+        num_simulations: number;
+        black_swan_probability: number;
+        black_swan_impact: number;
+        golden_swan_probability: number;
+        golden_swan_impact: number;
+      };
+    }>('/api/settings/config/monte_carlo');
 
     if (!data?.monte_carlo) return;
 

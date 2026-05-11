@@ -119,6 +119,7 @@ class PersonalSettings(BaseModel):
     withdrawal_rate: int = Field(4, ge=1, le=100, description="Withdrawal rate in retirement (%)")
     target_monthly_income: float = Field(0, ge=0, description="Target annual income in retirement ($)")
     avg_annual_growth_real: float = Field(0.06, ge=0.01, le=0.20, description='Average annual real portfolio growth rate after inflation (decimal, e.g. 0.06 = 6%)')
+    ss_claiming_age: int = Field(67, ge=62, le=70, description="Age at which Social Security benefits begin")
 
 
 class AssetClassTargets(BaseModel):
