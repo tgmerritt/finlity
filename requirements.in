@@ -105,4 +105,5 @@ email-validator==2.3.0
 # Pin urllib3 directly (was transitive via requests at 2.3.0).
 # Bumped 2.3.0 -> 2.6.3; clears CVE-2025-50181/50182, CVE-2025-66418/66471,
 # CVE-2026-21441
-urllib3==2.6.3
+# Bumped 2.6.3 -> 2.7.0; clears CVE-2026-44431, CVE-2026-44432
+urllib3==2.7.0
