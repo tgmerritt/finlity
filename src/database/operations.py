@@ -140,6 +140,17 @@ class Database:
                             conn.commit()
 
 
+                # Check and add missing columns to budget_tax_config table
+                if "budget_tax_config" in inspector.get_table_names():
+                    existing_cols = {col["name"] for col in inspector.get_columns("budget_tax_config")}
+                    tax_config_migrations = [
+                        ("ss_claiming_age", "INTEGER DEFAULT 67"),
+                    ]
+                    for col_name, col_type in tax_config_migrations:
+                        if col_name not in existing_cols:
+                            conn.execute(text(f"ALTER TABLE budget_tax_config ADD COLUMN {col_name} {col_type}"))
+                            conn.commit()
+
                 # Create bank_statement_imports table if it does not exist
                 if "bank_statement_imports" not in inspector.get_table_names():
                     logger.info("Creating bank_statement_imports table")

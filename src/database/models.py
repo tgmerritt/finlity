@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional, cast
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, String, Text, Boolean, text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, Boolean, text
 from sqlalchemy.orm import declarative_base, relationship
 
 Base: Any = declarative_base()
@@ -347,6 +347,7 @@ class BudgetTaxConfig(Base):
     ss_benefit_override = Column(Float, nullable=True)  # User-specified Social Security benefit
     additional_withholding = Column(Float, default=0)
     itemized_deduction = Column(Float, nullable=True)  # None = use standard deduction
+    ss_claiming_age = Column(Integer, default=67, nullable=True)  # Age at which user begins claiming Social Security benefits.
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

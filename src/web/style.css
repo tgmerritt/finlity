@@ -8128,3 +8128,125 @@ html {
 .tax-stat-balance {
     border-left-color: var(--color-purple);
 }
+
+/* ---------- Bank statement import: drop zone & candidates ---------- */
+.drop-zone {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 140px;
+    padding: 24px 20px;
+    border: 2px dashed var(--color-border);
+    border-radius: var(--border-radius);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.drop-zone:hover {
+    border-color: var(--color-primary);
+    color: var(--color-text-primary);
+}
+
+.drop-zone.drag-active {
+    border-color: var(--color-primary);
+    background: var(--color-primary-bg);
+    color: var(--color-text-primary);
+}
+
+.drop-zone p {
+    margin: 0;
+    max-width: 48ch;
+    line-height: 1.5;
+}
+
+.bank-statement-status {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    font-size: 0.9em;
+}
+
+.bank-statement-status.loading {
+    background: var(--color-primary-bg);
+    color: var(--color-primary-hover);
+}
+
+.bank-statement-status.success {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.bank-statement-status.error {
+    background: var(--color-error-bg);
+    color: var(--color-error);
+}
+
+.recurring-candidate-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--color-border-secondary);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-secondary);
+    margin-bottom: 8px;
+}
+
+.recurring-candidate-item:last-child {
+    margin-bottom: 0;
+}
+
+.candidate-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.candidate-name {
+    font-weight: 600;
+    color: var(--color-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.candidate-details {
+    color: var(--color-text-secondary);
+    font-size: 0.875em;
+}
+
+.candidate-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+
+/* budget-grid responsive */
+@media (max-width: 1024px) {
+  .budget-grid {
+    grid-template-columns: 1fr;
+  }
+  .budget-grid--expenses {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .budget-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .budget-stats-row {
+    grid-template-columns: 1fr;
+  }
+}

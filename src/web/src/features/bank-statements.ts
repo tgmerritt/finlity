@@ -42,7 +42,9 @@ export function initBankStatementUpload(): void {
 }
 
 async function handleBankStatementFiles(files: File[]): Promise<void> {
-  const valid = files.filter(f => ALLOWED_EXTENSIONS.some(ext => f.name.toLowerCase().endsWith(ext)));
+  const valid = files.filter((f) =>
+    ALLOWED_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
+  );
   if (valid.length === 0) {
     showToast('Please upload CSV or PDF bank statement files.', 'error');
     return;
@@ -57,18 +59,30 @@ async function handleBankStatementFiles(files: File[]): Promise<void> {
   if (uploadBtn) uploadBtn.setAttribute('disabled', 'true');
   if (uploadStatus) {
     uploadStatus.style.display = 'block';
-    uploadStatus.textContent = valid.length === 1
-      ? 'Analyzing statement…'
-      : `Analyzing ${valid.length} statements…`;
+    uploadStatus.textContent =
+      valid.length === 1 ? 'Analyzing statement…' : `Analyzing ${valid.length} statements…`;
     uploadStatus.className = 'bank-statement-status loading';
   }
 
   try {
-    const result = await uploadFiles<BankStatementBatchResponse>('/api/budget/bank-statements/upload', valid, 'files');
+    const result = await uploadFiles<BankStatementBatchResponse>(
+      '/api/budget/bank-statements/upload',
+      valid,
+      'files'
+    );
 
+    const allDuplicate = result.files_imported === 0 && result.files_skipped > 0;
     if (uploadStatus) {
-      const skippedNote = result.files_skipped > 0 ? ` (${result.files_skipped} duplicate${result.files_skipped > 1 ? 's' : ''} skipped)` : '';
-      if (result.candidates.length > 0) {
+      const skippedNote =
+        result.files_skipped > 0
+          ? ` (${result.files_skipped} duplicate${result.files_skipped > 1 ? 's' : ''} skipped)`
+          : '';
+      if (allDuplicate) {
+        uploadStatus.textContent =
+          result.candidates.length > 0
+            ? `Showing ${result.candidates.length} pending transaction(s) from previously-imported file(s).`
+            : 'All transactions from these files were already reviewed.';
+      } else if (result.candidates.length > 0) {
         uploadStatus.textContent = `Found ${result.candidates.length} recurring transaction(s) across ${result.files_imported} statement(s)${skippedNote}.`;
       } else {
         uploadStatus.textContent = `No recurring transactions detected across ${result.files_imported} statement(s)${skippedNote}.`;
@@ -77,8 +91,16 @@ async function handleBankStatementFiles(files: File[]): Promise<void> {
     }
 
     renderCandidates(result.candidates);
-    const count = result.files_imported;
-    showToast(`${count} statement${count !== 1 ? 's' : ''} imported`, 'success');
+    if (allDuplicate) {
+      if (result.candidates.length > 0) {
+        showToast('These files were already imported — showing pending transactions.', 'info');
+      } else {
+        showToast('Files already imported and fully reviewed.', 'info');
+      }
+    } else {
+      const count = result.files_imported;
+      showToast(`${count} statement${count !== 1 ? 's' : ''} imported`, 'success');
+    }
   } catch (error: any) {
     const errorMessage = error?.message || 'An error occurred during upload.';
     if (uploadStatus) {
@@ -94,86 +116,129 @@ async function handleBankStatementFiles(files: File[]): Promise<void> {
 function renderCandidates(candidates: RecurringCandidateResponse[]): void {
   const container = document.querySelector<HTMLElement>('#recurring-candidates-list');
   const reviewPanel = document.querySelector<HTMLElement>('#recurring-candidates-panel');
+  const importPanel = document.querySelector<HTMLElement>('#bank-statement-import-panel');
+  const cancelBtn = document.querySelector<HTMLButtonElement>('#recurring-candidates-cancel');
 
-  if (reviewPanel) {
-    reviewPanel.style.display = candidates.length > 0 ? 'block' : 'none';
+  const pendingCandidates = candidates.filter((c) => c.status === 'pending');
+  const hasPending = pendingCandidates.length > 0;
+
+  if (reviewPanel) reviewPanel.style.display = hasPending ? 'block' : 'none';
+  if (importPanel) importPanel.style.display = hasPending ? 'none' : '';
+
+  if (cancelBtn && !cancelBtn.dataset.bound) {
+    cancelBtn.addEventListener('click', () => {
+      void cancelAllCandidates();
+    });
+    cancelBtn.dataset.bound = 'true';
   }
 
   if (!container) return;
-
   container.textContent = '';
 
-  const pendingCandidates = candidates.filter(c => c.status === 'pending');
+  if (!hasPending) return;
 
-  if (pendingCandidates.length === 0) {
-    const p = document.createElement('p');
-    p.textContent = 'All transactions have been reviewed.';
-    container.appendChild(p);
-    return;
-  }
+  const renderItems = (categories: { id: string; name: string }[] | null) => {
+    for (const c of pendingCandidates) {
+      const item = document.createElement('div');
+      item.className = 'recurring-candidate-item';
+      item.id = `candidate-${c.id}`;
 
-  for (const c of pendingCandidates) {
-    const item = document.createElement('div');
-    item.className = 'recurring-candidate-item';
-    item.id = `candidate-${c.id}`;
+      const leftDiv = document.createElement('div');
+      leftDiv.className = 'candidate-info';
 
-    const leftDiv = document.createElement('div');
-    leftDiv.className = 'candidate-info';
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'candidate-name';
+      nameSpan.textContent = c.name;
 
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'candidate-name';
-    nameSpan.textContent = c.name;
+      const detailsSpan = document.createElement('span');
+      detailsSpan.className = 'candidate-details';
+      detailsSpan.textContent = `${formatCurrency(c.amount)} / ${formatFreq(c.frequency)} • ${c.occurrences} occurrences`;
 
-    const detailsSpan = document.createElement('span');
-    detailsSpan.className = 'candidate-details';
-    detailsSpan.textContent = `${formatCurrency(c.amount)} / ${formatFreq(c.frequency)} • ${c.occurrences} occurrences`;
+      leftDiv.appendChild(nameSpan);
+      leftDiv.appendChild(detailsSpan);
 
-    leftDiv.appendChild(nameSpan);
-    leftDiv.appendChild(detailsSpan);
+      if (categories) {
+        const catSelect = document.createElement('select');
+        catSelect.className = 'candidate-category-select';
+        catSelect.dataset.candidateId = c.id;
 
-    const rightDiv = document.createElement('div');
-    rightDiv.className = 'candidate-actions';
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = '— Select category —';
+        catSelect.appendChild(defaultOpt);
 
-    const acceptBtn = document.createElement('button');
-    acceptBtn.className = 'btn btn-primary btn-sm';
-    acceptBtn.textContent = 'Accept';
-    acceptBtn.onclick = () => acceptRecurringCandidate(c.id);
+        for (const cat of categories) {
+          const opt = document.createElement('option');
+          opt.value = cat.id;
+          opt.textContent = cat.name;
+          catSelect.appendChild(opt);
+        }
+        leftDiv.appendChild(catSelect);
+      }
 
-    const rejectBtn = document.createElement('button');
-    rejectBtn.className = 'btn btn-secondary btn-sm';
-    rejectBtn.textContent = 'Reject';
-    rejectBtn.onclick = () => rejectRecurringCandidate(c.id);
+      const rightDiv = document.createElement('div');
+      rightDiv.className = 'candidate-actions';
 
-    rightDiv.appendChild(acceptBtn);
-    rightDiv.appendChild(rejectBtn);
+      const acceptBtn = document.createElement('button');
+      acceptBtn.className = 'btn btn-primary btn-sm';
+      acceptBtn.textContent = 'Accept';
+      acceptBtn.onclick = () => acceptRecurringCandidate(c.id);
 
-    item.appendChild(leftDiv);
-    item.appendChild(rightDiv);
-    container.appendChild(item);
-  }
+      const rejectBtn = document.createElement('button');
+      rejectBtn.className = 'btn btn-secondary btn-sm';
+      rejectBtn.textContent = 'Reject';
+      rejectBtn.onclick = () => rejectRecurringCandidate(c.id);
+
+      rightDiv.appendChild(acceptBtn);
+      rightDiv.appendChild(rejectBtn);
+
+      item.appendChild(leftDiv);
+      item.appendChild(rightDiv);
+      container.appendChild(item);
+    }
+  };
+
+  apiCall<{ id: string; name: string }[]>('/api/budget/expense-categories')
+    .then((categories) => {
+      void renderItems(categories);
+    })
+    .catch(() => {
+      void renderItems(null);
+    });
 }
 
 function formatFreq(freq: string): string {
   const mapping: Record<string, string> = {
-    'weekly': 'Weekly',
-    'biweekly': 'Bi-weekly',
-    'monthly': 'Monthly',
-    'annual': 'Annual'
+    weekly: 'Weekly',
+    biweekly: 'Bi-weekly',
+    monthly: 'Monthly',
+    annual: 'Annual',
   };
   return mapping[freq.toLowerCase()] || freq;
 }
 
 export async function acceptRecurringCandidate(candidateId: string): Promise<void> {
   try {
-    await apiCall(`/api/budget/bank-statements/candidates/${candidateId}/accept`, {
-      method: 'POST',
-      body: JSON.stringify({})
-    });
+    const categorySelect = document.querySelector<HTMLSelectElement>(
+      '#candidate-' + candidateId + ' .candidate-category-select'
+    );
+    const categoryId = categorySelect?.value || null;
+    const body: Record<string, unknown> = {};
+    if (categoryId) body['category_id'] = categoryId;
+
+    const resp = await apiCall<{ status: string; deduped?: boolean }>(
+      `/api/budget/bank-statements/candidates/${candidateId}/accept`,
+      { method: 'POST', body }
+    );
 
     const el = document.getElementById(`candidate-${candidateId}`);
     if (el) el.remove();
 
-    showToast('Expense added', 'success');
+    if (resp?.deduped) {
+      showToast('Linked to existing expense (no duplicate created)', 'info');
+    } else {
+      showToast('Expense added', 'success');
+    }
     await loadExpenses();
     checkAllReviewed();
   } catch (error: any) {
@@ -184,7 +249,7 @@ export async function acceptRecurringCandidate(candidateId: string): Promise<voi
 export async function rejectRecurringCandidate(candidateId: string): Promise<void> {
   try {
     await apiCall(`/api/budget/bank-statements/candidates/${candidateId}/reject`, {
-      method: 'POST'
+      method: 'POST',
     });
 
     const el = document.getElementById(`candidate-${candidateId}`);
@@ -197,14 +262,58 @@ export async function rejectRecurringCandidate(candidateId: string): Promise<voi
   }
 }
 
+async function cancelAllCandidates(): Promise<void> {
+  const container = document.querySelector<HTMLElement>('#recurring-candidates-list');
+  if (!container) return;
+  const items = Array.from(container.querySelectorAll<HTMLElement>('.recurring-candidate-item'));
+  if (items.length === 0) {
+    closeReviewPanel();
+    return;
+  }
+  if (
+    !confirm(
+      `Discard ${items.length} detected transaction${items.length !== 1 ? 's' : ''} without adding any expenses?`
+    )
+  ) {
+    return;
+  }
+  const ids = items.map((el) => el.id.replace(/^candidate-/, '')).filter(Boolean);
+  const results = await Promise.allSettled(
+    ids.map((id) =>
+      apiCall(`/api/budget/bank-statements/candidates/${id}/reject`, { method: 'POST' })
+    )
+  );
+  const failed = results.filter((r) => r.status === 'rejected').length;
+  if (failed > 0) {
+    showToast(`Discarded ${ids.length - failed} of ${ids.length}; ${failed} failed.`, 'warning');
+  } else {
+    showToast('All detected transactions discarded.', 'info');
+  }
+  closeReviewPanel();
+}
+
+function closeReviewPanel(): void {
+  const reviewPanel = document.querySelector<HTMLElement>('#recurring-candidates-panel');
+  const importPanel = document.querySelector<HTMLElement>('#bank-statement-import-panel');
+  const uploadStatus = document.querySelector<HTMLElement>('#bank-statement-status');
+  const container = document.querySelector<HTMLElement>('#recurring-candidates-list');
+
+  if (reviewPanel) reviewPanel.style.display = 'none';
+  if (importPanel) importPanel.style.display = '';
+  if (uploadStatus) {
+    uploadStatus.style.display = 'none';
+    uploadStatus.textContent = '';
+    uploadStatus.className = 'bank-statement-status';
+  }
+  if (container) container.textContent = '';
+}
+
 function checkAllReviewed(): void {
   const container = document.querySelector<HTMLElement>('#recurring-candidates-list');
   if (!container) return;
 
   const items = container.querySelectorAll('.recurring-candidate-item');
   if (items.length === 0) {
-    const p = document.createElement('p');
-    p.textContent = 'All transactions have been reviewed.';
-    container.appendChild(p);
+    closeReviewPanel();
   }
 }

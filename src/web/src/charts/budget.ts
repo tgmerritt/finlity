@@ -353,6 +353,7 @@ export async function updateExpensesCategoryChart(
         hole: 0.4,
         textinfo: 'label+percent',
         textposition: 'outside',
+        automargin: true,
         textfont: { color: colors.text },
         marker: {
           colors: labels.map((_, i) => getColorByIndex(i)),
@@ -361,7 +362,7 @@ export async function updateExpensesCategoryChart(
     ],
     {
       ...getBaseLayout(),
-      margin: { t: 20, r: 20, b: 20, l: 20 },
+      margin: { t: 40, r: 40, b: 40, l: 40 },
       showlegend: false,
       hoverlabel: getHoverLabel(),
     },
@@ -497,5 +498,56 @@ export function renderSSComparison(ssData: SSComparisonRow[] | null): void {
   });
   table.appendChild(tbody);
 
+  container.appendChild(table);
+}
+
+/**
+ * Render year-by-year income transition table.
+ */
+export function renderIncomeTransitionTable(years: TransitionYear[] | null): void {
+  const container = document.getElementById('income-transition-table');
+  if (!container) return;
+
+  container.textContent = '';
+
+  if (!years || years.length === 0) {
+    showEmptyState(container, 'Run the transition projection to see year-by-year details.');
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'data-table';
+
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  ['Age', 'Employment Income', 'SS Income', 'Withdrawal Needed', 'Total Income'].forEach(
+    (label) => {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headerRow.appendChild(th);
+    }
+  );
+  thead.appendChild(headerRow);
+
+  const tbody = document.createElement('tbody');
+  years.forEach((row) => {
+    const tr = document.createElement('tr');
+    const cells = [
+      String(row.age),
+      formatCurrency(row.employment_income),
+      formatCurrency(row.ss_income),
+      formatCurrency(row.withdrawal_needed),
+      formatCurrency(row.total_income),
+    ];
+    cells.forEach((value) => {
+      const td = document.createElement('td');
+      td.textContent = value;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(thead);
+  table.appendChild(tbody);
   container.appendChild(table);
 }
