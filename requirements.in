@@ -8,7 +8,9 @@
 
 # Core web framework
 fastapi>=0.115.0
-starlette>=0.40.0
+# Floor bumped 0.40.0 -> 1.0.1; clears PYSEC-2026-161 (Host-header path
+# injection -> possible auth bypass). FastAPI 0.136 allows starlette 1.0.1.
+starlette>=1.0.1
 uvicorn[standard]==0.38.0
 uvloop==0.21.0
 httptools==0.6.4
@@ -22,6 +24,9 @@ requests==2.33.1
 # Bumped 3.12.15 -> 3.13.5; clears CVE-2026-34513..520, 34525, 22815, 34514..515,
 # CVE-2025-69223..230 (HTTP smuggling / parser fixes in 3.13.x)
 aiohttp==3.13.5
+# Transitive (via requests/httpx/anthropic), pinned directly to clear
+# CVE-2026-45409 (idna.encode DoS on very large inputs); fixed in 3.15.
+idna>=3.15
 
 # Data processing
 # numpy 2.0.0 / pandas 2.2.2 do not ship Python 3.13 wheels and fail to build
