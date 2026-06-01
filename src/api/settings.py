@@ -209,6 +209,20 @@ def get_full_config() -> dict:
     return config
 
 
+@router.get("/version")
+def get_settings_version() -> dict:
+    """Return the newest ``updated_at`` among config settings.
+
+    Cheap freshness probe for the frontend: clients cache the settings they
+    loaded along with this version string, then poll here on navigation. If the
+    returned ``updated_at`` is newer than the cached one, the client's copy is
+    stale and it re-pulls the full settings. Much cheaper than always refetching
+    every section on every page change.
+    """
+    db = get_database()
+    return {"updated_at": db.get_settings_version()}
+
+
 @router.get("/config/{section}")
 def get_config_section(section: str) -> dict:
     """Get a specific configuration section."""

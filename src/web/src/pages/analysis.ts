@@ -1233,6 +1233,12 @@ export async function loadAnalysisData(): Promise<void> {
     emptyHost.style.display = 'none';
   }
 
+  // Surface a visible indicator while the (potentially ~30s) analysis fetch
+  // runs in the background — otherwise the metric cards just sit on their "-"
+  // placeholders with no sign that anything is happening.
+  const loadingEl = document.getElementById('analysis-loading');
+  loadingEl?.classList.remove('hidden');
+
   try {
     // Load all data in parallel
     const [performance, risk, allocation] = await Promise.all([
@@ -1304,6 +1310,8 @@ export async function loadAnalysisData(): Promise<void> {
       });
     }
     showToast('Failed to load analysis data', 'error');
+  } finally {
+    loadingEl?.classList.add('hidden');
   }
 }
 

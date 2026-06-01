@@ -17,10 +17,10 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- sql.js for client-side SQLite database -->
     <script src="https://sql.js.org/dist/sql-wasm.js"></script>
-    <!-- Google Fonts: Inter for UI, JetBrains Mono for financial data -->
+    <!-- Google Fonts: Inter for all UI and financial figures (tabular-nums) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Custom styles -->
     <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -687,6 +687,12 @@
             <div id="tab-analysis" class="tab-content">
                 <!-- First-time / no-data inline state. Populated by loadAnalysisData(). -->
                 <div id="analysis-empty-state" class="hidden"></div>
+                <!-- Background-fetch indicator. Shown by loadAnalysisData() while the
+                     (sometimes ~30s) performance/risk/allocation fetch is in flight. -->
+                <div id="analysis-loading" class="analysis-loading hidden">
+                    <span class="spinner-sm"></span>
+                    <span>Loading analysis&hellip;</span>
+                </div>
                 <!-- Data Enrichment Section -->
                 <div class="card" id="data-enrichment-card" style="margin-bottom: 1.5rem;">
                     <div class="card-header">

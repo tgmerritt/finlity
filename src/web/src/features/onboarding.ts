@@ -70,6 +70,7 @@ export function isFirstVisit(): boolean {
 export function completeWelcome(): void {
   localStorage.setItem('hasVisitedBefore', 'true');
   showTab('dashboard');
+  document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
 }
 
 /**
@@ -84,6 +85,7 @@ export async function startDemoMode(): Promise<void> {
 
     localStorage.setItem('hasVisitedBefore', 'true');
     showTab('dashboard');
+    document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
 
     // Show demo mode banner
     const banner = getElementById<HTMLElement>('demo-mode-banner');
@@ -407,6 +409,7 @@ export function closeProfileSetup(): void {
   // If user cancels, still mark welcome as seen and go to dashboard
   localStorage.setItem('hasVisitedBefore', 'true');
   showTab('dashboard');
+  document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
 }
 
 /**

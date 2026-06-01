@@ -2,8 +2,6 @@
 Tests for Settings API endpoints.
 """
 
-import pytest
-
 
 class TestSettingsAPI:
     """Test settings API endpoints."""
@@ -28,6 +26,42 @@ class TestSettingsAPI:
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, dict)
+
+    def test_settings_version_shape(self, client):
+        """The version probe always returns an ``updated_at`` key."""
+        response = client.get("/api/settings/version")
+        assert response.status_code == 200
+        data = response.json()
+        assert "updated_at" in data
+        # Either None (nothing saved yet) or an ISO 8601 string.
+        assert data["updated_at"] is None or isinstance(data["updated_at"], str)
+
+    def test_settings_version_advances_after_save(self, client):
+        """Saving personal settings bumps the settings version forward.
+
+        This is what lets the frontend cheaply detect that its in-memory copy
+        is stale and re-pull the settings (e.g. the age fields) on navigation.
+        """
+        before = client.get("/api/settings/version").json()["updated_at"]
+
+        resp = client.put(
+            "/api/settings/config/personal",
+            json={
+                "dob": "1985-06-15",
+                "retirement_age": 65,
+                "withdrawal_rate": 4,
+                "target_monthly_income": 0,
+                "avg_annual_growth_real": 0.06,
+                "ss_claiming_age": 67,
+            },
+        )
+        assert resp.status_code == 200
+
+        after = client.get("/api/settings/version").json()["updated_at"]
+        assert after is not None
+        # Newer-or-equal as a lexicographic ISO string; never goes backwards.
+        if before is not None:
+            assert after >= before
 
 
 class TestProfilesAPI:

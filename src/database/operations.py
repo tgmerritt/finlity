@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker, Session, selectinload
 
 from .models import (
@@ -1073,6 +1073,35 @@ class Database:
         """Get all settings."""
         with self.get_session() as session:
             return session.query(AppSettings).all()
+
+    # Settings keys whose values feed page-level calculations (age, retirement
+    # targets, market/Monte-Carlo assumptions). The settings "version" is the
+    # newest updated_at among these, used by the frontend for a cheap "is my
+    # in-memory copy stale?" check. Deliberately excludes theme_mode and API
+    # keys so toggling the theme doesn't masquerade as a settings change.
+    CONFIG_SETTING_KEYS = (
+        "personal_settings",
+        "target_allocations",
+        "market_assumptions",
+        "monte_carlo_settings",
+        "withdrawal_settings",
+    )
+
+    def get_settings_version(self) -> Optional[str]:
+        """Return the newest ``updated_at`` (ISO 8601) among config settings.
+
+        Returns None if no config settings have been saved yet. Callers compare
+        this string lexicographically against the version they last loaded —
+        because every value comes from the same server clock there is no
+        client/server skew to reason about.
+        """
+        with self.get_session() as session:
+            newest = (
+                session.query(func.max(AppSettings.updated_at))
+                .filter(AppSettings.key.in_(self.CONFIG_SETTING_KEYS))
+                .scalar()
+            )
+            return newest.isoformat() if newest else None
 
     # ==================== Trigger Operations ====================
 

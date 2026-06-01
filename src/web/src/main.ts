@@ -8,7 +8,8 @@ import { initSession } from '@/state/session';
 import { initTheme, toggleTheme, setTheme } from '@/state/theme';
 
 // UI components
-import { initTabs, initMobileNav, showTab, toggleMobileNav } from '@/ui/tabs';
+import { initTabs, initMobileNav, showTab, toggleMobileNav, onTabChange } from '@/ui/tabs';
+import type { TabName } from '@/ui/tabs';
 import { showToast, showError } from '@/ui/toast';
 import { hideLoading, showLoading } from '@/ui/loading';
 import {
@@ -289,6 +290,77 @@ async function populateAgeFromSettings(): Promise<void> {
 }
 
 /**
+ * Newest settings `updated_at` (ISO 8601) we have already loaded into memory.
+ * `null` until the first sync. Compared lexicographically against the server's
+ * current version — both come from the same server clock, so there is no
+ * client/server skew to account for (the classic "is my cached copy stale?"
+ * check, done with a cheap version probe rather than a full refetch).
+ */
+let knownSettingsVersion: string | null = null;
+
+/** Tabs whose displayed values derive from saved settings (age, targets, etc.). */
+const SETTINGS_DEPENDENT_TABS: ReadonlySet<TabName> = new Set<TabName>([
+  'dashboard',
+  'analysis',
+  'projections',
+  'budget',
+  'taxes',
+]);
+
+/**
+ * Fetch the server's current settings version (newest config `updated_at`).
+ * Returns null on error or when no config has been saved yet.
+ */
+async function fetchSettingsVersion(): Promise<string | null> {
+  try {
+    const r = await apiCall<{ updated_at: string | null }>('/api/settings/version');
+    return r.updated_at ?? null;
+  } catch (error) {
+    console.warn('Could not check settings version:', error);
+    return null;
+  }
+}
+
+/**
+ * Record the current server settings version as "seen" without refreshing.
+ * Used after we have just loaded (or just saved) settings so a later navigation
+ * does not treat our own up-to-date copy as stale.
+ */
+async function syncSettingsVersion(): Promise<void> {
+  knownSettingsVersion = await fetchSettingsVersion();
+}
+
+/**
+ * Cheap freshness check run on navigation to a settings-dependent page.
+ *
+ * Compares our in-memory settings version against the database's newest
+ * `updated_at`. If the database is newer — settings changed since we last
+ * loaded them (another browser tab, another profile, a prior session) — our
+ * cached values are out of date, so we re-pull settings into the page inputs
+ * (notably the age fields, which otherwise silently keep their defaults) and
+ * tell the user. Returns true when a refresh occurred.
+ */
+async function refreshSettingsIfStale(): Promise<boolean> {
+  const serverVersion = await fetchSettingsVersion();
+  if (serverVersion === null) return false;
+
+  // First sighting: establish the baseline, nothing to refresh yet.
+  if (knownSettingsVersion === null) {
+    knownSettingsVersion = serverVersion;
+    return false;
+  }
+
+  // Our copy is current (or somehow newer) — no work to do.
+  if (serverVersion <= knownSettingsVersion) return false;
+
+  // Database is newer: our in-memory settings are stale. Pull them in.
+  knownSettingsVersion = serverVersion;
+  await populateAgeFromSettings();
+  showToast('Settings refreshed', 'info');
+  return true;
+}
+
+/**
  * Refresh all portfolio data.
  */
 export async function refreshData(): Promise<void> {
@@ -419,9 +491,24 @@ async function init(): Promise<void> {
     refreshData().catch(console.error);
   });
 
-  // Re-populate age fields when personal settings are saved
+  // Listen for dashboard refresh requests (e.g., first-visit onboarding landing on dashboard)
+  document.addEventListener('dashboard:refreshRequested', () => {
+    refreshData().catch(console.error);
+  });
+
+  // Re-populate age fields when personal settings are saved, and advance our
+  // known settings version so navigating away and back doesn't flag our own
+  // just-saved change as "stale" and show a spurious refresh toast.
   document.addEventListener('settings:personalUpdated', () => {
-    populateAgeFromSettings().catch(console.error);
+    populateAgeFromSettings().then(syncSettingsVersion).catch(console.error);
+  });
+
+  // On navigation to a settings-dependent page, cheaply verify our in-memory
+  // settings are still current and re-pull them if the database is newer.
+  onTabChange((tab) => {
+    if (SETTINGS_DEPENDENT_TABS.has(tab)) {
+      refreshSettingsIfStale().catch(console.error);
+    }
   });
 
   // Load initial data
@@ -429,6 +516,9 @@ async function init(): Promise<void> {
   try {
     await loadProfiles();
     await populateAgeFromSettings();
+    // Record the baseline settings version so the per-tab freshness check has
+    // something to compare against (and doesn't toast on the very first visit).
+    await syncSettingsVersion();
     // Fire-and-forget: can take 30s+ when upstream price APIs are slow/flaky.
     // Keeps the UI interactive while stale prices refresh in the background.
     autoRefreshIfStale().then(updatePriceStatus).catch(console.warn);
