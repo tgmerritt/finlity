@@ -153,8 +153,17 @@ button:disabled {
     --chart-grid: #21262d;
     --chart-text: #8b949e;
 
-    /* Typography */
-    --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+    /* Typography.
+       --font-sans : primary modern UI font (Inter).
+       --font-mono : retained name (used widely for figures/financial widgets),
+                     but it now resolves to the same modern sans as the rest of
+                     the UI. It previously pointed at JetBrains Mono, which gave
+                     the whole dashboard a dated "terminal" feel — and its 800
+                     weight was never loaded, so the hero figure silently fell
+                     back to the OS monospace. Figures stay column-aligned via
+                     `font-variant-numeric: tabular-nums` on the value cells
+                     instead of via a fixed-width font. */
+    --font-mono: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
@@ -1767,9 +1776,10 @@ body {
 
 .stat-card--hero .stat-value {
     font-size: 48px;
-    font-weight: 800;
+    font-weight: 700;
     letter-spacing: -1.5px;
     font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     background: linear-gradient(135deg, var(--color-text-primary) 0%, var(--color-primary) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -1852,6 +1862,7 @@ body {
     font-weight: 600;
     color: var(--color-text-primary);
     font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     letter-spacing: -0.5px;
 }
 
@@ -2084,11 +2095,24 @@ tr:hover td {
     background: var(--color-bg-spotlight);
 }
 
-/* Monospace for financial columns */
+/* Tabular figures for financial columns — modern sans with column-aligned
+   digits (replaces the old fixed-width monospace look). */
 td.text-right {
     font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     font-size: 13px;
     letter-spacing: -0.3px;
+}
+
+/* Other number-dense displays that don't already inherit tabular figures via
+   .stat-value / td.text-right. Without this, Inter's proportional digits make
+   right-aligned amounts in the budget/tax/paycheck tables look ragged. */
+.tax-stat-value,
+.tax-rate-value,
+.paycheck-line .amount,
+#tax-withdrawal-table td,
+.form-group input[type='number'] {
+    font-variant-numeric: tabular-nums;
 }
 
 /* Sticky header table container */
@@ -2185,6 +2209,7 @@ td.text-right {
     color: var(--color-text-primary);
     font-size: 14px;
     font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
     letter-spacing: -0.3px;
 }
 
@@ -2743,7 +2768,7 @@ td.text-right {
 .toast-container,
 #toast-container {
     position: fixed;
-    bottom: 24px;
+    top: 24px;
     left: 50%;
     transform: translateX(-50%);
     z-index: var(--z-toast);
@@ -2767,7 +2792,8 @@ td.text-right {
     font-size: 14px;
     pointer-events: auto;
     opacity: 0;
-    transform: translateY(20px);
+    /* Top-anchored: slide in from above and retract upward on dismiss. */
+    transform: translateY(-20px);
     transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
@@ -2870,14 +2896,12 @@ td.text-right {
     }
 }
 
-/* On narrow viewports the bottom-anchored toast can overlap a focused
-   keyboard / input. Move toasts to the top of the viewport, stack
-   downward, and clamp their width so they don't clip. */
+/* Toasts are top-anchored everywhere; on narrow viewports tighten the offset
+   and clamp width so they don't clip against the screen edges. */
 @media (max-width: 768px) {
     .toast-container,
     #toast-container {
         top: 16px;
-        bottom: auto;
         flex-direction: column;
         width: clamp(280px, calc(100vw - 32px), 480px);
     }
@@ -7769,11 +7793,23 @@ th.sortable.sort-desc .sort-icon::after {
     white-space: nowrap;
 }
 
+/* Actions column. Must stay a real table-cell (NOT display:flex) so it
+   participates in row-height equalization — a flex <td> sizes to its own
+   content and its background stops short of the row height the other cells
+   define, which is the uneven-row bug. Keep it a cell; lay the buttons out
+   inline and right-align them. */
 .actions-cell {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    justify-content: flex-end;
+    text-align: right;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.actions-cell .icon-btn {
+    vertical-align: middle;
+}
+
+.actions-cell .icon-btn + .icon-btn {
+    margin-left: 6px;
 }
 
 .icon-btn {
@@ -7823,6 +7859,20 @@ th.sortable.sort-desc .sort-icon::after {
 
 .analysis-grid {
     margin-bottom: 24px;
+}
+
+/* Analysis background-fetch indicator (item: visible spinner while loading). */
+.analysis-loading {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    border-radius: var(--border-radius);
+    background: var(--color-bg-spotlight);
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    font-weight: 500;
 }
 
 /* Better separator for account totals card */

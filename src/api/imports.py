@@ -359,7 +359,10 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[
         }
 
     scanner = FolderScanner(db)
-    result = scanner._fetch_and_update_prices(stale_tickers)
+    # On an explicit force refresh, bypass the PriceService file cache so we
+    # fetch live quotes — otherwise the cached (up to 4h old) value is returned
+    # and the DB timestamp is re-stamped fresh over a stale price.
+    result = scanner._fetch_and_update_prices(stale_tickers, force=force)
     success = result.get("success", [])
     skipped = result.get("skipped", [])
     failed = result.get("failed", [])

@@ -802,7 +802,9 @@ class FolderScanner:
 
         return created
 
-    def _fetch_and_update_prices(self, tickers: list[str]) -> dict[str, list[str]]:
+    def _fetch_and_update_prices(
+        self, tickers: list[str], force: bool = False
+    ) -> dict[str, list[str]]:
         """Fetch prices using PriceService and update positions.
 
         Returns a dict reporting which tickers succeeded vs failed so callers can
@@ -828,8 +830,10 @@ class FolderScanner:
 
         for ticker in tickers:
             try:
-                # Use PriceService which handles normalization, skips, and rate limiting
-                price_data = price_service.get_current_price(ticker)
+                # Use PriceService which handles normalization, skips, and rate limiting.
+                # `force` bypasses the file cache so an explicit user refresh
+                # fetches a live quote instead of re-stamping a cached value.
+                price_data = price_service.get_current_price(ticker, force=force)
 
                 if price_data:
                     # Update cache in database

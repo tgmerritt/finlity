@@ -543,14 +543,25 @@ class PriceService:
         if self.sources:
             self.sources.rotate(-1)
 
-    def get_current_price(self, ticker: str) -> Optional[PriceData]:
-        """Get current price data for a ticker using round-robin sources."""
+    def get_current_price(self, ticker: str, force: bool = False) -> Optional[PriceData]:
+        """Get current price data for a ticker using round-robin sources.
+
+        Args:
+            ticker: Ticker symbol to look up.
+            force: When True, bypass the local file cache and always fetch a
+                fresh quote from the upstream sources. This is what an explicit
+                user-initiated "Update Prices" must do — otherwise a forced
+                refresh within the 4-hour cache window returns the stale cached
+                value while the DB timestamp is re-stamped to "now", leaving the
+                freshness badge green over an out-of-date price.
+        """
         original_ticker = ticker.upper().strip()
         normalized_ticker = self.normalize_ticker(ticker)
         cache_path = self._get_cache_path(original_ticker)
 
-        # Check cache first
-        if self._is_cache_valid(cache_path):
+        # Check cache first (skipped on a forced refresh so the user actually
+        # gets a live quote, not the value we cached up to 4 hours ago).
+        if not force and self._is_cache_valid(cache_path):
             try:
                 with open(cache_path) as f:
                     data = json.load(f)
