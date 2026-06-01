@@ -41,3 +41,13 @@ CVE-2026-4539
 # /tmp/pytest-of-{user} dirs — not exploitable in CI containers. Deferred
 # to a follow-up "pytest 8 -> 9" migration ticket.
 CVE-2025-71176
+
+# ---------------------------------------------------------------------------
+# 2026-06-01 advisory refresh
+# ---------------------------------------------------------------------------
+# reason: transitive via scikit-learn (joblib==1.4.2, the latest release).
+# No fixed version exists, and the maintainer DISPUTES the report:
+# NumpyArrayWrapper.read_array() is only reached when de-serializing joblib's
+# own cache of *trusted* content, which this app never loads from an untrusted
+# source. Revisit if joblib ships a fix or scikit-learn loosens its joblib pin.
+PYSEC-2024-277
