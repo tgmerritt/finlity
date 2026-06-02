@@ -54,8 +54,8 @@ cryptography==46.0.7
 bcrypt==5.0.0
 # python-jose 3.3.0 removed: unused in src/ and tests/. PyJWT covers JWT needs.
 # (Drops PYSEC-2024-232/233 plus transitive ecdsa/pyasn1 CVEs.)
-# Bumped 2.10.1 -> 2.12.1; clears CVE-2026-32597
-PyJWT==2.12.1
+# Bumped 2.10.1 -> 2.12.1 -> 2.13.0; clears PYSEC-2026-175/177/178/179
+PyJWT==2.13.0
 # Bumped 1.6.5 -> 1.7.1; clears CVE-2025-68158, CVE-2026-28802, CVE-2026-27962,
 # CVE-2026-28490, GHSA-jj8c-mmj3-mmgv
 Authlib==1.7.1
