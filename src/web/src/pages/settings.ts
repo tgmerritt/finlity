@@ -717,7 +717,11 @@ export function showCreateViewModal(): void {
   }
 
   const modal = document.getElementById('view-modal');
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    // `hidden` is `display:none !important`; strip it so the modal shows.
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+  }
 }
 
 /**
@@ -767,7 +771,11 @@ export function editView(viewId: string): void {
   }
 
   const modal = document.getElementById('view-modal');
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    // `hidden` is `display:none !important`; strip it so the modal shows.
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+  }
 }
 
 /**
@@ -1021,6 +1029,8 @@ export function showCreateEntityModal(): void {
   if (colorInput) colorInput.value = '#4A90D9';
   if (defaultCheckbox) defaultCheckbox.checked = false;
 
+  // `hidden` is `display:none !important`; strip it so the modal shows.
+  modal.classList.remove('hidden');
   modal.style.display = 'flex';
 }
 
@@ -1058,6 +1068,8 @@ export async function editEntity(entityId: string): Promise<void> {
     if (colorInput) colorInput.value = entity.color;
     if (defaultCheckbox) defaultCheckbox.checked = entity.is_default;
 
+    // `hidden` is `display:none !important`; strip it so the modal shows.
+    modal.classList.remove('hidden');
     modal.style.display = 'flex';
   } catch (error) {
     showToast('Failed to load entity', 'error');

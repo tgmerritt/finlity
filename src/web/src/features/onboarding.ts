@@ -396,7 +396,11 @@ export function skipTour(): void {
  */
 export function showProfileSetup(): void {
   const modal = getElementById<HTMLElement>('profile-setup-modal');
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    // `hidden` is `display:none !important`; strip it so the modal shows.
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+  }
 }
 
 /**

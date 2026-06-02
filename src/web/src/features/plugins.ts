@@ -1458,7 +1458,11 @@ export function showInstallPluginModal(): void {
   const fileInput = getElementById<HTMLInputElement>('plugin-file');
   const fileName = getElementById<HTMLElement>('upload-file-name');
 
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    // `hidden` is `display:none !important`; strip it so the modal shows.
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+  }
   if (gitInput) gitInput.value = '';
   if (fileInput) fileInput.value = '';
   if (fileName) fileName.textContent = 'Drag and drop or click to select a ZIP file';
