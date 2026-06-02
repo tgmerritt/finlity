@@ -396,6 +396,18 @@ function updateOptionsTable(options: DashboardPosition[]): void {
     section.style.display = 'none';
     return;
   }
+
+  // Apply the same account filter used by the equity table
+  const selectedAccounts = store.get('selectedAccounts');
+  const filtered =
+    selectedAccounts.size === 0
+      ? options
+      : options.filter((p) => selectedAccounts.has(p.account));
+
+  if (filtered.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
   section.style.display = '';
 
   const tbody = section.querySelector('#options-table tbody') as HTMLTableSectionElement | null;
@@ -407,7 +419,7 @@ function updateOptionsTable(options: DashboardPosition[]): void {
   let totalGainLoss = 0;
   let hasGainLoss = false;
 
-  options.forEach((pos) => {
+  filtered.forEach((pos) => {
     const contracts = pos.contracts ?? pos.shares;
     const premium = pos.premium ?? pos.price;
     const multiplier = pos.contract_multiplier ?? 100;
@@ -428,6 +440,7 @@ function updateOptionsTable(options: DashboardPosition[]): void {
 
     const cells: [string, string][] = [
       [contractLabel, ''],
+      [pos.account, ''],
       [formatOptionExpiry(pos.option_expiration), 'text-right'],
       [pos.option_strike != null ? formatCurrency(pos.option_strike) : '-', 'text-right'],
       [optType, 'text-right'],
@@ -464,6 +477,9 @@ function updateOptionsTable(options: DashboardPosition[]): void {
   const totalValueEl = section.querySelector('#options-total-value');
   const totalGlEl = section.querySelector('#options-total-gl');
   if (totalValueEl) totalValueEl.textContent = formatCurrency(totalMktValue);
+  // Update contract count label
+  const contractCountEl = section.querySelector('#options-contract-count');
+  if (contractCountEl) contractCountEl.textContent = `${filtered.length} contract${filtered.length !== 1 ? 's' : ''}`;
   if (totalGlEl) {
     totalGlEl.textContent = hasGainLoss ? formatCurrency(totalGainLoss) : '-';
     totalGlEl.className = totalGainLoss >= 0 ? 'text-success' : 'text-error';
