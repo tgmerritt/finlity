@@ -713,6 +713,16 @@ export function showEditPositionModal(
     if (maturityDateEl) maturityDateEl.value = maturityDate || '';
   }
 
+  // Always reset the submit button — a prior in-flight save may have left it
+  // disabled with "Saving..." text. Opening the modal means a fresh intent to edit.
+  const form = document.getElementById('edit-position-form') as HTMLFormElement | null;
+  const submitBtn = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Save';
+    submitBtn.removeAttribute('aria-busy');
+  }
+
   showEditPositionModalUI();
 }
 
@@ -810,6 +820,16 @@ export async function showAddPositionModal(): Promise<void> {
   togglePositionTypeFields();
   await loadAccountsForSelect();
   await loadAccountTypesForSelect();
+
+  // Reset submit button in case a prior in-flight create left it stuck.
+  const addForm = document.getElementById('add-position-form') as HTMLFormElement | null;
+  const addSubmitBtn = addForm?.querySelector<HTMLButtonElement>('button[type="submit"]');
+  if (addSubmitBtn) {
+    addSubmitBtn.disabled = false;
+    addSubmitBtn.textContent = 'Add Position';
+    addSubmitBtn.removeAttribute('aria-busy');
+  }
+
   showAddPositionModalUI();
 }
 
