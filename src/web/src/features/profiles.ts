@@ -446,7 +446,12 @@ export function showCreateProfileModal(): void {
   });
 
   const modal = document.getElementById('profile-modal');
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    // Remove the `hidden` class (`display:none !important`) — an inline style
+    // alone can't override it.
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+  }
 }
 
 /**
@@ -488,7 +493,12 @@ export async function editProfile(profileId: string): Promise<void> {
     });
 
     const modal = document.getElementById('profile-modal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) {
+    // Remove the `hidden` class (`display:none !important`) — an inline style
+    // alone can't override it.
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+  }
   } catch (error) {
     console.error('Error loading profile:', error);
     showToast('Failed to load profile', 'error');

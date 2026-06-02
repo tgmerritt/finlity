@@ -338,9 +338,14 @@ async function showImportConfirmModal(filename: string, parseResult: ParseResult
     });
   }
 
-  // Show modal
+  // Show modal. The markup carries the `hidden` utility class
+  // (`display: none !important`), which an inline style cannot override — so
+  // remove the class to actually reveal the confirmation dialog.
   const modal = getElementById<HTMLElement>('import-confirm-modal');
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+  }
 }
 
 /**
@@ -403,7 +408,12 @@ export function hideImportModal(): void {
   const modal = getElementById<HTMLElement>('import-confirm-modal');
   const form = getElementById<HTMLElement>('import-new-account-form');
 
-  if (modal) modal.style.display = 'none';
+  // Re-add `hidden` (mirrors the removal in showImportConfirmModal) so the
+  // dialog stays hidden regardless of inline style.
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+  }
   if (form) form.style.display = 'none';
 
   pendingImportData = null;
