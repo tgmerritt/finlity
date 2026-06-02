@@ -269,7 +269,7 @@ class ChatToolExecutor:
             for pos in acc_positions:
                 if not include_cash and pos.position_type == "cash":
                     continue
-                value = (pos.shares * pos.current_price) if pos.current_price else 0
+                value = pos.market_value
                 gain_loss = value - pos.cost_basis if pos.cost_basis else None
                 result_positions.append({
                     "account": acc.name,
@@ -342,13 +342,13 @@ class ChatToolExecutor:
             return {"error": f"No positions found for ticker '{ticker}'", "available_tickers": sorted(all_tickers)[:20]}
 
         total_shares = sum(p.shares for p in matching)
-        total_value = sum((p.shares * p.current_price) if p.current_price else 0 for p in matching)
+        total_value = sum(p.market_value for p in matching)
         total_cost = sum(p.cost_basis or 0 for p in matching)
 
         holdings_by_account = []
         for pos in matching:
             acc = accounts.get(pos.account_id)
-            value = (pos.shares * pos.current_price) if pos.current_price else 0
+            value = pos.market_value
             holdings_by_account.append({
                 "account": acc.name if acc else "Unknown",
                 "account_type": acc.account_type if acc else "unknown",

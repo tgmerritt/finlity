@@ -175,6 +175,13 @@ export function handleAccountFilterChange(): void {
  * Update holdings table with positions.
  */
 export function updateHoldings(positions: DashboardPosition[]): void {
+  // Split options from equity positions
+  const optionPositions = positions.filter((p) => p.position_type === 'option');
+  const equityPositions = positions.filter((p) => p.position_type !== 'option');
+
+  // Update the options table independently
+  updateOptionsTable(optionPositions);
+
   const table = document.getElementById('holdings-table') as HTMLTableElement | null;
   const tbody = table?.querySelector('tbody');
   const tableContainer = table?.closest('.table-container') as HTMLElement | null;
@@ -185,15 +192,15 @@ export function updateHoldings(positions: DashboardPosition[]): void {
 
   // Apply sorting
   const currentSort = store.get('currentSort');
-  const sorted = sortPositions(positions, currentSort.field, currentSort.direction);
+  const sorted = sortPositions(equityPositions, currentSort.field, currentSort.direction);
 
-  // Apply filters
+  // Apply filters (only equity positions)
   const filtered = filterPositionsList(sorted);
 
   // Decide which non-data state (if any) to render. Two distinct UX cases:
   //  - No positions at all → onboarding empty state with "Add Position" CTA.
   //  - Filter excludes everything → "Clear filter" CTA (positions exist).
-  if (positions.length === 0) {
+  if (equityPositions.length === 0) {
     table.style.display = 'none';
     setStateView(tableContainer, {
       kind: 'empty',
@@ -363,6 +370,104 @@ export function updateHoldings(positions: DashboardPosition[]): void {
 
   // Update sort indicators
   updateSortIndicators();
+}
+
+/**
+ * Format option expiration date as "MMM DD 'YY".
+ */
+function formatOptionExpiry(isoStr: string | null | undefined): string {
+  if (!isoStr) return '-';
+  try {
+    const d = new Date(isoStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+  } catch {
+    return isoStr;
+  }
+}
+
+/**
+ * Render (or hide) the separate Options table.
+ */
+function updateOptionsTable(options: DashboardPosition[]): void {
+  const section = document.getElementById('options-section');
+  if (!section) return;
+
+  if (options.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+
+  const tbody = section.querySelector('#options-table tbody') as HTMLTableSectionElement | null;
+  if (!tbody) return;
+
+  tbody.textContent = '';
+
+  let totalMktValue = 0;
+  let totalGainLoss = 0;
+  let hasGainLoss = false;
+
+  options.forEach((pos) => {
+    const contracts = pos.contracts ?? pos.shares;
+    const premium = pos.premium ?? pos.price;
+    const multiplier = pos.contract_multiplier ?? 100;
+    const mktValue = contracts * multiplier * (premium ?? 0);
+    const gainLoss = pos.cost_basis != null ? mktValue - pos.cost_basis : null;
+    totalMktValue += mktValue;
+    if (gainLoss != null) {
+      totalGainLoss += gainLoss;
+      hasGainLoss = true;
+    }
+
+    const optType = pos.option_type === 'C' ? 'Call' : pos.option_type === 'P' ? 'Put' : '-';
+    const contractLabel = pos.option_underlying
+      ? `${pos.option_underlying} ${pos.option_strike ? '$' + pos.option_strike : ''} ${optType.charAt(0)} ${formatOptionExpiry(pos.option_expiration)}`
+      : pos.ticker;
+
+    const row = document.createElement('tr');
+
+    const cells: [string, string][] = [
+      [contractLabel, ''],
+      [formatOptionExpiry(pos.option_expiration), 'text-right'],
+      [pos.option_strike != null ? formatCurrency(pos.option_strike) : '-', 'text-right'],
+      [optType, 'text-right'],
+      [String(contracts), 'text-right'],
+      [premium != null ? formatCurrency(premium) : '-', 'text-right'],
+      [formatCurrency(mktValue), 'text-right'],
+      [gainLoss != null ? formatCurrency(gainLoss) : '-', `text-right ${gainLoss != null && gainLoss >= 0 ? 'text-success' : 'text-error'}`],
+    ];
+
+    cells.forEach(([text, cls]) => {
+      const td = document.createElement('td');
+      td.className = cls;
+      td.textContent = text;
+      row.appendChild(td);
+    });
+
+    // Actions cell
+    const actionsCell = document.createElement('td');
+    actionsCell.className = 'actions-cell';
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'icon-btn icon-btn-delete';
+    deleteBtn.title = 'Delete position';
+    deleteBtn.setAttribute('aria-label', 'Delete position');
+    deleteBtn.appendChild(createTrashIcon());
+    deleteBtn.addEventListener('click', () => deletePosition(pos.id));
+    actionsCell.appendChild(deleteBtn);
+    row.appendChild(actionsCell);
+
+    tbody.appendChild(row);
+  });
+
+  // Subtotal row
+  const totalValueEl = section.querySelector('#options-total-value');
+  const totalGlEl = section.querySelector('#options-total-gl');
+  if (totalValueEl) totalValueEl.textContent = formatCurrency(totalMktValue);
+  if (totalGlEl) {
+    totalGlEl.textContent = hasGainLoss ? formatCurrency(totalGainLoss) : '-';
+    totalGlEl.className = totalGainLoss >= 0 ? 'text-success' : 'text-error';
+  }
 }
 
 /**

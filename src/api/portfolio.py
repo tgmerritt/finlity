@@ -62,6 +62,14 @@ class PositionResponse(BaseModel):
     maturity_date: Optional[str] = None
     purchase_date: Optional[str] = None
     interest_rate: Optional[float] = None  # APY as decimal (0.05 = 5%)
+    # Options-specific fields (None for non-option positions)
+    option_underlying: Optional[str] = None
+    option_expiration: Optional[str] = None
+    option_strike: Optional[float] = None
+    option_type: Optional[str] = None       # "C" or "P"
+    contract_multiplier: Optional[float] = None
+    contracts: Optional[float] = None       # alias for shares when position_type == "option"
+    premium: Optional[float] = None         # alias for current_price when position_type == "option"
 
 
 class PortfolioSummary(BaseModel):
@@ -176,10 +184,7 @@ def get_accounts(db: Database = Depends(get_db)) -> list[AccountResponse]:
 
     for account in accounts:
         positions = db.get_positions_by_account(cast(str, account.id))
-        value: float = float(sum(
-            (p.shares * p.current_price) if p.current_price else 0
-            for p in positions
-        ))
+        value: float = float(sum(p.market_value for p in positions))
         cost_basis: float = float(sum(p.cost_basis for p in positions if p.cost_basis))
 
         result.append(AccountResponse(
@@ -229,12 +234,12 @@ def get_all_positions(db: Database = Depends(get_db)) -> list[PositionResponse]:
         accrued_value = db.calculate_accrued_value(pos)
 
         # For positions with interest, use accrued value as market value
-        # For regular positions, use shares * price
+        # For regular/option positions, use pos.market_value (handles ×100 for options)
         market_value: float
         if pos.interest_rate and pos.interest_rate > 0:
             market_value = float(accrued_value)
         else:
-            market_value = float(pos.shares * pos.current_price) if pos.current_price else 0.0
+            market_value = pos.market_value
 
         gain_loss: Optional[float] = None
         gain_loss_pct: Optional[float] = None
@@ -244,6 +249,8 @@ def get_all_positions(db: Database = Depends(get_db)) -> list[PositionResponse]:
             if pos.cost_basis > 0:
                 gain_loss_pct = (gain_loss / float(pos.cost_basis)) * 100
 
+        pos_type = cast(str, pos.position_type or "equity")
+        is_opt = pos_type == "option"
         result.append(PositionResponse(
             id=cast(str, pos.id),
             account_id=cast(str, pos.account_id),
@@ -259,10 +266,17 @@ def get_all_positions(db: Database = Depends(get_db)) -> list[PositionResponse]:
             gain_loss_pct=gain_loss_pct,
             is_fund=cast(bool, pos.is_fund),
             asset_class=cast(str, pos.asset_class or "equity"),
-            position_type=cast(str, pos.position_type or "equity"),
+            position_type=pos_type,
             maturity_date=pos.maturity_date.isoformat() if pos.maturity_date else None,
             purchase_date=pos.purchase_date.isoformat() if pos.purchase_date else None,
             interest_rate=cast(Optional[float], pos.interest_rate),
+            option_underlying=cast(Optional[str], pos.option_underlying) if is_opt else None,
+            option_expiration=pos.option_expiration.isoformat() if is_opt and pos.option_expiration else None,
+            option_strike=cast(Optional[float], pos.option_strike) if is_opt else None,
+            option_type=cast(Optional[str], pos.option_type) if is_opt else None,
+            contract_multiplier=cast(Optional[float], pos.contract_multiplier) if is_opt else None,
+            contracts=cast(float, pos.shares) if is_opt else None,
+            premium=cast(Optional[float], pos.current_price) if is_opt else None,
         ))
 
     return result
@@ -650,7 +664,7 @@ def export_to_csv(data_type: str, db: Database = Depends(get_db)) -> Any:
         ])
         for pos in positions:
             account = accounts_by_id.get(cast(str, pos.account_id))
-            market_value = (pos.shares * pos.current_price) if pos.current_price else 0
+            market_value = pos.market_value
             gain_loss = (market_value - pos.cost_basis) if pos.cost_basis else None
 
             writer.writerow([

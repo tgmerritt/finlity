@@ -133,18 +133,24 @@ class Position(Base):
     account_id = Column(String, ForeignKey("accounts.id"), nullable=False)
     ticker = Column(String, nullable=False)  # Can be "CASH" for cash positions
     name = Column(String)
-    shares = Column(Float, nullable=False)  # For cash/CDs, this is 1.0
+    shares = Column(Float, nullable=False)  # For cash/CDs, this is 1.0; for options = contract count
     cost_basis = Column(Float)
-    current_price = Column(Float)  # Cached from price lookup; for cash = dollar amount
+    current_price = Column(Float)  # Cached from price lookup; for options = per-share premium
     sector = Column(String)
     is_fund = Column(Boolean, default=False)
     asset_class = Column(String, default="equity")  # equity, fixed_income, alternative, cash
-    position_type = Column(String, default="equity")  # equity, fund, cash, cd, bond, treasury
+    position_type = Column(String, default="equity")  # equity, fund, cash, cd, bond, treasury, option
     maturity_date = Column(DateTime, nullable=True)  # For CDs/bonds
     interest_rate = Column(Float, nullable=True)  # Annual rate for CDs/bonds
     purchase_date = Column(DateTime, nullable=True)  # When CD/bond was purchased
     last_import_id = Column(String, ForeignKey("file_imports.id"))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Options-specific columns (NULL for non-option positions)
+    option_underlying = Column(String, nullable=True)    # e.g. "GOOG"
+    option_expiration = Column(DateTime, nullable=True)  # expiration date
+    option_strike = Column(Float, nullable=True)         # strike price
+    option_type = Column(String, nullable=True)          # "C" or "P"
+    contract_multiplier = Column(Float, nullable=True)   # 100 for standard equity options
 
     # Relationships
     account = relationship("Account", back_populates="positions")
@@ -157,9 +163,10 @@ class Position(Base):
 
     @property
     def market_value(self) -> float:
-        """Calculate market value."""
+        """Calculate market value, applying ×100 for options contracts."""
         if self.current_price and self.shares:
-            return float(self.shares * self.current_price)
+            multiplier = float(self.contract_multiplier or 1)
+            return float(self.shares * self.current_price * multiplier)
         return 0.0
 
     @property

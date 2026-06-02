@@ -131,10 +131,9 @@ class AdvisorAnalysisService:
         account_holdings = {}
 
         for pos in positions:
-            if not pos.current_price:
+            value = pos.market_value
+            if not value:
                 continue
-
-            value = pos.shares * pos.current_price
             total_value += value
 
             ticker = pos.ticker.upper()

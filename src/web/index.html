@@ -681,6 +681,41 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Options Section (hidden when no options exist) -->
+                <div id="options-section" class="card" style="display:none; margin-top: 1.5rem;">
+                    <div class="card-header">
+                        <h3>Options</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-container">
+                            <table id="options-table">
+                                <thead>
+                                    <tr>
+                                        <th>Contract</th>
+                                        <th class="text-right">Exp</th>
+                                        <th class="text-right">Strike</th>
+                                        <th class="text-right">Type</th>
+                                        <th class="text-right">Contracts</th>
+                                        <th class="text-right">Premium</th>
+                                        <th class="text-right">Mkt Value</th>
+                                        <th class="text-right">Gain/Loss</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                                <tfoot>
+                                    <tr id="options-subtotal" class="tfoot-subtotal">
+                                        <td colspan="6" class="text-right"><strong>Total</strong></td>
+                                        <td class="text-right"><strong id="options-total-value">—</strong></td>
+                                        <td class="text-right"><strong id="options-total-gl">—</strong></td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Analysis Tab -->

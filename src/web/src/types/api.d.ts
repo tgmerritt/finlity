@@ -21,7 +21,7 @@ export type Brokerage = 'schwab' | 'fidelity' | 'vanguard' | 'other' | (string &
 
 export type AssetClass = 'equity' | 'fixed_income' | 'alternative' | 'cash';
 
-export type PositionType = 'equity' | 'fund' | 'cash' | 'cd' | 'bond' | 'treasury' | 'real_estate';
+export type PositionType = 'equity' | 'fund' | 'cash' | 'cd' | 'bond' | 'treasury' | 'real_estate' | 'option';
 
 // Account responses
 export interface AccountResponse {
@@ -57,6 +57,14 @@ export interface PositionResponse {
   maturity_date?: string | null;
   purchase_date?: string | null;
   interest_rate?: number | null;
+  // Options-specific (null for non-option positions)
+  option_underlying?: string | null;
+  option_expiration?: string | null;
+  option_strike?: number | null;
+  option_type?: string | null;     // "C" or "P"
+  contract_multiplier?: number | null;
+  contracts?: number | null;       // alias for shares when position_type == 'option'
+  premium?: number | null;         // alias for current_price when position_type == 'option'
 }
 
 // Portfolio summary
@@ -97,6 +105,14 @@ export interface DashboardPosition {
   interest_rate?: number | null;
   purchase_date?: string | null;
   maturity_date?: string | null;
+  // Options-specific (undefined for non-option positions)
+  option_underlying?: string | null;
+  option_expiration?: string | null;
+  option_strike?: number | null;
+  option_type?: string | null;
+  contract_multiplier?: number | null;
+  contracts?: number | null;
+  premium?: number | null;
 }
 
 export interface SnapshotHistory {

@@ -191,7 +191,8 @@ class TaxLossHarvester(AnalysisPlugin):
                     holding_days = max((today - pdate).days, 0)
                     is_short_term = holding_days <= LONG_TERM_HOLDING_DAYS
 
-                    current_value = lot_shares * current_price
+                    contract_mult = float(pos.get("contract_multiplier") or 1)
+                    current_value = lot_shares * current_price * contract_mult
                     unrealized = current_value - lot_cost  # signed; loss = negative
 
                     if unrealized >= 0:

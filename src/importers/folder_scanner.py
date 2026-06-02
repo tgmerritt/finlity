@@ -14,6 +14,7 @@ import pandas as pd
 
 from src.database import Database
 from src.models.account_types import PREDEFINED_ACCOUNT_TYPES, get_folder_name
+from src.models.position_types import parse_occ_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -574,7 +575,7 @@ class FolderScanner:
                     if position_data is None:
                         continue
 
-                    ticker, shares, name, price, cost_basis, is_fund = position_data
+                    ticker, shares, name, price, cost_basis, is_fund, option_fields = position_data
 
                     # Add as individual lot (each row is a separate position)
                     self.db.add_position(
@@ -587,6 +588,12 @@ class FolderScanner:
                         is_fund=is_fund,
                         import_id=cast(Optional[str], file_import.id),
                         brokerage=brokerage,
+                        position_type=option_fields.get("position_type", "equity"),
+                        contract_multiplier=option_fields.get("contract_multiplier"),
+                        option_underlying=option_fields.get("option_underlying"),
+                        option_expiration=option_fields.get("option_expiration"),
+                        option_strike=option_fields.get("option_strike"),
+                        option_type=option_fields.get("option_type"),
                     )
                     positions_imported += 1
 
@@ -666,6 +673,7 @@ class FolderScanner:
 
         # Get price (optional)
         price = 0.0
+        price_from_mv = False  # track whether price was computed from market-value fallback
         price_col = column_map.get("price")
         if price_col:
             price_val = row.get(price_col)
@@ -681,6 +689,7 @@ class FolderScanner:
                     market_value = self._parse_number(mv_val)
                     if market_value > 0 and shares > 0:
                         price = market_value / shares
+                        price_from_mv = True
 
         # Get cost basis
         cost_basis = None
@@ -714,7 +723,36 @@ class FolderScanner:
                 if "etf" in sec_type or "fund" in sec_type or "mutual" in sec_type:
                     is_fund = True
 
-        return ticker, shares, name, price, cost_basis, is_fund
+        # Detect options by OCC ticker format (e.g. "GOOG 06/17/2027 305.00 C")
+        option_fields: dict = {}
+        occ = parse_occ_ticker(ticker)
+        if occ:
+            from datetime import datetime as _dt
+            is_fund = False
+            option_fields = {
+                "position_type": "option",
+                "contract_multiplier": 100.0,
+                "option_underlying": occ["underlying"],
+                "option_type": occ["opt_type"],
+                "option_strike": float(occ["strike"]),
+            }
+            try:
+                option_fields["option_expiration"] = _dt.strptime(occ["exp"], "%m/%d/%Y")
+            except ValueError:
+                pass
+            # Normalize price to per-share premium.
+            # The MV fallback gives market_value/shares which is per-CONTRACT for
+            # options (broker MV columns already reflect ×100). Divide by 100 so
+            # the stored current_price is per-share and the market_value property
+            # (which re-applies ×100) yields the correct total.
+            if price_from_mv and price > 0:
+                price = price / 100.0
+            # cost_basis from importer = cost_per_share × shares;
+            # multiply by contract_multiplier so stored value is total position cost.
+            if cost_basis is not None:
+                cost_basis = cost_basis * 100.0
+
+        return ticker, shares, name, price, cost_basis, is_fund, option_fields
 
     def _parse_number(self, value) -> float:
         """Parse a number from various formats (handles $, commas, etc.)."""
