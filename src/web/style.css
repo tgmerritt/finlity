@@ -2095,6 +2095,15 @@ tr:hover td {
     background: var(--color-bg-spotlight);
 }
 
+/* Options table subtotal row */
+tfoot.tfoot-subtotal td,
+tr.tfoot-subtotal td,
+tr#options-subtotal td {
+    border-top: 1px solid var(--color-border);
+    background: var(--color-bg-elevated);
+    font-weight: 600;
+}
+
 /* Tabular figures for financial columns — modern sans with column-aligned
    digits (replaces the old fixed-width monospace look). */
 td.text-right {

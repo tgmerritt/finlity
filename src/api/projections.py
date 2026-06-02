@@ -597,10 +597,9 @@ def get_account_balances_by_type(
 
     account_totals = {}
     for pos in positions:
-        if not pos.current_price:
+        value = pos.market_value
+        if not value:
             continue
-
-        value = float(pos.shares * pos.current_price)
         account = account_map.get(pos.account_id)
         if not account:
             continue

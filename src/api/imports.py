@@ -416,6 +416,12 @@ class ParsedPosition(BaseModel):
     price: Optional[float] = None
     cost_basis: Optional[float] = None
     is_fund: bool = False
+    position_type: str = "equity"
+    contract_multiplier: Optional[float] = None
+    option_underlying: Optional[str] = None
+    option_expiration: Optional[str] = None  # ISO date string
+    option_strike: Optional[float] = None
+    option_type: Optional[str] = None         # "C" or "P"
 
 
 class SuggestedAccount(BaseModel):
@@ -444,6 +450,12 @@ class ImportPositionInput(BaseModel):
     price: Optional[float] = None
     cost_basis: Optional[float] = None
     is_fund: bool = False
+    position_type: str = "equity"
+    contract_multiplier: Optional[float] = None
+    option_underlying: Optional[str] = None
+    option_expiration: Optional[str] = None  # ISO date string
+    option_strike: Optional[float] = None
+    option_type: Optional[str] = None         # "C" or "P"
 
 
 class ImportPositionsRequest(BaseModel):
@@ -707,7 +719,10 @@ async def parse_file(
             try:
                 result = scanner._extract_position(row, detected_columns)
                 if result:
-                    ticker, shares, name, price, cost_basis, is_fund = result
+                    ticker, shares, name, price, cost_basis, is_fund, option_fields = result
+                    exp_str = None
+                    if option_fields.get("option_expiration"):
+                        exp_str = option_fields["option_expiration"].isoformat()
                     positions.append(ParsedPosition(
                         ticker=ticker,
                         name=name if name != ticker else None,
@@ -715,6 +730,12 @@ async def parse_file(
                         price=price if price > 0 else None,
                         cost_basis=cost_basis,
                         is_fund=is_fund,
+                        position_type=option_fields.get("position_type", "equity"),
+                        contract_multiplier=option_fields.get("contract_multiplier"),
+                        option_underlying=option_fields.get("option_underlying"),
+                        option_expiration=exp_str,
+                        option_strike=option_fields.get("option_strike"),
+                        option_type=option_fields.get("option_type"),
                     ))
             except Exception as e:
                 warnings.append(f"Row {idx + 2}: {str(e)}")
@@ -781,6 +802,13 @@ async def import_positions(
 
         for pos in request.positions:
             try:
+                from datetime import datetime as _dt
+                opt_exp = None
+                if pos.option_expiration:
+                    try:
+                        opt_exp = _dt.fromisoformat(pos.option_expiration)
+                    except ValueError:
+                        pass
                 db.upsert_position(
                     account_id=request.account_id,
                     ticker=pos.ticker,
@@ -789,6 +817,12 @@ async def import_positions(
                     cost_basis=pos.cost_basis,
                     current_price=pos.price,
                     is_fund=pos.is_fund,
+                    position_type=pos.position_type,
+                    contract_multiplier=pos.contract_multiplier,
+                    option_underlying=pos.option_underlying,
+                    option_expiration=opt_exp,
+                    option_strike=pos.option_strike,
+                    option_type=pos.option_type,
                 )
                 imported_count += 1
 

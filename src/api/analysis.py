@@ -489,9 +489,7 @@ def get_expense_drag(
 
     positions_with_er: list[tuple[str, float, Optional[float]]] = []
     for pos in positions:
-        if not pos.current_price or not pos.shares:
-            continue
-        value = float(pos.shares) * float(pos.current_price)
+        value = pos.market_value
         if value <= 0:
             continue
 
@@ -709,10 +707,7 @@ def get_detailed_allocation(db: Database = Depends(get_db)) -> DetailedAllocatio
     from src.services.secrets import SecretsManager
 
     positions = db.get_all_positions()
-    total_value: float = float(sum(
-        (p.shares * p.current_price) if p.current_price else 0
-        for p in positions
-    ))
+    total_value: float = float(sum(p.market_value for p in positions))
 
     if total_value == 0:
         return DetailedAllocationResponse(
@@ -742,7 +737,7 @@ def get_detailed_allocation(db: Database = Depends(get_db)) -> DetailedAllocatio
     fund_value: float = 0.0
 
     for pos in positions:
-        value = float(pos.shares * pos.current_price) if pos.current_price else 0.0
+        value = pos.market_value
         is_fund = bool(pos.is_fund or (pos.position_type == "fund"))
         pos_type = cast(str, pos.position_type or "equity")
 

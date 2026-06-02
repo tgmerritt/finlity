@@ -102,7 +102,8 @@ class DividendTracker(AnalysisPlugin):
                 if not ticker or shares <= 0 or current_price <= 0:
                     continue
 
-                position_value = shares * current_price
+                contract_mult = float(pos.get("contract_multiplier") or 1)
+                position_value = shares * current_price * contract_mult
                 total_portfolio_value += position_value
 
                 # Skip ETFs if setting is disabled

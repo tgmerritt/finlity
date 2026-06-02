@@ -75,11 +75,50 @@ class Database:
                         ("maturity_date", "DATETIME"),
                         ("interest_rate", "REAL"),
                         ("purchase_date", "DATETIME"),
+                        ("option_underlying", "TEXT"),
+                        ("option_expiration", "DATETIME"),
+                        ("option_strike", "REAL"),
+                        ("option_type", "TEXT"),
+                        ("contract_multiplier", "REAL"),
                     ]
                     for col_name, col_type in position_migrations:
                         if col_name not in existing_cols:
                             conn.execute(text(f"ALTER TABLE positions ADD COLUMN {col_name} {col_type}"))
                             conn.commit()
+
+                    # Migrate existing option positions: set position_type, contract_multiplier,
+                    # parse option fields from ticker, and fix cost_basis (multiply by 100).
+                    # Detection: OCC ticker format "UNDERLYING MM/DD/YYYY STRIKE [CP]"
+                    import re as _re
+                    _occ = _re.compile(
+                        r'^(?P<u>[A-Z][A-Z0-9./]*)\s+(?P<exp>\d{2}/\d{2}/\d{4})\s+(?P<s>[\d.]+)\s+(?P<t>[CP])$'
+                    )
+                    option_rows = conn.execute(text(
+                        "SELECT id, ticker, cost_basis FROM positions "
+                        "WHERE position_type IS NULL OR position_type = 'equity'"
+                    )).fetchall()
+                    for row in option_rows:
+                        m = _occ.match(str(row[1]).strip().upper())
+                        if m:
+                            from datetime import datetime as _dt
+                            try:
+                                exp_dt = _dt.strptime(m.group('exp'), '%m/%d/%Y')
+                            except ValueError:
+                                exp_dt = None
+                            new_cost = float(row[2]) * 100 if row[2] else None
+                            conn.execute(text(
+                                "UPDATE positions SET position_type='option', "
+                                "contract_multiplier=100, "
+                                "option_underlying=:u, option_expiration=:exp, "
+                                "option_strike=:s, option_type=:t"
+                                + (", cost_basis=:cb" if new_cost is not None else "")
+                                + " WHERE id=:id"
+                            ), {
+                                'u': m.group('u'), 'exp': exp_dt, 's': float(m.group('s')),
+                                't': m.group('t'), 'id': row[0],
+                                **({'cb': new_cost} if new_cost is not None else {}),
+                            })
+                    conn.commit()
 
                 # Check and add missing columns to monte_carlo_results table
                 if "monte_carlo_results" in inspector.get_table_names():
@@ -378,6 +417,12 @@ class Database:
         is_fund: bool = False,
         asset_class: str = "equity",
         import_id: Optional[str] = None,
+        position_type: str = "equity",
+        contract_multiplier: Optional[float] = None,
+        option_underlying: Optional[str] = None,
+        option_expiration: Optional[datetime] = None,
+        option_strike: Optional[float] = None,
+        option_type: Optional[str] = None,
     ) -> Position:
         """Update or insert a position."""
         with self.get_session() as session:
@@ -401,6 +446,17 @@ class Database:
                     position.sector = sector  # type: ignore[assignment]
                 position.is_fund = is_fund  # type: ignore[assignment]
                 position.asset_class = asset_class  # type: ignore[assignment]
+                position.position_type = position_type  # type: ignore[assignment]
+                if contract_multiplier is not None:
+                    position.contract_multiplier = contract_multiplier  # type: ignore[assignment]
+                if option_underlying is not None:
+                    position.option_underlying = option_underlying  # type: ignore[assignment]
+                if option_expiration is not None:
+                    position.option_expiration = option_expiration  # type: ignore[assignment]
+                if option_strike is not None:
+                    position.option_strike = option_strike  # type: ignore[assignment]
+                if option_type is not None:
+                    position.option_type = option_type  # type: ignore[assignment]
                 if import_id:
                     position.last_import_id = import_id  # type: ignore[assignment]
                 position.updated_at = datetime.utcnow()  # type: ignore[assignment]
@@ -416,7 +472,13 @@ class Database:
                     sector=sector,
                     is_fund=is_fund,
                     asset_class=asset_class,
+                    position_type=position_type,
                     last_import_id=import_id,
+                    contract_multiplier=contract_multiplier,
+                    option_underlying=option_underlying,
+                    option_expiration=option_expiration,
+                    option_strike=option_strike,
+                    option_type=option_type,
                 )
                 session.add(position)
 
@@ -463,8 +525,8 @@ class Database:
             # No purchase date, just return principal
             return principal
 
-        # Regular positions: shares * price
-        return float(position.shares * position.current_price)
+        # Regular positions (and options): delegate to market_value for correct multiplier
+        return position.market_value
 
     def get_positions_by_account(self, account_id: str) -> list[Position]:
         """Get all positions for an account.
@@ -502,6 +564,11 @@ class Database:
         import_id: Optional[str] = None,
         lots: Optional[list[dict]] = None,
         brokerage: Optional[str] = None,
+        contract_multiplier: Optional[float] = None,
+        option_underlying: Optional[str] = None,
+        option_expiration: Optional[datetime] = None,
+        option_strike: Optional[float] = None,
+        option_type: Optional[str] = None,
     ) -> Position:
         """Add a new position (always creates new, never updates existing).
 
@@ -564,6 +631,11 @@ class Database:
                 interest_rate=interest_rate,
                 purchase_date=purchase_date,
                 last_import_id=import_id,
+                contract_multiplier=contract_multiplier,
+                option_underlying=option_underlying,
+                option_expiration=option_expiration,
+                option_strike=option_strike,
+                option_type=option_type,
             )
             session.add(position)
             session.flush()  # populate position.id without committing yet
@@ -788,7 +860,7 @@ class Database:
             for account in accounts:
                 positions = session.query(Position).filter_by(account_id=account.id).all()
                 for pos in positions:
-                    value = (pos.shares * pos.current_price) if pos.current_price else 0.0
+                    value = pos.market_value
                     total_value += value  # type: ignore[assignment]
 
                     if account.is_retirement:
@@ -998,7 +1070,7 @@ class Database:
                 account_cost = 0.0
 
                 for pos in positions:
-                    value = (pos.shares * pos.current_price) if pos.current_price else 0.0
+                    value = pos.market_value
                     account_value += value  # type: ignore[assignment]
                     if pos.cost_basis:
                         account_cost += pos.cost_basis  # type: ignore[assignment]

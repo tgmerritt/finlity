@@ -71,7 +71,7 @@ class TriggerEvaluator:
         account_cash = {}
 
         for pos in positions:
-            value = (pos.shares * pos.current_price) if pos.current_price else 0
+            value = pos.market_value
 
             # By position
             position_values[pos.id] = value
@@ -99,10 +99,7 @@ class TriggerEvaluator:
         account_invested_pct = {}
         for account in accounts:
             acc_positions = [p for p in positions if p.account_id == account.id]
-            acc_value = sum(
-                (p.shares * p.current_price) if p.current_price else 0
-                for p in acc_positions
-            )
+            acc_value = sum(p.market_value for p in acc_positions)
             if acc_value > 0:
                 cash_value = account_cash.get(account.id, 0)
                 invested_pct = ((acc_value - cash_value) / acc_value) * 100

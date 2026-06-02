@@ -419,8 +419,10 @@ async def get_dashboard_data(view_id: str = None):
         if pos.interest_rate and pos.interest_rate > 0:
             market_value = accrued_value
         else:
-            market_value = (pos.shares * pos.current_price) if pos.current_price else 0
+            market_value = pos.market_value
 
+        pos_type = pos.position_type or "equity"
+        is_opt = pos_type == "option"
         positions.append({
             "id": pos.id,
             "ticker": pos.ticker,
@@ -433,10 +435,17 @@ async def get_dashboard_data(view_id: str = None):
             "account": account.name if account else "Unknown",
             "account_type": account.account_type if account else "unknown",
             "is_fund": pos.is_fund,
-            "position_type": pos.position_type or "equity",
+            "position_type": pos_type,
             "interest_rate": pos.interest_rate,
             "purchase_date": pos.purchase_date.isoformat() if pos.purchase_date else None,
             "maturity_date": pos.maturity_date.isoformat() if pos.maturity_date else None,
+            "option_underlying": pos.option_underlying if is_opt else None,
+            "option_expiration": pos.option_expiration.isoformat() if is_opt and pos.option_expiration else None,
+            "option_strike": pos.option_strike if is_opt else None,
+            "option_type": pos.option_type if is_opt else None,
+            "contract_multiplier": pos.contract_multiplier if is_opt else None,
+            "contracts": pos.shares if is_opt else None,
+            "premium": pos.current_price if is_opt else None,
         })
 
         # Accumulate totals

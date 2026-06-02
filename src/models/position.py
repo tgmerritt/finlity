@@ -50,11 +50,13 @@ class Position(BaseModel):
     asset_class: AssetClass = AssetClass.EQUITY
     sector: Optional[str] = None
     is_fund: bool = False
+    contract_multiplier: Optional[float] = None  # 100 for options, None/1 otherwise
 
     @computed_field
     @property
     def market_value(self) -> float:
-        return self.shares * self.current_price
+        multiplier = float(self.contract_multiplier or 1)
+        return self.shares * self.current_price * multiplier
 
     @computed_field
     @property

@@ -1,7 +1,8 @@
 """Position type classifications for the portfolio system."""
 
+import re
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 
 class PositionType(str, Enum):
@@ -14,6 +15,7 @@ class PositionType(str, Enum):
     BOND = "bond"               # Individual bonds
     TREASURY = "treasury"       # T-bills, I-bonds, etc.
     REAL_ESTATE = "real_estate" # Property (home, rental, land)
+    OPTION = "option"           # Options contracts (calls/puts)
 
 
 class AssetClass(str, Enum):
@@ -34,6 +36,7 @@ POSITION_TYPE_TO_ASSET_CLASS = {
     PositionType.BOND: AssetClass.FIXED_INCOME,
     PositionType.TREASURY: AssetClass.FIXED_INCOME,
     PositionType.REAL_ESTATE: AssetClass.ALTERNATIVE,
+    PositionType.OPTION: AssetClass.EQUITY,  # Options provide equity exposure
 }
 
 
@@ -71,12 +74,56 @@ NON_UPDATABLE_POSITION_TYPES = frozenset({
     PositionType.CASH.value,
     PositionType.CD.value,
     PositionType.REAL_ESTATE.value,
+    PositionType.OPTION.value,  # Option symbols don't resolve via equity price providers
 })
 
 # Sentinel ticker values used internally for non-market positions
 # (set by the Add Cash / Add CD / Add Real Estate API endpoints) plus the
 # Schwab CSV placeholder for pending positions.
 _PLACEHOLDER_TICKERS = frozenset({"", "CASH", "CD", "RE", "NO NUMBER", "PENDING"})
+
+
+# OCC standard options ticker: e.g. "GOOG 06/17/2027 305.00 C"
+_OCC_PATTERN = re.compile(
+    r'^(?P<underlying>[A-Z][A-Z0-9./]*)(?:\s+(?P<exp>\d{2}/\d{2}/\d{4})\s+(?P<strike>[\d.]+)\s+(?P<opt_type>[CP]))?$'
+)
+
+
+def parse_occ_ticker(ticker: str) -> Optional[dict[str, str]]:
+    """Parse an OCC options ticker string.
+
+    Returns a dict with keys underlying, exp, strike, opt_type if the ticker
+    matches the options format, or None for plain equity tickers.
+    """
+    m = _OCC_PATTERN.match(ticker.strip().upper())
+    if m and m.group('exp'):
+        return {
+            'underlying': m.group('underlying'),
+            'exp': m.group('exp'),
+            'strike': m.group('strike'),
+            'opt_type': m.group('opt_type'),
+        }
+    return None
+
+
+def is_option(position_type: Optional[str]) -> bool:
+    """Return True if the position type is an options contract."""
+    return position_type == PositionType.OPTION.value
+
+
+def position_market_value(pos: Any) -> float:
+    """Compute the market value of a position.
+
+    For options, applies contract_multiplier (100) so that
+    market_value = contracts × 100 × premium_per_share.
+    For all other types, market_value = shares × current_price.
+    """
+    price = getattr(pos, 'current_price', None)
+    shares = getattr(pos, 'shares', None)
+    if not price or not shares:
+        return 0.0
+    multiplier = float(getattr(pos, 'contract_multiplier', None) or 1)
+    return float(shares * price * multiplier)
 
 
 def is_updatable_position(position_type: Optional[str], ticker: Optional[str]) -> bool:
