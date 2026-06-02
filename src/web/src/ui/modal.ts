@@ -50,6 +50,8 @@ export function showModal(title: string, content: string): void {
     bodyEl.innerHTML = content;
   }
   if (modal) {
+    // See showModalById: `hidden` is `display:none !important`, so remove it.
+    modal.classList.remove('hidden');
     modal.style.display = 'flex';
   }
 }
@@ -60,6 +62,7 @@ export function showModal(title: string, content: string): void {
 export function closeModal(): void {
   const modal = querySelector<HTMLElement>('#generic-modal');
   if (modal) {
+    modal.classList.add('hidden');
     modal.style.display = 'none';
   }
 }
@@ -232,6 +235,10 @@ export function closeDynamicModal(): void {
 export function showModalById(modalId: string): void {
   const modal = document.getElementById(modalId);
   if (modal) {
+    // Modals ship with the `hidden` utility class, which is
+    // `display: none !important` — an inline `style.display` cannot beat
+    // `!important`, so we must remove the class to actually reveal the modal.
+    modal.classList.remove('hidden');
     modal.style.display = 'flex';
   }
 }
@@ -243,6 +250,9 @@ export function showModalById(modalId: string): void {
 export function hideModalById(modalId: string): void {
   const modal = document.getElementById(modalId);
   if (modal) {
+    // Re-add `hidden` so it stays hidden even if something later clears the
+    // inline style; mirrors showModalById's removal of the class.
+    modal.classList.add('hidden');
     modal.style.display = 'none';
   }
 }
