@@ -519,9 +519,9 @@ async function init(): Promise<void> {
     // Record the baseline settings version so the per-tab freshness check has
     // something to compare against (and doesn't toast on the very first visit).
     await syncSettingsVersion();
-    // Fire-and-forget: can take 30s+ when upstream price APIs are slow/flaky.
-    // Keeps the UI interactive while stale prices refresh in the background.
-    autoRefreshIfStale().then(updatePriceStatus).catch(console.warn);
+    // Await the price refresh (if any stale tickers) so that summary cards
+    // rendered by refreshData() below always use up-to-date prices.
+    await autoRefreshIfStale();
     await updatePriceStatus();
     await checkDemoModeStatus();
     await loadDeploymentInfo();
