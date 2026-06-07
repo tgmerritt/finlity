@@ -37,4 +37,4 @@ fi
 echo "Running pip-audit on requirements.txt with $((${#ignore_args[@]} / 2)) ignore flags expanded from ${IGNORE_FILE}..."
 # `${ignore_args[@]+...}` guard handles the empty-array case under `set -u`
 # (older bash 3.2, including macOS, errors on bare ${arr[@]} when empty).
-exec pip-audit -r "${REPO_ROOT}/requirements.txt" --desc --disable-pip ${ignore_args[@]+"${ignore_args[@]}"}
+exec pip-audit -r "${REPO_ROOT}/requirements.txt" --desc --disable-pip --no-deps ${ignore_args[@]+"${ignore_args[@]}"}
