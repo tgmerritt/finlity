@@ -15,14 +15,17 @@ import io
 import logging
 import re
 import statistics
-import PyPDF2
 from collections import defaultdict
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+import PyPDF2
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
+from src.api.dependencies import get_db
 from src.database import get_database
 from src.database.models import (
     BankStatementImport,
@@ -30,6 +33,30 @@ from src.database.models import (
     BudgetExpenseCategory,
     RecurringCandidate,
 )
+
+# ---------------------------------------------------------------------------
+# Configuration constants
+# ---------------------------------------------------------------------------
+
+# Maximum total file size per upload request: 50 MB
+MAX_TOTAL_FILE_SIZE = 50 * 1024 * 1024
+
+# Maximum number of files per upload request
+MAX_FILE_COUNT = 20
+
+# Minimum occurrences for recurring detection
+MIN_OCCURRENCES = 3
+
+# Amount tolerance: fraction of median allowed (10%)
+AMOUNT_TOLERANCE = 0.10
+
+# Supported file extensions
+ALLOWED_EXTENSIONS = (".csv", ".pdf")
+
+# Supported bank parsers — extendable registry
+# Each entry: (extension_tuple, parser_fn)
+ParserEntry = tuple[tuple[str, ...], callable]
+PARSER_REGISTRY: list[ParserEntry] = []
 
 logger = logging.getLogger(__name__)
 
@@ -105,15 +132,6 @@ def _parse_amount(raw: str) -> Optional[float]:
         return -val if negative else val
     except ValueError:
         return None
-
-
-def _normalize_name(raw: str) -> str:
-    """Strip transaction IDs and noise from merchant descriptions."""
-    name = raw.strip()
-    name = re.sub(r"\s+\d{4,}$", "", name)
-    name = re.sub(r"\s+\d{1,2}[/-]\d{1,2}(/\d{2,4})?$", "", name)
-    name = re.sub(r"\s+", " ", name).strip()
-    return name.title()
 
 
 def _parse_usaa_pdf(content: bytes) -> list[dict]:
@@ -284,14 +302,15 @@ def _parse_usaa_pdf(content: bytes) -> list[dict]:
 # Recurring-transaction detection
 # ---------------------------------------------------------------------------
 
-MIN_OCCURRENCES = 3
-AMOUNT_TOLERANCE = 0.10
-
 
 def _infer_frequency(dates: list[datetime]) -> str:
-    """Infer payment cadence from a list of transaction dates."""
+    """Infer payment cadence from a list of transaction dates.
+
+    Returns one of: 'weekly', 'biweekly', 'monthly', 'annual', or 'unknown'.
+    'unknown' is returned when there are fewer than 2 dates to infer a gap.
+    """
     if len(dates) < 2:
-        return "monthly"
+        return "unknown"
     sorted_dates = sorted(dates)
     gaps = [(sorted_dates[i + 1] - sorted_dates[i]).days for i in range(len(sorted_dates) - 1)]
     avg_gap = statistics.mean(gaps)
@@ -302,6 +321,27 @@ def _infer_frequency(dates: list[datetime]) -> str:
     if avg_gap <= 45:
         return "monthly"
     return "annual"
+
+
+def _normalize_name(raw: str) -> str:
+    """Strip transaction IDs and noise from merchant descriptions.
+
+    Preserves order numbers, invoice refs, and masked account identifiers
+    that look like '*NNNNNNNNNN' patterns.  Strips:
+      - 6-digit ACH date codes (e.g. '021726')
+      - Trailing 4+ digit sequences that look like transaction IDs
+      - Trailing date-like suffixes (MM/DD or MM/DD/YYYY)
+    """
+    name = raw.strip()
+    # Remove 6-digit ACH date codes embedded in the middle of the string
+    name = re.sub(r'\b\d{6}\b', '', name)
+    # Strip trailing 4+ digit sequences (transaction IDs, order numbers)
+    name = re.sub(r"\s+\d{4,}$", "", name)
+    # Strip trailing date-like suffixes (e.g. "01/15" or "01/15/2026")
+    name = re.sub(r"\s+\d{1,2}[/-]\d{1,2}(/\d{2,4})?$", "", name)
+    # Collapse multiple spaces
+    name = re.sub(r"\s+", " ", name).strip()
+    return name.title() if name else ""
 
 
 def _detect_recurring(rows: list[dict]) -> list[dict]:
@@ -351,16 +391,22 @@ def _detect_recurring(rows: list[dict]) -> list[dict]:
 
 def _parse_file_rows(filename: str, content: bytes) -> list[dict]:
     """Parse a single uploaded file (CSV or PDF) into transaction row dicts."""
-    allowed_extensions = (".csv", ".pdf")
-    if not filename or not any(filename.lower().endswith(ext) for ext in allowed_extensions):
-        raise HTTPException(status_code=400, detail=f"{filename!r}: only CSV and PDF files are accepted.")
+    if not filename or not any(filename.lower().endswith(ext) for ext in ALLOWED_EXTENSIONS):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{filename!r}: only {', '.join(ALLOWED_EXTENSIONS)} files are accepted.",
+        )
 
     if filename.lower().endswith(".pdf"):
         rows = _parse_usaa_pdf(content)
         if not rows:
             raise HTTPException(
                 status_code=422,
-                detail=f"{filename!r}: no transactions could be parsed. Ensure this is a USAA checking statement.",
+                detail=(
+                    f"{filename!r}: no transactions could be parsed. "
+                    "Currently only USAA checking account statements are supported. "
+                    "Please upload a USAA PDF statement."
+                ),
             )
         return rows
 
@@ -412,7 +458,11 @@ def _parse_file_rows(filename: str, content: bytes) -> list[dict]:
 
 
 @router.post("/upload", response_model=BankStatementBatchResponse)
-async def upload_bank_statement(files: list[UploadFile] = File(...)) -> BankStatementBatchResponse:
+async def upload_bank_statement(
+    files: list[UploadFile] = File(...),
+    entity_id: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+) -> BankStatementBatchResponse:
     """
     Upload one or more bank statements (CSV or PDF).
 
@@ -422,20 +472,45 @@ async def upload_bank_statement(files: list[UploadFile] = File(...)) -> BankStat
 
     Duplicate files (same SHA-256) are silently skipped.
     Returns all detected recurring candidates across the batch.
+
+    Limits:
+    - Maximum 20 files per request
+    - Maximum 50 MB total size across all files
+
+    The optional ``entity_id`` form field associates the import with a
+    specific entity so that accepted expenses inherit the correct owner.
     """
     if not files:
         raise HTTPException(status_code=400, detail="No files provided.")
 
-    db = get_database()
+    if len(files) > MAX_FILE_COUNT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum {MAX_FILE_COUNT} files allowed; received {len(files)}.",
+        )
+
+    # Read all files and check total size before any DB work
+    file_contents: list[tuple[str, bytes]] = []  # (filename, content)
+    total_size = 0
+    for upload in files:
+        content = await upload.read()
+        total_size += len(content)
+        if total_size > MAX_TOTAL_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Total upload size exceeds {MAX_TOTAL_FILE_SIZE // (1024 * 1024)} MB limit.",
+            )
+        file_contents.append((upload.filename or "unknown", content))
+
     now = datetime.utcnow()
 
     with db.get_session() as session:
         all_rows: list[dict] = []
         import_records: list[BankStatementImport] = []
+        duplicate_import_ids: list[str] = []
         files_skipped = 0
 
-        for upload in files:
-            content = await upload.read()
+        for filename, content in file_contents:
             content_hash = hashlib.sha256(content).hexdigest()
 
             existing = session.query(BankStatementImport).filter(
@@ -443,21 +518,23 @@ async def upload_bank_statement(files: list[UploadFile] = File(...)) -> BankStat
             ).first()
             if existing:
                 files_skipped += 1
+                duplicate_import_ids.append(existing.id)
                 # Still include its rows in the combined analysis so previously
-                # imported months contribute to recurring detection.
+                # imported months contribute to recurring detection on mixed uploads.
                 try:
-                    file_rows = _parse_file_rows(upload.filename or "", content)
+                    file_rows = _parse_file_rows(filename, content)
                     all_rows.extend(file_rows)
                 except HTTPException:
                     pass
                 continue
 
-            file_rows = _parse_file_rows(upload.filename or "", content)
+            file_rows = _parse_file_rows(filename, content)
 
             import_record = BankStatementImport(
-                file_name=upload.filename or "unknown",
+                file_name=filename,
                 content_hash=content_hash,
-                row_count=float(len(file_rows)),
+                entity_id=entity_id,
+                row_count=len(file_rows),
                 status="analyzed",
                 analyzed_at=now,
             )
@@ -467,32 +544,49 @@ async def upload_bank_statement(files: list[UploadFile] = File(...)) -> BankStat
             import_records.append(import_record)
             all_rows.extend(file_rows)
 
-        if not import_records and files_skipped == len(files):
-            raise HTTPException(
-                status_code=409,
-                detail="All uploaded files have already been imported."
-            )
-
-        # Detect recurring transactions across all files combined.
-        # Link candidates to the first new import record.
-        primary_import = import_records[0]
-        candidates_data = _detect_recurring(all_rows)
-
+        # Run detection only when there's at least one new import. Re-detecting
+        # on an all-duplicate upload would just recreate identical candidates.
         candidate_objs: list[RecurringCandidate] = []
-        for c in candidates_data:
-            cand = RecurringCandidate(
-                import_id=primary_import.id,
-                name=c["name"],
-                amount=c["amount"],
-                frequency=c["frequency"],
-                occurrences=float(c["occurrences"]),
+        if import_records:
+            primary_import = import_records[0]
+            candidates_data = _detect_recurring(all_rows)
+            for c in candidates_data:
+                cand = RecurringCandidate(
+                    import_id=primary_import.id,
+                    name=c["name"],
+                    amount=c["amount"],
+                    frequency=c["frequency"],
+                    occurrences=float(c["occurrences"]),
+                )
+                session.add(cand)
+                candidate_objs.append(cand)
+
+        # Always surface still-pending candidates from any duplicate imports so
+        # the user can accept ones they missed on the original upload.
+        existing_pending: list[RecurringCandidate] = []
+        if duplicate_import_ids:
+            existing_pending = (
+                session.query(RecurringCandidate)
+                .filter(RecurringCandidate.import_id.in_(duplicate_import_ids))
+                .filter(RecurringCandidate.status == "pending")
+                .all()
             )
-            session.add(cand)
-            candidate_objs.append(cand)
 
         session.commit()
         for cand in candidate_objs:
             session.refresh(cand)
+        for cand in existing_pending:
+            session.refresh(cand)
+
+        # Merge while avoiding double-listing if a new candidate happens to
+        # share id with an existing one (shouldn't, but defensive).
+        seen_ids: set[str] = set()
+        merged: list[RecurringCandidate] = []
+        for cand in candidate_objs + existing_pending:
+            if cand.id in seen_ids:
+                continue
+            seen_ids.add(cand.id)
+            merged.append(cand)
 
         return BankStatementBatchResponse(
             files_imported=len(import_records),
@@ -509,7 +603,7 @@ async def upload_bank_statement(files: list[UploadFile] = File(...)) -> BankStat
                     status=c.status,
                     created_expense_id=c.created_expense_id,
                 )
-                for c in candidate_objs
+                for c in merged
             ],
         )
 
@@ -562,6 +656,7 @@ async def list_imports() -> list[BankStatementImportResponse]:
 async def accept_candidate(
     candidate_id: str,
     request: AcceptCandidateRequest,
+    db: Session = Depends(get_db),
 ) -> dict:
     """
     Accept a recurring candidate, creating a BudgetExpense entry.
@@ -569,8 +664,10 @@ async def accept_candidate(
     The expense inherits the candidate's name, amount, and frequency unless
     overridden in the request body.  Defaults to the 'Other' expense category
     if no category_id is provided.
+
+    Propagates entity_id from the import record to the created expense so
+    multi-entity household workflows remain consistent.
     """
-    db = get_database()
     with db.get_session() as session:
         candidate = (
             session.query(RecurringCandidate)
@@ -583,6 +680,38 @@ async def accept_candidate(
             raise HTTPException(
                 status_code=409, detail=f"Candidate is already {candidate.status}."
             )
+
+        target_name = candidate.name
+        target_frequency = request.frequency or candidate.frequency
+
+        # Resolve entity_id from the import record so the expense belongs to
+        # the same entity as the bank statement import.
+        entity_id: Optional[str] = None
+        if candidate.import_record and candidate.import_record.entity_id:
+            entity_id = candidate.import_record.entity_id
+
+        # Dedupe: if the user already has an active expense matching this
+        # name + frequency (case-insensitive on name), reuse it instead of
+        # creating a duplicate row.  Handles the case where the same statement
+        # is re-uploaded after a prior accept, or the user manually added the
+        # expense before discovering the import flow.
+        existing_expense = (
+            session.query(BudgetExpense)
+            .filter(BudgetExpense.is_active.is_(True))
+            .filter(BudgetExpense.frequency == target_frequency)
+            .filter(func.lower(BudgetExpense.name) == target_name.lower())
+            .first()
+        )
+        if existing_expense:
+            candidate.status = "accepted"
+            candidate.created_expense_id = existing_expense.id
+            session.commit()
+            return {
+                "status": "accepted",
+                "expense_id": existing_expense.id,
+                "candidate_id": candidate_id,
+                "deduped": True,
+            }
 
         category_id = request.category_id
         if not category_id:
@@ -600,10 +729,11 @@ async def accept_candidate(
             category_id = other_cat.id
 
         expense = BudgetExpense(
+            entity_id=entity_id,
             category_id=category_id,
-            name=candidate.name,
+            name=target_name,
             amount=request.amount if request.amount is not None else candidate.amount,
-            frequency=request.frequency or candidate.frequency,
+            frequency=target_frequency,
             is_active=True,
         )
         session.add(expense)
@@ -617,6 +747,7 @@ async def accept_candidate(
             "status": "accepted",
             "expense_id": expense.id,
             "candidate_id": candidate_id,
+            "deduped": False,
         }
 
 

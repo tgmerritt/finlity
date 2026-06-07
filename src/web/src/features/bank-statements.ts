@@ -2,6 +2,7 @@ import { uploadFiles, apiCall } from '@/api/client';
 import { showToast } from '@/ui/toast';
 import { formatCurrency } from '@/utils/format';
 import { loadExpenses } from '@/pages/budget';
+import { store } from '@/state/store';
 import type { BankStatementBatchResponse, RecurringCandidateResponse } from '@/types/api';
 
 const ALLOWED_EXTENSIONS = ['.csv', '.pdf'];
@@ -65,10 +66,22 @@ async function handleBankStatementFiles(files: File[]): Promise<void> {
   }
 
   try {
-    const result = await uploadFiles<BankStatementBatchResponse>(
+    // Pass entity_id as a form field alongside file upload
+    const formData = new FormData();
+    for (const file of valid) {
+      formData.append('files', file);
+    }
+    const currentEntityId = store.get('currentEntityId');
+    if (currentEntityId) {
+      formData.append('entity_id', currentEntityId);
+    }
+
+    const result = await apiCall<BankStatementBatchResponse>(
       '/api/budget/bank-statements/upload',
-      valid,
-      'files'
+      {
+        method: 'POST',
+        body: formData,
+      }
     );
 
     const allDuplicate = result.files_imported === 0 && result.files_skipped > 0;

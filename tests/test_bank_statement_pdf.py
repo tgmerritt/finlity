@@ -27,14 +27,21 @@ def test_parse_amount():
 
 def test_normalize_name():
     """Validates name cleaning: stripping trailing digit codes and applying title case."""
-    # Strips 6-digit ACH date code
+    # Strips 6-digit ACH date code from anywhere in the string
     assert _normalize_name('EXAMPLE BANK TRANSFER 010100') == 'Example Bank Transfer'
-    # Does NOT strip masked account numbers (*** prefix) — those are retained
+    # ***********9999 has no space between asterisks and digits, so the whole
+    # token stays intact (regex requires whitespace before trailing digits)
     assert _normalize_name('Zelle: Jane Doe ***********9999') == 'Zelle: Jane Doe ***********9999'
-    # Strips trailing long digit sequence
+    # Strips trailing long digit sequence (with space separator)
     assert _normalize_name('USAA DEBIT 1234567890') == 'Usaa Debit'
     # Title case
     assert _normalize_name('walmart') == 'Walmart'
+    # Trailing 4-digit number stripped, but 'Payment' remains (not empty)
+    assert _normalize_name('PAYMENT 4567') == 'Payment'
+    # ACH code in middle is stripped
+    assert _normalize_name('TRANSFER 021726 TO LOAN') == 'Transfer To Loan'
+    # Space-separated trailing digits are stripped
+    assert _normalize_name('WALMART 9999') == 'Walmart'
 
 def test_parse_usaa_pdf_success():
     """Validates successful parsing of a standard USAA statement PDF."""
