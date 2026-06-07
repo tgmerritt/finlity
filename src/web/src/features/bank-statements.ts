@@ -1,4 +1,4 @@
-import { uploadFiles, apiCall } from '@/api/client';
+import { apiCall } from '@/api/client';
 import { showToast } from '@/ui/toast';
 import { formatCurrency } from '@/utils/format';
 import { loadExpenses } from '@/pages/budget';
