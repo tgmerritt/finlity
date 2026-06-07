@@ -1,8 +1,8 @@
 # Top-level (curated) dependencies for Finlity.
 #
 # This file is the source of truth. Regenerate the pinned lockfile with:
-#     pip-compile --resolver=backtracking --generate-hashes \
-#         --output-file requirements.txt requirements.in
+#     pip-compile --resolver=backtracking \
+#        --output-file requirements.txt requirements.in
 #
 # Only add top-level deps here. Transitive deps are resolved by pip-compile.
 
