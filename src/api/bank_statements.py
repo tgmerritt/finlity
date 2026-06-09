@@ -19,7 +19,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Optional
 
-import PyPDF2
+import pypdf
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -142,7 +142,7 @@ def _parse_usaa_pdf(content: bytes) -> list[dict]:
     Debit amounts are stored as positive floats.  Credit transactions (deposits,
     transfers-in) are skipped so paychecks do not appear as recurring candidates.
 
-    USAA PDF line structure (from PyPDF2 text extraction):
+    USAA PDF line structure (from pypdf text extraction):
       - Transaction header: 'MM/DD <first description words>'
       - Optional continuation lines: merchant name, account mask
       - Amount line for DEBITS:  '<mask or desc> $N,NNN.NN 0'
@@ -157,7 +157,7 @@ def _parse_usaa_pdf(content: bytes) -> list[dict]:
       Month rollover (Dec→Jan statements) increments the year.
     """
     try:
-        reader = PyPDF2.PdfReader(io.BytesIO(content))
+        reader = pypdf.PdfReader(io.BytesIO(content))
     except Exception:
         return []
 
