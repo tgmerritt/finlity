@@ -83,9 +83,11 @@ NON_UPDATABLE_POSITION_TYPES = frozenset({
 _PLACEHOLDER_TICKERS = frozenset({"", "CASH", "CD", "RE", "NO NUMBER", "PENDING"})
 
 
-# OCC standard options ticker: e.g. "GOOG 06/17/2027 305.00 C"
+# OCC standard options ticker: e.g. "GOOG 06/17/2027 305.00 C".
+# Some importers store the expiry with dashes ("GOOG 01-21-2028 300.00 C"),
+# so both separators are accepted.
 _OCC_PATTERN = re.compile(
-    r'^(?P<underlying>[A-Z][A-Z0-9./]*)(?:\s+(?P<exp>\d{2}/\d{2}/\d{4})\s+(?P<strike>[\d.]+)\s+(?P<opt_type>[CP]))?$'
+    r'^(?P<underlying>[A-Z][A-Z0-9./]*)(?:\s+(?P<exp>\d{2}[-/]\d{2}[-/]\d{4})\s+(?P<strike>[\d.]+)\s+(?P<opt_type>[CP]))?$'
 )
 
 
@@ -139,6 +141,9 @@ def is_updatable_position(position_type: Optional[str], ticker: Optional[str]) -
       - empty / placeholder tickers (Schwab "NO NUMBER", "PENDING")
       - tickers prefixed "CD-" — defensive workaround for CDs imported via
         CSV with the wrong position_type (e.g. "CD-MARCUS-1" tagged as equity).
+      - OCC option-format tickers (e.g. "GOOG 01-21-2028 300.00 C") —
+        options don't resolve via equity price providers, even when the
+        position_type is mistagged.
     """
     if position_type and position_type in NON_UPDATABLE_POSITION_TYPES:
         return False
@@ -148,5 +153,7 @@ def is_updatable_position(position_type: Optional[str], ticker: Optional[str]) -
     if normalized in _PLACEHOLDER_TICKERS:
         return False
     if normalized.startswith("CD-"):
+        return False
+    if parse_occ_ticker(normalized):
         return False
     return True

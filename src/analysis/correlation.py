@@ -8,6 +8,7 @@ import pandas as pd
 
 from src.data import PriceService
 from src.models import Portfolio
+from src.models.position_types import is_updatable_position
 
 
 @dataclass
@@ -45,10 +46,12 @@ class CorrelationAnalyzer:
         min_weight: float = 0.02,
     ) -> Optional[CorrelationMatrix]:
         """Calculate correlation matrix between positions."""
-        # Get positions with significant weight
+        # Get positions with significant weight (skipping cash/CD sentinels
+        # and option tickers, which have no quotable price history)
         positions = [
             p for p in portfolio.all_positions
             if (p.market_value / portfolio.total_value) >= min_weight
+            and is_updatable_position(None, p.ticker)
         ]
 
         if len(positions) < 2:
