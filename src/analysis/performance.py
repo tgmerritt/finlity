@@ -7,6 +7,7 @@ from typing import Optional
 
 from src.data import PriceService
 from src.models import Portfolio
+from src.models.position_types import is_updatable_position
 
 
 @dataclass
@@ -150,6 +151,8 @@ class PerformanceAnalyzer:
         one_year_return = 0.0
 
         for position in portfolio.all_positions:
+            if not is_updatable_position(None, position.ticker):
+                continue  # cash/CD sentinels and option tickers have no quotable history
             weight = position.market_value / portfolio.total_value if portfolio.total_value > 0 else 0
             perf = self.get_position_performance(position.ticker)
             if perf:
