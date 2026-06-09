@@ -802,6 +802,7 @@ def get_dashboard_metrics(
     projected_value_at_retirement = None
     conservative_value_at_retirement = None
     fire_number = None
+    coast_number = None
     simulation_required = True
 
     if latest_mc:
@@ -831,7 +832,6 @@ def get_dashboard_metrics(
             fire_number = None
 
         # Calculate coast_number
-        coast_number = None
         if current_age is not None and retirement_age is not None:
             years_to_retirement = retirement_age - current_age
             if years_to_retirement <= 0:
