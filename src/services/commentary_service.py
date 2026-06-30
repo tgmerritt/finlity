@@ -1108,24 +1108,20 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
         }
 
     def _get_user_context(self) -> dict:
-        """Get user context for personalization."""
-        # Try to get from settings
-        try:
-            settings_list = self.db.get_all_settings()
-            settings: dict[str, Any] = {
-                cast(str, s.key): cast(Any, s.value) for s in settings_list
-            }
-            return {
-                "user_age": settings.get("current_age", 35),
-                "retirement_age": settings.get("retirement_age", 65),
-                "risk_tolerance": settings.get("risk_tolerance", "moderate"),
-            }
-        except Exception:
-            return {
-                "user_age": 35,
-                "retirement_age": 65,
-                "risk_tolerance": "moderate",
-            }
+        """Get user context for personalization.
+
+        Age and retirement age come from the single canonical interface in
+        ``src.api.settings`` so every page agrees on the user's age and falls
+        back to the same defaults when it is unknown.
+        """
+        # Lazy import avoids any import cycle between api and services.
+        from src.api.settings import get_retirement_age, get_user_age
+
+        return {
+            "user_age": get_user_age(),
+            "retirement_age": get_retirement_age(),
+            "risk_tolerance": "moderate",
+        }
 
     def _sanitize_search_context(self, context: dict) -> dict:
         """Sanitize user context values for use in search queries.

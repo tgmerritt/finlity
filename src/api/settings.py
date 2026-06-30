@@ -5,6 +5,7 @@ config.yaml provides initial defaults for first-time setup.
 """
 
 import json
+from datetime import date
 from pathlib import Path
 from typing import Optional, cast
 
@@ -105,6 +106,70 @@ def load_config() -> dict:
         config.pop(section, None)
 
     return config
+
+
+# Default age used everywhere the user's real age is unknown, the database is
+# missing, or the stored value is corrupt. Defined once so there is a single
+# source of truth — do not re-introduce literal age fallbacks at call sites.
+DEFAULT_USER_AGE = 35
+DEFAULT_RETIREMENT_AGE = 65
+
+
+def _load_personal_settings() -> dict:
+    """Read the user's personal settings straight from the database.
+
+    Deliberately bypasses ``load_config()`` (and its config.yaml fallback) so an
+    unset profile resolves to the documented defaults rather than the example
+    DOB in config.yaml. Returns an empty dict if the row is absent or corrupt.
+    """
+    try:
+        db = get_database()
+        row = db.get_setting("personal_settings")
+        if not row or not row.value:
+            return {}
+        parsed = json.loads(cast(str, row.value))
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def get_user_age() -> int:
+    """Return the user's current age — the single interface for user age.
+
+    Computes age from the date of birth stored in the database. Falls back to
+    ``DEFAULT_USER_AGE`` (35) whenever the value is unknown, the database is
+    missing, or the stored data is corrupt/invalid. Every part of the
+    application should obtain user age through this function.
+    """
+    dob_str = _load_personal_settings().get("dob")
+    if not dob_str:
+        return DEFAULT_USER_AGE
+    try:
+        dob = date.fromisoformat(str(dob_str))
+    except (ValueError, TypeError):
+        return DEFAULT_USER_AGE
+
+    today = date.today()
+    age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+    # Reject nonsensical ages (future DOB, garbage years) and fall back.
+    if age < 0 or age > 120:
+        return DEFAULT_USER_AGE
+    return age
+
+
+def get_retirement_age() -> int:
+    """Return the user's target retirement age from the database.
+
+    Falls back to ``DEFAULT_RETIREMENT_AGE`` (65) when unknown, missing, or
+    corrupt. Companion to :func:`get_user_age`.
+    """
+    value = _load_personal_settings().get("retirement_age")
+    if value is None:
+        return DEFAULT_RETIREMENT_AGE
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return DEFAULT_RETIREMENT_AGE
 
 
 # NOTE: We intentionally do NOT provide a save_config function.

@@ -100,15 +100,12 @@ class SeedLoader:
             with open(self.config_path) as f:
                 config = yaml.safe_load(f) or {}
 
-            # Store relevant settings in AppSettings
-            personal = config.get("personal", {})
-            if personal:
-                if "current_age" in personal:
-                    db.set_setting("current_age", str(personal["current_age"]))
-                if "retirement_age" in personal:
-                    db.set_setting("retirement_age", str(personal["retirement_age"]))
-                if "annual_spending" in personal:
-                    db.set_setting("annual_spending", str(personal["annual_spending"]))
+            # NOTE: Personal settings (age/dob, retirement_age, etc.) are NOT
+            # seeded here. They live in the canonical ``personal_settings`` JSON
+            # blob, and ``load_config()`` already falls back to config.yaml's
+            # ``personal`` section when that row is absent. The old code wrote
+            # flat ``current_age``/``retirement_age`` setting keys that nothing
+            # read — age now comes solely from ``settings.get_user_age()``.
 
             # Store Monte Carlo settings
             monte_carlo = config.get("monte_carlo", {})

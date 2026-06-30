@@ -753,8 +753,7 @@ def get_dashboard_metrics(
 
     Note: Monthly income requires a Monte Carlo simulation to be run first.
     """
-    from src.api.settings import load_config
-    from datetime import date
+    from src.api.settings import get_retirement_age, get_user_age, load_config
 
     # Validate entity_id if provided
     if entity_id:
@@ -775,18 +774,11 @@ def get_dashboard_metrics(
 
     withdrawal_rate = personal.get("withdrawal_rate", 4)  # Default 4%
     target_monthly_income = personal.get("target_monthly_income", 0)
-    retirement_age = personal.get("retirement_age", 65)
 
-    # Calculate current age from DOB
-    current_age = None
-    dob_str = personal.get("dob")
-    if dob_str:
-        try:
-            dob = datetime.strptime(dob_str, "%Y-%m-%d").date()
-            today = date.today()
-            current_age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-        except ValueError:
-            pass
+    # Age and retirement age come from the single canonical interface so every
+    # page agrees on the user's age (and shares one set of defaults).
+    retirement_age = get_retirement_age()
+    current_age = get_user_age()
 
     # Get latest Monte Carlo result - filtered by entity if specified
     if entity_id:
