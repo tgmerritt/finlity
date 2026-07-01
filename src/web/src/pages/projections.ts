@@ -577,28 +577,13 @@ function displayTaxProjectionResults(result: TaxProjectionResult): void {
  * Sets up form handlers and loads initial data.
  */
 export function initProjections(): void {
-  // Monte Carlo form
-  const projectionForm = document.getElementById('projection-form');
-  if (projectionForm) {
-    projectionForm.addEventListener('submit', runProjection);
-  }
+  // Monte Carlo, FIRE, and tax projection forms use the inline onsubmit=""
+  // handler in index.html — do not also bind here, or the submit fires twice.
 
   // Tax-aware toggle
   const taxAwareCheckbox = document.getElementById('use-tax-aware');
   if (taxAwareCheckbox) {
     taxAwareCheckbox.addEventListener('change', toggleTaxAwareSettings);
-  }
-
-  // FIRE calculator form
-  const fireForm = document.getElementById('fire-form');
-  if (fireForm) {
-    fireForm.addEventListener('submit', calculateFire);
-  }
-
-  // Tax projection form
-  const taxForm = document.getElementById('tax-projection-form');
-  if (taxForm) {
-    taxForm.addEventListener('submit', runTaxProjection);
   }
 
   // Load balance refresh button

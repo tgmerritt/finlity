@@ -1739,16 +1739,8 @@ export function initPlugins(): void {
     fileInput.addEventListener('change', handlePluginFileSelect);
   }
 
-  // Set up form handlers
-  const gitForm = getElementById<HTMLFormElement>('git-install-form');
-  if (gitForm) {
-    gitForm.addEventListener('submit', installFromGit);
-  }
-
-  const uploadForm = getElementById<HTMLFormElement>('upload-install-form');
-  if (uploadForm) {
-    uploadForm.addEventListener('submit', installFromUpload);
-  }
+  // Git/upload install forms use the inline onsubmit="" handler in
+  // index.html — do not also bind here, or the submit fires twice.
 
   console.debug('Plugins system initialized');
 }
