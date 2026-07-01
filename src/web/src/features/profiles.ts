@@ -727,11 +727,8 @@ export function initProfiles(): void {
     createBtn.addEventListener('click', showCreateProfileModal);
   }
 
-  // Profile form
-  const profileForm = document.getElementById('profile-form');
-  if (profileForm) {
-    profileForm.addEventListener('submit', saveProfile);
-  }
+  // Profile form uses the inline onsubmit="" handler in index.html; do not
+  // also bind here, or the submit fires twice (duplicate profile creation).
 
   // Profile modal close
   const modalClose = document.getElementById('profile-modal-close');

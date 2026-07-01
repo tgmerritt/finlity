@@ -1565,12 +1565,8 @@ export function initSettings(): void {
     mcForm.addEventListener('submit', saveMonteCarloSettings);
   }
 
-  // View modal
-  const viewForm = document.getElementById('view-form');
-  if (viewForm) {
-    viewForm.addEventListener('submit', saveView);
-  }
-
+  // View modal — the form uses the inline onsubmit="" handler in index.html;
+  // do not also bind here, or the submit fires twice.
   const createViewBtn = document.getElementById('create-view-btn');
   if (createViewBtn) {
     createViewBtn.addEventListener('click', showCreateViewModal);

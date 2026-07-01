@@ -840,7 +840,7 @@ export function hideAddPositionModal(): void {
   const newAccountForm = document.getElementById('new-account-form');
   const addPositionForm = document.getElementById('add-position-form') as HTMLFormElement | null;
 
-  if (newAccountForm) newAccountForm.style.display = 'none';
+  if (newAccountForm) newAccountForm.classList.add('hidden');
   if (addPositionForm) addPositionForm.reset();
   hideAddPositionModalUI();
 }
@@ -924,7 +924,7 @@ async function loadAccountTypesForSelect(): Promise<void> {
 export function showNewAccountForm(): void {
   const form = document.getElementById('new-account-form');
   if (form) {
-    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    form.classList.toggle('hidden');
   }
 }
 
@@ -965,7 +965,7 @@ export async function createNewAccount(): Promise<void> {
     if (select) select.value = result.id;
 
     const form = document.getElementById('new-account-form');
-    if (form) form.style.display = 'none';
+    if (form) form.classList.add('hidden');
     if (nameEl) nameEl.value = '';
     if (brokerageEl) brokerageEl.value = '';
 
@@ -993,7 +993,7 @@ export async function addManualPosition(event: Event): Promise<void> {
   const newAccountNameEl = document.getElementById('new-account-name') as HTMLInputElement | null;
   const newAccountName = newAccountNameEl?.value.trim() || '';
 
-  if (newAccountForm && newAccountForm.style.display !== 'none' && newAccountName) {
+  if (newAccountForm && !newAccountForm.classList.contains('hidden') && newAccountName) {
     // Auto-create the new account first
     const accountType =
       (document.getElementById('new-account-type') as HTMLSelectElement | null)?.value || 'taxable';
@@ -1205,17 +1205,8 @@ export function initHoldings(): void {
     addPositionBtn.addEventListener('click', showAddPositionModal);
   }
 
-  // Add position form
-  const addPositionForm = document.getElementById('add-position-form');
-  if (addPositionForm) {
-    addPositionForm.addEventListener('submit', addManualPosition);
-  }
-
-  // Edit position form
-  const editPositionForm = document.getElementById('edit-position-form');
-  if (editPositionForm) {
-    editPositionForm.addEventListener('submit', updatePosition);
-  }
+  // Add position and edit position forms use the inline onsubmit="" handler
+  // in index.html — do not also bind here, or the submit fires twice.
 
   // Position type change handler
   const positionTypeSelect = document.getElementById('position-type');

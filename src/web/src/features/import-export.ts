@@ -414,7 +414,7 @@ export function hideImportModal(): void {
     modal.classList.add('hidden');
     modal.style.display = 'none';
   }
-  if (form) form.style.display = 'none';
+  if (form) form.classList.add('hidden');
 
   pendingImportData = null;
 }
@@ -425,7 +425,7 @@ export function hideImportModal(): void {
 export function showImportNewAccountForm(): void {
   const form = getElementById<HTMLElement>('import-new-account-form');
   if (form) {
-    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    form.classList.toggle('hidden');
   }
 }
 
@@ -461,7 +461,7 @@ export async function createImportAccount(): Promise<void> {
     if (select) select.value = result.id;
 
     const form = getElementById<HTMLElement>('import-new-account-form');
-    if (form) form.style.display = 'none';
+    if (form) form.classList.add('hidden');
   } catch (error) {
     console.error('Error creating account:', error);
     showToast(
