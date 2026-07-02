@@ -14,6 +14,7 @@ from src.database import Database
 from src.services.background_tasks import task_manager
 from src.models import Portfolio, Account as PydanticAccount, Position as PydanticPosition
 from src.models import AccountType, Brokerage
+from src.models.position_types import position_market_value
 from src.analysis.performance import PerformanceAnalyzer
 from src.analysis.risk import RiskAnalyzer
 from src.analysis.allocation import AllocationAnalyzer
@@ -1761,6 +1762,11 @@ def _position_to_analysis_dict(db_pos: Any, db_account: Any) -> dict:
         "account_id": db_account.id,
         "account_name": db_account.name,
         "account_type": db_account.account_type,
+        # Options: analyzers apply contract_multiplier (×100) when valuing;
+        # without it here they silently fall back to ×1 and under-count.
+        "position_type": db_pos.position_type,
+        "contract_multiplier": db_pos.contract_multiplier,
+        "market_value": position_market_value(db_pos),
         # New (Sprint 8 wire-up): real per-lot tracking when populated by
         # importers; analyzer falls back to a synthetic single-lot view
         # using ``purchase_date`` + ``cost_basis`` + ``shares`` when this
@@ -1948,6 +1954,10 @@ def _get_widget_portfolio_data(db: Database) -> tuple[list[dict], list[dict]]:
                 "asset_class": db_pos.asset_class,
                 "is_fund": db_pos.is_fund,
                 "position_type": db_pos.position_type,
+                # Options: widgets apply contract_multiplier (×100) when valuing;
+                # without it here they silently fall back to ×1 and under-count.
+                "contract_multiplier": db_pos.contract_multiplier,
+                "market_value": position_market_value(db_pos),
                 "account_id": db_account.id,
                 "account_name": db_account.name,
                 "account_type": db_account.account_type,
