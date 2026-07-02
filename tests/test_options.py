@@ -5,6 +5,7 @@ import sys
 import pytest
 from pathlib import Path
 from datetime import datetime
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -257,3 +258,171 @@ def test_folder_scanner_equity_unchanged(tmp_path):
 
     assert ticker == "AAPL"
     assert option_fields == {}
+
+# ---------------------------------------------------------------------------
+# Downstream valuation paths: analysis dicts, widgets, commentary
+# (regression: these paths silently valued options at ×1 because the
+# position dicts never carried contract_multiplier)
+# ---------------------------------------------------------------------------
+
+def _occ_option_namespace():
+    return SimpleNamespace(
+        ticker="GOOG 06/17/2027 305.00 C",
+        name="CALL ALPHABET INC $305 EXP 06/17/27",
+        shares=1.0,
+        current_price=99.9,
+        cost_basis=11051.0,
+        is_fund=False,
+        sector=None,
+        asset_class="equity",
+        position_type="option",
+        contract_multiplier=100.0,
+        purchase_date=None,
+        lots=[],
+    )
+
+
+def test_analysis_dict_carries_option_fields():
+    """_position_to_analysis_dict must pass contract_multiplier through,
+    otherwise analyzers (tax-loss harvester, dividend tracker) fall back
+    to ×1 and under-count options 100×."""
+    from src.api.analysis import _position_to_analysis_dict
+
+    db_account = SimpleNamespace(id="a1", name="IRA", account_type="traditional_ira")
+    d = _position_to_analysis_dict(_occ_option_namespace(), db_account)
+
+    assert d["position_type"] == "option"
+    assert d["contract_multiplier"] == 100.0
+    assert d["market_value"] == pytest.approx(9990.0)
+
+
+def _load_widget(folder: str, class_name: str):
+    """Instantiate a builtin widget directly (hyphenated folders need importlib)."""
+    import importlib.util
+    from src.plugins.base import PluginManifest, PluginType
+
+    here = Path(__file__).resolve().parents[1]
+    src = here / "src" / "plugins" / "builtin" / folder / "widget.py"
+    spec = importlib.util.spec_from_file_location(f"{class_name}_under_test", src)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    manifest = PluginManifest(
+        name=folder,
+        version="1.0.0",
+        description="test",
+        author="test",
+        license="MIT",
+        plugin_type=PluginType.WIDGET,
+        main="widget.py",
+        entry_class=class_name,
+    )
+    return getattr(mod, class_name)(manifest, {})
+
+
+def _widget_positions():
+    """One equity and one option; daily_change_pct set to avoid price fetches."""
+    return [
+        {
+            "ticker": "AAPL",
+            "name": "APPLE INC",
+            "shares": 10.0,
+            "current_price": 100.0,
+            "sector": "Technology",
+            "position_type": "equity",
+            "contract_multiplier": None,
+            "daily_change_pct": 0.0,
+        },
+        {
+            "ticker": "MSFT",
+            "name": "MICROSOFT CORP",
+            "shares": 5.0,
+            "current_price": 200.0,
+            "sector": "Technology",
+            "position_type": "equity",
+            "contract_multiplier": None,
+            "daily_change_pct": 0.0,
+        },
+        {
+            "ticker": "GOOG 06/17/2027 305.00 C",
+            "name": "CALL ALPHABET INC $305 EXP 06/17/27",
+            "shares": 1.0,
+            "current_price": 99.9,
+            "sector": "Technology",
+            "position_type": "option",
+            "contract_multiplier": 100.0,
+            "daily_change_pct": 0.0,
+        },
+    ]
+
+
+def test_sector_treemap_counts_option_at_full_value():
+    widget = _load_widget("sector-treemap", "SectorTreemapWidget")
+    content = widget.render(_widget_positions(), [])
+    # 10×$100 + 5×$200 + 1 contract × 100 × $99.90
+    assert content.data["total_value"] == pytest.approx(1000.0 + 1000.0 + 9990.0)
+
+
+def test_correlation_heatmap_excludes_option_rows():
+    """Options have no quotable price history; they must not appear as
+    matrix rows (previously rendered with 0.5 filler correlations)."""
+    widget = _load_widget("correlation-heatmap", "CorrelationHeatmapWidget")
+    # Force the sector fallback so the test never touches the network.
+    widget._calculate_price_correlations = lambda tickers: None
+    content = widget.render(_widget_positions(), [])
+
+    assert "GOOG 06/17/2027 305.00 C" not in content.data["tickers"]
+    assert set(content.data["tickers"]) == {"AAPL", "MSFT"}
+
+
+def test_commentary_portfolio_summary_counts_option():
+    from unittest.mock import MagicMock
+    from src.database.models import Position
+    from src.services.commentary_service import CommentaryService
+
+    opt = Position()
+    opt.shares = 1.0
+    opt.current_price = 99.9
+    opt.contract_multiplier = 100.0
+    opt.cost_basis = 11051.0
+
+    eq = Position()
+    eq.shares = 10.0
+    eq.current_price = 100.0
+    eq.contract_multiplier = None
+    eq.cost_basis = 500.0
+
+    account = SimpleNamespace(
+        id="a1", name="IRA", account_type="traditional_ira", is_retirement=True
+    )
+    db = MagicMock()
+    db.get_all_accounts.return_value = [account]
+    db.get_positions_by_account.return_value = [opt, eq]
+
+    summary = CommentaryService(db)._get_portfolio_summary()
+    assert summary["total_value"] == pytest.approx(9990.0 + 1000.0)
+    assert summary["retirement_value"] == pytest.approx(9990.0 + 1000.0)
+
+
+def test_commentary_tax_projection_counts_option():
+    from unittest.mock import MagicMock
+    from src.database.models import Position
+    from src.services.commentary_service import CommentaryService
+
+    opt = Position()
+    opt.shares = 1.0
+    opt.current_price = 99.9
+    opt.contract_multiplier = 100.0
+
+    account = SimpleNamespace(
+        id="a1", name="IRA", account_type="traditional_ira", is_retirement=True
+    )
+    db = MagicMock()
+    db.get_all_accounts.return_value = [account]
+    db.get_positions_by_account.return_value = [opt]
+
+    service = CommentaryService(db)
+    service._get_user_context = lambda: {"user_age": 44, "retirement_age": 60}
+    data = service._get_tax_projection_data()
+    assert data["traditional_balance"] == pytest.approx(9990.0)

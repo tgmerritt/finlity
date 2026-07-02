@@ -18,6 +18,7 @@ from typing import Any, Generator, Optional, cast
 
 from src.database import Database
 from src.database.models import AICommentary
+from src.models.position_types import position_market_value
 from src.services.inference_provider import get_provider, InferenceProviderError
 from src.services.providers import InferenceMessage, ProviderNotConfiguredError
 from src.services.commentary_registry import (
@@ -929,7 +930,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             for account in accounts:
                 positions = self.db.get_positions_by_account(cast(str, account.id))
                 account_value = float(sum(
-                    (p.current_price or 0) * (p.shares or 0)
+                    position_market_value(p)
                     for p in positions
                 ))
 
@@ -996,7 +997,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             for account in accounts:
                 positions = self.db.get_positions_by_account(cast(str, account.id))
                 account_value = sum(
-                    (p.current_price or 0) * (p.shares or 0)
+                    position_market_value(p)
                     for p in positions
                 )
                 account_cost = sum(
@@ -1039,7 +1040,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
                         "name": pos.name,
                         "shares": pos.shares,
                         "current_price": pos.current_price,
-                        "value": (pos.current_price or 0) * (pos.shares or 0),
+                        "value": position_market_value(pos),
                         "account_type": account.account_type,
                     })
             return positions

@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 from src.plugins.base import WidgetPlugin, WidgetContent, PluginManifest
 from src.data import PriceService
+from src.models.position_types import is_option, parse_occ_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,10 @@ class CorrelationHeatmapWidget(WidgetPlugin):
         for p in positions:
             if p.get("current_price") and p.get("shares"):
                 ticker = p.get("ticker", "Unknown")
+                # Options have no quotable price history; without this skip
+                # they render as matrix rows of 0.5 filler correlations.
+                if is_option(p.get("position_type")) or parse_occ_ticker(str(ticker)):
+                    continue
                 value = p.get("current_price", 0) * p.get("shares", 0)
                 ticker_values[ticker] = ticker_values.get(ticker, 0) + value
 

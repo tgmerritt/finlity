@@ -33,7 +33,8 @@ class SectorTreemapWidget(WidgetPlugin):
         for pos in positions:
             price = pos.get("current_price") or 0
             shares = pos.get("shares") or 0
-            total_value += price * shares
+            contract_mult = float(pos.get("contract_multiplier") or 1)
+            total_value += price * shares * contract_mult
 
         if total_value == 0:
             return WidgetContent(
@@ -62,7 +63,8 @@ class SectorTreemapWidget(WidgetPlugin):
         for pos in positions:
             price = pos.get("current_price") or 0
             shares = pos.get("shares") or 0
-            value = price * shares
+            contract_mult = float(pos.get("contract_multiplier") or 1)
+            value = price * shares * contract_mult
             if value == 0:
                 continue
 
