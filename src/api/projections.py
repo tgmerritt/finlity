@@ -134,38 +134,97 @@ class SensitivityResponse(BaseModel):
     withdrawal_impacts: dict[str, float]
 
 
-def _run_monte_carlo_task(
-    request_dict: dict,
-    db_path: str,
-    progress_callback: Optional[Any] = None,
-) -> dict:
-    """
-    Background task function for Monte Carlo simulation.
+def compute_pre_retirement_income(
+    income_sources: list,
+    deductions_by_source: dict[str, list],
+    request_state: str,
+    request_filing_status: str,
+    tax_config: Optional[Any] = None,
+) -> tuple[float, float, str, str]:
+    """Sum active income sources and their linked pre-tax deductions into
+    annual pre-retirement income/deduction totals, and resolve filing_status
+    and state.
 
-    This is separated so it can be run in a background thread.
-    Returns a dict that can be converted to ProjectionResponse.
+    Pure function — duck-typed on `.gross_annual`, `.state`, `.pay_frequency`
+    (income sources), `.is_percentage`, `.amount_per_period` (deductions),
+    and `.filing_status`/`.state` (tax_config), so it runs unchanged whether
+    fed SQLAlchemy ORM rows (v1) or v2 payload objects with the same field
+    names.
 
     Args:
-        request_dict: Simulation parameters
-        db_path: Path to database file
-        progress_callback: Optional callback(progress: float, message: str) for progress updates
+        income_sources: active income sources.
+        deductions_by_source: map of income_source_id -> list of its deductions.
+        request_state: the caller's requested state (only overridden by a
+            source's state when it's still the literal "CA" default —
+            matches the original v1 behavior exactly).
+        request_filing_status: the caller's requested filing status.
+        tax_config: optional tax config object (filing_status, state).
+
+    Returns:
+        (pre_retirement_income, pre_retirement_deductions, filing_status, state)
+    """
+    pre_retirement_income = 0.0
+    pre_retirement_deductions = 0.0
+    state = request_state
+    filing_status = request_filing_status
+
+    for source in income_sources:
+        pre_retirement_income += float(source.gross_annual)
+        # Matches v1 exactly: only the literal "CA" default is overridden by
+        # a source's state, not any explicitly-requested state.
+        if state == "CA" and getattr(source, "state", None):
+            state = source.state
+
+    for source in income_sources:
+        source_deductions = deductions_by_source.get(getattr(source, "id", None), [])
+        periods_per_year = PAY_FREQUENCIES.get(source.pay_frequency, 26)
+        for ded in source_deductions:
+            if ded.is_percentage:
+                annual_ded = float(source.gross_annual) * (float(ded.amount_per_period) / 100)
+            else:
+                annual_ded = float(ded.amount_per_period) * periods_per_year
+            pre_retirement_deductions += annual_ded
+
+    if tax_config is not None:
+        if getattr(tax_config, "filing_status", None):
+            filing_status = tax_config.filing_status
+        if getattr(tax_config, "state", None):
+            state = tax_config.state
+
+    return pre_retirement_income, pre_retirement_deductions, filing_status, state
+
+
+def _compute_monte_carlo(
+    request_dict: dict,
+    current_balance: float,
+    progress_callback: Optional[Any] = None,
+    config: Optional[dict] = None,
+) -> dict:
+    """Pure Monte Carlo compute: no DB access, no side effects.
+
+    Shared by v1's `_run_monte_carlo_task` (which wraps this with a DB save)
+    and v2's task (which does not persist anything). Returns a dict with the
+    projection result plus the extra fields (`current_balance`,
+    `earliest_retirement_age`, `projected_value_at_retirement`,
+    `conservative_value_at_retirement`) the v1 caller needs to build its
+    save-to-DB call.
+
+    Args:
+        request_dict: Simulation parameters.
+        current_balance: Resolved starting balance (auto-fill from portfolio
+            or account_balances happens before calling this).
+        progress_callback: Optional callback(progress: float, message: str).
+        config: Optional explicit `{"market": {...}, "monte_carlo": {...}}`
+            dict passed straight to `MonteCarloEngine`. When None (v1's
+            default), `MonteCarloEngine` falls back to `load_config()`
+            (server DB). v2 callers MUST pass an explicit dict (even `{}`)
+            so the engine never touches the server's shared profile DB.
     """
     def report_progress(progress: float, message: str) -> None:
         if progress_callback:
             progress_callback(progress, message)
 
     report_progress(0.05, "Loading portfolio data...")
-
-    # Recreate database connection in background thread
-    from src.database import Database
-
-    db = Database(db_path)
-
-    # Recreate request from dict
-    current_balance = request_dict.get("current_balance")
-    if current_balance is None:
-        summary = db.get_portfolio_summary()
-        current_balance = summary["total_value"]
 
     # Validate allocations
     stock_allocation = request_dict.get("stock_allocation", 0.70)
@@ -213,7 +272,7 @@ def _run_monte_carlo_task(
 
     report_progress(0.10, "Running Monte Carlo simulation...")
 
-    engine = MonteCarloEngine()
+    engine = MonteCarloEngine(config=config)
     end_age = request_dict.get("end_age", 95)
     result = engine.run_projection(params, end_age=end_age)
 
@@ -244,24 +303,6 @@ def _run_monte_carlo_task(
             target_success_rate=0.80,
         )
 
-    report_progress(0.90, "Saving results...")
-
-    # Save results to database
-    db.save_monte_carlo_result(
-        current_age=request_dict["current_age"],
-        retirement_age=request_dict["retirement_age"],
-        portfolio_balance=current_balance,
-        success_rate=result.success_rate,
-        monthly_contribution=request_dict["monthly_contribution"],
-        monthly_withdrawal=request_dict["monthly_withdrawal"],
-        median_final_value=result.median_final_value,
-        worst_case_final=result.worst_case_final,
-        best_case_final=result.best_case_final,
-        earliest_retirement_age=earliest_retirement_age,
-        projected_value_at_retirement=projected_value_at_retirement,
-        conservative_value_at_retirement=conservative_value_at_retirement,
-    )
-
     return {
         "ages": result.ages,
         "median_values": result.median_values,
@@ -273,6 +314,75 @@ def _run_monte_carlo_task(
         "median_final_value": result.median_final_value,
         "worst_case_final": result.worst_case_final,
         "best_case_final": result.best_case_final,
+        # Extra fields for the v1 caller's save-to-DB call (v2 ignores these).
+        "current_balance": current_balance,
+        "earliest_retirement_age": earliest_retirement_age,
+        "projected_value_at_retirement": projected_value_at_retirement,
+        "conservative_value_at_retirement": conservative_value_at_retirement,
+    }
+
+
+def _run_monte_carlo_task(
+    request_dict: dict,
+    db_path: str,
+    progress_callback: Optional[Any] = None,
+) -> dict:
+    """Background task function for Monte Carlo simulation (v1, persists results).
+
+    This is separated so it can be run in a background thread.
+    Returns a dict that can be converted to ProjectionResponse.
+
+    Args:
+        request_dict: Simulation parameters
+        db_path: Path to database file
+        progress_callback: Optional callback(progress: float, message: str) for progress updates
+    """
+    # Recreate database connection in background thread
+    from src.database import Database
+
+    db = Database(db_path)
+
+    current_balance = request_dict.get("current_balance")
+    if current_balance is None:
+        summary = db.get_portfolio_summary()
+        current_balance = summary["total_value"]
+
+    if request_dict.get("use_tax_aware_withdrawals") and request_dict.get("account_balances"):
+        ab = request_dict["account_balances"]
+        current_balance = ab.get("taxable", 0) + ab.get("traditional", 0) + ab.get("roth", 0)
+
+    result = _compute_monte_carlo(request_dict, current_balance, progress_callback)
+
+    if progress_callback:
+        progress_callback(0.90, "Saving results...")
+
+    # Save results to database (v1 only — v2 never calls this task).
+    db.save_monte_carlo_result(
+        current_age=request_dict["current_age"],
+        retirement_age=request_dict["retirement_age"],
+        portfolio_balance=result["current_balance"],
+        success_rate=result["success_rate"],
+        monthly_contribution=request_dict["monthly_contribution"],
+        monthly_withdrawal=request_dict["monthly_withdrawal"],
+        median_final_value=result["median_final_value"],
+        worst_case_final=result["worst_case_final"],
+        best_case_final=result["best_case_final"],
+        earliest_retirement_age=result["earliest_retirement_age"],
+        projected_value_at_retirement=result["projected_value_at_retirement"],
+        conservative_value_at_retirement=result["conservative_value_at_retirement"],
+    )
+
+    return {
+        "ages": result["ages"],
+        "median_values": result["median_values"],
+        "percentile_10": result["percentile_10"],
+        "percentile_25": result["percentile_25"],
+        "percentile_75": result["percentile_75"],
+        "percentile_90": result["percentile_90"],
+        "success_rate": result["success_rate"],
+        "median_final_value": result["median_final_value"],
+        "worst_case_final": result["worst_case_final"],
+        "best_case_final": result["best_case_final"],
     }
 
 
@@ -636,8 +746,14 @@ def get_account_balances_by_type(
     )
 
 
-def _run_sensitivity_task(request_dict: dict, current_balance: float) -> dict:
-    """Background task for sensitivity analysis."""
+def _run_sensitivity_task(
+    request_dict: dict, current_balance: float, config: Optional[dict] = None
+) -> dict:
+    """Background task for sensitivity analysis.
+
+    `config` is None for v1 (MonteCarloEngine falls back to load_config()/
+    server DB); v2 always passes an explicit dict so no DB is touched.
+    """
     params = ProjectionParams(
         current_age=request_dict["current_age"],
         retirement_age=request_dict["retirement_age"],
@@ -648,7 +764,7 @@ def _run_sensitivity_task(request_dict: dict, current_balance: float) -> dict:
         bond_allocation=request_dict.get("bond_allocation", 0.25),
     )
 
-    engine = MonteCarloEngine()
+    engine = MonteCarloEngine(config=config)
     result = engine.run_sensitivity_analysis(params, end_age=request_dict.get("end_age", 95))
 
     return {
@@ -1235,8 +1351,6 @@ def run_tax_projection(
             roth = balances_response.roth
 
     # Fetch pre-retirement income from database if requested
-    pre_retirement_income = 0.0
-    pre_retirement_deductions = 0.0
     filing_status = request.filing_status
     state = request.state
 
@@ -1248,35 +1362,21 @@ def run_tax_projection(
                 BudgetIncomeSource.is_active.is_(True)
             ).all()
 
-            # Sum up all active income sources
+            deductions_by_source: dict[str, list] = {}
             for source in income_sources:
-                pre_retirement_income += float(cast(float, source.gross_annual))
-                # Use the first source's state if not specified
-                if state == "CA" and source.state:
-                    state = cast(str, source.state)
-
-            # Fetch pre-tax deductions linked to income sources
-            for source in income_sources:
-                deductions = session.query(BudgetPretaxDeduction).filter(
+                deductions_by_source[source.id] = session.query(BudgetPretaxDeduction).filter(
                     BudgetPretaxDeduction.income_source_id == source.id
                 ).all()
-                for ded in deductions:
-                    # Convert per-period to annual
-                    periods_per_year = PAY_FREQUENCIES.get(cast(str, source.pay_frequency), 26)
-                    annual_ded: float
-                    if ded.is_percentage:
-                        # Deduction is a percentage of gross
-                        annual_ded = float(cast(float, source.gross_annual)) * (float(cast(float, ded.amount_per_period)) / 100)
-                    else:
-                        annual_ded = float(cast(float, ded.amount_per_period)) * periods_per_year
-                    pre_retirement_deductions += annual_ded
 
-            # Fetch tax config for filing status
             tax_config = session.query(BudgetTaxConfig).first()
-            if tax_config:
-                filing_status = cast(str, tax_config.filing_status)
-                if tax_config.state:
-                    state = cast(str, tax_config.state)
+
+            pre_retirement_income, pre_retirement_deductions, filing_status, state = compute_pre_retirement_income(
+                income_sources=income_sources,
+                deductions_by_source=deductions_by_source,
+                request_state=state,
+                request_filing_status=filing_status,
+                tax_config=tax_config,
+            )
         finally:
             session.close()
     else:

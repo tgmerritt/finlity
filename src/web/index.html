@@ -15,8 +15,7 @@
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <!-- sql.js for client-side SQLite database -->
-    <script src="https://sql.js.org/dist/sql-wasm.js"></script>
+    <!-- sql.js is self-hosted and imported as an ES module in app.js (see src/database/client-database.ts) -->
     <!-- Google Fonts: Inter for all UI and financial figures (tabular-nums) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -216,6 +215,7 @@
                     <img src="/static/images/finlity-logo.png" alt="Finlity" width="28" height="28">
                     <span>Finlity</span>
                 </div>
+                <span id="unsaved-changes-indicator" class="unsaved-changes-indicator hidden" title="You have unsaved changes">●&nbsp;Unsaved</span>
                 <button class="mobile-theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
                     <svg class="sun-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="5"></circle>
@@ -3306,9 +3306,7 @@
         </svg>
     </button>
 
-    <!-- Client-side database support -->
-    <script src="/static/js/client-database.js"></script>
-    <script src="/static/js/local-api.js"></script>
+    <!-- Client-side database support is bundled into app.js (see src/database/) -->
     <!-- Main application (ES module — required for code-split chunks) -->
     <script type="module" src="/static/dist/app.js"></script>
 </body>

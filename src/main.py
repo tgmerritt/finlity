@@ -39,6 +39,7 @@ from src.api.inference import router as inference_router
 from src.api.tasks import router as tasks_router
 from src.api.session import router as session_router
 from src.api.entities import router as entities_router
+from src.api.v2 import v2_router
 from src.database import get_profile_manager, get_database
 from src.importers import FolderScanner
 from src.services.session import is_multi_user_mode
@@ -323,6 +324,7 @@ app.include_router(inference_router)
 app.include_router(tasks_router)
 app.include_router(session_router)
 app.include_router(entities_router)
+app.include_router(v2_router)
 
 # Serve static files (web dashboard)
 web_dir = Path(__file__).parent / "web"

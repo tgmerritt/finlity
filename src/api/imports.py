@@ -528,8 +528,18 @@ def _suggest_account_with_ai(
     accounts: list,
     brokerage: Optional[str],
     account_type: Optional[str],
+    api_key: Optional[str] = None,
 ) -> Optional[SuggestedAccount]:
-    """Try to suggest an account using AI or simple matching."""
+    """Try to suggest an account using AI or simple matching.
+
+    Args:
+        api_key: Optional explicit Claude API key. When provided, this is
+            used directly for the AI suggestion step instead of the
+            (nonexistent) `get_anthropic_api_key` DB-backed lookup below —
+            this is the injection point for the stateless v2 API (see
+            src/api/v2/imports.py), which resolves its key from the
+            environment only.
+    """
     # First, try simple matching
     filename_lower = filename.lower()
 
@@ -561,8 +571,9 @@ def _suggest_account_with_ai(
 
     # Try Claude AI if available (optional enhancement)
     try:
-        from src.services.secrets import get_anthropic_api_key  # type: ignore[attr-defined]
-        api_key = get_anthropic_api_key()
+        if api_key is None:
+            from src.services.secrets import get_anthropic_api_key  # type: ignore[attr-defined]
+            api_key = get_anthropic_api_key()
         if api_key and accounts:
             import anthropic
 

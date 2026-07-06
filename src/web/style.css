@@ -72,6 +72,16 @@
    styles toggled imperatively elsewhere in the codebase. */
 .hidden { display: none !important; }
 
+/* Small "unsaved changes" badge in the mobile header (see F1(c) /
+   onboarding.ts's updateUnsavedChangesIndicator). Hidden by default via
+   .hidden; toggled visible only while clientDB has unpersisted writes. */
+.unsaved-changes-indicator {
+    font-size: 0.75rem;
+    color: var(--color-warning, #d97706);
+    white-space: nowrap;
+    margin-left: 0.5rem;
+}
+
 /* Global disabled-button affordance. Applies to any .btn variant or any
    <button> with the disabled attribute. Uses pointer-events: auto so the
    not-allowed cursor still shows; click is gated by the disabled attr. */

@@ -47,6 +47,33 @@ def check_demo_mode_write() -> None:
     check_demo_data_protection()
 
 
+def map_account_type_str(account_type: Optional[str]) -> AccountType:
+    """Map a raw account_type string (as stored in the DB / sent by a v2
+    payload) to the Pydantic AccountType enum used by analysis.
+
+    Shared by v1 db_to_portfolio and v2 payload_to_portfolio so both paths
+    use one mapping (no duplication). Anything not in the map (custom types,
+    529, checking, etc.) falls back to TAXABLE, matching prior v1 behavior.
+    """
+    account_type_map: dict[str, AccountType] = {
+        "roth_ira": AccountType.ROTH_IRA,
+        "traditional_ira": AccountType.TRADITIONAL_IRA,
+        "traditional_401k": AccountType.TRADITIONAL_401K,
+        "roth_401k": AccountType.ROTH_401K,
+        "taxable": AccountType.TAXABLE,
+        "hsa": AccountType.HSA,
+    }
+    return account_type_map.get(account_type or "", AccountType.TAXABLE)
+
+
+def map_brokerage_str(brokerage: Optional[str]) -> Brokerage:
+    """Map a raw brokerage string to the Brokerage enum, defaulting to OTHER.
+
+    Shared by v1 db_to_portfolio and v2 payload_to_portfolio.
+    """
+    return Brokerage(brokerage) if brokerage in [b.value for b in Brokerage] else Brokerage.OTHER
+
+
 def db_to_portfolio(db: Database) -> Portfolio:
     """Convert database data to Portfolio model for analysis."""
     accounts = []
@@ -69,31 +96,38 @@ def db_to_portfolio(db: Database) -> Portfolio:
                 current_price=cast(float, db_pos.current_price),
                 cost_basis=cast(Optional[float], db_pos.cost_basis),
                 account_name=account_name,
-                brokerage=Brokerage(account_brokerage) if account_brokerage in [b.value for b in Brokerage] else Brokerage.OTHER,
+                brokerage=map_brokerage_str(account_brokerage),
                 sector=cast(Optional[str], db_pos.sector),
                 is_fund=cast(bool, db_pos.is_fund),
             ))
 
         if positions:
-            # Map account type
-            account_type_map: dict[str, AccountType] = {
-                "roth_ira": AccountType.ROTH_IRA,
-                "traditional_ira": AccountType.TRADITIONAL_IRA,
-                "traditional_401k": AccountType.TRADITIONAL_401K,
-                "roth_401k": AccountType.ROTH_401K,
-                "taxable": AccountType.TAXABLE,
-                "hsa": AccountType.HSA,
-            }
-            account_type = account_type_map.get(cast(str, db_account.account_type), AccountType.TAXABLE)
+            account_type = map_account_type_str(cast(str, db_account.account_type))
 
             accounts.append(PydanticAccount(
                 name=account_name,
                 account_type=account_type,
-                brokerage=Brokerage(account_brokerage) if account_brokerage in [b.value for b in Brokerage] else Brokerage.OTHER,
+                brokerage=map_brokerage_str(account_brokerage),
                 positions=positions,
             ))
 
     return Portfolio(accounts=accounts)
+
+
+class ExcludedPositionWarning(BaseModel):
+    """A single position dropped by the v2 payload adapter, and why."""
+    ticker: str
+    account_name: str
+    reason: str = "missing_price"
+
+
+class DataWarnings(BaseModel):
+    """Additive, v2-only diagnostics about client-supplied data that was
+    silently dropped by an adapter (e.g. payload_to_portfolio_with_warnings)
+    before analysis ran. Always None for v1 responses (populated only by
+    v2 endpoints that consume the payload adapter) — see F5."""
+    excluded_positions: list[ExcludedPositionWarning] = []
+    count: int = 0
 
 
 class PerformanceResponse(BaseModel):
@@ -108,6 +142,7 @@ class PerformanceResponse(BaseModel):
     benchmark_one_year: float
     alpha_ytd: float
     alpha_one_year: float
+    data_warnings: Optional[DataWarnings] = None
 
 
 class RiskResponse(BaseModel):
@@ -120,6 +155,7 @@ class RiskResponse(BaseModel):
     var_95: float
     cvar_95: float
     diversification_ratio: float
+    data_warnings: Optional[DataWarnings] = None
 
 
 class AllocationResponse(BaseModel):
@@ -130,6 +166,7 @@ class AllocationResponse(BaseModel):
     by_brokerage: dict[str, float]
     concentration_top5: float
     concentration_top10: float
+    data_warnings: Optional[DataWarnings] = None
 
 
 class CorrelationEntry(BaseModel):
@@ -145,6 +182,7 @@ class CorrelationResponse(BaseModel):
     matrix: list[list[float]]
     high_correlations: list[CorrelationEntry]
     low_correlations: list[CorrelationEntry]
+    data_warnings: Optional[DataWarnings] = None
 
 
 class ExpenseDragHolding(BaseModel):
@@ -291,8 +329,12 @@ def get_performance(
     )
 
 
-def _run_risk_task(portfolio_dict: dict, benchmark: str) -> dict:
-    """Background task for risk analysis."""
+def _run_risk_task(portfolio_dict: dict, benchmark: str, config: Optional[dict] = None) -> dict:
+    """Background task for risk analysis.
+
+    `config` is None for v1 (RiskAnalyzer falls back to load_config()/server
+    DB); v2 always passes an explicit dict so no DB is touched.
+    """
     import math
 
     def sanitize(value: Any, default: float = 0.0) -> float:
@@ -315,7 +357,7 @@ def _run_risk_task(portfolio_dict: dict, benchmark: str) -> dict:
         ]
     )
 
-    analyzer = RiskAnalyzer()
+    analyzer = RiskAnalyzer(config=config)
     risk = analyzer.get_portfolio_risk(portfolio, benchmark)
 
     return {
@@ -1547,7 +1589,9 @@ _chat_api_keys: dict[str, str] = {}  # Track which API key was used
 
 
 @router.post("/advisor/chat", response_model=ChatResponse)
-def chat_with_advisor(request: ChatRequest, db: Database = Depends(get_db)) -> "ChatResponse":
+def chat_with_advisor(
+    request: ChatRequest, http_request: Request, db: Database = Depends(get_db)
+) -> "ChatResponse":
     """Have a conversation with the AI advisor about investments.
 
     The advisor has context about your portfolio and can answer follow-up
@@ -1566,9 +1610,11 @@ def chat_with_advisor(request: ChatRequest, db: Database = Depends(get_db)) -> "
             history=[],
         )
 
-    # Get or create chat service (using a simple session key for now)
-    # Recreate service if the API key changed (e.g., user added key after first attempt)
-    session_key = "default"
+    # Get or create chat service, keyed by the caller's session id (falls
+    # back to "default" when no session id is available, e.g. single-user
+    # local mode) so one caller's /advisor/chat/clear can't wipe another
+    # caller's in-progress chat (see F4 fix).
+    session_key = get_session_id(http_request) or "default"
     if session_key not in _chat_services or _chat_api_keys.get(session_key) != claude_key:
         _chat_services[session_key] = AdvisorAnalysisService(
             claude_api_key=claude_key, db=db
@@ -1591,7 +1637,9 @@ def chat_with_advisor(request: ChatRequest, db: Database = Depends(get_db)) -> "
 
 
 @router.post("/advisor/chat/stream")
-def chat_with_advisor_stream(request: ChatRequest, db: Database = Depends(get_db)) -> StreamingResponse:
+def chat_with_advisor_stream(
+    request: ChatRequest, http_request: Request, db: Database = Depends(get_db)
+) -> StreamingResponse:
     """Stream a conversation with the AI advisor about investments.
 
     Returns a Server-Sent Events stream with text chunks as they arrive.
@@ -1609,8 +1657,8 @@ def chat_with_advisor_stream(request: ChatRequest, db: Database = Depends(get_db
             yield "data: [DONE]\n\n"
         return StreamingResponse(error_stream(), media_type="text/event-stream")
 
-    # Get or create chat service
-    session_key = "default"
+    # Get or create chat service (see F4: session-keyed like /advisor/chat)
+    session_key = get_session_id(http_request) or "default"
     if session_key not in _chat_services or _chat_api_keys.get(session_key) != claude_key:
         _chat_services[session_key] = AdvisorAnalysisService(
             claude_api_key=claude_key, db=db
@@ -1647,15 +1695,31 @@ def chat_with_advisor_stream(request: ChatRequest, db: Database = Depends(get_db
 
 
 @router.post("/advisor/chat/clear")
-def clear_chat_history() -> dict:
-    """Clear the advisor chat history."""
-    global _chat_services
-    _chat_services = {}
-    return {"message": "Chat history cleared"}
+def clear_chat_history(http_request: Request) -> dict:
+    """Clear the advisor chat history for the caller's session only.
+
+    F4 fix: previously this reset the module-level `_chat_services` dict
+    entirely (`_chat_services = {}`), wiping every other session's
+    in-progress chat state too. Now it removes only the caller's session
+    key (same session-id resolution the other chat endpoints use — see
+    `get_session_id`), falling back to "default" when no session id is
+    available (single-user local mode, where all callers already share the
+    "default" key by design).
+    """
+    session_key = get_session_id(http_request) or "default"
+    had_session = session_key in _chat_services
+    _chat_services.pop(session_key, None)
+    _chat_api_keys.pop(session_key, None)
+    return {
+        "message": "Chat history cleared" if had_session else "No active chat session to clear",
+        "success": True,
+    }
 
 
 @router.post("/advisor/chat/stream/v2")
-def chat_with_advisor_stream_v2(request: EnhancedChatRequest, db: Database = Depends(get_db)) -> StreamingResponse:
+def chat_with_advisor_stream_v2(
+    request: EnhancedChatRequest, http_request: Request, db: Database = Depends(get_db)
+) -> StreamingResponse:
     """Enhanced streaming chat with tool support and page context.
 
     This endpoint provides context-aware chat that:
@@ -1683,8 +1747,8 @@ def chat_with_advisor_stream_v2(request: EnhancedChatRequest, db: Database = Dep
             yield f'data: {json.dumps({"type": "error", "message": "Claude API key not configured. Please add your API key in Settings."})}\n\n'
         return StreamingResponse(error_stream(), media_type="text/event-stream")
 
-    # Get or create chat service
-    session_key = "default"
+    # Get or create chat service (see F4: session-keyed like /advisor/chat)
+    session_key = get_session_id(http_request) or "default"
     if session_key not in _chat_services or _chat_api_keys.get(session_key) != claude_key:
         _chat_services[session_key] = AdvisorAnalysisService(
             claude_api_key=claude_key, db=db

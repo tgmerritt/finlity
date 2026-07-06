@@ -9,6 +9,8 @@ import { showLoading, hideLoading } from '@/ui/loading';
 import { getElementById, createSvgElement } from '@/utils/html';
 import { showTab } from '@/ui/tabs';
 import { emit } from '@/state/events';
+import { clientDB } from '@/database/client-database';
+import { getLocalAPI } from '@/api/dispatcher';
 
 /**
  * Demo mode status.
@@ -502,7 +504,10 @@ export async function loadDeploymentInfo(): Promise<DeploymentInfo | null> {
 
     // SAFETY: On failure, assume server storage is NOT allowed to prevent data loss
     // This ensures users don't accidentally store personal data on ephemeral storage
-    updateStorageModeRestrictions(false, 'Unable to verify deployment environment. Using local storage for safety.');
+    updateStorageModeRestrictions(
+      false,
+      'Unable to verify deployment environment. Using local storage for safety.'
+    );
 
     return null;
   }
@@ -512,13 +517,12 @@ export async function loadDeploymentInfo(): Promise<DeploymentInfo | null> {
  * Update storage mode UI based on deployment restrictions.
  * On Heroku when demo mode is disabled, server storage is not allowed.
  */
-export function updateStorageModeRestrictions(
-  serverAllowed: boolean,
-  reason: string | null
-): void {
+export function updateStorageModeRestrictions(serverAllowed: boolean, reason: string | null): void {
   const serverOption = getElementById<HTMLElement>('server-storage-option');
   const serverRadio = getElementById<HTMLInputElement>('storage-mode-server');
-  const localRadio = document.querySelector<HTMLInputElement>('input[name="storage-mode"][value="local"]');
+  const localRadio = document.querySelector<HTMLInputElement>(
+    'input[name="storage-mode"][value="local"]'
+  );
   const banner = getElementById<HTMLElement>('heroku-storage-banner');
   const message = getElementById<HTMLElement>('heroku-storage-message');
 
@@ -553,36 +557,48 @@ export function isTourCompleted(): boolean {
 }
 
 /**
- * Create a new local database by resetting server data to empty state.
- * This creates a fresh portfolio without any existing positions or accounts.
+ * F2: guard against silently discarding unsaved work. openFile()/
+ * importFromFile()/createNew() all unconditionally overwrite whatever
+ * database is currently open in clientDB with no dirty check of their own
+ * (see client-database.ts:178,311,201-210) — callers at the UI layer are
+ * expected to confirm with the user first. Returns true if it's safe to
+ * proceed (nothing open, nothing unsaved, or the user confirmed), false if
+ * the caller should abort.
+ */
+function confirmDiscardUnsavedChanges(): boolean {
+  if (!clientDB.isOpen() || !clientDB.getStorageInfo().isDirty) return true;
+  return window.confirm(
+    'You have unsaved changes that will be lost if you continue. Continue anyway?'
+  );
+}
+
+/**
+ * Create a new, empty local database in the browser (clientDB).
+ *
+ * REWRITTEN for hosted/local mode: previously this created a server-side
+ * profile via POST /api/profiles, which no longer applies now that user
+ * data lives entirely in the browser SQLite DB (see
+ * src/database/client-database.ts). Any existing in-memory data is
+ * discarded — the caller is expected to have confirmed with the user
+ * (see the boot-gate modal in ensureLocalDatabaseReady, or the Settings
+ * page action that calls this directly).
  */
 export async function createNewLocalDatabase(): Promise<void> {
-  const confirmed = window.confirm(
-    'This will create a new empty portfolio database.\n\n' +
-    'Your current data will remain on the server. ' +
-    'You can switch back to server mode to access it.\n\n' +
-    'Continue?'
-  );
-
-  if (!confirmed) return;
+  if (!confirmDiscardUnsavedChanges()) return;
 
   showLoading('Creating new database...');
   try {
-    // Create a new profile for local storage
-    await apiCall('/api/profiles', {
-      method: 'POST',
-      body: {
-        name: `Local Profile ${new Date().toLocaleDateString()}`,
-        description: 'Created for local storage mode',
-      },
-    });
-
-    // Ensure local mode is selected
-    setStorageMode('local');
-
+    clientDB.close();
+    await clientDB.createNew();
+    // F1(b): persist immediately so storageMode flips to 'indexeddb' and
+    // auto-save (started right below) actually has somewhere to write.
+    // createNew() alone leaves storageMode as 'memory', under which
+    // ClientDatabase.startAutoSave()'s interval is a no-op — without this,
+    // data entered here would only ever be saved if the user happened to
+    // trigger a manual "Save to browser storage" action.
+    await clientDB.saveToIndexedDB();
+    startClientDbAutoSave();
     showToast('New database created. You can now import your data.', 'success');
-
-    // Navigate to holdings tab to start importing
     showTab('holdings');
   } catch (error) {
     console.error('Error creating new database:', error);
@@ -594,60 +610,103 @@ export async function createNewLocalDatabase(): Promise<void> {
 
 /**
  * Save the current local database state.
- * In local mode, this persists data to localStorage/IndexedDB.
+ *
+ * REWRITTEN for hosted/local mode: delegates to clientDB.saveToFile() (File
+ * System Access API when the DB was opened/saved as a file) or, when no
+ * file handle exists yet, falls back to a browser download so the data is
+ * never silently unsaved.
  */
 export async function saveLocalDatabase(): Promise<void> {
-  showToast('Data is automatically saved', 'info');
-}
+  if (!clientDB.isOpen()) {
+    showToast('No database is open', 'warning');
+    return;
+  }
 
-/**
- * Download the local database as a backup file.
- */
-export async function downloadLocalDatabase(): Promise<void> {
-  showLoading('Preparing download...');
-  try {
-    // Backend exposes separate CSV endpoints per data_type; concatenate them
-    // into a single multi-section CSV file for backup purposes.
-    const dataTypes = ['accounts', 'positions', 'snapshots'];
-    const sections: string[] = [];
-
-    for (const dataType of dataTypes) {
-      const response = await fetch(`/api/portfolio/export/${dataType}`);
-      if (!response.ok) {
-        throw new Error(`Failed to export ${dataType} (HTTP ${response.status})`);
-      }
-      const text = await response.text();
-      sections.push(`# ${dataType}\n${text.trim()}`);
+  const info = clientDB.getStorageInfo();
+  if (info.mode === 'indexeddb') {
+    // IndexedDB auto-save already persists on the interval started by
+    // startClientDbAutoSave(); a manual save just forces it immediately.
+    try {
+      await clientDB.saveToIndexedDB();
+      showToast('Saved to browser storage', 'success');
+    } catch (error) {
+      console.error('Error saving to IndexedDB:', error);
+      showToast('Failed to save to browser storage', 'error');
     }
+    return;
+  }
 
-    const blob = new Blob([sections.join('\n\n')], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `portfolio-backup-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-
-    showToast('Database exported successfully', 'success');
+  try {
+    const result = await clientDB.saveToFile();
+    if (result.status === 'saved') {
+      showToast(`Saved to ${result.name}`, 'success');
+    } else if (result.status === 'downloaded') {
+      showToast(`Downloaded ${result.name}`, 'success');
+    } else if (result.status === 'failed') {
+      showToast(`Failed to save: ${result.error}`, 'error');
+    }
+    // 'cancelled' — user dismissed the save-as picker, no toast needed.
   } catch (error) {
-    console.error('Error downloading database:', error);
-    showToast('Failed to download database', 'error');
-  } finally {
-    hideLoading();
+    console.error('Error saving database:', error);
+    showToast('Failed to save database', 'error');
   }
 }
 
 /**
- * Open a local database file using file picker.
- * Supports CSV files for import.
+ * Download the local database as a .db file.
+ *
+ * REWRITTEN for hosted/local mode: previously concatenated server CSV
+ * export endpoints into one file. The local database IS the backup now, so
+ * this downloads the raw SQLite file via clientDB.downloadDatabase()
+ * instead.
+ */
+export function downloadLocalDatabase(): void {
+  if (!clientDB.isOpen()) {
+    showToast('No database is open', 'warning');
+    return;
+  }
+  try {
+    const timestamp = new Date().toISOString().split('T')[0];
+    clientDB.downloadDatabase(`portfolio-backup-${timestamp}.db`);
+    showToast('Database downloaded successfully', 'success');
+  } catch (error) {
+    console.error('Error downloading database:', error);
+    showToast('Failed to download database', 'error');
+  }
+}
+
+/**
+ * Open an existing local database (.db/.sqlite file) using a file picker.
+ *
+ * REWRITTEN for hosted/local mode: previously only handled CSV via the
+ * import flow. Now opens real SQLite database files into clientDB via the
+ * File System Access API (Chrome/Edge) when available, falling back to a
+ * plain file input (importFromFile) otherwise. CSV files are still routed
+ * to the existing import flow for backwards compatibility.
  */
 export function openLocalDatabase(): void {
-  // Create a hidden file input
+  if (!confirmDiscardUnsavedChanges()) return;
+
+  if (clientDB.hasFileSystemAccess()) {
+    clientDB
+      .openFile()
+      .then((result) => {
+        if (!result) return; // user cancelled
+        startClientDbAutoSave();
+        showToast(`Opened ${result.name}`, 'success');
+        document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
+      })
+      .catch((error) => {
+        console.error('Error opening database file:', error);
+        showToast('Failed to open database file', 'error');
+      });
+    return;
+  }
+
+  // Fallback: plain file input (no File System Access API support).
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.csv,.db,.sqlite';
+  input.accept = '.csv,.db,.sqlite,.sqlite3';
   input.style.display = 'none';
 
   input.addEventListener('change', async (e) => {
@@ -657,7 +716,6 @@ export function openLocalDatabase(): void {
 
     showLoading(`Opening ${file.name}...`);
     try {
-      // For CSV files, use the import flow
       if (file.name.endsWith('.csv')) {
         // Trigger the import modal with this file
         const importModal = getElementById<HTMLElement>('import-modal');
@@ -665,21 +723,21 @@ export function openLocalDatabase(): void {
           importModal.style.display = 'flex';
         }
 
-        // Create a DataTransfer to simulate file drop
         const dataTransfer = new DataTransfer();
         dataTransfer.items.add(file);
 
-        // Find the file input in import modal and set the file
         const importFileInput = document.getElementById('import-file') as HTMLInputElement | null;
         if (importFileInput) {
           importFileInput.files = dataTransfer.files;
-          // Trigger change event to process the file
           importFileInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
         showToast('File loaded. Review the import preview and confirm.', 'info');
       } else {
-        showToast('Only CSV files are currently supported for import.', 'warning');
+        const result = await clientDB.importFromFile(file);
+        startClientDbAutoSave();
+        showToast(`Opened ${result.name}`, 'success');
+        document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
       }
     } catch (error) {
       console.error('Error opening database:', error);
@@ -688,7 +746,6 @@ export function openLocalDatabase(): void {
       hideLoading();
     }
 
-    // Clean up
     document.body.removeChild(input);
   });
 
@@ -697,61 +754,48 @@ export function openLocalDatabase(): void {
 }
 
 /**
- * Browser storage key for portfolio data.
- */
-const BROWSER_STORAGE_KEY = 'finlity_portfolio_data';
-
-/**
- * Load portfolio data from browser storage (localStorage).
- * This restores previously saved account and position data.
+ * Load portfolio data from browser storage (IndexedDB).
+ *
+ * REWRITTEN for hosted/local mode: previously read a JSON blob from
+ * localStorage. Now delegates to clientDB.loadFromIndexedDB(), which loads
+ * the real SQLite database saved there.
  */
 export async function loadFromBrowserStorage(): Promise<void> {
-  const storedData = localStorage.getItem(BROWSER_STORAGE_KEY);
-  if (!storedData) {
-    showToast('No saved data found in browser storage', 'warning');
-    return;
-  }
-
+  showLoading('Loading from browser storage...');
   try {
-    const data = JSON.parse(storedData);
-    const positionCount = data.positions?.length || 0;
-    const accountCount = data.accounts?.length || 0;
-
-    showToast(
-      `Browser storage contains ${accountCount} accounts and ${positionCount} positions. ` +
-        'Use Import to restore this data.',
-      'info'
-    );
-
-    // For now, just show what's stored - full restore requires import functionality
-    console.log('Browser storage data:', data);
+    const result = await clientDB.loadFromIndexedDB();
+    if (!result.loaded) {
+      showToast('No saved data found in browser storage', 'warning');
+      return;
+    }
+    startClientDbAutoSave();
+    showToast('Loaded database from browser storage', 'success');
+    document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
   } catch (error) {
-    console.error('Error parsing browser storage:', error);
+    console.error('Error loading from browser storage:', error);
     showToast('Browser storage data is corrupted', 'error');
+  } finally {
+    hideLoading();
   }
 }
 
 /**
- * Save current portfolio data to browser storage (localStorage).
- * Fetches accounts and positions from API and stores them locally.
+ * Save current database to browser storage (IndexedDB).
+ *
+ * REWRITTEN for hosted/local mode: previously fetched accounts/positions
+ * from the server API and stringified them into localStorage. Now saves
+ * the real SQLite database (all tables) into IndexedDB via clientDB.
  */
 export async function saveToBrowserStorage(): Promise<void> {
+  if (!clientDB.isOpen()) {
+    showToast('No database is open', 'warning');
+    return;
+  }
   showLoading('Saving to browser storage...');
   try {
-    // Fetch accounts and positions from API
-    const accounts = await apiCall<unknown[]>('/api/portfolio/accounts');
-    const positions = await apiCall<unknown[]>('/api/portfolio/positions');
-
-    const data = {
-      accounts,
-      positions,
-      savedAt: new Date().toISOString(),
-    };
-
-    // Store in localStorage
-    localStorage.setItem(BROWSER_STORAGE_KEY, JSON.stringify(data));
-
-    showToast(`Saved ${accounts.length} accounts and ${positions.length} positions to browser`, 'success');
+    await clientDB.saveToIndexedDB();
+    startClientDbAutoSave();
+    showToast('Saved database to browser storage', 'success');
   } catch (error) {
     console.error('Error saving to browser storage:', error);
     showToast('Failed to save data to browser storage', 'error');
@@ -761,7 +805,10 @@ export async function saveToBrowserStorage(): Promise<void> {
 }
 
 /**
- * Clear all portfolio data from browser storage.
+ * Clear all portfolio data from browser storage (IndexedDB).
+ *
+ * REWRITTEN for hosted/local mode: previously removed a localStorage key.
+ * Now clears the IndexedDB-persisted SQLite database via clientDB.
  */
 export function clearBrowserStorage(): void {
   const confirmed = window.confirm(
@@ -772,12 +819,326 @@ export function clearBrowserStorage(): void {
 
   if (!confirmed) return;
 
+  clientDB
+    .clearIndexedDB()
+    .then(() => showToast('Browser storage cleared', 'success'))
+    .catch((error) => {
+      console.error('Error clearing browser storage:', error);
+      showToast('Failed to clear browser storage', 'error');
+    });
+}
+
+// =====================================================================
+// Hosted-mode boot gate (dataMode === 'local')
+// =====================================================================
+
+/** Auto-save interval for the unsaved-changes header indicator (ms). Matches clientDB's default. */
+const AUTO_SAVE_INTERVAL_MS = 30000;
+/** Interval for polling clientDB.isDirty() to refresh the header indicator (ms). */
+const DIRTY_INDICATOR_POLL_MS = 5000;
+
+let dirtyIndicatorInterval: ReturnType<typeof setInterval> | null = null;
+let beforeUnloadHandlerInstalled = false;
+
+/**
+ * Start clientDB's auto-save (only actually persists in IndexedDB mode —
+ * see ClientDatabase.startAutoSave), the unsaved-changes header indicator,
+ * and the beforeunload warning. Safe to call multiple times (idempotent).
+ */
+export function startClientDbAutoSave(): void {
+  clientDB.startAutoSave(AUTO_SAVE_INTERVAL_MS);
+  clientDB.setAutoSaveFailureCallback((failCount) => {
+    showToast(
+      `Auto-save to browser storage failed ${failCount} times in a row. Download a backup to avoid losing data.`,
+      'error'
+    );
+  });
+
+  if (!dirtyIndicatorInterval) {
+    dirtyIndicatorInterval = setInterval(updateUnsavedChangesIndicator, DIRTY_INDICATOR_POLL_MS);
+  }
+  updateUnsavedChangesIndicator();
+
+  if (!beforeUnloadHandlerInstalled) {
+    window.addEventListener('beforeunload', (event) => {
+      if (clientDB.isOpen() && clientDB.getStorageInfo().isDirty) {
+        event.preventDefault();
+        // Modern browsers ignore custom messages, but setting returnValue
+        // is still required to trigger the confirmation prompt at all.
+        event.returnValue = true;
+      }
+    });
+    beforeUnloadHandlerInstalled = true;
+  }
+}
+
+/**
+ * Update the "unsaved changes" indicator in the header, if present in the
+ * markup. Uses `#unsaved-changes-indicator`; hidden by the `hidden` utility
+ * class when there is nothing unsaved.
+ */
+function updateUnsavedChangesIndicator(): void {
+  const indicator = getElementById<HTMLElement>('unsaved-changes-indicator');
+  if (!indicator) return;
+  const isDirty = clientDB.isOpen() && clientDB.getStorageInfo().isDirty;
+  indicator.classList.toggle('hidden', !isDirty);
+}
+
+/**
+ * Build and show the blocking "open or create a database" modal used by
+ * ensureLocalDatabaseReady() when no database is open yet (first visit,
+ * IndexedDB has nothing saved, or - see C3 - a storage failure occurred
+ * while checking/loading IndexedDB). Unlike ui/modal.ts's
+ * createDynamicModal, this modal has no close/cancel/backdrop/Escape
+ * dismissal — the app has no data source until the user picks one, so it
+ * must be answered.
+ *
+ * @param errorNotice - When set (C3 recovery path), renders an error banner
+ * above the description and adds a "Start fresh" button that clears
+ * IndexedDB before creating a new database — for the case where existing
+ * IndexedDB data can't be read/loaded, so the user isn't stuck retrying the
+ * same failing load.
+ *
+ * Resolves once a database is open (never rejects).
+ */
+function showDatabaseGateModal(errorNotice?: string): Promise<void> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-backdrop db-gate-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.zIndex = '10000';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+
+    const card = document.createElement('div');
+    card.className = 'modal-content db-gate-card';
+    card.style.maxWidth = '480px';
+    card.style.width = '90%';
+
+    const title = document.createElement('h2');
+    title.textContent = 'Open or create your portfolio database';
+    card.appendChild(title);
+
+    if (errorNotice) {
+      const errorBanner = document.createElement('div');
+      errorBanner.className = 'db-gate-error-notice';
+      errorBanner.setAttribute('role', 'alert');
+      errorBanner.style.color = 'var(--color-danger, #dc2626)';
+      errorBanner.style.marginBottom = '0.5rem';
+      errorBanner.textContent = errorNotice;
+      card.appendChild(errorBanner);
+    }
+
+    const description = document.createElement('p');
+    description.className = 'form-help';
+    description.textContent =
+      'Your data stays in this browser — nothing is sent to or stored on the server. ' +
+      'Choose how you want to get started.';
+    card.appendChild(description);
+
+    const buttonGroup = document.createElement('div');
+    buttonGroup.className = 'button-group';
+    buttonGroup.style.flexDirection = 'column';
+    buttonGroup.style.gap = '0.75rem';
+    buttonGroup.style.marginTop = '1rem';
+
+    const finish = (): void => {
+      overlay.remove();
+      resolve();
+    };
+
+    const openBtn = document.createElement('button');
+    openBtn.type = 'button';
+    openBtn.className = 'btn btn-primary';
+    openBtn.textContent = clientDB.hasFileSystemAccess()
+      ? 'Open existing .db file'
+      : 'Open existing .db file (upload)';
+    openBtn.addEventListener('click', async () => {
+      openBtn.disabled = true;
+      try {
+        if (clientDB.hasFileSystemAccess()) {
+          const result = await clientDB.openFile();
+          if (!result) {
+            openBtn.disabled = false;
+            return; // user cancelled the file picker — stay on the gate
+          }
+        } else {
+          const opened = await promptForFileUpload();
+          if (!opened) {
+            openBtn.disabled = false;
+            return;
+          }
+        }
+        finish();
+      } catch (error) {
+        console.error('Failed to open database file:', error);
+        showToast('Failed to open database file', 'error');
+        openBtn.disabled = false;
+      }
+    });
+    buttonGroup.appendChild(openBtn);
+
+    const createBtn = document.createElement('button');
+    createBtn.type = 'button';
+    createBtn.className = 'btn btn-secondary';
+    createBtn.textContent = 'Create new database';
+    createBtn.addEventListener('click', async () => {
+      createBtn.disabled = true;
+      try {
+        await clientDB.createNew();
+        // F1(b): persist immediately and switch to 'indexeddb' storage mode
+        // so auto-save (started right after this modal resolves, in
+        // ensureLocalDatabaseReady) is active from the very first keystroke
+        // instead of leaving the new database in non-persisting 'memory'
+        // mode until the user happens to trigger a save. This makes
+        // "Create new database" behaviorally identical to the "Continue
+        // with browser storage" button below; both are kept as distinct,
+        // clearly-labeled entry points since users take this path from
+        // different mental models (starting a database vs. picking a
+        // storage location).
+        await clientDB.saveToIndexedDB();
+        finish();
+      } catch (error) {
+        console.error('Failed to create new database:', error);
+        showToast('Failed to create new database', 'error');
+        createBtn.disabled = false;
+      }
+    });
+    buttonGroup.appendChild(createBtn);
+
+    const browserBtn = document.createElement('button');
+    browserBtn.type = 'button';
+    browserBtn.className = 'btn btn-text';
+    browserBtn.textContent = 'Continue with browser storage (new database, auto-saved)';
+    browserBtn.addEventListener('click', async () => {
+      browserBtn.disabled = true;
+      try {
+        await clientDB.createNew();
+        await clientDB.saveToIndexedDB();
+        finish();
+      } catch (error) {
+        console.error('Failed to initialize browser storage:', error);
+        showToast('Failed to initialize browser storage', 'error');
+        browserBtn.disabled = false;
+      }
+    });
+    buttonGroup.appendChild(browserBtn);
+
+    // C3 recovery action: only shown when the gate is presented because an
+    // existing IndexedDB read/load failed (errorNotice set) rather than
+    // because there was simply nothing saved yet. Clears the (apparently
+    // corrupted/unreadable) IndexedDB data before creating a fresh database,
+    // so the user has a way forward instead of being stuck re-attempting a
+    // load that will keep failing.
+    if (errorNotice) {
+      const startFreshBtn = document.createElement('button');
+      startFreshBtn.type = 'button';
+      startFreshBtn.className = 'btn btn-text';
+      startFreshBtn.textContent = 'Start fresh (clears browser storage)';
+      startFreshBtn.addEventListener('click', async () => {
+        startFreshBtn.disabled = true;
+        try {
+          await clientDB.clearIndexedDB();
+          await clientDB.createNew();
+          await clientDB.saveToIndexedDB();
+          finish();
+        } catch (error) {
+          console.error('Failed to start fresh:', error);
+          showToast('Failed to reset browser storage', 'error');
+          startFreshBtn.disabled = false;
+        }
+      });
+      buttonGroup.appendChild(startFreshBtn);
+    }
+
+    card.appendChild(buttonGroup);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  });
+}
+
+/**
+ * Fallback file picker for browsers without the File System Access API.
+ * Resolves true if a file was loaded into clientDB, false if cancelled.
+ */
+function promptForFileUpload(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.db,.sqlite,.sqlite3';
+    input.style.display = 'none';
+
+    input.addEventListener('change', async (e) => {
+      const target = e.target as HTMLInputElement;
+      const file = target.files?.[0];
+      document.body.removeChild(input);
+      if (!file) {
+        resolve(false);
+        return;
+      }
+      try {
+        await clientDB.importFromFile(file);
+        resolve(true);
+      } catch (error) {
+        console.error('Failed to import database file:', error);
+        showToast('Failed to open database file', 'error');
+        resolve(false);
+      }
+    });
+
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+/**
+ * Ensure a local database is open before the app proceeds, in hosted/local
+ * mode (dataMode === 'local'). Called from main.ts's init() before any
+ * feature/page initialization runs.
+ *
+ * - If IndexedDB already has a saved database, load it silently.
+ * - Otherwise, block on a modal asking the user to open an existing .db
+ *   file, create a new one, or continue with auto-saved browser storage.
+ *
+ * Starts auto-save (appropriate to whichever storage mode was chosen) once
+ * a database is open, then takes an initial snapshot so the dashboard
+ * history chart has at least one data point.
+ */
+export async function ensureLocalDatabaseReady(): Promise<void> {
+  await clientDB.init();
+
+  // C3: hasIndexedDBData()/loadFromIndexedDB() now reject (rather than
+  // hang) on a genuine storage failure (see C1/C2 fixes in
+  // client-database.ts). Catch that here so a corrupted/unreadable
+  // IndexedDB never leaves the user on a stuck loading screen — instead,
+  // show the same gate modal with an error notice and a "Start fresh"
+  // recovery action (in addition to the normal open/create options).
   try {
-    localStorage.removeItem(BROWSER_STORAGE_KEY);
-    showToast('Browser storage cleared', 'success');
+    const hasSaved = await clientDB.hasIndexedDBData();
+    if (hasSaved) {
+      await clientDB.loadFromIndexedDB();
+    } else {
+      await showDatabaseGateModal();
+    }
   } catch (error) {
-    console.error('Error clearing browser storage:', error);
-    showToast('Failed to clear browser storage', 'error');
+    console.error('Failed to read local browser storage:', error);
+    await showDatabaseGateModal(
+      'Could not read your saved data from browser storage. You can open a database file, ' +
+        'start fresh, or create a new database.'
+    );
+  }
+
+  startClientDbAutoSave();
+
+  // Baseline snapshot so history/allocation charts have data on first load,
+  // matching the server's behavior of snapshotting after each mutation
+  // (here we just ensure at least one point exists at boot).
+  try {
+    getLocalAPI().takeSnapshot();
+  } catch (error) {
+    console.warn('Could not take initial snapshot:', error);
   }
 }
 

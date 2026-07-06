@@ -31,8 +31,28 @@ export interface SortConfig {
 
 /**
  * Storage mode for data persistence.
+ *
+ * @deprecated Legacy cosmetic toggle from the Settings "Data Storage" card
+ * (localStorage 'storageMode', badge text, radio buttons). Superseded by
+ * `dataMode` below, which is resolved from the server's `multi_user_mode`
+ * flag and actually drives request routing. Kept only so the existing
+ * Settings card continues to render unchanged in server mode.
  */
 export type StorageMode = 'server' | 'local' | 'indexeddb';
+
+/**
+ * Data routing mode, resolved once at boot from `/api/session/init`'s
+ * `multi_user_mode` flag (see src/state/session.ts initSession()):
+ * - 'server': v1 behavior, unchanged. All requests hit the FastAPI server.
+ * - 'local': hosted/multi-user mode. All user data lives in the browser
+ *   SQLite DB (src/database/client-database.ts); CRUD is served by
+ *   LocalAPI and analysis/projection calls are POSTed to the stateless
+ *   /api/v2 endpoints. See src/api/dispatcher.ts.
+ *
+ * Defaults to 'server' until session init resolves, so anything that reads
+ * this before boot completes gets today's behavior.
+ */
+export type DataMode = 'server' | 'local';
 
 /**
  * Allocation tab options.
@@ -64,17 +84,19 @@ export interface AppState {
 
   // Entity state (for multi-person household tracking)
   entities: Entity[];
-  currentEntityId: string | null;  // null = household/combined view
+  currentEntityId: string | null; // null = household/combined view
 
   // Session state
   sessionHmacKey: string | null;
   sessionSigningRequired: boolean;
+  multiUserMode: boolean;
 
   // Mode state
   demoMode: boolean;
   isLoading: boolean;
   loadingMessage: string;
   storageMode: StorageMode;
+  dataMode: DataMode;
 
   // Plugin state
   plugins: Plugin[];
@@ -130,12 +152,14 @@ const initialState: AppState = {
   // Session state
   sessionHmacKey: null,
   sessionSigningRequired: false,
+  multiUserMode: false,
 
   // Mode state
   demoMode: false,
   isLoading: false,
   loadingMessage: 'Loading...',
   storageMode: 'server',
+  dataMode: 'server',
 
   // Plugin state
   plugins: [],

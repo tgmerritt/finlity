@@ -11,6 +11,7 @@ import { getElementById, setVisible, clearElement, createSvgElement } from '@/ut
 import { setStateView } from '@/ui/state-view';
 import { formatNumber } from '@/utils/format';
 import { emit } from '@/state/events';
+import { store } from '@/state/store';
 
 /**
  * Plugin information from API.
@@ -610,7 +611,10 @@ export async function savePluginSettings(event: Event, pluginId: string): Promis
   const plugin = availablePlugins.find((p) => p.plugin_id === pluginId);
   if (plugin?.settings_schema) {
     plugin.settings_schema.forEach((setting) => {
-      const input = form.querySelector(`[name="${setting.key}"]`) as HTMLInputElement | HTMLSelectElement | null;
+      const input = form.querySelector(`[name="${setting.key}"]`) as
+        | HTMLInputElement
+        | HTMLSelectElement
+        | null;
       if (input) {
         if (setting.type === 'boolean') {
           settings[setting.key] = (input as HTMLInputElement).checked;
@@ -1500,6 +1504,11 @@ export function switchInstallTab(tabName: string): void {
 export async function installFromGit(event: Event): Promise<void> {
   event.preventDefault();
 
+  if (store.get('dataMode') === 'local') {
+    showToast('Plugins are disabled in hosted mode.', 'info');
+    return;
+  }
+
   const sourceInput = getElementById<HTMLInputElement>('git-source');
   const source = sourceInput?.value.trim();
 
@@ -1573,6 +1582,11 @@ export function handlePluginFileSelect(event: Event): void {
  */
 export async function installFromUpload(event: Event): Promise<void> {
   event.preventDefault();
+
+  if (store.get('dataMode') === 'local') {
+    showToast('Plugins are disabled in hosted mode.', 'info');
+    return;
+  }
 
   const fileInput = getElementById<HTMLInputElement>('plugin-file');
   const file = fileInput?.files?.[0];

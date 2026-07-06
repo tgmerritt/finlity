@@ -5,6 +5,9 @@
 
 import { showToast } from '@/ui/toast';
 import { getBaseUrl } from '@/api/client';
+import { store } from '@/state/store';
+import { getLocalAPI } from '@/api/dispatcher';
+import { generateSignatureHeaders, isSigningRequired } from '@/state/session';
 
 /**
  * Commentary data from API.
@@ -160,7 +163,9 @@ function extractVisibleData(elementId: string): Record<string, unknown> | null {
   // Handle dashboard chart tiles (allocation and account type)
   if (elementId === 'dashboard.allocation_chart') {
     // Extract allocation data from Plotly chart
-    const chartDiv = document.getElementById('chart-allocation') as HTMLElement & { data?: unknown[] };
+    const chartDiv = document.getElementById('chart-allocation') as HTMLElement & {
+      data?: unknown[];
+    };
     if (!chartDiv) {
       console.warn('AI Commentary: chart-allocation element not found');
       data.extraction_error = 'Chart element not found';
@@ -193,7 +198,7 @@ function extractVisibleData(elementId: string): Record<string, unknown> | null {
         console.warn(`AI Commentary: allocation data missing at index ${i}`);
         continue;
       }
-      const pct = (val / total * 100).toFixed(1);
+      const pct = ((val / total) * 100).toFixed(1);
       allocations.push(`${labels[i]}: ${pct}%`);
     }
     data.allocation_summary = allocations.join(', ');
@@ -202,14 +207,16 @@ function extractVisibleData(elementId: string): Record<string, unknown> | null {
     const sortedValues = [...values].sort((a, b) => b - a);
     const top5Value = sortedValues.slice(0, 5).reduce((sum, v) => sum + v, 0);
     const top10Value = sortedValues.slice(0, 10).reduce((sum, v) => sum + v, 0);
-    data.top_5_pct = (top5Value / total * 100);
-    data.top_10_pct = (top10Value / total * 100);
+    data.top_5_pct = (top5Value / total) * 100;
+    data.top_10_pct = (top10Value / total) * 100;
     return data;
   }
 
   if (elementId === 'dashboard.account_type_chart') {
     // Extract account type data from Plotly chart
-    const chartDiv = document.getElementById('chart-account-type') as HTMLElement & { data?: unknown[] };
+    const chartDiv = document.getElementById('chart-account-type') as HTMLElement & {
+      data?: unknown[];
+    };
     if (!chartDiv) {
       console.warn('AI Commentary: chart-account-type element not found');
       data.extraction_error = 'Chart element not found';
@@ -250,14 +257,17 @@ function extractVisibleData(elementId: string): Record<string, unknown> | null {
       }
 
       const label = labelText.toLowerCase();
-      const pct = (value / total * 100).toFixed(1);
+      const pct = ((value / total) * 100).toFixed(1);
       allocations.push(`${labelText}: ${pct}%`);
 
       // Categorize by account type for tax analysis
       // Priority: specific matches first, then general categories
       if (label.includes('taxable') || label === 'brokerage') {
         taxableValue += value;
-      } else if (label.includes('traditional') || (label.includes('401k') && !label.includes('roth'))) {
+      } else if (
+        label.includes('traditional') ||
+        (label.includes('401k') && !label.includes('roth'))
+      ) {
         traditionalValue += value;
         taxAdvantagedValue += value;
       } else if (label.includes('roth')) {
@@ -279,17 +289,19 @@ function extractVisibleData(elementId: string): Record<string, unknown> | null {
       } else {
         // Track uncategorized accounts so percentages still add up
         otherValue += value;
-        console.warn(`AI Commentary: uncategorized account type "${labelText}" with value ${value}`);
+        console.warn(
+          `AI Commentary: uncategorized account type "${labelText}" with value ${value}`
+        );
       }
     }
 
     data.account_type_summary = allocations.join(', ');
-    data.taxable_pct = (taxableValue / total * 100);
-    data.traditional_pct = (traditionalValue / total * 100);
-    data.roth_pct = (rothValue / total * 100);
-    data.tax_advantaged_pct = (taxAdvantagedValue / total * 100);
+    data.taxable_pct = (taxableValue / total) * 100;
+    data.traditional_pct = (traditionalValue / total) * 100;
+    data.roth_pct = (rothValue / total) * 100;
+    data.tax_advantaged_pct = (taxAdvantagedValue / total) * 100;
     if (otherValue > 0) {
-      data.other_pct = (otherValue / total * 100);
+      data.other_pct = (otherValue / total) * 100;
       data.has_uncategorized = true;
     }
     return data;
@@ -299,8 +311,9 @@ function extractVisibleData(elementId: string): Record<string, unknown> | null {
   if (elementId.startsWith('dashboard.')) {
     // Get the stat card containing this button
     const cardId = elementId.replace('dashboard.', '');
-    const statCard = document.querySelector(`[data-stat="${cardId}"]`) ||
-                     document.querySelector(`.stat-card:has([data-element-id="${elementId}"])`);
+    const statCard =
+      document.querySelector(`[data-stat="${cardId}"]`) ||
+      document.querySelector(`.stat-card:has([data-element-id="${elementId}"])`);
 
     if (statCard) {
       const value = statCard.querySelector('.stat-value, .stat-card-value');
@@ -600,121 +613,348 @@ export async function showAICommentary(button: HTMLButtonElement): Promise<void>
 
   // Use streaming API for real-time text generation
   try {
-    const baseUrl = getBaseUrl();
-
-    // Extract visible data from the page to send to the AI
+    const isLocalMode = store.get('dataMode') === 'local';
     const visibleData = extractVisibleData(elementId);
-    let streamUrl = `${baseUrl}/api/commentary/${elementId}/stream`;
-    if (visibleData) {
-      const dataParam = encodeURIComponent(JSON.stringify(visibleData));
-      streamUrl += `?data=${dataParam}`;
+
+    if (isLocalMode) {
+      await startLocalCommentaryStream(popover, elementId, visibleData);
+    } else {
+      startServerCommentaryStream(popover, elementId, visibleData);
     }
-
-    const eventSource = new EventSource(streamUrl);
-    let fullText = '';
-    let ageHours = 0;
-
-    // Get content area and prepare for streaming
-    const body = popover.querySelector('.commentary-body');
-    const loading = body?.querySelector('.commentary-loading');
-
-    eventSource.onmessage = (event: MessageEvent) => {
-      let data: CommentarySSEMessage;
-      try {
-        data = JSON.parse(event.data);
-      } catch (parseError) {
-        console.error('Failed to parse SSE message:', parseError, event.data);
-        eventSource.close();
-        renderCommentaryError(popover, 'Failed to parse server response');
-        return;
-      }
-
-      if (data.error) {
-        eventSource.close();
-        renderCommentaryError(popover, data.error);
-        return;
-      }
-
-      if (data.type === 'cached') {
-        // Cached response - show immediately
-        fullText = data.commentary || '';
-        ageHours = data.age_hours || 0;
-        eventSource.close();
-        commentaryCache[elementId] = {
-          commentary: fullText,
-          age_hours: ageHours,
-          is_cached: true,
-          element_id: elementId,
-        };
-        renderCommentaryContent(popover, commentaryCache[elementId]);
-        return;
-      }
-
-      if (data.type === 'chunk') {
-        // First chunk - switch from loading to content
-        if (!fullText && body) {
-          if (loading) loading.remove();
-          const contentDiv = document.createElement('div');
-          contentDiv.className = 'commentary-content streaming';
-          body.appendChild(contentDiv);
-        }
-
-        fullText += data.text || '';
-
-        // Update content with parsed markdown using safe DOM methods
-        const contentDiv = body?.querySelector('.commentary-content');
-        if (contentDiv instanceof HTMLElement) {
-          renderMarkdownToElement(contentDiv, fullText);
-        }
-      }
-
-      if (data.type === 'complete' && body) {
-        eventSource.close();
-        ageHours = data.age_hours || 0;
-
-        // Cache the result
-        commentaryCache[elementId] = {
-          commentary: fullText,
-          age_hours: ageHours,
-          is_cached: false,
-          element_id: elementId,
-        };
-
-        // Remove streaming class
-        const contentDiv = body.querySelector('.commentary-content');
-        if (contentDiv) {
-          contentDiv.classList.remove('streaming');
-        }
-
-        // Add footer
-        const footer = document.createElement('div');
-        footer.className = 'commentary-footer';
-
-        const ageSpan = document.createElement('span');
-        ageSpan.className = 'commentary-age';
-        ageSpan.textContent = 'Generated just now';
-        footer.appendChild(ageSpan);
-
-        const refreshBtn = document.createElement('button');
-        refreshBtn.className = 'btn btn-sm btn-link';
-        refreshBtn.textContent = 'Refresh';
-        refreshBtn.onclick = () => refreshCommentary(elementId);
-        footer.appendChild(refreshBtn);
-
-        body.appendChild(footer);
-      }
-    };
-
-    eventSource.onerror = (error: Event) => {
-      console.error('SSE error:', error);
-      eventSource.close();
-      if (!fullText) {
-        renderCommentaryError(popover, 'Connection error. Please try again.');
-      }
-    };
   } catch (error) {
     console.error('Failed to start streaming:', error);
     renderCommentaryError(popover, error instanceof Error ? error.message : 'Unknown error');
+  }
+}
+
+/**
+ * Handle the stream connection dropping after some text has already
+ * rendered (F8, both modes — pre-existing bug, not local-mode-specific).
+ * Previously this left the partial text stuck with the `.streaming` class
+ * (an animated cursor/highlight meant only for active streaming) and no
+ * indication anything had gone wrong — the user would see what looks like a
+ * permanently "still typing" response that never finishes. Removes the
+ * class and appends a visible "connection lost" footer with a Refresh
+ * action instead, matching the visual treatment `complete` uses.
+ */
+function renderStreamConnectionLost(popover: HTMLElement, elementId: string): void {
+  const body = popover.querySelector('.commentary-body');
+  const contentDiv = body?.querySelector('.commentary-content');
+  if (contentDiv) {
+    contentDiv.classList.remove('streaming');
+  }
+  if (body && !body.querySelector('.commentary-connection-lost')) {
+    const footer = document.createElement('div');
+    footer.className = 'commentary-footer commentary-connection-lost';
+
+    const message = document.createElement('span');
+    message.className = 'commentary-age';
+    message.textContent = 'connection lost — ';
+    footer.appendChild(message);
+
+    const refreshBtn = document.createElement('button');
+    refreshBtn.className = 'btn btn-sm btn-link';
+    refreshBtn.textContent = 'Refresh';
+    refreshBtn.onclick = () => refreshCommentary(elementId);
+    footer.appendChild(refreshBtn);
+
+    body.appendChild(footer);
+  }
+}
+
+/**
+ * Append the "complete" footer (age text + Refresh button) to a commentary
+ * popover body once streaming has finished, shared by both the server
+ * (EventSource) and local (fetch-POST) streaming paths.
+ */
+function appendCompleteFooter(body: Element, elementId: string): void {
+  const contentDiv = body.querySelector('.commentary-content');
+  if (contentDiv) {
+    contentDiv.classList.remove('streaming');
+  }
+
+  const footer = document.createElement('div');
+  footer.className = 'commentary-footer';
+
+  const ageSpan = document.createElement('span');
+  ageSpan.className = 'commentary-age';
+  ageSpan.textContent = 'Generated just now';
+  footer.appendChild(ageSpan);
+
+  const refreshBtn = document.createElement('button');
+  refreshBtn.className = 'btn btn-sm btn-link';
+  refreshBtn.textContent = 'Refresh';
+  refreshBtn.onclick = () => refreshCommentary(elementId);
+  footer.appendChild(refreshBtn);
+
+  body.appendChild(footer);
+}
+
+/**
+ * Server mode (dataMode === 'server'): unchanged v1 EventSource streaming
+ * against GET /api/commentary/{elementId}/stream?data=...&no_store=...
+ */
+function startServerCommentaryStream(
+  popover: HTMLElement,
+  elementId: string,
+  visibleData: Record<string, unknown> | null
+): void {
+  const baseUrl = getBaseUrl();
+  const params = new URLSearchParams();
+  if (visibleData) {
+    params.set('data', JSON.stringify(visibleData));
+  }
+  const queryString = params.toString();
+  const streamUrl = `${baseUrl}/api/commentary/${elementId}/stream${queryString ? `?${queryString}` : ''}`;
+
+  const eventSource = new EventSource(streamUrl);
+  let fullText = '';
+  let ageHours = 0;
+
+  // Get content area and prepare for streaming
+  const body = popover.querySelector('.commentary-body');
+  const loading = body?.querySelector('.commentary-loading');
+
+  eventSource.onmessage = (event: MessageEvent) => {
+    let data: CommentarySSEMessage;
+    try {
+      data = JSON.parse(event.data);
+    } catch (parseError) {
+      console.error('Failed to parse SSE message:', parseError, event.data);
+      eventSource.close();
+      renderCommentaryError(popover, 'Failed to parse server response');
+      return;
+    }
+
+    if (data.error) {
+      eventSource.close();
+      renderCommentaryError(popover, data.error);
+      return;
+    }
+
+    if (data.type === 'cached') {
+      // Cached response - show immediately
+      fullText = data.commentary || '';
+      ageHours = data.age_hours || 0;
+      eventSource.close();
+      commentaryCache[elementId] = {
+        commentary: fullText,
+        age_hours: ageHours,
+        is_cached: true,
+        element_id: elementId,
+      };
+      renderCommentaryContent(popover, commentaryCache[elementId]);
+      return;
+    }
+
+    if (data.type === 'chunk') {
+      // First chunk - switch from loading to content
+      if (!fullText && body) {
+        if (loading) loading.remove();
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'commentary-content streaming';
+        body.appendChild(contentDiv);
+      }
+
+      fullText += data.text || '';
+
+      // Update content with parsed markdown using safe DOM methods
+      const contentDiv = body?.querySelector('.commentary-content');
+      if (contentDiv instanceof HTMLElement) {
+        renderMarkdownToElement(contentDiv, fullText);
+      }
+    }
+
+    if (data.type === 'complete' && body) {
+      eventSource.close();
+      ageHours = data.age_hours || 0;
+
+      // Cache the result
+      commentaryCache[elementId] = {
+        commentary: fullText,
+        age_hours: ageHours,
+        is_cached: false,
+        element_id: elementId,
+      };
+
+      appendCompleteFooter(body, elementId);
+    }
+  };
+
+  eventSource.onerror = (error: Event) => {
+    console.error('SSE error:', error);
+    eventSource.close();
+    if (!fullText) {
+      renderCommentaryError(popover, 'Connection error. Please try again.');
+    } else {
+      renderStreamConnectionLost(popover, elementId);
+    }
+  };
+}
+
+/**
+ * Local personal settings (age computed from dob, retirement_age) to embed
+ * as `user_context` in the local-mode commentary stream request, when
+ * available. Mirrors main.ts's populateAgeFromSettings() age computation.
+ * Returns undefined (omit the field) if no personal settings are saved.
+ */
+function getLocalUserContext(): { age?: number; retirement_age?: number } | undefined {
+  const personal = getLocalAPI().getConfigSection('personal')?.personal as
+    | { dob?: string; retirement_age?: number }
+    | undefined;
+  if (!personal) return undefined;
+
+  const context: { age?: number; retirement_age?: number } = {};
+  if (personal.dob) {
+    const dob = new Date(personal.dob + 'T00:00:00');
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      age--;
+    }
+    context.age = age;
+  }
+  if (personal.retirement_age) {
+    context.retirement_age = personal.retirement_age;
+  }
+  return Object.keys(context).length > 0 ? context : undefined;
+}
+
+/**
+ * Local/hosted mode (dataMode === 'local'): stream commentary via a fetch
+ * POST to the stateless /api/v2/commentary/{elementId}/stream endpoint
+ * instead of EventSource+query-string GET. EventSource cannot send a
+ * request body, and the visible-page `data` payload can be arbitrarily
+ * large (chart series, tax tile text, etc.) - too large/awkward to encode
+ * safely as a query string on every request. Mirrors the fetch-stream
+ * reader parser used by pages/analysis.ts's sendStreamingChatMessageV2 for
+ * the same "simple data: <chunk> SSE-over-fetch" pattern, but this
+ * endpoint's chunk protocol is the same `data: {...}` JSON-per-line format
+ * v1's EventSource path already parses (CommentarySSEMessage), not the
+ * plain-text chat format - so this reuses CommentarySSEMessage parsing
+ * rather than the chat parser.
+ */
+async function startLocalCommentaryStream(
+  popover: HTMLElement,
+  elementId: string,
+  visibleData: Record<string, unknown> | null
+): Promise<void> {
+  const signatureHeaders = isSigningRequired()
+    ? await generateSignatureHeaders('POST', `/api/v2/commentary/${elementId}/stream`)
+    : {};
+
+  const response = await fetch(`/api/v2/commentary/${elementId}/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...signatureHeaders },
+    credentials: 'include',
+    body: JSON.stringify({
+      data: visibleData ?? {},
+      ...(getLocalUserContext() ? { user_context: getLocalUserContext() } : {}),
+    }),
+  });
+
+  if (!response.ok || !response.body) {
+    renderCommentaryError(popover, `HTTP ${response.status}`);
+    return;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+  let ageHours = 0;
+
+  const body = popover.querySelector('.commentary-body');
+  const loading = body?.querySelector('.commentary-loading');
+
+  const handleMessage = (raw: string): boolean => {
+    let data: CommentarySSEMessage;
+    try {
+      data = JSON.parse(raw);
+    } catch (parseError) {
+      console.error('Failed to parse commentary stream message:', parseError, raw);
+      renderCommentaryError(popover, 'Failed to parse server response');
+      return true; // stop
+    }
+
+    if (data.error) {
+      renderCommentaryError(popover, data.error);
+      return true;
+    }
+
+    if (data.type === 'cached') {
+      fullText = data.commentary || '';
+      ageHours = data.age_hours || 0;
+      commentaryCache[elementId] = {
+        commentary: fullText,
+        age_hours: ageHours,
+        is_cached: true,
+        element_id: elementId,
+      };
+      renderCommentaryContent(popover, commentaryCache[elementId]);
+      return true;
+    }
+
+    if (data.type === 'chunk') {
+      if (!fullText && body) {
+        if (loading) loading.remove();
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'commentary-content streaming';
+        body.appendChild(contentDiv);
+      }
+      fullText += data.text || '';
+      const contentDiv = body?.querySelector('.commentary-content');
+      if (contentDiv instanceof HTMLElement) {
+        renderMarkdownToElement(contentDiv, fullText);
+      }
+    }
+
+    if (data.type === 'complete' && body) {
+      ageHours = data.age_hours || 0;
+      commentaryCache[elementId] = {
+        commentary: fullText,
+        age_hours: ageHours,
+        is_cached: false,
+        element_id: elementId,
+      };
+      appendCompleteFooter(body, elementId);
+      return true;
+    }
+
+    return false;
+  };
+
+  try {
+    let stopped = false;
+    while (!stopped) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6);
+        if (raw === '[DONE]') {
+          stopped = true;
+          break;
+        }
+        if (handleMessage(raw)) {
+          stopped = true;
+          break;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Local commentary stream error:', error);
+    if (!fullText) {
+      renderCommentaryError(popover, 'Connection error. Please try again.');
+    } else {
+      renderStreamConnectionLost(popover, elementId);
+    }
   }
 }
 
@@ -877,6 +1117,18 @@ export async function refreshCommentary(elementId: string): Promise<void> {
     // Close current popover
     closeAICommentary();
 
+    if (store.get('dataMode') === 'local') {
+      // Hosted/local mode: GET /api/commentary/{elementId} has no data/
+      // no_store params (see src/api/commentary.py get_element_commentary)
+      // — it reads server-side portfolio state that doesn't exist here, so
+      // it can't be used for a force-refresh. The cache was already cleared
+      // above; re-triggering the streaming flow (which does accept data/
+      // no_store) regenerates fresh commentary the same way the first
+      // request did.
+      await showAICommentary(button);
+      return;
+    }
+
     // Re-fetch with force refresh
     try {
       const baseUrl = getBaseUrl();
@@ -900,6 +1152,22 @@ export async function refreshCommentary(elementId: string): Promise<void> {
  * Refresh all AI insights.
  */
 export async function refreshAllAIInsights(): Promise<void> {
+  // F5: mirror the dataMode guard showAICommentary()/refreshCommentary()
+  // already have. /api/commentary/refresh clears a server-side commentary
+  // cache that doesn't exist in local mode (local mode never stores
+  // generated commentary anywhere but this in-memory client cache — see
+  // showAICommentary's no_store handling) — hitting the raw v1 endpoint via
+  // fetch() would bypass the dispatcher's local-mode routing entirely and
+  // either 404 or, if a same-named v1 route happened to exist, hit the real
+  // server. Clearing the client-side cache is the entire "refresh" in local
+  // mode; the next showAICommentary() call for each element regenerates on
+  // demand.
+  if (store.get('dataMode') === 'local') {
+    commentaryCache = {};
+    showToast('AI insight cache cleared. Insights will regenerate on next view.', 'success');
+    return;
+  }
+
   try {
     showToast('Refreshing AI insights...', 'info');
     const baseUrl = getBaseUrl();

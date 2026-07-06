@@ -168,3 +168,88 @@ class TestExpenseDrag:
         # Benchmark constant exposed correctly
         assert data["benchmark_expense_ratio"] == pytest.approx(BENCHMARK_ER)
         assert isinstance(data["top_drag_holdings"], list)
+
+
+class _FakeRequestState:
+    def __init__(self, session_id):
+        self.session_id = session_id
+
+
+class _FakeRequest:
+    """Minimal stand-in for fastapi.Request — clear_chat_history only reads
+    `request.state.session_id` via get_session_id()."""
+
+    def __init__(self, session_id):
+        self.state = _FakeRequestState(session_id)
+
+
+class TestAdvisorChatClearCrossTenant:
+    """F4 regression: /advisor/chat/clear used to unconditionally reset the
+    entire module-level `_chat_services` dict (`_chat_services = {}}`),
+    destroying every other session's in-progress chat state — a cross-tenant
+    bug in multi-user deployments (see is_multi_user_mode() in
+    src/services/session.py). It must now remove only the caller's own
+    session key.
+
+    SessionMiddleware (and therefore a real per-request session_id) is only
+    wired up when running in multi-user mode, which is decided at app
+    startup — not toggleable per-test against the already-constructed test
+    app. So this test drives `clear_chat_history` directly with fake
+    Request-like objects carrying distinct `state.session_id` values,
+    exactly mirroring what SessionMiddleware would set in production.
+    """
+
+    def setup_method(self):
+        from src.api import analysis as analysis_module
+
+        analysis_module._chat_services.clear()
+        analysis_module._chat_api_keys.clear()
+
+    def teardown_method(self):
+        from src.api import analysis as analysis_module
+
+        analysis_module._chat_services.clear()
+        analysis_module._chat_api_keys.clear()
+
+    def test_clear_only_removes_callers_own_session(self):
+        from src.api import analysis as analysis_module
+
+        # Seed two independent "tenant" sessions directly (no network call
+        # needed — clear_chat_history only cares about dict keys).
+        analysis_module._chat_services["session-a"] = object()
+        analysis_module._chat_services["session-b"] = object()
+        analysis_module._chat_api_keys["session-a"] = "key-a"
+        analysis_module._chat_api_keys["session-b"] = "key-b"
+
+        result = analysis_module.clear_chat_history(_FakeRequest("session-a"))
+
+        assert result["success"] is True
+        assert "session-a" not in analysis_module._chat_services
+        assert "session-a" not in analysis_module._chat_api_keys
+        # Tenant B's session must survive tenant A's clear.
+        assert "session-b" in analysis_module._chat_services
+        assert "session-b" in analysis_module._chat_api_keys
+
+    def test_clearing_nonexistent_session_is_a_harmless_noop(self):
+        from src.api import analysis as analysis_module
+
+        analysis_module._chat_services["session-b"] = object()
+
+        result = analysis_module.clear_chat_history(_FakeRequest("session-does-not-exist"))
+
+        assert result["success"] is True
+        # Nothing else was touched.
+        assert "session-b" in analysis_module._chat_services
+
+    def test_no_session_id_falls_back_to_default_key(self):
+        """Single-user/local mode: SessionMiddleware isn't active, so
+        request.state.session_id is None/absent and every caller shares the
+        "default" key — matches pre-fix local behavior exactly."""
+        from src.api import analysis as analysis_module
+
+        analysis_module._chat_services["default"] = object()
+
+        result = analysis_module.clear_chat_history(_FakeRequest(None))
+
+        assert result["success"] is True
+        assert "default" not in analysis_module._chat_services

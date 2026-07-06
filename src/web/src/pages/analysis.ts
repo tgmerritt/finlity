@@ -16,6 +16,8 @@ import { setStateView, clearStateView } from '@/ui/state-view';
 import { loadPluginAnalysis, loadWidgets } from '@/features/plugins';
 import { showGlobalChatModal, hideGlobalChatModal } from '@/ui/modal';
 import { loadCorrelationHeatmap } from '@/charts/correlation';
+import { generateSignatureHeaders, isSigningRequired } from '@/state/session';
+import { buildPortfolioPayload } from '@/api/dispatcher';
 import type { DashboardPosition, ExpenseDragResponse } from '@/types/api';
 
 // Declare marked as global (loaded via CDN)
@@ -400,6 +402,34 @@ function buildPageContext(): PageContext {
 }
 
 /**
+ * F9: fetch() only rejects on network failure — a 4xx/5xx HTTP response is
+ * still a "successful" fetch as far as the Promise is concerned. Both
+ * streaming chat functions previously skipped straight to
+ * `response.body.getReader()` without checking `response.ok`, so an error
+ * response (rate limit, auth failure, server error) got streamed through
+ * the same `data:`-line parser looking for chunks, found none, and quietly
+ * rendered an empty assistant bubble with no indication anything failed.
+ * Reads the error body (JSON `detail` field if present, else status text)
+ * and throws a descriptive Error so the caller's existing catch block
+ * renders it in the chat UI instead of a silent empty response.
+ */
+async function throwIfChatStreamNotOk(response: Response): Promise<void> {
+  if (response.ok) return;
+
+  let detail = `HTTP ${response.status}`;
+  try {
+    const body: unknown = await response.json();
+    if (typeof body === 'object' && body !== null && 'detail' in body) {
+      detail = String((body as { detail: unknown }).detail);
+    }
+  } catch {
+    // Error response wasn't JSON - fall back to the status text if present.
+    detail = response.statusText || detail;
+  }
+  throw new Error(detail);
+}
+
+/**
  * Add a chat message to a container using safe DOM methods.
  */
 function addChatMessageToContainer(
@@ -466,18 +496,47 @@ export async function sendStreamingChatMessageV2(
 
   let fullContent = '';
   const pageContext = buildPageContext();
+  const isLocalMode = store.get('dataMode') === 'local';
 
   try {
-    const response = await fetch('/api/analysis/advisor/chat/stream/v2', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message,
-        ticker,
-        include_portfolio: true,
-        page_context: pageContext,
-      }),
-    });
+    let response: Response;
+    if (isLocalMode) {
+      // Hosted/local mode: the tool-calling v1 endpoint reads server-side
+      // portfolio state that doesn't exist here, so route to the stateless
+      // v2 advisor stream instead, sending the local portfolio in the body.
+      // DEVIATION: /api/v2/analysis/advisor/chat/stream/v2 mirrors v1's
+      // *simple* SSE format (plain-text chunks, no tool_start/tool_result
+      // events - see src/api/v2/analysis.py chat_with_advisor_stream), so
+      // tool-lookup indicators never appear in local mode. AdvisorChatRequest
+      // also has no page_context field, so it isn't sent.
+      const signatureHeaders = isSigningRequired()
+        ? await generateSignatureHeaders('POST', '/api/v2/analysis/advisor/chat/stream/v2')
+        : {};
+      response = await fetch('/api/v2/analysis/advisor/chat/stream/v2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...signatureHeaders },
+        credentials: 'include',
+        body: JSON.stringify({
+          message,
+          ticker,
+          include_portfolio: true,
+          portfolio: buildPortfolioPayload(),
+        }),
+      });
+    } else {
+      response = await fetch('/api/analysis/advisor/chat/stream/v2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          ticker,
+          include_portfolio: true,
+          page_context: pageContext,
+        }),
+      });
+    }
+
+    await throwIfChatStreamNotOk(response);
 
     if (!response.body) {
       throw new Error('No response body');
@@ -486,45 +545,70 @@ export async function sendStreamingChatMessageV2(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    if (isLocalMode) {
+      // Simple SSE format: `data: <text>\n\n`, terminated by `data: [DONE]`.
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const event = JSON.parse(line.substring(6)) as SSEEvent;
-
-            if (event.type === 'text') {
-              fullContent += event.content;
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.substring(6);
+            if (data === '[DONE]') {
+              contentDiv.classList.remove('streaming-cursor');
+              setMarkdownContent(contentDiv, fullContent);
+            } else {
+              fullContent += data.replace(/\\n/g, '\n');
               contentDiv.textContent = fullContent;
               container.scrollTop = container.scrollHeight;
-            } else if (event.type === 'tool_start') {
-              const toolIndicator = document.createElement('div');
-              toolIndicator.className = 'tool-indicator';
-              toolIndicator.id = `tool-${event.id}`;
-              toolIndicator.textContent = `Looking up ${formatToolName(event.name)}...`;
-              contentDiv.appendChild(toolIndicator);
-              container.scrollTop = container.scrollHeight;
-            } else if (event.type === 'tool_result') {
-              // Remove tool indicators
-              const indicators = contentDiv.querySelectorAll('.tool-indicator');
-              indicators.forEach((ind) => ind.remove());
-            } else if (event.type === 'done') {
-              contentDiv.classList.remove('streaming-cursor');
-              const indicators = contentDiv.querySelectorAll('.tool-indicator');
-              indicators.forEach((ind) => ind.remove());
-              // Render final markdown (AI-generated content via marked.js)
-              setMarkdownContent(contentDiv, fullContent);
-            } else if (event.type === 'error') {
-              contentDiv.classList.remove('streaming-cursor');
-              contentDiv.textContent = `Error: ${event.message}`;
             }
-          } catch {
-            // JSON parse error - ignore partial data
+          }
+        }
+      }
+    } else {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.substring(6)) as SSEEvent;
+
+              if (event.type === 'text') {
+                fullContent += event.content;
+                contentDiv.textContent = fullContent;
+                container.scrollTop = container.scrollHeight;
+              } else if (event.type === 'tool_start') {
+                const toolIndicator = document.createElement('div');
+                toolIndicator.className = 'tool-indicator';
+                toolIndicator.id = `tool-${event.id}`;
+                toolIndicator.textContent = `Looking up ${formatToolName(event.name)}...`;
+                contentDiv.appendChild(toolIndicator);
+                container.scrollTop = container.scrollHeight;
+              } else if (event.type === 'tool_result') {
+                // Remove tool indicators
+                const indicators = contentDiv.querySelectorAll('.tool-indicator');
+                indicators.forEach((ind) => ind.remove());
+              } else if (event.type === 'done') {
+                contentDiv.classList.remove('streaming-cursor');
+                const indicators = contentDiv.querySelectorAll('.tool-indicator');
+                indicators.forEach((ind) => ind.remove());
+                // Render final markdown (AI-generated content via marked.js)
+                setMarkdownContent(contentDiv, fullContent);
+              } else if (event.type === 'error') {
+                contentDiv.classList.remove('streaming-cursor');
+                contentDiv.textContent = `Error: ${event.message}`;
+              }
+            } catch {
+              // JSON parse error - ignore partial data
+            }
           }
         }
       }
@@ -532,7 +616,13 @@ export async function sendStreamingChatMessageV2(
   } catch (error) {
     console.error('Chat stream error:', error);
     contentDiv.classList.remove('streaming-cursor');
-    contentDiv.textContent = 'Sorry, I encountered an error. Please try again.';
+    // F9: show the actual error detail (from throwIfChatStreamNotOk, when
+    // the failure was a non-OK HTTP response) rather than always showing a
+    // generic message that hides what went wrong.
+    contentDiv.textContent =
+      error instanceof Error && error.message
+        ? `Error: ${error.message}`
+        : 'Sorry, I encountered an error. Please try again.';
   } finally {
     input.disabled = false;
     input.focus();
@@ -570,15 +660,39 @@ export async function sendStreamingChatMessage(
   let fullContent = '';
 
   try {
-    const response = await fetch('/api/analysis/advisor/chat/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message,
-        ticker,
-        include_portfolio: true,
-      }),
-    });
+    // NOTE: this legacy simple-format function has no live UI caller (see
+    // sendStreamingChatMessageV2 for the path actually wired to buttons),
+    // but is still exported/exposed on window.finlity, so it gets the same
+    // local-mode treatment for consistency.
+    let response: Response;
+    if (store.get('dataMode') === 'local') {
+      const signatureHeaders = isSigningRequired()
+        ? await generateSignatureHeaders('POST', '/api/v2/analysis/advisor/chat/stream/v2')
+        : {};
+      response = await fetch('/api/v2/analysis/advisor/chat/stream/v2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...signatureHeaders },
+        credentials: 'include',
+        body: JSON.stringify({
+          message,
+          ticker,
+          include_portfolio: true,
+          portfolio: buildPortfolioPayload(),
+        }),
+      });
+    } else {
+      response = await fetch('/api/analysis/advisor/chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          ticker,
+          include_portfolio: true,
+        }),
+      });
+    }
+
+    await throwIfChatStreamNotOk(response);
 
     if (!response.body) {
       throw new Error('No response body');
@@ -612,7 +726,10 @@ export async function sendStreamingChatMessage(
   } catch (error) {
     console.error('Chat stream error:', error);
     contentDiv.classList.remove('streaming-cursor');
-    contentDiv.textContent = 'Sorry, I encountered an error. Please try again.';
+    contentDiv.textContent =
+      error instanceof Error && error.message
+        ? `Error: ${error.message}`
+        : 'Sorry, I encountered an error. Please try again.';
   } finally {
     input.disabled = false;
     input.focus();
@@ -1340,7 +1457,8 @@ export async function loadExpenseDrag(): Promise<void> {
     if (!hasCoverage) {
       // Empty state — no funds with cached expense ratios
       if (portfolioErEl) portfolioErEl.textContent = '-';
-      if (benchmarkErEl) benchmarkErEl.textContent = formatPercent(drag.benchmark_expense_ratio * 100);
+      if (benchmarkErEl)
+        benchmarkErEl.textContent = formatPercent(drag.benchmark_expense_ratio * 100);
       if (annualDollarsEl) annualDollarsEl.textContent = '-';
       if (emptyEl) emptyEl.style.display = '';
       if (table) table.style.display = 'none';
@@ -1359,8 +1477,7 @@ export async function loadExpenseDrag(): Promise<void> {
       annualDollarsEl.textContent = `${formatCurrencyValue(drag.annual_drag_dollars)}/yr`;
     }
     if (annualContextEl) {
-      annualContextEl.textContent =
-        `Excess cost on ${formatCurrencyValue(drag.covered_value)} of fund holdings`;
+      annualContextEl.textContent = `Excess cost on ${formatCurrencyValue(drag.covered_value)} of fund holdings`;
     }
 
     // Top-drag holdings table
@@ -1413,14 +1530,14 @@ export function showMetricDetail(metricId: string): void {
   const descriptions: Record<string, string> = {
     'ytd-return': 'Year-to-date return measures portfolio growth since January 1st.',
     'one-year-return': 'Rolling 12-month return of your portfolio.',
-    'alpha': 'Excess return compared to the S&P 500 benchmark.',
-    'volatility': 'Annualized standard deviation of returns - higher means more price swings.',
-    'sharpe': 'Risk-adjusted return (return per unit of risk). Higher is better.',
-    'sortino': 'Risk-adjusted return penalizing only downside volatility. Higher is better.',
+    alpha: 'Excess return compared to the S&P 500 benchmark.',
+    volatility: 'Annualized standard deviation of returns - higher means more price swings.',
+    sharpe: 'Risk-adjusted return (return per unit of risk). Higher is better.',
+    sortino: 'Risk-adjusted return penalizing only downside volatility. Higher is better.',
     'max-drawdown': 'Largest peak-to-trough decline in portfolio value.',
-    'beta': 'Sensitivity to market movements. 1.0 = moves with market.',
-    'var': 'Value at Risk - maximum expected daily loss 95% of the time.',
-    'cvar': 'Conditional VaR - average loss in the worst 5% of scenarios. More conservative than VaR.',
+    beta: 'Sensitivity to market movements. 1.0 = moves with market.',
+    var: 'Value at Risk - maximum expected daily loss 95% of the time.',
+    cvar: 'Conditional VaR - average loss in the worst 5% of scenarios. More conservative than VaR.',
   };
 
   const description = descriptions[metricId] || 'No additional information available.';
@@ -1537,7 +1654,9 @@ export async function showTopHoldingsDetail(count: number): Promise<void> {
     const lines: string[] = [`Top ${count} Holdings:`];
     for (const holding of topHoldings) {
       const pct = totalValue > 0 ? (holding.market_value / totalValue) * 100 : 0;
-      lines.push(`${holding.ticker}: ${formatCurrencyValue(holding.market_value)} (${pct.toFixed(1)}%)`);
+      lines.push(
+        `${holding.ticker}: ${formatCurrencyValue(holding.market_value)} (${pct.toFixed(1)}%)`
+      );
     }
 
     showToast(lines.join('\n'), 'info');
@@ -1564,7 +1683,9 @@ export async function showAllocationTab(tabName: string): Promise<void> {
   // Fetch detailed allocation data if not cached
   if (!cachedDetailedAllocationData) {
     try {
-      cachedDetailedAllocationData = await apiCall<DetailedAllocationData>('/api/analysis/allocation/detailed');
+      cachedDetailedAllocationData = await apiCall<DetailedAllocationData>(
+        '/api/analysis/allocation/detailed'
+      );
     } catch (error) {
       console.error('Error loading detailed allocation data:', error);
       return;

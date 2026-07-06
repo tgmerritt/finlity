@@ -16,12 +16,14 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "@types/sql.js": "^1.4.11",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "@vitest/coverage-v8": "^2.1.0",
     "eslint": "^8.55.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.0.1",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^25.0.0",
     "prettier": "^3.3.0",
     "typescript": "^5.6.0",
@@ -30,5 +32,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "sql.js": "^1.14.1"
   }
 }

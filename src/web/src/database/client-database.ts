@@ -4,9 +4,18 @@
  * Supports two storage modes:
  * 1. File System Access API - Direct file access (Chrome/Edge)
  * 2. IndexedDB - Browser storage fallback (all browsers)
+ *
+ * The local `.db` file mirrors the server's SQLAlchemy schema (see
+ * src/database/models.py) table-for-table and column-for-column so a
+ * server profile export can be opened locally and vice versa.
  */
 
-// Types for sql.js (loaded via CDN)
+import initSqlJs from 'sql.js';
+// Vite asset import - resolves to a hashed URL under the build output so the
+// wasm binary is self-hosted rather than fetched from a CDN.
+import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+
+// Types for sql.js
 interface SqlJsStatic {
   Database: new (data?: ArrayLike<number>) => SqlJsDatabase;
 }
@@ -105,21 +114,22 @@ export class ClientDatabase {
   private onAutoSaveFailure: AutoSaveFailureCallback | null = null;
 
   /**
+   * Optional override for locating the sql.js wasm binary. Defaults to the
+   * self-hosted, Vite-bundled asset URL. Overridden in tests to point at the
+   * wasm file under node_modules.
+   */
+  static wasmLocateFile: (file: string) => string = () => sqlWasmUrl;
+
+  /**
    * Initialize sql.js WebAssembly module.
    */
   async init(): Promise<void> {
     if (this.SQL) return;
 
     try {
-      // initSqlJs is a global function from the CDN script
-      const initSqlJs = (
-        window as unknown as {
-          initSqlJs: (config: { locateFile: (file: string) => string }) => Promise<SqlJsStatic>;
-        }
-      ).initSqlJs;
-      this.SQL = await initSqlJs({
-        locateFile: (file: string) => `https://sql.js.org/dist/${file}`,
-      });
+      this.SQL = (await initSqlJs({
+        locateFile: ClientDatabase.wasmLocateFile,
+      })) as unknown as SqlJsStatic;
       console.log('sql.js initialized successfully');
     } catch (error) {
       console.error('Failed to initialize sql.js:', error);
@@ -166,6 +176,7 @@ export class ClientDatabase {
       const buffer = await file.arrayBuffer();
 
       this.db = new this.SQL!.Database(new Uint8Array(buffer));
+      this.migrateSchema();
       this.storageMode = 'file';
       this.isDirty = false;
 
@@ -298,6 +309,7 @@ export class ClientDatabase {
 
     const buffer = await file.arrayBuffer();
     this.db = new this.SQL!.Database(new Uint8Array(buffer));
+    this.migrateSchema();
     this.storageMode = 'imported';
     this.isDirty = false;
 
@@ -305,16 +317,37 @@ export class ClientDatabase {
   }
 
   /**
-   * Save to IndexedDB for persistence.
+   * Open the shared 'PortfolioApp' IndexedDB database, always installing
+   * `onupgradeneeded` so the 'databases' object store is guaranteed to exist
+   * before any caller's `onsuccess` handler runs.
+   *
+   * CRITICAL FIX (C1): every prior open call site (saveToIndexedDB,
+   * loadFromIndexedDB, hasIndexedDBData, clearIndexedDB) independently
+   * called `indexedDB.open('PortfolioApp', 1)`. Whichever one ran *first*
+   * (in practice, `hasIndexedDBData()` from the boot gate) would commit the
+   * database at version 1 with no object stores if it lacked
+   * `onupgradeneeded`, or - even where a handler had its own
+   * `onupgradeneeded` - a subsequent open at the same version never fires
+   * `onupgradeneeded` again. Any caller opening after that point would find
+   * no 'databases' store and throw a NotFoundError from inside `onsuccess`,
+   * which (if unguarded) left its Promise permanently unsettled. Routing
+   * every open through this single helper enforces the invariant in one
+   * place instead of re-asserting it at each call site.
+   *
+   * Rejects (never hangs) on any request error.
    */
-  async saveToIndexedDB(): Promise<void> {
-    if (!this.db) return;
-
+  private openIDB(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      const data = this.db!.export();
-      const request = indexedDB.open('PortfolioApp', 1);
+      let request: IDBOpenDBRequest;
+      try {
+        request = indexedDB.open('PortfolioApp', 1);
+      } catch (error) {
+        reject(error);
+        return;
+      }
 
-      request.onerror = () => reject(request.error);
+      request.onerror = () => reject(request.error ?? new Error('Failed to open IndexedDB'));
+      request.onblocked = () => reject(new Error('IndexedDB open blocked by another connection'));
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
@@ -323,8 +356,20 @@ export class ClientDatabase {
         }
       };
 
-      request.onsuccess = () => {
-        const db = request.result;
+      request.onsuccess = () => resolve(request.result);
+    });
+  }
+
+  /**
+   * Save to IndexedDB for persistence.
+   */
+  async saveToIndexedDB(): Promise<void> {
+    if (!this.db) return;
+    const data = this.db.export();
+
+    const db = await this.openIDB();
+    return new Promise((resolve, reject) => {
+      try {
         const tx = db.transaction('databases', 'readwrite');
         const store = tx.objectStore('databases');
 
@@ -335,8 +380,10 @@ export class ClientDatabase {
           this.isDirty = false;
           resolve();
         };
-        tx.onerror = () => reject(tx.error);
-      };
+        tx.onerror = () => reject(tx.error ?? new Error('IndexedDB write transaction failed'));
+      } catch (error) {
+        reject(error);
+      }
     });
   }
 
@@ -346,58 +393,64 @@ export class ClientDatabase {
   async loadFromIndexedDB(): Promise<{ loaded: boolean; mode?: StorageMode }> {
     await this.init();
 
+    const db = await this.openIDB();
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('PortfolioApp', 1);
-
-      request.onerror = () => reject(request.error);
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains('databases')) {
-          db.createObjectStore('databases');
-        }
-      };
-
-      request.onsuccess = () => {
-        const db = request.result;
+      try {
         const tx = db.transaction('databases', 'readonly');
         const store = tx.objectStore('databases');
         const getRequest = store.get(this.dbName);
 
         getRequest.onsuccess = () => {
-          if (getRequest.result) {
-            this.db = new this.SQL!.Database(new Uint8Array(getRequest.result as ArrayBuffer));
-            this.storageMode = 'indexeddb';
-            this.isDirty = false;
-            resolve({ loaded: true, mode: 'indexeddb' });
-          } else {
-            resolve({ loaded: false });
+          try {
+            if (getRequest.result) {
+              // CRITICAL FIX (C2): `new SQL.Database(bytes)` and
+              // `migrateSchema()` can throw (corrupted/incompatible bytes,
+              // schema DDL error) - previously this ran unguarded inside the
+              // onsuccess callback, so a throw here left the Promise
+              // unsettled forever (the app hangs on boot with no recovery).
+              // Wrapping in try/catch and rejecting lets callers (see
+              // ensureLocalDatabaseReady's C3 fix) recover instead of
+              // hanging.
+              this.db = new this.SQL!.Database(new Uint8Array(getRequest.result as ArrayBuffer));
+              this.migrateSchema();
+              this.storageMode = 'indexeddb';
+              this.isDirty = false;
+              resolve({ loaded: true, mode: 'indexeddb' });
+            } else {
+              resolve({ loaded: false });
+            }
+          } catch (error) {
+            reject(error);
           }
         };
-        getRequest.onerror = () => reject(getRequest.error);
-      };
+        getRequest.onerror = () => reject(getRequest.error ?? new Error('IndexedDB read failed'));
+      } catch (error) {
+        reject(error);
+      }
     });
   }
 
   /**
    * Check if IndexedDB has saved data.
+   *
+   * CRITICAL FIX (C1): distinguishes "no data" (resolve false) from "error
+   * opening/reading IndexedDB" (reject) - a genuine IndexedDB failure (e.g.
+   * a corrupted browser profile) must not be silently reported as "no saved
+   * data", which would make ensureLocalDatabaseReady() proceed as if this
+   * were a fresh install and risk masking an existing database.
    */
   async hasIndexedDBData(): Promise<boolean> {
-    return new Promise((resolve) => {
-      const request = indexedDB.open('PortfolioApp', 1);
-      request.onerror = () => resolve(false);
-      request.onsuccess = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains('databases')) {
-          resolve(false);
-          return;
-        }
+    const db = await this.openIDB();
+    return new Promise((resolve, reject) => {
+      try {
         const tx = db.transaction('databases', 'readonly');
         const store = tx.objectStore('databases');
         const getRequest = store.get(this.dbName);
         getRequest.onsuccess = () => resolve(!!getRequest.result);
-        getRequest.onerror = () => resolve(false);
-      };
+        getRequest.onerror = () => reject(getRequest.error ?? new Error('IndexedDB read failed'));
+      } catch (error) {
+        reject(error);
+      }
     });
   }
 
@@ -405,81 +458,433 @@ export class ClientDatabase {
    * Clear IndexedDB data.
    */
   async clearIndexedDB(): Promise<void> {
+    const db = await this.openIDB();
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('PortfolioApp', 1);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains('databases')) {
-          resolve();
-          return;
-        }
+      try {
         const tx = db.transaction('databases', 'readwrite');
         const store = tx.objectStore('databases');
         store.delete(this.dbName);
         tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      };
+        tx.onerror = () => reject(tx.error ?? new Error('IndexedDB delete transaction failed'));
+      } catch (error) {
+        reject(error);
+      }
     });
   }
 
   /**
-   * Initialize database schema (matches server schema).
+   * Full schema DDL - mirrors src/database/models.py table-for-table and
+   * column-for-column so a server profile export (portfolio.db) opens
+   * cleanly here and vice versa. All CREATE statements use IF NOT EXISTS so
+   * this can be re-run against an existing file (see migrateSchema()).
+   *
+   * SQLite typing conventions (matching SQLAlchemy's SQLite storage):
+   * - TEXT for ids/strings/datetimes (ISO 8601 strings)
+   * - REAL for floats
+   * - INTEGER 0/1 for booleans
    */
-  initSchema(): void {
-    if (!this.db) return;
-
-    const schema = `
-      -- Accounts table
-      CREATE TABLE IF NOT EXISTS accounts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+  private static readonly SCHEMA_SQL = `
+      CREATE TABLE IF NOT EXISTS entities (
+        id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        account_type TEXT NOT NULL,
-        brokerage TEXT,
-        beneficiary TEXT,
-        custom_type_name TEXT,
-        is_retirement INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        entity_type TEXT NOT NULL DEFAULT 'individual',
+        is_default INTEGER DEFAULT 0,
+        is_household INTEGER DEFAULT 0,
+        color TEXT DEFAULT '#4A90D9',
+        icon TEXT DEFAULT 'user',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
 
-      -- Positions table
+      CREATE TABLE IF NOT EXISTS file_imports (
+        id TEXT PRIMARY KEY,
+        file_name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        content_hash TEXT NOT NULL UNIQUE,
+        account_type TEXT NOT NULL,
+        import_date TEXT DEFAULT CURRENT_TIMESTAMP,
+        row_count REAL,
+        status TEXT DEFAULT 'pending',
+        error_message TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS accounts (
+        id TEXT PRIMARY KEY,
+        entity_id TEXT,
+        name TEXT NOT NULL,
+        account_type TEXT NOT NULL,
+        brokerage TEXT DEFAULT 'other',
+        beneficiary TEXT,
+        custom_type_name TEXT,
+        is_retirement_account INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (entity_id) REFERENCES entities(id)
+      );
+
       CREATE TABLE IF NOT EXISTS positions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        account_id INTEGER NOT NULL,
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
         ticker TEXT NOT NULL,
         name TEXT,
         shares REAL NOT NULL DEFAULT 0,
-        cost_basis REAL DEFAULT 0,
-        current_price REAL DEFAULT 0,
+        cost_basis REAL,
+        current_price REAL,
         sector TEXT,
         is_fund INTEGER DEFAULT 0,
-        asset_class TEXT,
+        asset_class TEXT DEFAULT 'equity',
         position_type TEXT DEFAULT 'equity',
-        maturity_date DATE,
+        maturity_date TEXT,
         interest_rate REAL,
-        purchase_date DATE,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        purchase_date TEXT,
+        last_import_id TEXT,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        option_underlying TEXT,
+        option_expiration TEXT,
+        option_strike REAL,
+        option_type TEXT,
+        contract_multiplier REAL,
+        FOREIGN KEY (account_id) REFERENCES accounts(id),
+        FOREIGN KEY (last_import_id) REFERENCES file_imports(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS position_lots (
+        id TEXT PRIMARY KEY,
+        position_id TEXT NOT NULL,
+        purchase_date TEXT NOT NULL,
+        shares REAL NOT NULL,
+        cost_basis REAL NOT NULL,
+        notes TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (position_id) REFERENCES positions(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS realized_sales (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        ticker TEXT NOT NULL,
+        sale_date TEXT NOT NULL,
+        shares_sold REAL NOT NULL,
+        proceeds REAL NOT NULL,
+        cost_basis_realized REAL NOT NULL,
+        gain_loss REAL NOT NULL,
+        is_short_term INTEGER NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (account_id) REFERENCES accounts(id)
       );
 
-      -- App settings table
-      CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT,
-        encrypted INTEGER DEFAULT 0
+      CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+        id TEXT PRIMARY KEY,
+        snapshot_date TEXT NOT NULL UNIQUE,
+        total_value REAL,
+        retirement_value REAL,
+        taxable_value REAL,
+        positions_json TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
 
-      -- Price cache table
       CREATE TABLE IF NOT EXISTS price_cache (
         ticker TEXT PRIMARY KEY,
         current_price REAL,
-        last_updated DATETIME
+        previous_close REAL,
+        year_high REAL,
+        year_low REAL,
+        last_updated TEXT DEFAULT CURRENT_TIMESTAMP
       );
-    `;
 
-    this.db.run(schema);
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        encrypted INTEGER DEFAULT 0,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS allocation_triggers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        condition_type TEXT NOT NULL,
+        ticker TEXT,
+        account_type TEXT,
+        sector TEXT,
+        operator TEXT NOT NULL,
+        threshold REAL NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS portfolio_views (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        account_ids TEXT NOT NULL,
+        is_default INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS budget_income_sources (
+        id TEXT PRIMARY KEY,
+        entity_id TEXT,
+        name TEXT NOT NULL,
+        income_type TEXT NOT NULL DEFAULT 'employment',
+        gross_annual REAL NOT NULL,
+        pay_frequency TEXT NOT NULL DEFAULT 'biweekly',
+        state TEXT DEFAULT 'CA',
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (entity_id) REFERENCES entities(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS budget_tax_config (
+        id TEXT PRIMARY KEY,
+        entity_id TEXT,
+        tax_year REAL NOT NULL DEFAULT 2024,
+        filing_status TEXT NOT NULL DEFAULT 'single',
+        state TEXT DEFAULT 'CA',
+        ss_benefit_override REAL,
+        additional_withholding REAL DEFAULT 0,
+        itemized_deduction REAL,
+        ss_claiming_age INTEGER DEFAULT 67,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (entity_id) REFERENCES entities(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS budget_expense_categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        icon TEXT DEFAULT '',
+        color TEXT DEFAULT '#6b7280',
+        sort_order REAL DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS budget_expenses (
+        id TEXT PRIMARY KEY,
+        entity_id TEXT,
+        category_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        amount REAL NOT NULL,
+        frequency TEXT NOT NULL DEFAULT 'monthly',
+        is_pretax INTEGER DEFAULT 0,
+        is_mortgage INTEGER DEFAULT 0,
+        principal_portion REAL,
+        interest_portion REAL,
+        is_active INTEGER DEFAULT 1,
+        start_date TEXT,
+        end_date TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (entity_id) REFERENCES entities(id),
+        FOREIGN KEY (category_id) REFERENCES budget_expense_categories(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS budget_pretax_deductions (
+        id TEXT PRIMARY KEY,
+        income_source_id TEXT,
+        label TEXT,
+        deduction_type TEXT NOT NULL DEFAULT '401k',
+        amount_per_period REAL NOT NULL,
+        employer_match REAL DEFAULT 0,
+        is_percentage INTEGER DEFAULT 0,
+        max_annual REAL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (income_source_id) REFERENCES budget_income_sources(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS bank_statement_imports (
+        id TEXT PRIMARY KEY,
+        entity_id TEXT,
+        file_name TEXT NOT NULL,
+        content_hash TEXT NOT NULL UNIQUE,
+        row_count REAL DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        error_message TEXT,
+        uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        analyzed_at TEXT,
+        FOREIGN KEY (entity_id) REFERENCES entities(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS recurring_candidates (
+        id TEXT PRIMARY KEY,
+        import_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        amount REAL NOT NULL,
+        frequency TEXT NOT NULL DEFAULT 'monthly',
+        occurrences REAL NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_expense_id TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (import_id) REFERENCES bank_statement_imports(id),
+        FOREIGN KEY (created_expense_id) REFERENCES budget_expenses(id)
+      );
+
+      CREATE TABLE IF NOT EXISTS monte_carlo_results (
+        id TEXT PRIMARY KEY,
+        entity_id TEXT,
+        run_date TEXT DEFAULT CURRENT_TIMESTAMP,
+        current_age REAL NOT NULL,
+        retirement_age REAL NOT NULL,
+        portfolio_balance REAL NOT NULL,
+        monthly_contribution REAL DEFAULT 0,
+        monthly_withdrawal REAL DEFAULT 0,
+        success_rate REAL NOT NULL,
+        median_final_value REAL,
+        worst_case_final REAL,
+        best_case_final REAL,
+        earliest_retirement_age REAL,
+        projected_value_at_retirement REAL,
+        conservative_value_at_retirement REAL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (entity_id) REFERENCES entities(id)
+      );
+  `;
+
+  /**
+   * Current local schema version, recorded as a row in app_settings under
+   * key 'schema_version'. Bump when SCHEMA_SQL changes in a way that needs
+   * tracking (informational only - migrateSchema() is idempotent via
+   * CREATE TABLE IF NOT EXISTS and does not branch on this value today).
+   */
+  static readonly SCHEMA_VERSION = 1;
+
+  /**
+   * Initialize database schema on a brand new database (matches server
+   * schema in src/database/models.py), then seed default rows.
+   */
+  initSchema(): void {
+    if (!this.db) return;
+    this.migrateSchema();
+  }
+
+  /**
+   * Ensure all tables exist, creating any that are missing. Safe to call on
+   * an existing file - CREATE TABLE IF NOT EXISTS never touches tables that
+   * already exist (including legacy 4-table local DBs or full server
+   * exports), so this only ever adds missing tables/rows, never mutates
+   * existing columns. Called from every open path (openFile,
+   * importFromFile, loadFromIndexedDB, createNew).
+   */
+  migrateSchema(): void {
+    if (!this.db) return;
+    this.db.run(ClientDatabase.SCHEMA_SQL);
+    this.migrateAppSettingsUpdatedAt();
+    this.recordSchemaVersion();
+    this.seedDefaults();
+  }
+
+  /**
+   * F12: retrofit `updated_at` onto app_settings when it's missing (legacy
+   * local databases created before this column existed in SCHEMA_SQL).
+   * CREATE TABLE IF NOT EXISTS (in SCHEMA_SQL above) never adds columns to
+   * an existing table, so a legacy app_settings table would otherwise be
+   * stuck without updated_at forever, and writeConfigSection's
+   * `ON CONFLICT ... SET updated_at = excluded.updated_at` would fail
+   * against it.
+   *
+   * NOTE: `ALTER TABLE ... ADD COLUMN ... DEFAULT CURRENT_TIMESTAMP` is
+   * rejected by SQLite - ADD COLUMN only accepts a literal constant or NULL
+   * as its default, not an expression/keyword. So this adds a plain
+   * nullable TEXT column with no default; existing rows get NULL (there is
+   * no historical timestamp to backfill). LocalAPI's writeConfigSection
+   * (the main app_settings writer, used by updateConfigSection/
+   * updateTargetsSubsection) already sets updated_at explicitly via
+   * nowIso() on every write, so config-section rows get a real timestamp
+   * going forward even though this migration itself doesn't backfill one.
+   */
+  private migrateAppSettingsUpdatedAt(): void {
+    if (!this.db) return;
+    const columns = this.query<{ name: string }>('PRAGMA table_info(app_settings)');
+    const hasUpdatedAt = columns.some((c) => c.name === 'updated_at');
+    if (!hasUpdatedAt) {
+      this.db.run('ALTER TABLE app_settings ADD COLUMN updated_at TEXT');
+    }
+  }
+
+  /**
+   * Record the current schema version in app_settings, if not already set
+   * to a value greater than or equal to it.
+   */
+  private recordSchemaVersion(): void {
+    if (!this.db) return;
+    const existing = this.query<{ value: string }>(
+      "SELECT value FROM app_settings WHERE key = 'schema_version'"
+    );
+    const currentVersion = existing[0] ? parseInt(existing[0].value, 10) : 0;
+    if (
+      !existing[0] ||
+      Number.isNaN(currentVersion) ||
+      currentVersion < ClientDatabase.SCHEMA_VERSION
+    ) {
+      this.db.run(`INSERT OR REPLACE INTO app_settings (key, value, encrypted) VALUES (?, ?, 0)`, [
+        'schema_version',
+        String(ClientDatabase.SCHEMA_VERSION),
+      ]);
+    }
+  }
+
+  /**
+   * Seed default rows that the server also seeds on a fresh database:
+   * - budget_expense_categories: 12 defaults (see src/budget/models.py DEFAULT_EXPENSE_CATEGORIES)
+   * - entities: a default "Household" entity (see operations.py ensure_household_entity)
+   * - portfolio_views: an "All Accounts" default view
+   * Each block is idempotent - it only inserts when the relevant table is
+   * empty (categories) or the specific row is absent (household entity,
+   * All Accounts view), so re-running migrateSchema on every open never
+   * duplicates rows.
+   */
+  private seedDefaults(): void {
+    if (!this.db) return;
+
+    // Default expense categories (matches src/budget/models.py DEFAULT_EXPENSE_CATEGORIES)
+    const categoryCount = this.query<{ count: number }>(
+      'SELECT COUNT(*) as count FROM budget_expense_categories'
+    )[0]?.count;
+    if (!categoryCount) {
+      const defaults: Array<[string, string, string, number]> = [
+        ['Housing', 'home', '#3b82f6', 1],
+        ['Utilities', 'bolt', '#8b5cf6', 2],
+        ['Transportation', 'car', '#f97316', 3],
+        ['Insurance', 'shield', '#06b6d4', 4],
+        ['Healthcare', 'heart', '#ef4444', 5],
+        ['Debt Payments', 'credit-card', '#f59e0b', 6],
+        ['Food & Dining', 'utensils', '#22c55e', 7],
+        ['Entertainment', 'film', '#ec4899', 8],
+        ['Savings & Investments', 'piggy-bank', '#14b8a6', 9],
+        ['Personal', 'user', '#6366f1', 10],
+        ['Education', 'book', '#84cc16', 11],
+        ['Other', 'ellipsis', '#6b7280', 99],
+      ];
+      for (const [name, icon, color, sortOrder] of defaults) {
+        this.db.run(
+          `INSERT INTO budget_expense_categories (id, name, icon, color, sort_order) VALUES (?, ?, ?, ?, ?)`,
+          [crypto.randomUUID(), name, icon, color, sortOrder]
+        );
+      }
+    }
+
+    // Default household entity (matches operations.py ensure_household_entity)
+    const household = this.query<{ id: string }>('SELECT id FROM entities WHERE is_household = 1');
+    if (household.length === 0) {
+      this.db.run(
+        `INSERT INTO entities (id, name, entity_type, is_default, is_household, color, icon)
+         VALUES (?, 'Household', 'household', 0, 1, '#2ECC71', 'users')`,
+        [crypto.randomUUID()]
+      );
+    }
+
+    // Default "All Accounts" portfolio view (matches seed_loader.py ensure_all_accounts_view)
+    const allAccountsView = this.query<{ id: string }>(
+      "SELECT id FROM portfolio_views WHERE name = 'All Accounts'"
+    );
+    if (allAccountsView.length === 0) {
+      this.db.run(
+        `INSERT INTO portfolio_views (id, name, account_ids, is_default) VALUES (?, 'All Accounts', '[]', 1)`,
+        [crypto.randomUUID()]
+      );
+    }
   }
 
   /**
@@ -550,7 +955,9 @@ export class ClientDatabase {
     this.stopAutoSave();
     this.autoSaveFailCount = 0;
     this.autoSaveInterval = setInterval(() => {
-      if (this.isDirty && this.storageMode === 'indexeddb') {
+      if (!this.isDirty) return;
+
+      if (this.storageMode === 'indexeddb') {
         this.saveToIndexedDB()
           .then(() => {
             console.log('Auto-saved to IndexedDB');
@@ -558,14 +965,49 @@ export class ClientDatabase {
           })
           .catch((error) => {
             console.error('Auto-save failed:', error);
-            this.autoSaveFailCount++;
-            // Notify callback after 3 consecutive failures
-            if (this.autoSaveFailCount >= 3 && this.onAutoSaveFailure) {
-              this.onAutoSaveFailure(this.autoSaveFailCount);
+            this.recordAutoSaveFailure();
+          });
+      } else if (this.storageMode === 'file' && this.fileHandle) {
+        // F1(a): 'file' mode previously never auto-saved at all - only
+        // 'indexeddb' mode did - so users who opened/saved to a real .db
+        // file via the File System Access API had no protection against
+        // losing unsaved work between manual saves. The File System Access
+        // permission granted when the handle was obtained persists across
+        // writes (no re-prompt needed) for the life of the page, so this is
+        // safe to run unattended on the same interval as IndexedDB
+        // auto-save. Routes failures through the same failure-count/
+        // callback path as the IndexedDB branch.
+        this.saveToFile()
+          .then((result) => {
+            if (result.status === 'saved') {
+              console.log('Auto-saved to file');
+              this.autoSaveFailCount = 0;
+            } else if (result.status === 'failed') {
+              console.error('Auto-save to file failed:', result.error);
+              this.recordAutoSaveFailure();
             }
+            // 'downloaded'/'cancelled' can't happen here: fileHandle is set,
+            // so saveToFile() takes the "save to existing file" branch.
+          })
+          .catch((error) => {
+            console.error('Auto-save to file failed:', error);
+            this.recordAutoSaveFailure();
           });
       }
     }, intervalMs);
+  }
+
+  /**
+   * Shared auto-save failure bookkeeping for both storage-mode branches of
+   * startAutoSave(): increments the consecutive-failure counter and, once
+   * it reaches 3, notifies the registered failure callback (see
+   * setAutoSaveFailureCallback).
+   */
+  private recordAutoSaveFailure(): void {
+    this.autoSaveFailCount++;
+    if (this.autoSaveFailCount >= 3 && this.onAutoSaveFailure) {
+      this.onAutoSaveFailure(this.autoSaveFailCount);
+    }
   }
 
   /**
