@@ -1,43 +1,53 @@
 """
 Pytest configuration and fixtures for the test suite.
+
+Database isolation happens at IMPORT time, not in a fixture: the app caches
+its Database singleton on first use, so the isolation env vars must be in
+place before ANY test module imports src.main or creates a TestClient.
+Fixture-based isolation (the old test_env approach) silently leaked test
+writes into the real data/databases/default/portfolio.db whenever a test
+that didn't request the fixture ran first.
 """
 
 import os
+import shutil
 import sys
 import tempfile
-import pytest
 from pathlib import Path
+
+import pytest
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# --- Import-time test isolation (must precede any src.* import) ---
+_REPO_ROOT = Path(__file__).parent.parent
+_TEST_DATA_DIR = Path(tempfile.mkdtemp(prefix="finlity-tests-"))
+for _sub in ("imports", "databases/default", "cache", "demo"):
+    (_TEST_DATA_DIR / _sub).mkdir(parents=True, exist_ok=True)
+
+# Seed the isolated demo DB from the tracked copy so tests see the same
+# demo data CI sees (CI runs from a fresh checkout with no PORTFOLIO_DATA_DIR).
+_tracked_demo = _REPO_ROOT / "data" / "demo" / "demo.db"
+if _tracked_demo.exists():
+    shutil.copy2(_tracked_demo, _TEST_DATA_DIR / "demo" / "demo.db")
+
+# setdefault: explicit env (e.g. CI) still wins.
+os.environ.setdefault("PORTFOLIO_DATA_DIR", str(_TEST_DATA_DIR))
+os.environ.setdefault("PORTFOLIO_DEMO_MODE", "true")
+os.environ.setdefault("PORTFOLIO_TEST_MODE", "true")
+
 
 @pytest.fixture(scope="session")
 def temp_data_dir():
-    """Create a temporary data directory for tests."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Create subdirectories
-        os.makedirs(os.path.join(tmpdir, "imports"), exist_ok=True)
-        os.makedirs(os.path.join(tmpdir, "databases", "default"), exist_ok=True)
-        os.makedirs(os.path.join(tmpdir, "cache"), exist_ok=True)
-        yield tmpdir
+    """The session-wide isolated data directory (created at import time)."""
+    yield str(_TEST_DATA_DIR)
 
 
 @pytest.fixture(scope="session")
 def test_env(temp_data_dir):
-    """Set up test environment variables."""
-    original_env = os.environ.copy()
-
-    # Set test environment
-    os.environ["PORTFOLIO_DATA_DIR"] = temp_data_dir
-    os.environ["PORTFOLIO_DEMO_MODE"] = "true"
-    os.environ["PORTFOLIO_TEST_MODE"] = "true"
-
+    """Kept for backward compatibility — isolation is now import-time."""
     yield
-
-    # Restore original environment
-    os.environ.clear()
-    os.environ.update(original_env)
 
 
 @pytest.fixture(scope="module")
