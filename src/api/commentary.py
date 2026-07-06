@@ -352,6 +352,11 @@ def stream_element_commentary(
     element_id: str,
     force_refresh: bool = Query(False, description="Force regeneration even if cached"),
     data: Optional[str] = Query(None, description="JSON-encoded current data from the page"),
+    no_store: bool = Query(
+        False,
+        description="When true, skip reading/writing the ai_commentary cache table and "
+        "generate from `data` only (no DB access). Default false preserves v1 behavior.",
+    ),
     service: CommentaryService = Depends(get_commentary_service),
 ) -> StreamingResponse:
     """Stream AI commentary for a specific dashboard element using SSE.
@@ -363,6 +368,7 @@ def stream_element_commentary(
         element_id: The element identifier (e.g., "dashboard.total_value")
         force_refresh: If True, regenerate commentary even if cached
         data: Optional JSON-encoded current data visible on the page
+        no_store: If True, no server-side cache read/write occurs
 
     Returns:
         Server-Sent Events stream with commentary chunks
@@ -388,7 +394,7 @@ def stream_element_commentary(
 
     def event_generator() -> Iterator[str]:
         yield from service.generate_commentary_streaming(
-            element_id, force_refresh=force_refresh, current_data=current_data
+            element_id, force_refresh=force_refresh, current_data=current_data, no_store=no_store
         )
 
     return StreamingResponse(

@@ -66,16 +66,38 @@ class CommentaryService:
 
     def __init__(
         self,
-        db: Database,
+        db: Optional[Database] = None,
         provider_id: str = None,
         model_id: str = None,
+        claude_api_key: Optional[str] = None,
+        portfolio_context: Optional[dict] = None,
+        user_context: Optional[dict] = None,
     ):
         """Initialize the commentary service.
 
         Args:
-            db: Database instance for storing/retrieving commentary
+            db: Database instance for storing/retrieving commentary. Optional
+                — when omitted, the service runs in a fully stateless mode
+                (no cache read/write, no settings/portfolio DB reads): the
+                injection point for the stateless v2 API (see
+                src/api/v2/commentary.py), mirroring how
+                AdvisorAnalysisService takes a `portfolio_context` override.
             provider_id: Preferred AI provider ID (e.g., "claude", "cerebras", "openai")
             model_id: Specific model to use (defaults to provider's default)
+            claude_api_key: Anthropic API key. When `db` is not provided,
+                this is used directly (bypassing the app_settings DB lookup)
+                — same pattern as AdvisorAnalysisService.
+            portfolio_context: Optional pre-built portfolio context, same
+                shape as `payload_to_advisor_portfolio_context()` returns
+                (`total_value`, `holdings`, `accounts`, `holding_count`).
+                Used in place of DB-backed `_get_portfolio_summary()` /
+                `_get_positions()` / `_get_allocation_data()` when `db` is
+                None. Only feeds the cacheable dossier prefix — never used
+                for cache read/write or persistence.
+            user_context: Optional `{age?, retirement_age?}` dict used in
+                place of the DB-backed `_get_user_context()` when `db` is
+                None. Omitted keys are simply left out of the prompt rather
+                than defaulted.
         """
         self.db = db
         self.provider_id = provider_id
@@ -83,10 +105,21 @@ class CommentaryService:
         self._provider: Any = None
         self._client: Any = None  # Legacy client for backward compatibility
         self._api_key: Optional[str] = None
+        self.claude_api_key = claude_api_key
+        self._portfolio_context_override = portfolio_context
+        self._user_context_override = user_context
 
     def _get_provider(self) -> Any:
         """Get or create inference provider."""
         if self._provider is None:
+            # No DB means this is a stateless (v2) caller: use the explicit
+            # key directly rather than routing through the
+            # app_settings-reading global registry (mirrors
+            # AdvisorAnalysisService._get_provider).
+            if self.claude_api_key and not self.db:
+                from src.services.providers.claude_provider import ClaudeProvider
+                self._provider = ClaudeProvider(api_key=self.claude_api_key)
+                return self._provider
             try:
                 self._provider = get_provider(self.provider_id, self.db)
                 logger.info(f"Using inference provider: {self._provider.info.display_name}")
@@ -102,27 +135,38 @@ class CommentaryService:
         portfolios) so it clears Anthropic's prompt-caching threshold. Tiny or
         empty portfolios will produce a smaller prompt that won't cache —
         that's expected.
+
+        When `self.db` is None (stateless v2 caller), the DB-backed summary/
+        positions/allocation/settings helpers are skipped entirely (not just
+        try/excepted around) and the dossier is built from
+        `self._portfolio_context_override` instead — no ai_commentary cache
+        table access, no settings/portfolio DB reads.
         """
-        try:
-            summary = self._get_portfolio_summary()
-        except Exception:
-            summary = {}
-        try:
-            positions = self._get_positions()
-        except Exception:
-            positions = []
-        try:
-            allocation = self._get_allocation_data()
-        except Exception:
-            allocation = {}
+        if self.db is None:
+            summary, positions, allocation = self._stateless_dossier_inputs()
+            settings_data: dict = {}
+        else:
+            try:
+                summary = self._get_portfolio_summary()
+            except Exception:
+                summary = {}
+            try:
+                positions = self._get_positions()
+            except Exception:
+                positions = []
+            try:
+                allocation = self._get_allocation_data()
+            except Exception:
+                allocation = {}
+            try:
+                settings_data = self._get_settings_data()
+            except Exception:
+                settings_data = {}
+
         try:
             user_context = self._get_user_context()
         except Exception:
             user_context = {}
-        try:
-            settings_data = self._get_settings_data()
-        except Exception:
-            settings_data = {}
 
         system_text = build_cacheable_system_prompt(
             summary=summary,
@@ -139,6 +183,41 @@ class CommentaryService:
             len(system_text) // 4,
         )
         return system_text
+
+    def _stateless_dossier_inputs(self) -> tuple[dict, list, dict]:
+        """Map `self._portfolio_context_override` (same shape as
+        `payload_to_advisor_portfolio_context()`) to the (summary, positions,
+        allocation) shapes `build_portfolio_dossier` expects — the stateless
+        counterpart to `_get_portfolio_summary()` / `_get_positions()` /
+        `_get_allocation_data()`, which all require `self.db`.
+
+        Mirrors AdvisorAnalysisService._build_chat_context's
+        summary_for_dossier/positions_for_dossier mapping exactly.
+        """
+        portfolio = self._portfolio_context_override or {}
+        if not portfolio:
+            return {}, [], {}
+
+        summary = {
+            "total_value": portfolio.get("total_value", 0),
+            "num_accounts": len(portfolio.get("accounts", {}) or {}),
+        }
+        positions = [
+            {
+                "ticker": h.get("ticker"),
+                "name": h.get("name"),
+                "value": h.get("value", 0),
+                "account_type": (h.get("accounts") or [{}])[0].get(
+                    "type", "unknown"
+                ) if h.get("accounts") else "unknown",
+            }
+            for h in (portfolio.get("holdings") or [])
+        ]
+        # No DB-backed concentration/cash-allocation figures available
+        # statelessly; the dossier renders fine with an empty allocation
+        # dict (matches how a DB-backed empty portfolio behaves too).
+        allocation: dict = {}
+        return summary, positions, allocation
 
     def _get_client(self):
         """Get client - now returns the provider for backward compatibility."""
@@ -535,6 +614,7 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
         element_id: str,
         force_refresh: bool = False,
         current_data: Optional[dict] = None,
+        no_store: bool = False,
     ) -> Generator[str, None, None]:
         """Generate commentary using streaming, yielding text chunks.
 
@@ -545,6 +625,12 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             element_id: The element identifier
             force_refresh: If True, regenerate even if cached
             current_data: Optional pre-fetched data
+            no_store: If True, skip reading AND writing the ai_commentary
+                cache table entirely, and skip the DB-backed
+                _collect_element_data merge — generate from `current_data`
+                only. Used by the stateless v2 API path, which must not
+                touch server-side storage. Default False preserves v1
+                behavior exactly.
 
         Yields:
             Text chunks as they are generated
@@ -557,18 +643,23 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             yield f"data: {json.dumps({'error': f'Unknown element: {element_id}'})}\n\n"
             return
 
-        # Always collect server-side data (has correct keys for prompt templates),
-        # then merge any frontend-provided data on top
-        server_data = self._collect_element_data(element_id)
-        if current_data is not None:
-            server_data.update(current_data)
-        current_data = server_data
+        if no_store:
+            # Stateless: use only the caller-supplied data, no DB reads.
+            current_data = current_data or {}
+        else:
+            # Always collect server-side data (has correct keys for prompt
+            # templates), then merge any frontend-provided data on top.
+            server_data = self._collect_element_data(element_id)
+            if current_data is not None:
+                server_data.update(current_data)
+            current_data = server_data
 
         # Compute hash for change detection
         current_hash = self._compute_data_hash(element_id, current_data)
 
-        # Check cache unless forced refresh
-        if not force_refresh:
+        # Check cache unless forced refresh or no_store (stateless callers
+        # never read the cache table).
+        if not force_refresh and not no_store:
             cached = self._get_cached_commentary(element_id)
             if cached and not self._is_cache_stale(cached, current_hash):
                 # Send complete event with cached data
@@ -642,20 +733,21 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
             token_count = input_tokens + output_tokens
             generation_time_ms = (time.time() - start_time) * 1000
 
-            # Cache the result
-            self._save_commentary(
-                element_id=element_id,
-                element_type=config.get("type", "unknown"),
-                element_tab=config.get("tab", "unknown"),
-                commentary=full_text,
-                comparison_data=comparison_data,
-                data_hash=current_hash,
-                data_snapshot=current_data,
-                model_version=model_version,
-                generation_time_ms=generation_time_ms,
-                token_count=token_count,
-                web_search_used=web_search_used,
-            )
+            # Cache the result (skipped entirely for stateless/no_store callers).
+            if not no_store:
+                self._save_commentary(
+                    element_id=element_id,
+                    element_type=config.get("type", "unknown"),
+                    element_tab=config.get("tab", "unknown"),
+                    commentary=full_text,
+                    comparison_data=comparison_data,
+                    data_hash=current_hash,
+                    data_snapshot=current_data,
+                    model_version=model_version,
+                    generation_time_ms=generation_time_ms,
+                    token_count=token_count,
+                    web_search_used=web_search_used,
+                )
 
             # Send completion event
             yield f"data: {json.dumps({'type': 'complete', 'age_hours': 0})}\n\n"
@@ -1114,7 +1206,24 @@ Provide a brief 2-3 sentence explanation of what this data shows and any relevan
         Age and retirement age come from the single canonical interface in
         ``src.api.settings`` so every page agrees on the user's age and falls
         back to the same defaults when it is unknown.
+
+        When `self.db` is None (stateless v2 caller), `src.api.settings`'s
+        get_user_age()/get_retirement_age() are never called — they read the
+        server's shared profile DB via `get_database()`, which v2 must not
+        touch. Instead, `self._user_context_override` (an optional
+        `{age?, retirement_age?}` dict from the request body) is used, and
+        omitted keys are simply left out of the prompt rather than defaulted
+        (unlike the DB-backed path, which always defaults to 35/65).
         """
+        if self.db is None:
+            override = self._user_context_override or {}
+            context: dict = {"risk_tolerance": "moderate"}
+            if override.get("age") is not None:
+                context["user_age"] = override["age"]
+            if override.get("retirement_age") is not None:
+                context["retirement_age"] = override["retirement_age"]
+            return context
+
         # Lazy import avoids any import cycle between api and services.
         from src.api.settings import get_retirement_age, get_user_age
 

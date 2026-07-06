@@ -48,13 +48,18 @@ class ClaudeProvider(InferenceProvider):
         ),
     ]
 
-    def __init__(self, db=None):
+    def __init__(self, db=None, api_key: Optional[str] = None):
         """Initialize Claude provider.
 
         Args:
             db: Optional database connection for secrets lookup
+            api_key: Optional explicit API key. Used as-is (no demo-mode gate,
+                no DB lookup) — this is the injection point for the stateless
+                v2 API, which resolves its key from the environment directly
+                (see src/api/v2/analysis.py) and must never touch app_settings.
         """
         self._db = db
+        self._explicit_api_key = api_key
         self._client = None
         self._info = ProviderInfo(
             id="claude",
@@ -70,12 +75,16 @@ class ClaudeProvider(InferenceProvider):
         return self._info
 
     def get_api_key(self) -> Optional[str]:
-        """Get API key from env or database.
+        """Get API key from an explicit override, env, or database.
 
         Environment variable keys are only used in demo mode. This prevents
         hosted deployments from paying for API usage by non-demo users.
         When not in demo mode, users must configure their own API keys.
         """
+        # Explicit key takes precedence (v2 stateless callers only).
+        if self._explicit_api_key:
+            return self._explicit_api_key
+
         from src.services.demo_mode import allow_env_api_keys
 
         # Check environment first, but only if demo mode is enabled

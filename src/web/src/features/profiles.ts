@@ -11,6 +11,7 @@ import { emit } from '@/state/events';
 import { refreshData } from '@/pages/dashboard';
 import { clearCommentaryCache } from '@/features/commentary';
 import { showTab } from '@/ui/tabs';
+import { clientDB } from '@/database/client-database';
 import type { Profile } from '@/types/api';
 
 /** Current active profile ID. */
@@ -494,11 +495,11 @@ export async function editProfile(profileId: string): Promise<void> {
 
     const modal = document.getElementById('profile-modal');
     if (modal) {
-    // Remove the `hidden` class (`display:none !important`) — an inline style
-    // alone can't override it.
-    modal.classList.remove('hidden');
-    modal.style.display = 'flex';
-  }
+      // Remove the `hidden` class (`display:none !important`) — an inline style
+      // alone can't override it.
+      modal.classList.remove('hidden');
+      modal.style.display = 'flex';
+    }
   } catch (error) {
     console.error('Error loading profile:', error);
     showToast('Failed to load profile', 'error');
@@ -512,12 +513,18 @@ export async function saveProfile(event: Event): Promise<void> {
   event.preventDefault();
 
   const profileId = (document.getElementById('profile-id') as HTMLInputElement | null)?.value;
-    const name = (document.getElementById('profile-name') as HTMLInputElement | null)?.value?.trim();
-    const description = (document.getElementById('profile-description') as HTMLTextAreaElement | null)?.value?.trim();
-    const color = (document.querySelector('input[name="profile-color"]:checked') as HTMLInputElement | null)?.value;
-    const icon = (document.querySelector('input[name="profile-icon"]:checked') as HTMLInputElement | null)?.value;
-  
-    if (!name) {
+  const name = (document.getElementById('profile-name') as HTMLInputElement | null)?.value?.trim();
+  const description = (
+    document.getElementById('profile-description') as HTMLTextAreaElement | null
+  )?.value?.trim();
+  const color = (
+    document.querySelector('input[name="profile-color"]:checked') as HTMLInputElement | null
+  )?.value;
+  const icon = (
+    document.querySelector('input[name="profile-icon"]:checked') as HTMLInputElement | null
+  )?.value;
+
+  if (!name) {
     showToast('Profile name is required', 'error');
     return;
   }
@@ -614,8 +621,24 @@ export async function duplicateProfile(profileId: string): Promise<void> {
 
 /**
  * Export a profile.
+ *
+ * In hosted/local mode, profiles are your local database file — there is
+ * no server-side zip to export. Offer clientDB.downloadDatabase() instead
+ * (this UI path is normally hidden entirely in local mode; see
+ * applyLocalModeUiRestrictions in main.ts, but this function stays guarded
+ * since it's also reachable via window.finlity).
  */
 export async function exportProfile(profileId: string): Promise<void> {
+  if (store.get('dataMode') === 'local') {
+    if (clientDB.isOpen()) {
+      clientDB.downloadDatabase();
+      showToast('Your local database file is the profile export.', 'info');
+    } else {
+      showToast('Profiles are your local database files in hosted mode.', 'info');
+    }
+    return;
+  }
+
   try {
     showToast('Preparing export...', 'info');
     const response = await fetch(`/api/profiles/${profileId}/export`, {
@@ -660,11 +683,25 @@ export function importProfileFromFile(): void {
 
 /**
  * Handle profile import file selection.
+ *
+ * In hosted/local mode, "importing a profile" means opening a different
+ * local .db file — see openLocalDatabase() in src/features/onboarding.ts.
+ * This zip-import flow doesn't apply and is guarded here (the UI path that
+ * triggers it is hidden entirely in local mode).
  */
 export async function handleProfileImport(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
+
+  if (store.get('dataMode') === 'local') {
+    showToast(
+      'Profiles are your local database files in hosted mode. Use "Open existing .db file" instead.',
+      'info'
+    );
+    input.value = '';
+    return;
+  }
 
   const formData = new FormData();
   formData.append('file', file);

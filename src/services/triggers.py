@@ -28,6 +28,72 @@ OPERATORS = {
 }
 
 
+def build_portfolio_data_from_payload(raw_positions: list[dict]) -> dict:
+    """Build the same portfolio_data dict shape as
+    TriggerEvaluator._get_portfolio_data(), from "full ORM-like" position
+    dicts (see src/api/v2/payload.py:payload_to_raw_positions).
+
+    Used by the stateless v2 trigger-evaluation endpoint so `evaluate_trigger`
+    (already pure) can run unchanged against client-supplied data instead of
+    the DB.
+    """
+    total_value = 0.0
+    ticker_values: dict[str, float] = {}
+    sector_values: dict[str, float] = {}
+    account_values: dict[str, float] = {}
+    account_cash: dict[str, float] = {}
+    account_totals: dict[str, float] = {}
+
+    for pos in raw_positions:
+        value = pos["market_value"]
+        total_value += value
+
+        ticker = (pos["ticker"] or "").upper()
+        ticker_values[ticker] = ticker_values.get(ticker, 0) + value
+
+        if pos.get("sector"):
+            sector = pos["sector"].lower()
+            sector_values[sector] = sector_values.get(sector, 0) + value
+
+        account_id = pos.get("account_id")
+        acc_type = pos.get("account_type")
+        if acc_type:
+            account_values[acc_type] = account_values.get(acc_type, 0) + value
+
+        if account_id:
+            account_totals[account_id] = account_totals.get(account_id, 0) + value
+            if pos.get("position_type") == "cash":
+                account_cash[account_id] = account_cash.get(account_id, 0) + value
+
+    # Calculate invested percentage per account (by account_id and by
+    # account_type, matching TriggerEvaluator._get_portfolio_data).
+    account_invested_pct: dict[str, float] = {}
+    # Need account_type per account_id to also key by type.
+    account_id_to_type: dict[str, str] = {}
+    for pos in raw_positions:
+        account_id = pos.get("account_id")
+        acc_type = pos.get("account_type")
+        if account_id and acc_type and account_id not in account_id_to_type:
+            account_id_to_type[account_id] = acc_type
+
+    for account_id, acc_value in account_totals.items():
+        if acc_value > 0:
+            cash_value = account_cash.get(account_id, 0)
+            invested_pct = ((acc_value - cash_value) / acc_value) * 100
+            account_invested_pct[account_id] = invested_pct
+            acc_type = account_id_to_type.get(account_id)
+            if acc_type:
+                account_invested_pct[acc_type] = invested_pct
+
+    return {
+        "total_value": total_value,
+        "ticker_values": ticker_values,
+        "sector_values": sector_values,
+        "account_values": account_values,
+        "account_invested_pct": account_invested_pct,
+    }
+
+
 @dataclass
 class TriggerResult:
     """Result of evaluating a trigger."""

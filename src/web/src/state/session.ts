@@ -4,12 +4,74 @@
  */
 
 import { store } from './store';
+import type { DataMode } from './store';
+import { showToast } from '@/ui/toast';
 
 const API_BASE = '';
 
 /**
+ * localStorage override key for dev testing — lets a developer force
+ * dataMode without standing up a multi_user_mode server. Real deployments
+ * never need this; `multi_user_mode` from the server is authoritative.
+ */
+const DATA_MODE_OVERRIDE_KEY = 'dataMode';
+
+/**
+ * F3: localStorage key caching the last successfully-confirmed
+ * `multi_user_mode` value from /api/session/init. Read only when a later
+ * init call fails (network error or non-OK status), so a transient outage
+ * on a hosted (multi_user_mode=true) deployment keeps routing to 'local'
+ * instead of silently falling back to 'server' and leaking user data to v1
+ * server-side endpoints.
+ */
+const LAST_KNOWN_MULTI_USER_MODE_KEY = 'lastKnownMultiUserMode';
+
+/**
+ * Resolve the effective dataMode for this session.
+ *
+ * `multi_user_mode` (from /api/session/init) is mandatory when true — hosted
+ * deployments must not store user data server-side, so 'local' always wins
+ * over any override in that direction. When the server reports
+ * multi_user_mode=false (self-hosted Docker / single-user), a dev can still
+ * force 'local' via localStorage for testing, but cannot force 'server' on
+ * a multi-user deployment (that would violate the "no server storage in
+ * hosted mode" requirement).
+ */
+function resolveDataMode(multiUserMode: boolean): DataMode {
+  if (multiUserMode) return 'local';
+
+  const override = localStorage.getItem(DATA_MODE_OVERRIDE_KEY);
+  if (override === 'local') return 'local';
+  return 'server';
+}
+
+/**
+ * F3 fail-safe: resolve dataMode when /api/session/init could not be
+ * reached or returned an error status. Never falls back to 'server' just
+ * because the network call failed — that would silently route user data to
+ * server-side v1 endpoints on what might actually be a hosted deployment
+ * experiencing a transient outage. Order of preference:
+ * 1. The last successfully-confirmed multi_user_mode value (localStorage).
+ * 2. If there is no cached value at all (e.g. very first load, before any
+ *    successful init), default to 'local' - the safe direction, since it
+ *    never leaks data server-side even if this turns out to be a
+ *    single-user self-hosted deployment (worst case there, the user sees
+ *    local/browser storage instead of server storage, which is merely
+ *    inconvenient, not a data-exposure risk).
+ * Shows a warning toast either way so the user knows the mode was inferred
+ * rather than confirmed.
+ */
+function resolveDataModeOnInitFailure(): DataMode {
+  const cached = localStorage.getItem(LAST_KNOWN_MULTI_USER_MODE_KEY);
+  const dataMode: DataMode = cached === null ? 'local' : resolveDataMode(cached === 'true');
+  showToast('Could not confirm server mode — using local data mode', 'warning');
+  return dataMode;
+}
+
+/**
  * Initialize session for multi-user mode.
- * Gets HMAC key for request signing if required by server.
+ * Gets HMAC key for request signing if required by server, and resolves
+ * `dataMode` (server vs local/hosted) from the `multi_user_mode` flag.
  */
 export async function initSession(): Promise<void> {
   try {
@@ -21,15 +83,24 @@ export async function initSession(): Promise<void> {
       const data = (await response.json()) as {
         hmac_key: string | null;
         signing_required: boolean;
+        multi_user_mode?: boolean;
       };
+      const multiUserMode = data.multi_user_mode ?? false;
       store.set('sessionHmacKey', data.hmac_key);
       store.set('sessionSigningRequired', data.signing_required || false);
+      store.set('multiUserMode', multiUserMode);
+      store.set('dataMode', resolveDataMode(multiUserMode));
+      // F3: remember this confirmed value so a later transient init
+      // failure can fail safe instead of defaulting to 'server'.
+      localStorage.setItem(LAST_KNOWN_MULTI_USER_MODE_KEY, String(multiUserMode));
       console.log(
-        `Session initialized: signing ${data.signing_required ? 'required' : 'not required'}`
+        `Session initialized: signing ${data.signing_required ? 'required' : 'not required'}, ` +
+          `dataMode=${store.get('dataMode')}`
       );
     } else {
       // Server returned an error status - log it for debugging
       console.warn(`Session init failed with status ${response.status}`);
+      store.set('dataMode', resolveDataModeOnInitFailure());
     }
   } catch (error) {
     // Differentiate between expected failures (no server) and unexpected failures
@@ -43,6 +114,7 @@ export async function initSession(): Promise<void> {
       // Unexpected error - log for debugging
       console.error('Session initialization failed:', error);
     }
+    store.set('dataMode', resolveDataModeOnInitFailure());
   }
 }
 

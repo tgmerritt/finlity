@@ -72,14 +72,21 @@ class AdvisorAnalysisService:
         db=None,
         provider_id: str = None,
         model_id: str = None,
+        portfolio_context: Optional[dict] = None,
     ):
         """Initialize advisor analysis service.
 
         Args:
-            claude_api_key: Anthropic API key (deprecated, use provider_id)
+            claude_api_key: Anthropic API key. When `db` is not provided, this
+                is used directly (bypassing the demo-mode env-key gate and any
+                app_settings DB lookup) — this is the injection point for the
+                stateless v2 API (see src/api/v2/analysis.py).
             db: Database instance for accessing portfolio data
             provider_id: Preferred AI provider ID (e.g., "claude", "cerebras", "openai")
             model_id: Specific model to use (defaults to provider's default)
+            portfolio_context: Optional pre-built portfolio context dict (same
+                shape as `_get_portfolio_context()` returns) for callers with
+                no DB, e.g. v2's in-memory payload-derived portfolio.
         """
         self.claude_api_key = claude_api_key
         self.db = db
@@ -88,10 +95,18 @@ class AdvisorAnalysisService:
         self._provider = None
         self._client = None  # Legacy client for backward compatibility
         self._chat_history: list[ChatMessage] = []
+        self._portfolio_context_override = portfolio_context
 
     def _get_provider(self):
         """Get or create inference provider."""
         if self._provider is None:
+            # No DB means this is a stateless (v2) caller: use the explicit
+            # key directly rather than routing through the demo-mode-gated,
+            # app_settings-reading global registry.
+            if self.claude_api_key and not self.db:
+                from src.services.providers.claude_provider import ClaudeProvider
+                self._provider = ClaudeProvider(api_key=self.claude_api_key)
+                return self._provider
             try:
                 self._provider = get_provider(self.provider_id, self.db)
             except ProviderNotConfiguredError:
@@ -119,6 +134,9 @@ class AdvisorAnalysisService:
 
     def _get_portfolio_context(self) -> dict:
         """Get current portfolio context for analysis."""
+        if self._portfolio_context_override is not None:
+            return self._portfolio_context_override
+
         if not self.db:
             return {}
 
@@ -293,8 +311,8 @@ Return ONLY valid JSON, no markdown or explanation."""
         except InferenceProviderError as e:
             logger.warning(f"AI provider error for {ticker}: {e}")
             return None
-        except Exception as e:
-            logger.warning(f"AI API error for {ticker}: {e}")
+        except Exception:
+            logger.exception(f"AI API error for {ticker}")
             return None
 
     def _build_chat_context(
@@ -489,6 +507,18 @@ Return ONLY valid JSON, no markdown or explanation."""
     def clear_chat_history(self):
         """Clear the chat history."""
         self._chat_history = []
+
+    def set_chat_history(self, history: list[dict]) -> None:
+        """Seed chat history from a list of {role, content} dicts.
+
+        Used by the stateless v2 API: since v2 keeps no server-side session,
+        the caller resends prior turns with each request and this replaces
+        the in-memory history for that single call.
+        """
+        self._chat_history = [
+            ChatMessage(role=m["role"], content=m["content"])
+            for m in history
+        ]
 
     def get_chat_history(self) -> list[dict]:
         """Get chat history as list of dicts."""

@@ -248,50 +248,21 @@ declare namespace marked {
   function setOptions(options: MarkedOptions): void;
 }
 
-// sql.js types (https://sql.js.org/documentation/Database.html)
-declare interface SqlJsStatic {
-  Database: new (data?: ArrayLike<number>) => SqlJsDatabase;
+// sql.js is now self-hosted via the `sql.js` npm package (see
+// src/database/client-database.ts) and imported as an ES module, so it is
+// no longer a CDN global. The npm package ships its own types via
+// @types/sql.js. We only need a module declaration for the Vite `?url`
+// asset import of the wasm binary.
+declare module '*.wasm?url' {
+  const url: string;
+  export default url;
 }
-
-declare interface SqlJsDatabase {
-  run(sql: string, params?: SqlJsBindParams): void;
-  exec(sql: string, params?: SqlJsBindParams): SqlJsQueryResult[];
-  prepare(sql: string): SqlJsStatement;
-  export(): Uint8Array;
-  close(): void;
-  getRowsModified(): number;
-}
-
-declare interface SqlJsStatement {
-  bind(params?: SqlJsBindParams): boolean;
-  step(): boolean;
-  get(params?: SqlJsBindParams): SqlJsValueType[];
-  getAsObject(params?: SqlJsBindParams): Record<string, SqlJsValueType>;
-  run(params?: SqlJsBindParams): void;
-  reset(): void;
-  free(): boolean;
-}
-
-declare type SqlJsValueType = number | string | Uint8Array | null;
-declare type SqlJsBindParams = SqlJsValueType[] | Record<string, SqlJsValueType>;
-
-declare interface SqlJsQueryResult {
-  columns: string[];
-  values: SqlJsValueType[][];
-}
-
-declare interface SqlJsConfig {
-  locateFile?: (filename: string) => string;
-}
-
-declare function initSqlJs(config?: SqlJsConfig): Promise<SqlJsStatic>;
 
 // Extend Window interface for global access
 declare global {
   interface Window {
     Plotly: typeof Plotly;
     marked: typeof marked;
-    initSqlJs: typeof initSqlJs;
   }
 }
 

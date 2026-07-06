@@ -100,7 +100,11 @@ import {
   runTransitionProjection,
   updateBudgetCalc,
 } from '@/pages/budget';
-import { initBankStatementUpload, acceptRecurringCandidate, rejectRecurringCandidate } from '@/features/bank-statements';
+import {
+  initBankStatementUpload,
+  acceptRecurringCandidate,
+  rejectRecurringCandidate,
+} from '@/features/bank-statements';
 import {
   initSettings,
   loadAIProviders,
@@ -146,11 +150,7 @@ import {
   changeEntity,
   autoDetectEntities,
 } from '@/features/entities';
-import {
-  loadViews,
-  changeView,
-  initViewSelector,
-} from '@/features/views';
+import { loadViews, changeView, initViewSelector } from '@/features/views';
 import { initCommentary, initAICommentaryButtons, showAICommentary } from '@/features/commentary';
 import {
   initPlugins,
@@ -206,7 +206,9 @@ import {
   loadFromBrowserStorage,
   saveToBrowserStorage,
   clearBrowserStorage,
+  ensureLocalDatabaseReady,
 } from '@/features/onboarding';
+import { store } from '@/state/store';
 import { initSocialFeed, destroySocialFeed, refreshSocialFeed } from '@/features/social-feed';
 
 // Utilities
@@ -235,17 +237,18 @@ export {
   createBarChartData,
 } from '@/charts/plotly-utils';
 
-
 /**
  * Populate age-related form fields across all pages from saved personal settings.
  * Falls back to HTML defaults (35/65) if no settings are saved.
  */
 async function populateAgeFromSettings(): Promise<void> {
   try {
-    const data = await apiCall<{ personal?: {
-      dob?: string;
-      retirement_age?: number;
-    } }>('/api/settings/config/personal');
+    const data = await apiCall<{
+      personal?: {
+        dob?: string;
+        retirement_age?: number;
+      };
+    }>('/api/settings/config/personal');
 
     if (!data?.personal) return;
 
@@ -434,6 +437,44 @@ function initStorageMode(): void {
 }
 
 /**
+ * Hide UI affordances that don't apply in hosted/local mode
+ * (dataMode === 'local'): profile switching/import/export (the local
+ * database file itself IS the profile), plugins (server-local feature),
+ * and the API-key settings section (server uses env keys in hosted mode).
+ * Also hides the legacy "Data Storage" Settings card, since dataMode is
+ * mandatory (not a user choice) once the server reports multi_user_mode.
+ *
+ * Prefers hiding via class toggle over deleting markup, per the plan, so
+ * server-mode rendering of the same elements is completely unaffected —
+ * this function is only ever called when dataMode === 'local'.
+ */
+function applyLocalModeUiRestrictions(): void {
+  document.body.classList.add('local-mode');
+
+  // Profile selector (header) — the local DB file is the only "profile".
+  const profileSelector = document.querySelector('.profile-selector');
+  if (profileSelector instanceof HTMLElement) profileSelector.classList.add('hidden');
+
+  // Plugins nav tab, if present.
+  document.querySelectorAll<HTMLElement>('[data-tab="plugins"]').forEach((el) => {
+    el.classList.add('hidden');
+  });
+
+  // Settings: "Data Storage" card (legacy server/browser toggle — the
+  // choice already happened at the boot-gate modal) and "Data Sources"
+  // API-key card.
+  const dataStorageCard = document.getElementById('data-storage-card');
+  if (dataStorageCard) dataStorageCard.classList.add('hidden');
+
+  document.querySelectorAll('.card').forEach((card) => {
+    const header = card.querySelector('h3');
+    if (header?.textContent?.trim().startsWith('Data Sources')) {
+      card.classList.add('hidden');
+    }
+  });
+}
+
+/**
  * Initialize collapsible config panels.
  */
 function initConfigPanels(): void {
@@ -464,8 +505,18 @@ async function init(): Promise<void> {
   initStorageMode();
   initConfigPanels();
 
-  // Initialize session (for multi-user mode)
+  // Initialize session (resolves dataMode: 'server' unchanged v1 behavior,
+  // or 'local' for hosted/multi-user mode — see src/state/session.ts).
   await initSession();
+
+  // Hosted/local mode: block until a browser-side SQLite database is open
+  // (see src/api/dispatcher.ts for how requests route to it) before any
+  // feature/page initialization runs, since every one of them expects data
+  // to already be available. No-op in server mode.
+  if (store.get('dataMode') === 'local') {
+    await ensureLocalDatabaseReady();
+    applyLocalModeUiRestrictions();
+  }
 
   // Initialize features
   initProfiles();

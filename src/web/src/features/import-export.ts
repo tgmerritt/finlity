@@ -3,10 +3,12 @@
  * Handles CSV/Excel file imports and data exports.
  */
 
-import { apiCall, getBaseUrl, uploadFile } from '@/api/client';
+import { apiCall, getBaseUrl, uploadFile, uploadFileWithFields } from '@/api/client';
 import { showToast } from '@/ui/toast';
 import { showLoading, hideLoading } from '@/ui/loading';
 import { getElementById, setVisible, clearElement } from '@/utils/html';
+import { store } from '@/state/store';
+import { getLocalAPI } from '@/api/dispatcher';
 
 /**
  * Parsed position from import.
@@ -67,11 +69,40 @@ let pendingImportData: ParseResult | null = null;
 let selectedDbFileHandle: FileSystemFileHandle | null = null;
 
 /**
+ * Trigger a browser download of `text` as a file. Shared by the local-mode
+ * CSV export paths below (bypasses the network entirely).
+ */
+function downloadTextAsFile(text: string, filename: string, mimeType = 'text/csv'): void {
+  const blob = new Blob([text], { type: mimeType });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  a.remove();
+}
+
+/**
  * Export data to CSV file.
  */
 export async function exportToCSV(dataType: string): Promise<void> {
   try {
     showLoading(`Exporting ${dataType}...`);
+    const timestamp = new Date().toISOString().slice(0, 10);
+
+    if (store.get('dataMode') === 'local') {
+      // Hosted/local mode: LocalAPI.exportCsv() builds the CSV text
+      // directly from the browser database — no network call needed.
+      const csvText = getLocalAPI().exportCsv(dataType as 'accounts' | 'positions' | 'snapshots');
+      downloadTextAsFile(csvText, `portfolio_${dataType}_${timestamp}.csv`);
+      showToast(
+        `${dataType.charAt(0).toUpperCase() + dataType.slice(1)} exported successfully`,
+        'success'
+      );
+      return;
+    }
 
     const baseUrl = getBaseUrl();
     const response = await fetch(`${baseUrl}/api/portfolio/export/${dataType}`);
@@ -84,9 +115,6 @@ export async function exportToCSV(dataType: string): Promise<void> {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-
-    // Generate filename with timestamp
-    const timestamp = new Date().toISOString().slice(0, 10);
     a.download = `portfolio_${dataType}_${timestamp}.csv`;
 
     document.body.appendChild(a);
@@ -116,8 +144,22 @@ export async function exportAllToCSV(): Promise<void> {
     // Export each type sequentially
     const types = ['accounts', 'positions', 'snapshots'];
     const timestamp = new Date().toISOString().slice(0, 10);
+    const isLocalMode = store.get('dataMode') === 'local';
 
     for (const dataType of types) {
+      if (isLocalMode) {
+        try {
+          const csvText = getLocalAPI().exportCsv(
+            dataType as 'accounts' | 'positions' | 'snapshots'
+          );
+          downloadTextAsFile(csvText, `portfolio_${dataType}_${timestamp}.csv`);
+        } catch (error) {
+          console.error(`Failed to export ${dataType}:`, error);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        continue;
+      }
+
       const baseUrl = getBaseUrl();
       const response = await fetch(`${baseUrl}/api/portfolio/export/${dataType}`);
 
@@ -222,8 +264,19 @@ export async function processImportFile(file: File): Promise<void> {
   if (statusText) statusText.textContent = 'Uploading and analyzing file...';
 
   try {
-    // Upload and parse file
-    const result = await uploadFile<ParseResult>('/api/import/parse', file);
+    // Upload and parse file. In hosted/local mode, route to the stateless
+    // v2 parser and supply the local accounts list (via a form field) for
+    // account-suggestion heuristics, since the server has no accounts of
+    // its own to read (see src/api/v2/imports.py).
+    const result =
+      store.get('dataMode') === 'local'
+        ? await uploadFileWithFields<ParseResult>(
+            '/api/v2/import/parse',
+            file,
+            { accounts: JSON.stringify(getLocalAPI().getAccounts()) },
+            'file'
+          )
+        : await uploadFile<ParseResult>('/api/import/parse', file);
 
     // Store parsed data
     pendingImportData = result;
@@ -537,6 +590,18 @@ export async function confirmImport(refreshDataCallback: () => Promise<void>): P
 
     showToast(`Successfully imported ${result.imported_count} positions`, 'success');
     hideImportModal();
+
+    if (store.get('dataMode') === 'local') {
+      // Newly-imported positions have no cached price yet; fetch one
+      // before refreshing so the dashboard doesn't show $0 until the next
+      // manual/auto price refresh (see LocalAPI.getStaleTickers()).
+      try {
+        await apiCall('/api/imports/refresh-prices', { method: 'POST' });
+      } catch (priceError) {
+        console.warn('Price refresh after import failed:', priceError);
+      }
+    }
+
     await refreshDataCallback();
   } catch (error) {
     console.error('Error importing positions:', error);

@@ -854,6 +854,120 @@ async def calculate_paycheck(data: PaycheckRequest) -> dict:
     return breakdown.to_dict()
 
 
+def compute_annual_summary(
+    income_sources: list,
+    expenses: list,
+    deductions: list,
+    filing_status: str,
+    tax_year: int,
+) -> dict:
+    """Pure annual-budget-summary calculation.
+
+    Duck-typed on `.gross_annual`/`.state`/`.pay_frequency`/`.id` (income
+    sources), `.income_source_id`/`.amount_per_period` (deductions), and
+    `.is_pretax`/`.frequency`/`.amount`/`.category_name` (expenses) — runs
+    unchanged whether fed SQLAlchemy ORM rows (v1, which resolves
+    `category_name` from the `category` relationship before calling) or v2
+    payload objects that carry `category_name` directly.
+    """
+    if not income_sources:
+        return {
+            "gross_income": 0,
+            "total_income_sources": 0,
+            "total_taxes": 0,
+            "net_income": 0,
+            "total_expenses": 0,
+            "net_savings": 0,
+            "savings_rate": 0,
+        }
+
+    # Calculate totals
+    total_gross = float(sum(s.gross_annual for s in income_sources))
+
+    # Calculate taxes for each income source
+    total_federal: float = 0.0
+    total_state: float = 0.0
+    total_ss: float = 0.0
+    total_medicare: float = 0.0
+    total_pretax: float = 0.0
+
+    for source in income_sources:
+        # Get deductions for this source
+        source_deductions = [d for d in deductions if d.income_source_id == source.id]
+        pretax_amount = float(sum(
+            d.amount_per_period * PAY_FREQUENCIES.get(cast(str, source.pay_frequency), 26)
+            for d in source_deductions
+        ))
+        total_pretax += pretax_amount
+
+        calculator = PayrollTaxCalculator(
+            filing_status=filing_status,
+            state=cast(str, source.state),
+            tax_year=tax_year,
+        )
+
+        summary = calculator.calculate_annual_summary(
+            annual_gross=cast(float, source.gross_annual),
+            pretax_deductions={"total": pretax_amount},
+        )
+
+        total_federal += summary["federal_income_tax"]
+        total_state += summary["state_income_tax"]
+        total_ss += summary["social_security"]
+        total_medicare += summary["medicare"] + summary["additional_medicare"]
+
+    total_taxes = total_federal + total_state + total_ss + total_medicare
+    net_income = total_gross - total_taxes - total_pretax
+
+    # Calculate expenses by category
+    freq_multiplier = {
+        "weekly": 52,
+        "biweekly": 26,
+        "monthly": 12,
+        "quarterly": 4,
+        "annual": 1,
+        "one_time": 0,
+    }
+
+    expenses_by_category: dict[str, float] = {}
+    total_expenses: float = 0.0
+
+    for expense in expenses:
+        if expense.is_pretax:
+            continue  # Don't count pretax items as expenses
+
+        mult = freq_multiplier.get(cast(str, expense.frequency), 12)
+        annual = float(expense.amount * mult if mult > 0 else expense.amount)
+        total_expenses += annual
+
+        cat_name = expense.category_name
+        expenses_by_category[cat_name] = expenses_by_category.get(cat_name, 0) + annual
+
+    net_savings = net_income - total_expenses
+    savings_rate = (net_savings / total_gross * 100) if total_gross > 0 else 0
+
+    return {
+        "gross_income": round(total_gross, 2),
+        "total_income_sources": len(income_sources),
+        "federal_income_tax": round(total_federal, 2),
+        "state_income_tax": round(total_state, 2),
+        "social_security_tax": round(total_ss, 2),
+        "medicare_tax": round(total_medicare, 2),
+        "total_taxes": round(total_taxes, 2),
+        "total_pretax_deductions": round(total_pretax, 2),
+        "net_income": round(net_income, 2),
+        "total_expenses": round(total_expenses, 2),
+        "expenses_by_category": {k: round(v, 2) for k, v in expenses_by_category.items()},
+        "net_savings": round(net_savings, 2),
+        "savings_rate": round(savings_rate, 2),
+        "effective_tax_rate": round((total_taxes / total_gross * 100) if total_gross > 0 else 0, 2),
+        "monthly_gross": round(total_gross / 12, 2),
+        "monthly_net": round(net_income / 12, 2),
+        "monthly_expenses": round(total_expenses / 12, 2),
+        "monthly_savings": round(net_savings / 12, 2),
+    }
+
+
 @router.post("/calculate-annual")
 async def calculate_annual_summary(data: AnnualSummaryRequest) -> dict:
     """Calculate annual budget summary from stored income and expenses."""
@@ -865,110 +979,28 @@ async def calculate_annual_summary(data: AnnualSummaryRequest) -> dict:
             BudgetIncomeSource.is_active.is_(True)
         ).all()
 
-        if not income_sources:
-            return {
-                "gross_income": 0,
-                "total_income_sources": 0,
-                "total_taxes": 0,
-                "net_income": 0,
-                "total_expenses": 0,
-                "net_savings": 0,
-                "savings_rate": 0,
-            }
-
-        # Get all active expenses
-        expenses = session.query(BudgetExpense).filter(
+        # Get all active expenses (eagerly load category for category_name)
+        expenses = session.query(BudgetExpense).options(
+            joinedload(BudgetExpense.category)
+        ).filter(
             BudgetExpense.is_active.is_(True)
         ).all()
 
         # Get deductions
         deductions = session.query(BudgetPretaxDeduction).all()
 
-        # Calculate totals
-        total_gross = float(sum(s.gross_annual for s in income_sources))
-
-        # Calculate taxes for each income source
-        total_federal: float = 0.0
-        total_state: float = 0.0
-        total_ss: float = 0.0
-        total_medicare: float = 0.0
-        total_pretax: float = 0.0
-
-        for source in income_sources:
-            # Get deductions for this source
-            source_deductions = [d for d in deductions if d.income_source_id == source.id]
-            pretax_amount = float(sum(
-                d.amount_per_period * PAY_FREQUENCIES.get(cast(str, source.pay_frequency), 26)
-                for d in source_deductions
-            ))
-            total_pretax += pretax_amount
-
-            calculator = PayrollTaxCalculator(
-                filing_status=data.filing_status,
-                state=cast(str, source.state),
-                tax_year=data.tax_year,
-            )
-
-            summary = calculator.calculate_annual_summary(
-                annual_gross=cast(float, source.gross_annual),
-                pretax_deductions={"total": pretax_amount},
-            )
-
-            total_federal += summary["federal_income_tax"]
-            total_state += summary["state_income_tax"]
-            total_ss += summary["social_security"]
-            total_medicare += summary["medicare"] + summary["additional_medicare"]
-
-        total_taxes = total_federal + total_state + total_ss + total_medicare
-        net_income = total_gross - total_taxes - total_pretax
-
-        # Calculate expenses by category
-        freq_multiplier = {
-            "weekly": 52,
-            "biweekly": 26,
-            "monthly": 12,
-            "quarterly": 4,
-            "annual": 1,
-            "one_time": 0,
-        }
-
-        expenses_by_category: dict[str, float] = {}
-        total_expenses: float = 0.0
-
+        # Resolve category_name from the ORM relationship before handing off
+        # to the pure function, which only knows about plain attributes.
         for expense in expenses:
-            if expense.is_pretax:
-                continue  # Don't count pretax items as expenses
+            expense.category_name = expense.category.name if expense.category else "Other"  # type: ignore[attr-defined]
 
-            mult = freq_multiplier.get(cast(str, expense.frequency), 12)
-            annual = float(expense.amount * mult if mult > 0 else expense.amount)
-            total_expenses += annual
-
-            cat_name = expense.category.name if expense.category else "Other"
-            expenses_by_category[cat_name] = expenses_by_category.get(cat_name, 0) + annual
-
-        net_savings = net_income - total_expenses
-        savings_rate = (net_savings / total_gross * 100) if total_gross > 0 else 0
-
-        return {
-            "gross_income": round(total_gross, 2),
-            "total_income_sources": len(income_sources),
-            "federal_income_tax": round(total_federal, 2),
-            "state_income_tax": round(total_state, 2),
-            "social_security_tax": round(total_ss, 2),
-            "medicare_tax": round(total_medicare, 2),
-            "total_taxes": round(total_taxes, 2),
-            "total_pretax_deductions": round(total_pretax, 2),
-            "net_income": round(net_income, 2),
-            "total_expenses": round(total_expenses, 2),
-            "expenses_by_category": {k: round(v, 2) for k, v in expenses_by_category.items()},
-            "net_savings": round(net_savings, 2),
-            "savings_rate": round(savings_rate, 2),
-            "effective_tax_rate": round((total_taxes / total_gross * 100) if total_gross > 0 else 0, 2),
-            "monthly_gross": round(total_gross / 12, 2),
-            "monthly_net": round(net_income / 12, 2),
-            "monthly_expenses": round(total_expenses / 12, 2),
-            "monthly_savings": round(net_savings / 12, 2),
-        }
+        return compute_annual_summary(
+            income_sources=income_sources,
+            expenses=expenses,
+            deductions=deductions,
+            filing_status=data.filing_status,
+            tax_year=data.tax_year,
+        )
     finally:
         session.close()
 
@@ -1099,6 +1131,202 @@ async def get_income_transition(data: IncomeTransitionRequest) -> dict:
         session.close()
 
 
+def compute_paycheck_chart_data(
+    source,
+    deductions: list,
+    expenses: list,
+    filing_status: str,
+    state: str,
+) -> dict:
+    """Pure cumulative-YTD paycheck chart calculation.
+
+    Duck-typed on `.gross_annual`/`.pay_frequency` (primary income source),
+    `.amount_per_period`/`.deduction_type` (deductions), and
+    `.amount`/`.frequency` (expenses) — runs unchanged whether fed
+    SQLAlchemy ORM rows (v1) or v2 payload objects with the same field names.
+
+    Returns cumulative (running total) amounts for each pay period, with
+    proper FICA wage cap handling — Social Security stops accumulating once
+    the wage base is reached.
+    """
+    periods_per_year: int = PAY_FREQUENCIES.get(cast(str, source.pay_frequency), 26)
+    gross_per_period: float = float(cast(float, source.gross_annual) / periods_per_year)
+
+    pretax_per_period: dict[str, float] = {
+        "401k": float(sum(d.amount_per_period for d in deductions if d.deduction_type == "401k")),
+        "hsa": float(sum(d.amount_per_period for d in deductions if d.deduction_type == "hsa")),
+        "fsa": float(sum(d.amount_per_period for d in deductions if d.deduction_type == "fsa")),
+        "other": float(sum(d.amount_per_period for d in deductions if d.deduction_type == "other")),
+    }
+    total_pretax_per_period: float = float(sum(pretax_per_period.values()))
+
+    freq_to_annual = {"weekly": 52, "biweekly": 26, "monthly": 12, "quarterly": 4, "annual": 1}
+    total_annual_expenses: float = float(sum(
+        e.amount * freq_to_annual.get(cast(str, e.frequency), 12)
+        for e in expenses
+    ))
+    expenses_per_period: float = total_annual_expenses / periods_per_year
+
+    calculator = PayrollTaxCalculator(
+        filing_status=filing_status,
+        state=state,
+        tax_year=2024,
+    )
+
+    # Tax rates and limits for manual per-period calculation
+    ss_rate = 0.062  # 6.2%
+    medicare_rate = 0.0145  # 1.45%
+    additional_medicare_rate = 0.009  # 0.9%
+    ss_wage_base = 168600  # 2024
+    medicare_threshold = 250000 if "married" in filing_status else 200000
+
+    # Annual contribution limits (2024)
+    limit_401k = 23000
+    limit_hsa = 4150 if filing_status == "single" else 8300
+    limit_fsa = 3200
+
+    # Per-period calculation with YTD tracking
+    periods = []
+
+    # Cumulative totals (YTD)
+    ytd_gross = 0.0
+    ytd_federal_tax = 0.0
+    ytd_state_tax = 0.0
+    ytd_ss_tax = 0.0
+    ytd_medicare_tax = 0.0
+    ytd_pretax = 0.0
+    ytd_takehome = 0.0
+    ytd_expenses = 0.0
+    ytd_savings = 0.0
+
+    # Track YTD contributions for limits
+    ytd_401k = 0.0
+    ytd_hsa = 0.0
+    ytd_fsa = 0.0
+
+    # Arrays for cumulative chart data
+    gross_amounts = []
+    federal_taxes = []
+    state_taxes = []
+    ss_taxes = []
+    medicare_taxes = []
+    pretax_deductions = []
+    takehome_amounts = []
+    expense_amounts = []
+    savings_amounts = []
+
+    for period in range(1, periods_per_year + 1):
+        periods.append(period)
+
+        # Add gross for this period
+        ytd_gross += gross_per_period
+
+        # Calculate pre-tax deductions with annual limits
+        period_401k = min(pretax_per_period["401k"], max(0, limit_401k - ytd_401k))
+        period_hsa = min(pretax_per_period["hsa"], max(0, limit_hsa - ytd_hsa))
+        period_fsa = min(pretax_per_period["fsa"], max(0, limit_fsa - ytd_fsa))
+        period_other = pretax_per_period["other"]
+        period_pretax = period_401k + period_hsa + period_fsa + period_other
+
+        ytd_401k += period_401k
+        ytd_hsa += period_hsa
+        ytd_fsa += period_fsa
+        ytd_pretax += period_pretax
+
+        # Calculate Social Security with wage cap
+        prev_ytd_gross = ytd_gross - gross_per_period
+        period_ss: float
+        if prev_ytd_gross >= ss_wage_base:
+            # Already at cap, no more SS tax
+            period_ss = 0.0
+        elif ytd_gross > ss_wage_base:
+            # Partial period hits cap
+            taxable_ss = ss_wage_base - prev_ytd_gross
+            period_ss = taxable_ss * ss_rate
+        else:
+            # Full period taxable
+            period_ss = gross_per_period * ss_rate
+        ytd_ss_tax += period_ss
+
+        # Calculate Medicare (no cap, but additional Medicare over threshold)
+        period_medicare = gross_per_period * medicare_rate
+        if ytd_gross > medicare_threshold:
+            # Additional Medicare on income over threshold
+            if prev_ytd_gross >= medicare_threshold:
+                # All of this period is over threshold
+                period_medicare += gross_per_period * additional_medicare_rate
+            else:
+                # Partial period over threshold
+                excess = ytd_gross - medicare_threshold
+                period_medicare += excess * additional_medicare_rate
+        ytd_medicare_tax += period_medicare
+
+        # Calculate federal and state taxes (use calculator for brackets)
+        # Approximate per-period by calculating annual and dividing
+        annual_federal = calculator.calculate_federal_income_tax(
+            cast(float, source.gross_annual),
+            pretax_deductions=total_pretax_per_period * periods_per_year
+        )
+        annual_state = calculator.calculate_state_tax(
+            cast(float, source.gross_annual),
+            total_pretax_per_period * periods_per_year
+        )
+
+        # Prorate to this point in year
+        ytd_federal_tax = (annual_federal / periods_per_year) * period
+        ytd_state_tax = (annual_state / periods_per_year) * period
+
+        # Calculate take-home
+        period_takehome = (gross_per_period -
+                          (annual_federal / periods_per_year) -
+                          (annual_state / periods_per_year) -
+                          period_ss - period_medicare - period_pretax)
+        ytd_takehome += period_takehome
+
+        # Expenses and savings
+        ytd_expenses += expenses_per_period
+        remaining = period_takehome - expenses_per_period
+        ytd_savings += max(0, remaining)
+
+        # Store cumulative values
+        gross_amounts.append(round(ytd_gross, 2))
+        federal_taxes.append(round(ytd_federal_tax, 2))
+        state_taxes.append(round(ytd_state_tax, 2))
+        ss_taxes.append(round(ytd_ss_tax, 2))
+        medicare_taxes.append(round(ytd_medicare_tax, 2))
+        pretax_deductions.append(round(ytd_pretax, 2))
+        takehome_amounts.append(round(ytd_takehome, 2))
+        expense_amounts.append(round(ytd_expenses, 2))
+        savings_amounts.append(round(ytd_savings, 2))
+
+    # Combined FICA for backwards compatibility
+    fica_taxes = [round(ss + med, 2) for ss, med in zip(ss_taxes, medicare_taxes)]
+
+    return {
+        "periods": periods,
+        "pay_frequency": source.pay_frequency,
+        "gross_per_period": round(gross_per_period, 2),
+        "cumulative": True,  # Flag indicating cumulative data
+        "gross": gross_amounts,
+        "federal_tax": federal_taxes,
+        "state_tax": state_taxes,
+        "social_security": ss_taxes,
+        "medicare": medicare_taxes,
+        "fica": fica_taxes,
+        "pretax": pretax_deductions,
+        "takehome": takehome_amounts,
+        "expenses": expense_amounts,
+        "savings": savings_amounts,
+        # Limits info for display
+        "limits": {
+            "ss_wage_base": ss_wage_base,
+            "limit_401k": limit_401k,
+            "limit_hsa": limit_hsa,
+            "limit_fsa": limit_fsa,
+        }
+    }
+
+
 @router.get("/paycheck-chart-data")
 async def get_paycheck_chart_data() -> dict:
     """Get cumulative YTD data for paycheck stacked bar chart.
@@ -1125,21 +1353,11 @@ async def get_paycheck_chart_data() -> dict:
 
         # Use primary income source (first one)
         source = sources[0]
-        periods_per_year: int = PAY_FREQUENCIES.get(cast(str, source.pay_frequency), 26)
-        gross_per_period: float = float(cast(float, source.gross_annual) / periods_per_year)
 
         # Get deductions for this source
         deductions = session.query(BudgetPretaxDeduction).filter(
             BudgetPretaxDeduction.income_source_id == source.id
         ).all()
-
-        pretax_per_period: dict[str, float] = {
-            "401k": float(sum(d.amount_per_period for d in deductions if d.deduction_type == "401k")),
-            "hsa": float(sum(d.amount_per_period for d in deductions if d.deduction_type == "hsa")),
-            "fsa": float(sum(d.amount_per_period for d in deductions if d.deduction_type == "fsa")),
-            "other": float(sum(d.amount_per_period for d in deductions if d.deduction_type == "other")),
-        }
-        total_pretax_per_period: float = float(sum(pretax_per_period.values()))
 
         # Get expenses and convert to per-period
         expenses = session.query(BudgetExpense).filter(
@@ -1147,170 +1365,12 @@ async def get_paycheck_chart_data() -> dict:
             BudgetExpense.is_pretax.is_(False),
         ).all()
 
-        freq_to_annual = {"weekly": 52, "biweekly": 26, "monthly": 12, "quarterly": 4, "annual": 1}
-        total_annual_expenses: float = float(sum(
-            e.amount * freq_to_annual.get(cast(str, e.frequency), 12)
-            for e in expenses
-        ))
-        expenses_per_period: float = total_annual_expenses / periods_per_year
-
-        calculator = PayrollTaxCalculator(
+        return compute_paycheck_chart_data(
+            source=source,
+            deductions=deductions,
+            expenses=expenses,
             filing_status=filing_status,
             state=state,
-            tax_year=2024,
         )
-
-        # Tax rates and limits for manual per-period calculation
-        ss_rate = 0.062  # 6.2%
-        medicare_rate = 0.0145  # 1.45%
-        additional_medicare_rate = 0.009  # 0.9%
-        ss_wage_base = 168600  # 2024
-        medicare_threshold = 250000 if "married" in filing_status else 200000
-
-        # Annual contribution limits (2024)
-        limit_401k = 23000
-        limit_hsa = 4150 if filing_status == "single" else 8300
-        limit_fsa = 3200
-
-        # Per-period calculation with YTD tracking
-        periods = []
-
-        # Cumulative totals (YTD)
-        ytd_gross = 0.0
-        ytd_federal_tax = 0.0
-        ytd_state_tax = 0.0
-        ytd_ss_tax = 0.0
-        ytd_medicare_tax = 0.0
-        ytd_pretax = 0.0
-        ytd_takehome = 0.0
-        ytd_expenses = 0.0
-        ytd_savings = 0.0
-
-        # Track YTD contributions for limits
-        ytd_401k = 0.0
-        ytd_hsa = 0.0
-        ytd_fsa = 0.0
-
-        # Arrays for cumulative chart data
-        gross_amounts = []
-        federal_taxes = []
-        state_taxes = []
-        ss_taxes = []
-        medicare_taxes = []
-        pretax_deductions = []
-        takehome_amounts = []
-        expense_amounts = []
-        savings_amounts = []
-
-        for period in range(1, periods_per_year + 1):
-            periods.append(period)
-
-            # Add gross for this period
-            ytd_gross += gross_per_period
-
-            # Calculate pre-tax deductions with annual limits
-            period_401k = min(pretax_per_period["401k"], max(0, limit_401k - ytd_401k))
-            period_hsa = min(pretax_per_period["hsa"], max(0, limit_hsa - ytd_hsa))
-            period_fsa = min(pretax_per_period["fsa"], max(0, limit_fsa - ytd_fsa))
-            period_other = pretax_per_period["other"]
-            period_pretax = period_401k + period_hsa + period_fsa + period_other
-
-            ytd_401k += period_401k
-            ytd_hsa += period_hsa
-            ytd_fsa += period_fsa
-            ytd_pretax += period_pretax
-
-            # Calculate Social Security with wage cap
-            prev_ytd_gross = ytd_gross - gross_per_period
-            period_ss: float
-            if prev_ytd_gross >= ss_wage_base:
-                # Already at cap, no more SS tax
-                period_ss = 0.0
-            elif ytd_gross > ss_wage_base:
-                # Partial period hits cap
-                taxable_ss = ss_wage_base - prev_ytd_gross
-                period_ss = taxable_ss * ss_rate
-            else:
-                # Full period taxable
-                period_ss = gross_per_period * ss_rate
-            ytd_ss_tax += period_ss
-
-            # Calculate Medicare (no cap, but additional Medicare over threshold)
-            period_medicare = gross_per_period * medicare_rate
-            if ytd_gross > medicare_threshold:
-                # Additional Medicare on income over threshold
-                if prev_ytd_gross >= medicare_threshold:
-                    # All of this period is over threshold
-                    period_medicare += gross_per_period * additional_medicare_rate
-                else:
-                    # Partial period over threshold
-                    excess = ytd_gross - medicare_threshold
-                    period_medicare += excess * additional_medicare_rate
-            ytd_medicare_tax += period_medicare
-
-            # Calculate federal and state taxes (use calculator for brackets)
-            # Approximate per-period by calculating annual and dividing
-            annual_federal = calculator.calculate_federal_income_tax(
-                cast(float, source.gross_annual),
-                pretax_deductions=total_pretax_per_period * periods_per_year
-            )
-            annual_state = calculator.calculate_state_tax(
-                cast(float, source.gross_annual),
-                total_pretax_per_period * periods_per_year
-            )
-
-            # Prorate to this point in year
-            ytd_federal_tax = (annual_federal / periods_per_year) * period
-            ytd_state_tax = (annual_state / periods_per_year) * period
-
-            # Calculate take-home
-            period_takehome = (gross_per_period -
-                              (annual_federal / periods_per_year) -
-                              (annual_state / periods_per_year) -
-                              period_ss - period_medicare - period_pretax)
-            ytd_takehome += period_takehome
-
-            # Expenses and savings
-            ytd_expenses += expenses_per_period
-            remaining = period_takehome - expenses_per_period
-            ytd_savings += max(0, remaining)
-
-            # Store cumulative values
-            gross_amounts.append(round(ytd_gross, 2))
-            federal_taxes.append(round(ytd_federal_tax, 2))
-            state_taxes.append(round(ytd_state_tax, 2))
-            ss_taxes.append(round(ytd_ss_tax, 2))
-            medicare_taxes.append(round(ytd_medicare_tax, 2))
-            pretax_deductions.append(round(ytd_pretax, 2))
-            takehome_amounts.append(round(ytd_takehome, 2))
-            expense_amounts.append(round(ytd_expenses, 2))
-            savings_amounts.append(round(ytd_savings, 2))
-
-        # Combined FICA for backwards compatibility
-        fica_taxes = [round(ss + med, 2) for ss, med in zip(ss_taxes, medicare_taxes)]
-
-        return {
-            "periods": periods,
-            "pay_frequency": source.pay_frequency,
-            "gross_per_period": round(gross_per_period, 2),
-            "cumulative": True,  # Flag indicating cumulative data
-            "gross": gross_amounts,
-            "federal_tax": federal_taxes,
-            "state_tax": state_taxes,
-            "social_security": ss_taxes,
-            "medicare": medicare_taxes,
-            "fica": fica_taxes,
-            "pretax": pretax_deductions,
-            "takehome": takehome_amounts,
-            "expenses": expense_amounts,
-            "savings": savings_amounts,
-            # Limits info for display
-            "limits": {
-                "ss_wage_base": ss_wage_base,
-                "limit_401k": limit_401k,
-                "limit_hsa": limit_hsa,
-                "limit_fsa": limit_fsa,
-            }
-        }
     finally:
         session.close()

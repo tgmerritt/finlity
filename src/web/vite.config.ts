@@ -45,6 +45,7 @@ export default defineConfig({
             id.includes('/src/web/src/ui/') ||
             id.includes('/src/web/src/state/') ||
             id.includes('/src/web/src/api/') ||
+            id.includes('/src/web/src/database/') ||
             id.includes('/src/web/src/utils/')
           ) {
             return 'shared';
