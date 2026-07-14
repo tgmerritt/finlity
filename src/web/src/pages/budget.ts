@@ -44,6 +44,7 @@ interface PaycheckBreakdown {
 interface TaxConfig {
   filing_status: string;
   state: string;
+  ss_claiming_age?: number;
 }
 
 /**
@@ -189,7 +190,7 @@ export async function loadTaxConfig(): Promise<void> {
         stateEl.value = data.state;
       }
       const ssAgeEl = document.getElementById('transition-ss-age') as HTMLInputElement | null;
-      const ssAge = (data as unknown as Record<string, unknown>)['ss_claiming_age'];
+      const ssAge = data.ss_claiming_age;
       if (ssAgeEl && ssAge != null) {
         ssAgeEl.value = String(ssAge);
       }
@@ -793,7 +794,7 @@ async function buildStateOptions(selectedState = 'CA'): Promise<string> {
         })
         .join('');
     }
-  } catch (e) {
+  } catch {
     console.warn('Could not load states, using default');
   }
   return `<option value="CA"${selectedState === 'CA' ? ' selected' : ''}>California</option>`;

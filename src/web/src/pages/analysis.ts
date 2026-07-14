@@ -190,11 +190,7 @@ interface SSEErrorEvent {
 }
 
 type SSEEvent =
-  | SSETextEvent
-  | SSEToolStartEvent
-  | SSEToolResultEvent
-  | SSEDoneEvent
-  | SSEErrorEvent;
+  SSETextEvent | SSEToolStartEvent | SSEToolResultEvent | SSEDoneEvent | SSEErrorEvent;
 
 /**
  * Page context for context-aware chat.
@@ -258,7 +254,7 @@ function setMarkdownContent(element: HTMLElement, markdown: string): void {
   // Using innerHTML is intentional here for markdown rendering.
   // Content comes from our AI backend (Claude) and is rendered via marked.js.
   // This matches the original app.js implementation.
-  element.innerHTML = renderMarkdown(markdown); // eslint-disable-line no-unsanitized/property
+  element.innerHTML = renderMarkdown(markdown);
 }
 
 /**
@@ -420,7 +416,7 @@ async function throwIfChatStreamNotOk(response: Response): Promise<void> {
   try {
     const body: unknown = await response.json();
     if (typeof body === 'object' && body !== null && 'detail' in body) {
-      detail = String((body as { detail: unknown }).detail);
+      detail = String(body.detail);
     }
   } catch {
     // Error response wasn't JSON - fall back to the status text if present.

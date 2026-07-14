@@ -2,6 +2,9 @@
  * Type declarations for external libraries loaded via CDN.
  * These libraries are available as globals, not ES modules.
  */
+/* eslint-disable @typescript-eslint/no-unused-vars -- ambient `declare namespace` globals below
+   are only ever referenced in type positions (e.g. `Plotly.Layout`), which the no-unused-vars
+   rule doesn't recognize as a "use" of the namespace itself. */
 
 // Plotly.js types (subset of the full API we use)
 declare namespace Plotly {

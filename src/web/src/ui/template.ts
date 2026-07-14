@@ -36,15 +36,7 @@ function appendContent(parent: HTMLElement, content: string | Node): void {
  * responsible for appending it to the DOM and wiring open/close actions.
  */
 export function createModal(options: CreateModalOptions): HTMLDivElement {
-  const {
-    id,
-    title,
-    subtitle,
-    body,
-    footer,
-    size = 'md',
-    className,
-  } = options;
+  const { id, title, subtitle, body, footer, size = 'md', className } = options;
 
   const overlay = document.createElement('div');
   overlay.id = id;

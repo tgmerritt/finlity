@@ -800,8 +800,7 @@ function startServerCommentaryStream(
  */
 function getLocalUserContext(): { age?: number; retirement_age?: number } | undefined {
   const personal = getLocalAPI().getConfigSection('personal')?.personal as
-    | { dob?: string; retirement_age?: number }
-    | undefined;
+    { dob?: string; retirement_age?: number } | undefined;
   if (!personal) return undefined;
 
   const context: { age?: number; retirement_age?: number } = {};

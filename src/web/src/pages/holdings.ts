@@ -400,9 +400,7 @@ function updateOptionsTable(options: DashboardPosition[]): void {
   // Apply the same account filter used by the equity table
   const selectedAccounts = store.get('selectedAccounts');
   const filtered =
-    selectedAccounts.size === 0
-      ? options
-      : options.filter((p) => selectedAccounts.has(p.account));
+    selectedAccounts.size === 0 ? options : options.filter((p) => selectedAccounts.has(p.account));
 
   if (filtered.length === 0) {
     section.style.display = 'none';
@@ -447,7 +445,10 @@ function updateOptionsTable(options: DashboardPosition[]): void {
       [String(contracts), 'text-right'],
       [premium != null ? formatCurrency(premium) : '-', 'text-right'],
       [formatCurrency(mktValue), 'text-right'],
-      [gainLoss != null ? formatCurrency(gainLoss) : '-', `text-right ${gainLoss != null && gainLoss >= 0 ? 'text-success' : 'text-error'}`],
+      [
+        gainLoss != null ? formatCurrency(gainLoss) : '-',
+        `text-right ${gainLoss != null && gainLoss >= 0 ? 'text-success' : 'text-error'}`,
+      ],
     ];
 
     cells.forEach(([text, cls]) => {
@@ -479,7 +480,8 @@ function updateOptionsTable(options: DashboardPosition[]): void {
   if (totalValueEl) totalValueEl.textContent = formatCurrency(totalMktValue);
   // Update contract count label
   const contractCountEl = section.querySelector('#options-contract-count');
-  if (contractCountEl) contractCountEl.textContent = `${filtered.length} contract${filtered.length !== 1 ? 's' : ''}`;
+  if (contractCountEl)
+    contractCountEl.textContent = `${filtered.length} contract${filtered.length !== 1 ? 's' : ''}`;
   if (totalGlEl) {
     totalGlEl.textContent = hasGainLoss ? formatCurrency(totalGainLoss) : '-';
     totalGlEl.className = totalGainLoss >= 0 ? 'text-success' : 'text-error';
@@ -641,7 +643,7 @@ function createTrashIcon(): SVGSVGElement {
 /**
  * Delete a position.
  */
-export async function deletePosition(positionId: string): Promise<void> {
+export function deletePosition(positionId: string): void {
   showConfirmDialog(
     'Are you sure you want to delete this position?',
     async () => {
@@ -1070,8 +1072,7 @@ async function buildAndSubmitPosition(
     const amount = parseFloat(
       (document.getElementById('cash-amount') as HTMLInputElement | null)?.value || '0'
     );
-    const name =
-      (document.getElementById('cash-name') as HTMLInputElement | null)?.value || 'Cash';
+    const name = (document.getElementById('cash-name') as HTMLInputElement | null)?.value || 'Cash';
     const apyInput = (document.getElementById('cash-apy') as HTMLInputElement | null)?.value;
     const apy = apyInput ? parseFloat(apyInput) / 100 : null;
 
@@ -1151,9 +1152,8 @@ async function buildAndSubmitPosition(
   );
   const priceInput = (document.getElementById('position-price') as HTMLInputElement | null)?.value;
   const price = priceInput ? parseFloat(priceInput) : null;
-  const costBasisInput = (
-    document.getElementById('position-cost-basis') as HTMLInputElement | null
-  )?.value;
+  const costBasisInput = (document.getElementById('position-cost-basis') as HTMLInputElement | null)
+    ?.value;
   const costBasis = costBasisInput ? parseFloat(costBasisInput) : null;
   const isFund = posType === 'fund';
 

@@ -76,13 +76,10 @@ async function handleBankStatementFiles(files: File[]): Promise<void> {
       formData.append('entity_id', currentEntityId);
     }
 
-    const result = await apiCall<BankStatementBatchResponse>(
-      '/api/budget/bank-statements/upload',
-      {
-        method: 'POST',
-        body: formData,
-      }
-    );
+    const result = await apiCall<BankStatementBatchResponse>('/api/budget/bank-statements/upload', {
+      method: 'POST',
+      body: formData,
+    });
 
     const allDuplicate = result.files_imported === 0 && result.files_skipped > 0;
     if (uploadStatus) {
