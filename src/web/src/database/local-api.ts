@@ -1246,7 +1246,7 @@ export class LocalAPI {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const [y, m, d] = LocalAPI.dateOnly(maturityDate).split('-').map(Number);
-    const maturity = new Date(y!, m! - 1, d!);
+    const maturity = new Date(y!, m! - 1, d);
     return Math.round((maturity.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
   }
 
@@ -1630,13 +1630,14 @@ export class LocalAPI {
 
   /** GET /api/portfolio/export/{dataType} - returns CSV text (accounts | positions | snapshots). */
   exportCsv(dataType: 'accounts' | 'positions' | 'snapshots'): string {
-    const escape = (v: unknown): string => {
+    const escape = (v: string | number | boolean | null | undefined): string => {
       if (v === null || v === undefined) return '';
       const s = String(v);
       if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
       return s;
     };
-    const toRow = (values: unknown[]): string => values.map(escape).join(',');
+    const toRow = (values: Array<string | number | boolean | null | undefined>): string =>
+      values.map(escape).join(',');
 
     if (dataType === 'accounts') {
       const header = [

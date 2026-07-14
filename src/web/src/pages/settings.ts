@@ -820,7 +820,7 @@ export async function saveView(event: Event): Promise<void> {
     showToast(editId ? 'View updated' : 'View created', 'success');
     hideViewModal();
     await loadViewsList();
-  } catch (error) {
+  } catch {
     showToast('Failed to save view', 'error');
   }
 }
@@ -834,7 +834,7 @@ export async function setDefaultView(viewId: string): Promise<void> {
 
     showToast('Default view updated', 'success');
     await loadViewsList();
-  } catch (error) {
+  } catch {
     showToast('Failed to set default view', 'error');
   }
 }
@@ -858,7 +858,7 @@ export async function deleteView(viewId: string): Promise<void> {
       localStorage.removeItem('portfolioViewId');
       refreshData();
     }
-  } catch (error) {
+  } catch {
     showToast('Failed to delete view', 'error');
   }
 }
@@ -1071,7 +1071,7 @@ export async function editEntity(entityId: string): Promise<void> {
     // `hidden` is `display:none !important`; strip it so the modal shows.
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
-  } catch (error) {
+  } catch {
     showToast('Failed to load entity', 'error');
   }
 }
@@ -1118,7 +1118,7 @@ export async function saveEntity(event: Event): Promise<void> {
     await loadEntitiesList();
     // Reload entity selector in sidebar
     await loadEntities();
-  } catch (error) {
+  } catch {
     showToast('Failed to save entity', 'error');
   }
 }
@@ -1134,7 +1134,7 @@ export async function setDefaultEntity(entityId: string): Promise<void> {
     });
     showToast('Default entity updated', 'success');
     await loadEntitiesList();
-  } catch (error) {
+  } catch {
     showToast('Failed to set default entity', 'error');
   }
 }
@@ -1152,7 +1152,7 @@ export async function deleteEntity(entityId: string): Promise<void> {
     await loadEntitiesList();
     // Reload entity selector in sidebar
     await loadEntities();
-  } catch (error) {
+  } catch {
     showToast('Failed to delete entity', 'error');
   }
 }
@@ -1181,7 +1181,7 @@ export async function runAutoDetectEntities(): Promise<void> {
     await loadEntitiesList();
     // Reload entity selector in sidebar
     await loadEntities();
-  } catch (error) {
+  } catch {
     showToast('Failed to auto-detect entities', 'error');
   }
 }
@@ -1231,7 +1231,7 @@ export async function savePersonalSettings(event: Event): Promise<void> {
     // Notify other pages to update age fields from the new settings.
     // Legacy event kept for the listener in main.ts; typed bus is additive.
     document.dispatchEvent(new CustomEvent('settings:personalUpdated'));
-  } catch (error) {
+  } catch {
     showToast('Failed to save settings', 'error');
   }
 }
@@ -1267,7 +1267,7 @@ export async function saveAssetClassTargets(event: Event): Promise<void> {
       body: data,
     });
     showToast('Asset targets saved', 'success');
-  } catch (error) {
+  } catch {
     showToast('Failed to save targets', 'error');
   }
 }
@@ -1437,7 +1437,7 @@ export async function saveMarketAssumptions(event: Event): Promise<void> {
       body: data,
     });
     showToast('Market assumptions saved', 'success');
-  } catch (error) {
+  } catch {
     showToast('Failed to save assumptions', 'error');
   }
 }
@@ -1477,7 +1477,7 @@ export async function saveMonteCarloSettings(event: Event): Promise<void> {
       body: data,
     });
     showToast('Monte Carlo settings saved', 'success');
-  } catch (error) {
+  } catch {
     showToast('Failed to save settings', 'error');
   }
 }

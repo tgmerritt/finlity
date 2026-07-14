@@ -28,15 +28,9 @@ export interface WithApiCallOptions<T> extends ApiCallOptions {
  */
 export async function withApiCall<T>(
   endpoint: string,
-  options: WithApiCallOptions<T> = {},
+  options: WithApiCallOptions<T> = {}
 ): Promise<T | null> {
-  const {
-    loadingMessage,
-    errorMessage,
-    silentErrors,
-    onSuccess,
-    ...apiOptions
-  } = options;
+  const { loadingMessage, errorMessage, silentErrors, onSuccess, ...apiOptions } = options;
 
   if (loadingMessage) showLoading(loadingMessage);
 
@@ -46,9 +40,7 @@ export async function withApiCall<T>(
     return data;
   } catch (err) {
     if (!silentErrors) {
-      const message =
-        errorMessage ??
-        (err instanceof ApiError ? err.message : 'Unexpected error');
+      const message = errorMessage ?? (err instanceof ApiError ? err.message : 'Unexpected error');
       showError(message);
     }
     return null;
