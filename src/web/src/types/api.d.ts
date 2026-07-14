@@ -21,7 +21,8 @@ export type Brokerage = 'schwab' | 'fidelity' | 'vanguard' | 'other' | (string &
 
 export type AssetClass = 'equity' | 'fixed_income' | 'alternative' | 'cash';
 
-export type PositionType = 'equity' | 'fund' | 'cash' | 'cd' | 'bond' | 'treasury' | 'real_estate' | 'option';
+export type PositionType =
+  'equity' | 'fund' | 'cash' | 'cd' | 'bond' | 'treasury' | 'real_estate' | 'option';
 
 // Account responses
 export interface AccountResponse {
@@ -61,10 +62,10 @@ export interface PositionResponse {
   option_underlying?: string | null;
   option_expiration?: string | null;
   option_strike?: number | null;
-  option_type?: string | null;     // "C" or "P"
+  option_type?: string | null; // "C" or "P"
   contract_multiplier?: number | null;
-  contracts?: number | null;       // alias for shares when position_type == 'option'
-  premium?: number | null;         // alias for current_price when position_type == 'option'
+  contracts?: number | null; // alias for shares when position_type == 'option'
+  premium?: number | null; // alias for current_price when position_type == 'option'
 }
 
 // Portfolio summary
@@ -453,8 +454,8 @@ export interface ExpenseDragHolding {
 }
 
 export interface ExpenseDragResponse {
-  portfolio_expense_ratio: number;     // decimal, e.g. 0.0032 = 0.32%
-  benchmark_expense_ratio: number;     // decimal, e.g. 0.0004 = 0.04%
+  portfolio_expense_ratio: number; // decimal, e.g. 0.0032 = 0.32%
+  benchmark_expense_ratio: number; // decimal, e.g. 0.0004 = 0.04%
   annual_drag_dollars: number;
   annual_drag_basis_points: number;
   covered_value: number;

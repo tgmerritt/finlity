@@ -92,7 +92,10 @@ export async function apiCall<T>(endpoint: string, options: ApiCallOptions = {})
     // tickers, calls the stateless v2 fund/analyze endpoint per ticker, and
     // writes the returned sector back into local positions — a genuine
     // multi-request composite, not a single endpoint rewrite.
-    if (endpoint === '/api/analysis/fund/analyze-portfolio' && (options.method ?? 'GET') === 'POST') {
+    if (
+      endpoint === '/api/analysis/fund/analyze-portfolio' &&
+      (options.method ?? 'GET') === 'POST'
+    ) {
       return (await handleLocalAnalyzePortfolioFunds()) as T;
     }
 
@@ -100,7 +103,10 @@ export async function apiCall<T>(endpoint: string, options: ApiCallOptions = {})
     // loops local tickers lacking a sector, calls the stateless v2
     // positions/sectors endpoint in one batched request, and writes the
     // results back into local positions.
-    if (endpoint === '/api/analysis/positions/update-sectors' && (options.method ?? 'GET') === 'POST') {
+    if (
+      endpoint === '/api/analysis/positions/update-sectors' &&
+      (options.method ?? 'GET') === 'POST'
+    ) {
       return (await handleLocalUpdatePositionSectors()) as T;
     }
 
@@ -186,7 +192,7 @@ export async function apiCall<T>(endpoint: string, options: ApiCallOptions = {})
       try {
         errorData = await response.json();
         if (typeof errorData === 'object' && errorData !== null && 'detail' in errorData) {
-          errorMessage = String((errorData as { detail: unknown }).detail);
+          errorMessage = String(errorData.detail);
         }
       } catch {
         // Response body is not JSON
@@ -338,7 +344,7 @@ export async function uploadFiles<T>(
       try {
         const errorData: unknown = await response.json();
         if (typeof errorData === 'object' && errorData !== null && 'detail' in errorData) {
-          errorMessage = String((errorData as { detail: unknown }).detail);
+          errorMessage = String(errorData.detail);
         }
       } catch (parseError) {
         console.debug(`Upload error response is not JSON for ${endpoint}:`, parseError);
@@ -375,7 +381,7 @@ function dataWarningsEndpointFamily(endpoint: string): string {
   const [pathOnly] = endpoint.split('?');
   const segments = (pathOnly ?? endpoint).split('/').filter(Boolean);
   // e.g. "/api/analysis/risk" -> "analysis", "/api/projections/monte-carlo" -> "projections"
-  return segments[1] ?? (pathOnly ?? endpoint);
+  return segments[1] ?? pathOnly ?? endpoint;
 }
 
 /** F14: endpoint families already warned about in this page load. Reset only by a full page reload (intentional — see dataWarningsEndpointFamily's docstring). */
@@ -596,11 +602,7 @@ function primarySectorFromFundAnalysis(result: {
   if (category.includes('real estate')) return 'Real Estate';
   if (category.includes('consumer')) return 'Consumer';
   if (category.includes('industrial')) return 'Industrials';
-  if (
-    category.includes('blend') ||
-    category.includes('growth') ||
-    category.includes('value')
-  ) {
+  if (category.includes('blend') || category.includes('growth') || category.includes('value')) {
     return 'Diversified';
   }
   return null;
@@ -630,7 +632,12 @@ async function handleLocalAnalyzePortfolioFunds(): Promise<{
   const fundTickers = api.getFundTickers();
 
   if (fundTickers.length === 0) {
-    return { analyzed: [], total_funds: 0, positions_updated: 0, message: 'No funds found in portfolio' };
+    return {
+      analyzed: [],
+      total_funds: 0,
+      positions_updated: 0,
+      message: 'No funds found in portfolio',
+    };
   }
 
   const analyzed: Array<Record<string, unknown>> = [];
@@ -809,7 +816,7 @@ export async function uploadFile<T>(
       try {
         const errorData: unknown = await response.json();
         if (typeof errorData === 'object' && errorData !== null && 'detail' in errorData) {
-          errorMessage = String((errorData as { detail: unknown }).detail);
+          errorMessage = String(errorData.detail);
         }
       } catch (parseError) {
         // Error response is not JSON - log for debugging
@@ -885,7 +892,7 @@ export async function uploadFileWithFields<T>(
       try {
         const errorData: unknown = await response.json();
         if (typeof errorData === 'object' && errorData !== null && 'detail' in errorData) {
-          errorMessage = String((errorData as { detail: unknown }).detail);
+          errorMessage = String(errorData.detail);
         }
       } catch (parseError) {
         console.debug(`Upload error response is not JSON for ${endpoint}:`, parseError);
