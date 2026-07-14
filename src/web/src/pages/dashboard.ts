@@ -287,7 +287,7 @@ export async function loadRetirementMetrics(): Promise<boolean> {
           const yearsLeft = metrics.target_retirement_age - metrics.current_age;
           coastSublabel.textContent = `needed today to coast ${yearsLeft > 0 ? `${yearsLeft} yrs` : ''} to FIRE`;
         } else if (coastSublabel) {
-          coastSublabel.textContent = 'today\'s value to coast to FIRE';
+          coastSublabel.textContent = "today's value to coast to FIRE";
         }
       } else {
         coastNumberEl.textContent = '--';
@@ -477,7 +477,7 @@ export function showDuplicateDetails(): void {
 /**
  * Delete a duplicate position.
  */
-export async function deleteDuplicatePosition(positionId: string): Promise<void> {
+export function deleteDuplicatePosition(positionId: string): void {
   showConfirmDialog(
     'Are you sure you want to delete this position?',
     async () => {
@@ -851,13 +851,10 @@ export async function autoRefreshIfStale(): Promise<void> {
     );
 
     if (!status.all_fresh && status.stale_tickers > 0) {
-      console.log(
-        `Auto-refreshing ${status.stale_tickers} stale ticker(s) (timezone: ${tz})`
-      );
-      const result = await apiCall<PriceRefreshResponse>(
-        '/api/imports/refresh-prices',
-        { method: 'POST' }
-      );
+      console.log(`Auto-refreshing ${status.stale_tickers} stale ticker(s) (timezone: ${tz})`);
+      const result = await apiCall<PriceRefreshResponse>('/api/imports/refresh-prices', {
+        method: 'POST',
+      });
       if (result.updated > 0) {
         showToast(`Auto-updated ${result.updated} stale price(s)`, 'info');
       }

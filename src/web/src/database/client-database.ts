@@ -342,7 +342,7 @@ export class ClientDatabase {
       try {
         request = indexedDB.open('PortfolioApp', 1);
       } catch (error) {
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
         return;
       }
 
@@ -382,7 +382,7 @@ export class ClientDatabase {
         };
         tx.onerror = () => reject(tx.error ?? new Error('IndexedDB write transaction failed'));
       } catch (error) {
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
@@ -420,12 +420,12 @@ export class ClientDatabase {
               resolve({ loaded: false });
             }
           } catch (error) {
-            reject(error);
+            reject(error instanceof Error ? error : new Error(String(error)));
           }
         };
         getRequest.onerror = () => reject(getRequest.error ?? new Error('IndexedDB read failed'));
       } catch (error) {
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
@@ -449,7 +449,7 @@ export class ClientDatabase {
         getRequest.onsuccess = () => resolve(!!getRequest.result);
         getRequest.onerror = () => reject(getRequest.error ?? new Error('IndexedDB read failed'));
       } catch (error) {
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
@@ -467,7 +467,7 @@ export class ClientDatabase {
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error ?? new Error('IndexedDB delete transaction failed'));
       } catch (error) {
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }

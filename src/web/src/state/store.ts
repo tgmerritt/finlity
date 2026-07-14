@@ -237,7 +237,7 @@ export function set<K extends keyof AppState>(key: K, value: AppState[K]): void 
  */
 export function update(updates: Partial<AppState>): void {
   Object.entries(updates).forEach(([key, value]) => {
-    set(key as keyof AppState, value as AppState[keyof AppState]);
+    set(key as keyof AppState, value);
   });
 }
 
