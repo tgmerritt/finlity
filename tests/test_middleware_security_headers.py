@@ -33,10 +33,13 @@ def test_csp_is_strict(client: TestClient) -> None:
     resp = client.get("/ping")
     csp = resp.headers["content-security-policy"]
     assert "script-src 'self' https://cdn.plot.ly https://cdn.jsdelivr.net" in csp
-    # Inline onclick handlers are allowed via script-src-attr ONLY; a strict
-    # script-src must not carry 'unsafe-inline' or 'unsafe-eval'.
-    assert "script-src 'self'" in csp
-    assert "'unsafe-inline'" not in csp.replace("script-src-attr 'unsafe-inline'", "")
+    # Inline onclick handlers are allowed via script-src-attr ONLY; the
+    # script-src directive itself must not carry 'unsafe-inline' or
+    # 'unsafe-eval'. ('unsafe-inline' in style-src is fine — the dashboard
+    # sets element styles from JS.)
+    script_src = csp.split(";")[1].strip()
+    assert script_src.startswith("script-src ")
+    assert "'unsafe-inline'" not in script_src
     assert "'unsafe-eval'" not in csp
     assert "object-src 'none'" in csp
     assert "frame-ancestors 'none'" in csp

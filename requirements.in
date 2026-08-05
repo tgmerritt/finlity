@@ -62,7 +62,10 @@ sqlalchemy==2.0.36
 # Security
 # Bumped 46.0.7 -> 48.0.1; clears GHSA-537c-gmf6-5ccf (statically linked
 # OpenSSL in the cryptography wheel vulnerable to the 2026-06-09 OpenSSL advisory)
-cryptography==48.0.1
+# Bumped 48.0.1 -> 50.0.0; clears PYSEC-2026-3552 (PKCS7 RSA decryption
+# Bleichenbacher oracle), PYSEC-2026-3553 (cert-chain exponential DoS),
+# PYSEC-2026-3554 (wildcard SAN name-constraint escape) from the 2026-08-05 advisory refresh.
+cryptography==50.0.0
 
 # Validation / config
 pydantic==2.12.4
