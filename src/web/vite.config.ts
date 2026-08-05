@@ -5,7 +5,10 @@ const isProd = process.env.NODE_ENV === 'production';
 
 export default defineConfig({
   root: '.',
-  base: '/static/',
+  // The FastAPI app mounts StaticFiles at /static -> src/web, and the Vite
+  // build output lives at src/web/dist/. Base must be '/static/dist/' so
+  // ?url asset imports (sql.js wasm) resolve to the real file location.
+  base: '/static/dist/',
 
   resolve: {
     alias: {
