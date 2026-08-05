@@ -1,9 +1,7 @@
 """Performance analysis for portfolio returns."""
 
 from dataclasses import dataclass
-from datetime import date
-from typing import Optional
-
+from datetime import datetime, timezone
 
 from src.data import PriceService
 from src.models import Portfolio
@@ -20,8 +18,8 @@ class PerformanceMetrics:
     monthly_return: float
     ytd_return: float
     one_year_return: float
-    three_year_cagr: Optional[float]
-    five_year_cagr: Optional[float]
+    three_year_cagr: float | None
+    five_year_cagr: float | None
 
 
 @dataclass
@@ -29,9 +27,9 @@ class PortfolioPerformance:
     """Aggregate performance for the entire portfolio."""
 
     total_value: float
-    total_cost_basis: Optional[float]
-    total_gain_loss: Optional[float]
-    total_gain_loss_pct: Optional[float]
+    total_cost_basis: float | None
+    total_gain_loss: float | None
+    total_gain_loss_pct: float | None
     ytd_return: float
     one_year_return: float
     benchmark_ytd: float
@@ -43,7 +41,7 @@ class PortfolioPerformance:
 class PerformanceAnalyzer:
     """Analyzer for portfolio and position performance."""
 
-    def __init__(self, price_service: Optional[PriceService] = None):
+    def __init__(self, price_service: PriceService | None = None):
         self.price_service = price_service or PriceService()
 
     def calculate_returns(self, prices: list[float]) -> list[float]:
@@ -71,7 +69,7 @@ class PerformanceAnalyzer:
             return 0.0
         return (end_value / start_value) ** (1 / years) - 1
 
-    def get_position_performance(self, ticker: str) -> Optional[PerformanceMetrics]:
+    def get_position_performance(self, ticker: str) -> PerformanceMetrics | None:
         """Get performance metrics for a single position."""
         history = self.price_service.get_price_history(ticker, period="5y")
         if not history or len(history.prices) < 2:
@@ -90,7 +88,7 @@ class PerformanceAnalyzer:
         monthly_return = self.calculate_total_return(prices[-22], prices[-1]) if len(prices) >= 22 else 0.0
 
         # YTD
-        current_year = date.today().year
+        current_year = datetime.now(timezone.utc).date().year
         ytd_start_idx = next(
             (i for i, d in enumerate(dates) if d.year == current_year),
             0,
