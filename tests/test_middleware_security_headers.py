@@ -28,6 +28,29 @@ def test_static_headers_on_http(client: TestClient) -> None:
     assert resp.headers["cross-origin-opener-policy"] == "same-origin"
 
 
+def test_csp_is_strict(client: TestClient) -> None:
+    """CSP must exist, allow only known CDNs, and never enable unsafe-eval."""
+    resp = client.get("/ping")
+    csp = resp.headers["content-security-policy"]
+    assert "script-src 'self' https://cdn.plot.ly https://cdn.jsdelivr.net" in csp
+    # Inline onclick handlers are allowed via script-src-attr ONLY; a strict
+    # script-src must not carry 'unsafe-inline' or 'unsafe-eval'.
+    assert "script-src 'self'" in csp
+    assert "'unsafe-inline'" not in csp.replace("script-src-attr 'unsafe-inline'", "")
+    assert "'unsafe-eval'" not in csp
+    assert "object-src 'none'" in csp
+    assert "frame-ancestors 'none'" in csp
+    assert "connect-src 'self'" in csp
+    assert "https://www.youtube.com" in csp
+
+
+def test_csp_has_no_unsafe_eval_or_script_unsafe_inline(client: TestClient) -> None:
+    resp = client.get("/ping")
+    csp = resp.headers["content-security-policy"]
+    assert "'unsafe-eval'" not in csp
+    assert "script-src 'self' https://cdn.plot.ly https://cdn.jsdelivr.net" in csp
+
+
 def test_hsts_absent_on_http(client: TestClient) -> None:
     resp = client.get("/ping")
     assert "strict-transport-security" not in {k.lower() for k in resp.headers}

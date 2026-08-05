@@ -18,7 +18,7 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.middleware import RateLimitMiddleware, SecurityHeadersMiddleware
@@ -380,6 +380,69 @@ async def health_check():
         "positions": summary["position_count"],
         "demo_mode": is_demo_mode(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Bot-friendly endpoints: robots.txt, sitemap.xml, security.txt
+# These must be registered BEFORE any catch-all route (there is none today,
+# but keeping them explicit makes the contract visible). They return plain
+# text/XML with the correct content types so crawlers get real directives
+# instead of the SPA fallback HTML.
+# ---------------------------------------------------------------------------
+
+_ROBOTS_TXT = """User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /static/
+Disallow: /docs
+Disallow: /redoc
+Disallow: /openapi.json
+
+# API endpoints are for the app itself, not for indexing.
+# The dashboard is a private tool; allow bots to see the lander page only.
+
+Sitemap: https://app.finlity.net/sitemap.xml
+"""
+
+_SITEMAP_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://app.finlity.net/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://www.finlity.net/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+</urlset>
+"""
+
+_SECURITY_TXT = """Contact: mailto:feedback@finlity.net
+Expires: 2027-08-05T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://app.finlity.net/.well-known/security.txt
+"""
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt() -> Response:
+    """Serve robots.txt for search engine crawlers."""
+    return PlainTextResponse(_ROBOTS_TXT, media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml() -> Response:
+    """Serve sitemap.xml for search engine crawlers."""
+    return Response(content=_SITEMAP_XML, media_type="application/xml")
+
+
+@app.get("/.well-known/security.txt", include_in_schema=False)
+@app.get("/security.txt", include_in_schema=False)
+async def security_txt() -> Response:
+    """Serve security.txt per RFC 9116 (security contact)."""
+    return PlainTextResponse(_SECURITY_TXT, media_type="text/plain")
 
 
 @app.get("/api/dashboard/data")

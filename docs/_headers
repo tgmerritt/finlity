@@ -1,0 +1,13 @@
+# Cloudflare Pages _headers — applied to every response on the lander.
+# The lander has no inline scripts, no inline handlers, and no external
+# scripts — only the AntD reset stylesheet from cdnjs. So the CSP can be
+# genuinely strict (no 'unsafe-inline' for scripts, no 'unsafe-eval').
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin
