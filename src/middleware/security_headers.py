@@ -4,12 +4,16 @@ Adds defensive HTTP response headers recommended by OWASP, including a
 Content-Security-Policy tuned to the app's real inventory:
 
 - Scripts: self (the built bundle) + Plotly + marked from their CDNs.
-  ``script-src`` has NO 'unsafe-inline' and NO 'unsafe-eval'. The dashboard's
+  ``script-src`` has NO 'unsafe-inline' and NO 'unsafe-eval'; the only
+  concession is CSP3's 'wasm-unsafe-eval', required by the app's sql.js
+  (WebAssembly SQLite) local-first mode — it permits WASM compilation
+  without allowing eval()/new Function for JavaScript. The dashboard's
   legacy inline onclick attributes are covered by ``script-src-attr
   'unsafe-inline'`` (event handlers only), so injected inline ``<script>``
-  blocks and eval() are still blocked. Verified: Plotly 2.27's only Function
-  constructor usage is the standard global-object polyfill wrapped in
-  try/catch that falls back to ``window``, so it works without unsafe-eval.
+  blocks and JS eval() are still blocked. Verified: Plotly 2.27's only
+  Function constructor usage is the standard global-object polyfill wrapped
+  in try/catch that falls back to ``window``, so it works without
+  unsafe-eval.
 - Styles: self + AntD reset CDN + Google Fonts CSS, with 'unsafe-inline' for
   inline style attributes (the dashboard sets element styles from JS).
 - Fonts: self + fonts.gstatic.com.
@@ -43,7 +47,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         "Cross-Origin-Opener-Policy": "same-origin",
         "Content-Security-Policy": (
             "default-src 'self'; "
-            "script-src 'self' https://cdn.plot.ly https://cdn.jsdelivr.net; "
+            "script-src 'self' 'wasm-unsafe-eval' "
+            "https://cdn.plot.ly https://cdn.jsdelivr.net; "
             "script-src-attr 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline' "
             "https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
