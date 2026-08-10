@@ -52,6 +52,10 @@ openpyxl==3.1.5
 # unchanged in 1.x.
 yfinance==1.4.1
 
+# NYSE trading calendar for market-hours-aware price refreshes. Free, no API
+# key; same library yfinance vendors. Calendar data is bundled in the wheel.
+exchange_calendars==4.13.2
+
 # AI providers
 anthropic>=0.40.0
 openai==2.8.1
