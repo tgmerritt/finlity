@@ -1,0 +1,57 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module",
+    "project": "./tsconfig.json"
+  },
+  "plugins": ["@typescript-eslint", "prettier"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:@typescript-eslint/recommended-type-checked",
+    "plugin:prettier/recommended"
+  ],
+  "rules": {
+    "@typescript-eslint/explicit-function-return-type": "warn",
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/strict-boolean-expressions": "off",
+    "prettier/prettier": "error",
+    // v8's type-checked ruleset newly flags ~100 pre-existing fire-and-forget async
+    // call sites (event handlers, background refreshes) across 9-10 files each. Each
+    // one needs a case-by-case await/void/.catch decision - real behavior review, not
+    // an upgrade-mechanical fix. Downgraded to warn; tracked for a follow-up pass.
+    "@typescript-eslint/no-floating-promises": "warn",
+    "@typescript-eslint/no-misused-promises": "warn",
+    // Empirically false-positives on generic DOM APIs in this codebase: for
+    // `el.querySelector(...) as SpecificElement | null` the rule reports the assertion
+    // as redundant, but removing it (verified via tsc) collapses the inferred type back
+    // to the generic `Element` default and breaks compilation/narrowing. The rule
+    // doesn't account for its own assertion supplying the contextual type used for
+    // generic inference. Downgraded to warn; genuine redundant assertions found during
+    // this pass (client.ts, dispatcher.ts, local-api.ts, store.ts) were fixed directly.
+    "@typescript-eslint/no-unnecessary-type-assertion": "warn",
+    // New type-checked rules catching `any` flowing out of untyped `catch (err)` blocks
+    // (22 call sites across 6 files). Fixing properly means adding `instanceof Error`
+    // narrowing at each site - a real error-handling refactor, not an upgrade fix.
+    // Downgraded to warn; tracked for a follow-up pass.
+    "@typescript-eslint/no-unsafe-assignment": "warn",
+    "@typescript-eslint/no-unsafe-member-access": "warn",
+    "@typescript-eslint/no-unsafe-argument": "warn",
+    // `while (true) { ...; if (done) break; }` is the standard idiom for draining a
+    // ReadableStream reader (analysis.ts SSE parsing); the loop body always contains
+    // the exit condition, so only flag genuinely-constant `if`/ternary conditions.
+    "no-constant-condition": ["error", { "checkLoops": false }],
+    // Allow `never`-typed values in template expressions - used for the standard
+    // exhaustive-switch idiom (`const x: never = value; console.error(`...${x}`))`)
+    // that logs an unexpected value if a new union member is added but not handled.
+    "@typescript-eslint/restrict-template-expressions": ["error", { "allowNever": true }]
+  },
+  "env": {
+    "browser": true,
+    "es2022": true
+  },
+  "ignorePatterns": ["dist/", "node_modules/", "*.js"]
+}

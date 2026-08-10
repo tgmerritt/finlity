@@ -21,17 +21,16 @@
     "declarationMap": true,
     "sourceMap": true,
 
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@/types/*": ["src/types/*"],
-      "@/api/*": ["src/api/*"],
-      "@/state/*": ["src/state/*"],
-      "@/ui/*": ["src/ui/*"],
-      "@/charts/*": ["src/charts/*"],
-      "@/pages/*": ["src/pages/*"],
-      "@/database/*": ["src/database/*"],
-      "@/utils/*": ["src/utils/*"]
+      "@/*": ["./src/*"],
+      "@/types/*": ["./src/types/*"],
+      "@/api/*": ["./src/api/*"],
+      "@/state/*": ["./src/state/*"],
+      "@/ui/*": ["./src/ui/*"],
+      "@/charts/*": ["./src/charts/*"],
+      "@/pages/*": ["./src/pages/*"],
+      "@/database/*": ["./src/database/*"],
+      "@/utils/*": ["./src/utils/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],

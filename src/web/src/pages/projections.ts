@@ -242,9 +242,12 @@ export function updateMonteCarloConfigSummary(): void {
   if (!summary) return;
 
   const currentAge = (document.getElementById('current-age') as HTMLInputElement)?.value || '35';
-  const retirementAge = (document.getElementById('retirement-age') as HTMLInputElement)?.value || '65';
-  const monthlyContribution = (document.getElementById('monthly-contribution') as HTMLInputElement)?.value || '0';
-  const monthlyWithdrawal = (document.getElementById('monthly-withdrawal') as HTMLInputElement)?.value || '0';
+  const retirementAge =
+    (document.getElementById('retirement-age') as HTMLInputElement)?.value || '65';
+  const monthlyContribution =
+    (document.getElementById('monthly-contribution') as HTMLInputElement)?.value || '0';
+  const monthlyWithdrawal =
+    (document.getElementById('monthly-withdrawal') as HTMLInputElement)?.value || '0';
 
   const contrib = parseInt(monthlyContribution, 10);
   const withdraw = parseInt(monthlyWithdrawal, 10);
@@ -501,10 +504,11 @@ function displayTaxProjectionResults(result: TaxProjectionResult): void {
   const federalDetail = document.getElementById('tax-federal-detail');
   if (federalDetail) {
     // Use post-retirement federal tax for annual average (not total which includes pre-retirement salary taxes)
-    const postRetirementFederal = result.summary.post_retirement_federal_tax ?? result.summary.total_federal_tax;
+    const postRetirementFederal =
+      result.summary.post_retirement_federal_tax ?? result.summary.total_federal_tax;
     const avgAnnualFederal = postRetirementFederal / withdrawalYears;
     // Calculate federal effective rate (federal tax / gross withdrawn)
-    const federalEffRate = grossWithdrawn > 0 ? (postRetirementFederal / grossWithdrawn * 100) : 0;
+    const federalEffRate = grossWithdrawn > 0 ? (postRetirementFederal / grossWithdrawn) * 100 : 0;
     federalDetail.textContent = `~${formatCurrency(avgAnnualFederal)}/yr (~${federalEffRate.toFixed(1)}% effective rate)`;
   }
 
@@ -516,10 +520,11 @@ function displayTaxProjectionResults(result: TaxProjectionResult): void {
       stateDetail.textContent = 'No state income tax configured';
     } else {
       // Use post-retirement state tax for annual average
-      const postRetirementState = result.summary.post_retirement_state_tax ?? result.summary.total_state_tax;
+      const postRetirementState =
+        result.summary.post_retirement_state_tax ?? result.summary.total_state_tax;
       const avgAnnualState = postRetirementState / withdrawalYears;
       // Calculate state effective rate
-      const stateEffRate = grossWithdrawn > 0 ? (postRetirementState / grossWithdrawn * 100) : 0;
+      const stateEffRate = grossWithdrawn > 0 ? (postRetirementState / grossWithdrawn) * 100 : 0;
       stateDetail.textContent = `~${formatCurrency(avgAnnualState)}/yr (~${stateEffRate.toFixed(1)}% effective rate)`;
     }
   }
@@ -529,11 +534,13 @@ function displayTaxProjectionResults(result: TaxProjectionResult): void {
     // Calculate total years (accumulation + withdrawal)
     const totalYears = accumulationYears + withdrawalYears;
     // Show whether this includes pre-retirement taxes
-    const hasPreRetirement = accumulationYears > 0 && (result.summary.pre_retirement_total_tax ?? 0) > 0;
+    const hasPreRetirement =
+      accumulationYears > 0 && (result.summary.pre_retirement_total_tax ?? 0) > 0;
     if (hasPreRetirement) {
-      const retirementPct = grossWithdrawn > 0
-        ? (((result.summary.post_retirement_total_tax ?? 0) / grossWithdrawn) * 100).toFixed(1)
-        : '0.0';
+      const retirementPct =
+        grossWithdrawn > 0
+          ? (((result.summary.post_retirement_total_tax ?? 0) / grossWithdrawn) * 100).toFixed(1)
+          : '0.0';
       totalDetail.textContent = `${retirementPct}% of gross withdrawals over ${totalYears} years`;
     } else {
       const taxAsPercent =
