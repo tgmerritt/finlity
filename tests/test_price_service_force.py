@@ -82,3 +82,28 @@ def test_force_bypasses_fresh_cache_and_fetches_live(tmp_path):
     assert result is not None
     assert result.current_price == 200.0  # the live value, not the cached 100
     assert fake.calls == 1  # upstream was actually consulted
+
+
+def test_real_estate_sentinel_never_hits_upstream(tmp_path):
+    """The "RE" real-estate sentinel must never reach a price provider.
+
+    Real-estate prices are user-managed. Before "RE" was added to
+    SKIP_PRICE_LOOKUP, analysis history calls and /api/v2/prices hit Yahoo
+    for it, which logs "No data found, symbol may be delisted" on every
+    dashboard load.
+    """
+    svc, fake = _service_with_cached_price(tmp_path, "RE", cached_price=0.0, live_price=1.0)
+
+    result = svc.get_current_price("RE", force=True)
+
+    assert result is None
+    assert fake.calls == 0  # the sentinel short-circuited before upstream
+
+
+def test_real_estate_sentinel_history_returns_none(tmp_path):
+    """get_price_history for "RE" returns None without touching yfinance."""
+    svc, _ = _service_with_cached_price(tmp_path, "RE", cached_price=0.0, live_price=1.0)
+
+    history = svc.get_price_history("RE", period="1y")
+
+    assert history is None

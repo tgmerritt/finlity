@@ -423,6 +423,7 @@ class PriceService:
         "CASH", "CD", "MONEY", "SPAXX", "FDRXX",  # Cash/money market
         "VMFXX", "VUSXX", "VMRXX", "VFFXX",  # Vanguard money-market sweeps
         "UTVTX", "UTVNX", "UTVYX", "UTVIX",  # Utah 529 funds (state-specific)
+        "RE",  # Real-estate sentinel (positions created via /positions/real-estate)
     }
 
     # Prefixes that indicate non-market securities (CDs, bonds, etc.)

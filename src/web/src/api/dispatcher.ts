@@ -337,7 +337,7 @@ const NOT_HANDLED = Symbol('not-handled');
  */
 export function tryLocalRoute(endpoint: string, options: ApiCallOptions): unknown {
   const [pathOnly, queryString = ''] = endpoint.split('?');
-  const method = (options.method ?? 'GET') as HttpMethod;
+  const method = options.method ?? 'GET';
   const query = new URLSearchParams(queryString);
   const req: DispatchRequest = { method, path: pathOnly ?? endpoint, query, body: options.body };
 
@@ -365,7 +365,7 @@ export function matchPayloadRoute(
   options: ApiCallOptions
 ): PayloadRewrite | typeof NOT_HANDLED {
   const [pathOnly, queryString = ''] = endpoint.split('?');
-  const method = (options.method ?? 'GET') as HttpMethod;
+  const method = options.method ?? 'GET';
   const query = new URLSearchParams(queryString);
   const req: DispatchRequest = { method, path: pathOnly ?? endpoint, query, body: options.body };
 
@@ -415,7 +415,8 @@ const PASSTHROUGH_ALLOWLIST: Array<{ method: HttpMethod | '*'; pattern: RegExp }
 export function isPassthroughAllowed(endpoint: string, method: HttpMethod): boolean {
   const [pathOnly] = endpoint.split('?');
   return PASSTHROUGH_ALLOWLIST.some(
-    (rule) => (rule.method === '*' || rule.method === method) && rule.pattern.test(pathOnly ?? endpoint)
+    (rule) =>
+      (rule.method === '*' || rule.method === method) && rule.pattern.test(pathOnly ?? endpoint)
   );
 }
 
@@ -890,11 +891,12 @@ function buildMarketMonteCarloConfig(): {
   const api = getLocalAPI();
   const market = api.getConfigSection('market')?.market as Record<string, unknown> | undefined;
   const monteCarlo = api.getConfigSection('monte_carlo')?.monte_carlo as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
 
-  const result: { market_config?: Record<string, unknown>; monte_carlo_config?: Record<string, unknown> } =
-    {};
+  const result: {
+    market_config?: Record<string, unknown>;
+    monte_carlo_config?: Record<string, unknown>;
+  } = {};
   if (market && Object.keys(market).length > 0) result.market_config = market;
   if (monteCarlo && Object.keys(monteCarlo).length > 0) result.monte_carlo_config = monteCarlo;
   return result;

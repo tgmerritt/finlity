@@ -50,6 +50,7 @@ output/
 !package.json
 !package-lock.json
 !tsconfig.json
+!.eslintrc.json
 !.claude/*.json
 
 # ----- Secrets & API Keys -----

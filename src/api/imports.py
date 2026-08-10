@@ -12,6 +12,12 @@ from src.database import Database
 from src.importers import FolderScanner
 from src.models.position_types import is_updatable_position
 from src.services.ai_config import CLAUDE_MODEL_HAIKU
+from src.services.market_hours import is_market_open
+from src.services.price_refresh_gate import (
+    MARKET_CLOSED,
+    evaluate_refresh_gate,
+    record_refresh_pass,
+)
 from src.utils.paths import UnsafePathError, safe_join
 
 router = APIRouter(prefix="/api/imports", tags=["imports"])
@@ -315,14 +321,24 @@ async def upload_file(
 
 @router.get("/price-status")
 def get_price_status(timezone: str = "UTC", db: Database = Depends(get_db)) -> dict[str, Any]:
-    """Get status of price cache - freshness, last update times.
+    """Get status of price cache under market-aware freshness rules.
 
-    Args:
-        timezone: User's IANA timezone (e.g., "America/New_York") for future
-                  market-hours-aware staleness checks. Currently uses 24h UTC threshold.
+    When the market is open, a ticker is stale once its cache is older
+    than 1 hour. When the market is closed nothing is due: the last
+    fetched close is authoritative and stale_tickers reports 0.
     """
-    status = db.get_price_cache_status()
+    market_open = is_market_open()
+    if market_open:
+        status = db.get_price_cache_status(max_age_hours=1)
+    else:
+        status = db.get_price_cache_status(max_age_hours=24)
+        status["stale_tickers"] = 0
+        status["all_fresh"] = True
+
+    decision = evaluate_refresh_gate(db)
     status["user_timezone"] = timezone
+    status["market_open"] = market_open
+    status["next_refresh_at"] = decision.next_refresh_at.isoformat() if decision.next_refresh_at else None
     return status
 
 
@@ -330,12 +346,40 @@ def get_price_status(timezone: str = "UTC", db: Database = Depends(get_db)) -> d
 def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[str, Any]:
     """Refresh prices for all positions with stale data.
 
+    Market-gated: no upstream fetch when the market is closed, and at most
+    one refresh pass per hour during the trading day (see
+    src/services/price_refresh_gate.py). ``force`` bypasses the hourly cap
+    but never the market-closed rule.
+
     Returns honest success / failure counts so the UI can decrement the
     "X stale" badge to the *actually-fresh* count, not the *attempted* count.
 
     Args:
         force: If True, refresh all prices regardless of staleness.
     """
+    decision = evaluate_refresh_gate(db, force=force)
+
+    if not decision.allowed:
+        if decision.reason == MARKET_CLOSED:
+            message = "Markets closed: prices current as of last close"
+        else:
+            message = "Prices refreshed within the last hour"
+            if decision.next_refresh_at:
+                message += f"; next refresh at {decision.next_refresh_at.isoformat()}"
+        status = db.get_price_cache_status()
+        return {
+            "message": message,
+            "updated": 0,
+            "attempted": 0,
+            "failed": 0,
+            "failed_tickers": [],
+            "tickers": [],
+            "all_fresh": True,
+            "newest_update": status.get("newest_update"),
+            "market_open": decision.reason != MARKET_CLOSED,
+            "next_refresh_at": decision.next_refresh_at.isoformat() if decision.next_refresh_at else None,
+        }
+
     stale_tickers: list[str]
     if force:
         positions = db.get_all_positions()
@@ -344,18 +388,20 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[
             if is_updatable_position(cast(Optional[str], p.position_type), cast(Optional[str], p.ticker))
         })
     else:
-        stale_tickers = db.get_stale_tickers()
+        stale_tickers = db.get_stale_tickers(max_age_hours=1)
 
     if not stale_tickers:
         status = db.get_price_cache_status()
         return {
-            "message": "All prices are up to date (less than 24 hours old)",
+            "message": "All prices are up to date",
             "updated": 0,
             "attempted": 0,
             "failed": 0,
             "failed_tickers": [],
             "all_fresh": True,
             "newest_update": status.get("newest_update"),
+            "market_open": True,
+            "next_refresh_at": decision.next_refresh_at.isoformat() if decision.next_refresh_at else None,
         }
 
     scanner = FolderScanner(db)
@@ -363,6 +409,7 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[
     # fetch live quotes — otherwise the cached (up to 4h old) value is returned
     # and the DB timestamp is re-stamped fresh over a stale price.
     result = scanner._fetch_and_update_prices(stale_tickers, force=force)
+    record_refresh_pass(db)
     success = result.get("success", [])
     skipped = result.get("skipped", [])
     failed = result.get("failed", [])
@@ -387,6 +434,8 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[
         "tickers": success,
         "all_fresh": status.get("all_fresh", False),
         "newest_update": status.get("newest_update"),
+        "market_open": True,
+        "next_refresh_at": decision.next_refresh_at.isoformat() if decision.next_refresh_at else None,
     }
 
 
