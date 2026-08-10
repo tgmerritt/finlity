@@ -87,7 +87,10 @@ python-multipart==0.0.31
 # Maintained successor to abandoned PyPDF2 3.0.1 (ReDoS / parsing CVEs).
 # Floor bumped 5.1 -> 6.13.3; clears GHSA-jm82-fx9c-mx94 (MAX_DECLARED_STREAM_LENGTH
 # ignored when a content stream omits /Length, leading to excess memory use).
-pypdf>=6.13.3
+# Floor bumped 6.13.3 -> 6.15.0; clears PYSEC-2026-3655 and PYSEC-2026-3656
+# (unbounded memory/runtime when parsing malformed font /ToUnicode and width
+# entries in PDFs).
+pypdf>=6.15.0
 reportlab==4.4.6  # test-only: synthetic PDF generation in tests/test_bank_statement_pdf.py
 # Pinned transitive of yfinance.
 # Bumped 5.3.0 -> 6.1.0; clears CVE-2026-41066 (5.4.0 still flagged; fix in 6.1.0)
