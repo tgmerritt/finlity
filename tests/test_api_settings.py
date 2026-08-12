@@ -158,6 +158,60 @@ class TestUserAgeInterface:
         assert get_retirement_age() == 65
 
 
+class TestDemoModeHerokuLock:
+    """Demo mode must stay ON for visitors of the hosted (Heroku) site.
+
+    The demo toggle writes server-global state, so on the public deployment
+    one visitor switching it off would flip the whole site to an empty
+    personal portfolio until the next dyno restart. When DYNO is present the
+    disable path is blocked with 403 unless PORTFOLIO_ALLOW_DEMO_DISABLE
+    explicitly opts back in.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _restore_demo_mode(self, client):
+        """Leave demo mode enabled for the rest of the module."""
+        yield
+        from src.services.demo_mode import get_demo_manager
+        get_demo_manager().enable("default")
+
+    def test_disable_blocked_on_heroku(self, client, monkeypatch):
+        monkeypatch.setenv("DYNO", "web.1")
+        monkeypatch.delenv("PORTFOLIO_ALLOW_DEMO_DISABLE", raising=False)
+        response = client.put("/api/settings/demo-mode", json={"enabled": False})
+        assert response.status_code == 403
+        # And the state must not have flipped
+        status = client.get("/api/settings/demo-mode").json()
+        assert status["enabled"] is True
+
+    def test_enable_still_allowed_on_heroku(self, client, monkeypatch):
+        monkeypatch.setenv("DYNO", "web.1")
+        response = client.put("/api/settings/demo-mode", json={"enabled": True})
+        assert response.status_code == 200
+
+    def test_disable_allowed_with_escape_hatch(self, client, monkeypatch):
+        monkeypatch.setenv("DYNO", "web.1")
+        monkeypatch.setenv("PORTFOLIO_ALLOW_DEMO_DISABLE", "true")
+        response = client.put("/api/settings/demo-mode", json={"enabled": False})
+        assert response.status_code == 200
+
+    def test_disable_allowed_off_heroku(self, client, monkeypatch):
+        monkeypatch.delenv("DYNO", raising=False)
+        response = client.put("/api/settings/demo-mode", json={"enabled": False})
+        assert response.status_code == 200
+
+    def test_status_reports_lock_on_heroku(self, client, monkeypatch):
+        monkeypatch.setenv("DYNO", "web.1")
+        monkeypatch.delenv("PORTFOLIO_ALLOW_DEMO_DISABLE", raising=False)
+        status = client.get("/api/settings/demo-mode").json()
+        assert status["disable_locked"] is True
+
+    def test_status_reports_unlocked_off_heroku(self, client, monkeypatch):
+        monkeypatch.delenv("DYNO", raising=False)
+        status = client.get("/api/settings/demo-mode").json()
+        assert status["disable_locked"] is False
+
+
 class TestProfilesAPI:
     """Test profile management endpoints."""
 
