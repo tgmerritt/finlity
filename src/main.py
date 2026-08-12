@@ -18,7 +18,7 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.middleware import RateLimitMiddleware, SecurityHeadersMiddleware
@@ -42,6 +42,7 @@ from src.api.entities import router as entities_router
 from src.api.v2 import v2_router
 from src.database import get_profile_manager, get_database
 from src.importers import FolderScanner
+from src.services.price_refresh_gate import evaluate_refresh_gate, record_refresh_pass
 from src.services.session import is_multi_user_mode
 
 logger = logging.getLogger(__name__)
@@ -163,12 +164,15 @@ async def _background_bootstrap(demo_mode: bool) -> None:
                     success_count,
                 )
 
-        stale_tickers = db.get_stale_tickers()
-        if stale_tickers:
-            logger.info("Refreshing %d stale price(s)...", len(stale_tickers))
-            await asyncio.to_thread(
-                scanner._fetch_and_update_prices, stale_tickers
-            )
+        decision = evaluate_refresh_gate(db)
+        if decision.allowed:
+            stale_tickers = db.get_stale_tickers(max_age_hours=1)
+            if stale_tickers:
+                logger.info("Refreshing %d stale price(s)...", len(stale_tickers))
+                await asyncio.to_thread(
+                    scanner._fetch_and_update_prices, stale_tickers
+                )
+                record_refresh_pass(db)
 
         await asyncio.to_thread(db.take_snapshot)
     except Exception:  # noqa: BLE001 - background bootstrap must not crash app
@@ -380,6 +384,69 @@ async def health_check():
         "positions": summary["position_count"],
         "demo_mode": is_demo_mode(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Bot-friendly endpoints: robots.txt, sitemap.xml, security.txt
+# These must be registered BEFORE any catch-all route (there is none today,
+# but keeping them explicit makes the contract visible). They return plain
+# text/XML with the correct content types so crawlers get real directives
+# instead of the SPA fallback HTML.
+# ---------------------------------------------------------------------------
+
+_ROBOTS_TXT = """User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /static/
+Disallow: /docs
+Disallow: /redoc
+Disallow: /openapi.json
+
+# API endpoints are for the app itself, not for indexing.
+# The dashboard is a private tool; allow bots to see the lander page only.
+
+Sitemap: https://app.finlity.net/sitemap.xml
+"""
+
+_SITEMAP_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://app.finlity.net/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://www.finlity.net/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+</urlset>
+"""
+
+_SECURITY_TXT = """Contact: mailto:feedback@finlity.net
+Expires: 2027-08-05T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://app.finlity.net/.well-known/security.txt
+"""
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt() -> Response:
+    """Serve robots.txt for search engine crawlers."""
+    return PlainTextResponse(_ROBOTS_TXT, media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml() -> Response:
+    """Serve sitemap.xml for search engine crawlers."""
+    return Response(content=_SITEMAP_XML, media_type="application/xml")
+
+
+@app.get("/.well-known/security.txt", include_in_schema=False)
+@app.get("/security.txt", include_in_schema=False)
+async def security_txt() -> Response:
+    """Serve security.txt per RFC 9116 (security contact)."""
+    return PlainTextResponse(_SECURITY_TXT, media_type="text/plain")
 
 
 @app.get("/api/dashboard/data")
