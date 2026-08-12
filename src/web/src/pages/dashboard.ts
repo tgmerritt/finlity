@@ -53,6 +53,8 @@ interface PriceStatusResponse {
   all_fresh: boolean;
   newest_update?: string;
   stale_tickers: number;
+  market_open?: boolean;
+  next_refresh_at?: string | null;
 }
 
 /**
@@ -65,6 +67,8 @@ interface PriceRefreshResponse {
   failed?: number;
   failed_tickers?: string[];
   message?: string;
+  market_open?: boolean;
+  next_refresh_at?: string | null;
 }
 
 /**
@@ -670,7 +674,7 @@ export async function refreshPrices(force = false): Promise<void> {
     const attempted = result.attempted ?? result.updated ?? 0;
     const failedCount = result.failed ?? 0;
     if (result.all_fresh && result.updated === 0) {
-      showToast('Prices are fresh (less than 24 hours old)', 'info');
+      showToast(result.message ?? 'Prices are fresh', 'info');
     } else if (failedCount > 0) {
       const sample = (result.failed_tickers ?? []).slice(0, 3).join(', ');
       const more = (result.failed_tickers ?? []).length > 3 ? '…' : '';
@@ -711,6 +715,23 @@ export async function updatePriceStatus(): Promise<void> {
 
     const statusEl = document.getElementById('price-status');
     if (!statusEl) return;
+
+    if (status.market_open === false) {
+      // Markets closed: prices are as current as they can be (last close).
+      statusEl.className = 'price-status fresh';
+      statusEl.textContent = '';
+
+      const dot = document.createElement('span');
+      dot.className = 'status-dot';
+      statusEl.appendChild(dot);
+
+      const asOf = status.newest_update
+        ? new Date(status.newest_update).toLocaleString()
+        : 'last close';
+      statusEl.appendChild(document.createTextNode(` Markets closed (prices as of ${asOf})`));
+      statusEl.title = 'Market closed: prices current as of last close';
+      return;
+    }
 
     if (status.all_fresh) {
       const newestUpdate = status.newest_update ? new Date(status.newest_update) : null;
@@ -850,15 +871,27 @@ export async function autoRefreshIfStale(): Promise<void> {
       `/api/imports/price-status?timezone=${encodeURIComponent(tz)}`
     );
 
-    if (!status.all_fresh && status.stale_tickers > 0) {
-      console.log(`Auto-refreshing ${status.stale_tickers} stale ticker(s) (timezone: ${tz})`);
-      const result = await apiCall<PriceRefreshResponse>('/api/imports/refresh-prices', {
-        method: 'POST',
-      });
-      if (result.updated > 0) {
-        showToast(`Auto-updated ${result.updated} stale price(s)`, 'info');
-      }
+    // Markets closed: nothing to fetch; prices are current as of last close.
+    if (status.market_open === false) return;
+    if (status.all_fresh && status.stale_tickers === 0) return;
+
+    const result = await apiCall<PriceRefreshResponse>('/api/imports/refresh-prices', {
+      method: 'POST',
+    });
+    if (result.updated === 0) {
+      // Gated no-op (hourly cap or nothing due): the badge already shows
+      // the state, so stay silent.
+      return;
     }
+
+    showToast(`Auto-updated ${result.updated} price(s)`, 'info');
+    await updatePriceStatus();
+    await refreshData();
+    emit({
+      type: 'prices:refreshed',
+      updated: result.updated,
+      failed: result.failed ?? 0,
+    });
   } catch (error) {
     console.warn('Auto-refresh price check failed:', error);
   }

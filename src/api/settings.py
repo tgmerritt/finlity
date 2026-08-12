@@ -625,9 +625,14 @@ def get_demo_mode() -> dict:
         demo_initialized: Whether demo data exists
         protected: Whether demo data modifications are blocked (hosted site)
     """
-    from src.services.demo_mode import get_demo_manager, is_demo_data_protected
+    from src.services.demo_mode import (
+        get_demo_manager,
+        is_demo_data_protected,
+        is_demo_disable_locked,
+    )
     status = get_demo_manager().get_status()
     status["protected"] = is_demo_data_protected()
+    status["disable_locked"] = is_demo_disable_locked()
     return status
 
 
@@ -647,8 +652,18 @@ def set_demo_mode(settings: DemoModeSettings) -> dict:
     Note: PROTECT_DEMO_DATA only protects demo data from modifications,
     it does NOT prevent toggling demo mode on/off.
     """
-    from src.services.demo_mode import get_demo_manager
+    from src.services.demo_mode import get_demo_manager, is_demo_disable_locked
     from src.database import get_profile_manager, reset_database_caches
+
+    if not settings.enabled and is_demo_disable_locked():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Demo mode cannot be disabled on the hosted site. It is "
+                "shared by all visitors and stays on so everyone sees demo "
+                "data. Run the app locally to use a personal portfolio."
+            ),
+        )
 
     demo_manager = get_demo_manager()
     profile_manager = get_profile_manager()

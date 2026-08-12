@@ -52,6 +52,10 @@ openpyxl==3.1.5
 # unchanged in 1.x.
 yfinance==1.4.1
 
+# NYSE trading calendar for market-hours-aware price refreshes. Free, no API
+# key; same library yfinance vendors. Calendar data is bundled in the wheel.
+exchange_calendars==4.13.2
+
 # AI providers
 anthropic>=0.40.0
 openai==2.8.1
@@ -62,7 +66,10 @@ sqlalchemy==2.0.36
 # Security
 # Bumped 46.0.7 -> 48.0.1; clears GHSA-537c-gmf6-5ccf (statically linked
 # OpenSSL in the cryptography wheel vulnerable to the 2026-06-09 OpenSSL advisory)
-cryptography==48.0.1
+# Bumped 48.0.1 -> 50.0.0; clears PYSEC-2026-3552 (PKCS7 RSA decryption
+# Bleichenbacher oracle), PYSEC-2026-3553 (cert-chain exponential DoS),
+# PYSEC-2026-3554 (wildcard SAN name-constraint escape) from the 2026-08-05 advisory refresh.
+cryptography==50.0.0
 
 # Validation / config
 pydantic==2.12.4
@@ -80,7 +87,10 @@ python-multipart==0.0.31
 # Maintained successor to abandoned PyPDF2 3.0.1 (ReDoS / parsing CVEs).
 # Floor bumped 5.1 -> 6.13.3; clears GHSA-jm82-fx9c-mx94 (MAX_DECLARED_STREAM_LENGTH
 # ignored when a content stream omits /Length, leading to excess memory use).
-pypdf>=6.13.3
+# Floor bumped 6.13.3 -> 6.15.0; clears PYSEC-2026-3655 and PYSEC-2026-3656
+# (unbounded memory/runtime when parsing malformed font /ToUnicode and width
+# entries in PDFs).
+pypdf>=6.15.0
 reportlab==4.4.6  # test-only: synthetic PDF generation in tests/test_bank_statement_pdf.py
 # Pinned transitive of yfinance.
 # Bumped 5.3.0 -> 6.1.0; clears CVE-2026-41066 (5.4.0 still flagged; fix in 6.1.0)

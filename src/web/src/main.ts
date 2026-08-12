@@ -570,9 +570,6 @@ async function init(): Promise<void> {
     // Record the baseline settings version so the per-tab freshness check has
     // something to compare against (and doesn't toast on the very first visit).
     await syncSettingsVersion();
-    // Await the price refresh (if any stale tickers) so that summary cards
-    // rendered by refreshData() below always use up-to-date prices.
-    await autoRefreshIfStale();
     await updatePriceStatus();
     await checkDemoModeStatus();
     await loadDeploymentInfo();
@@ -585,6 +582,11 @@ async function init(): Promise<void> {
       showTab('dashboard');
       await refreshData();
     }
+
+    // Fire the market-gated price refresh in the background: it must not
+    // block first paint. The server-side gate makes it a cheap no-op when
+    // markets are closed or a pass ran within the last hour.
+    void autoRefreshIfStale();
   } catch (error) {
     console.error('Initialization error:', error);
     showError('Failed to initialize application');

@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# The lander is a public marketing page — crawl it freely.
+# The app itself lives on app.finlity.net and has its own robots.txt.
+
+Sitemap: https://www.finlity.net/sitemap.xml
