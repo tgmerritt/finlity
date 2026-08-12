@@ -282,6 +282,25 @@ def is_demo_mode() -> bool:
     return get_demo_manager().is_enabled
 
 
+def is_demo_disable_locked() -> bool:
+    """Check if disabling demo mode is blocked.
+
+    On the hosted site (Heroku, detected via DYNO) the demo toggle writes
+    server-global state, so one visitor switching it off would flip the whole
+    site to an empty personal portfolio until the next dyno restart. Hosted
+    deployments therefore keep demo mode locked on.
+
+    Set PORTFOLIO_ALLOW_DEMO_DISABLE=true to allow disabling anyway.
+    """
+    import os
+
+    if not os.environ.get("DYNO"):
+        return False
+
+    allow = os.environ.get("PORTFOLIO_ALLOW_DEMO_DISABLE", "").lower()
+    return allow not in ("true", "1", "yes")
+
+
 def is_demo_data_protected() -> bool:
     """Check if demo data modifications are protected.
 
