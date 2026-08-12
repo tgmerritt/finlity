@@ -18,6 +18,12 @@ import { getLocalAPI } from '@/api/dispatcher';
 let currentDemoMode = false;
 
 /**
+ * Whether the server blocks disabling demo mode (hosted site). Reported by
+ * GET /api/settings/demo-mode as disable_locked.
+ */
+let demoDisableLocked = false;
+
+/**
  * Current tour step index.
  */
 let currentTourStep = 0;
@@ -105,7 +111,10 @@ export async function startDemoMode(): Promise<void> {
  */
 export async function checkDemoModeStatus(): Promise<boolean> {
   try {
-    const data = await apiCall<{ enabled: boolean }>('/api/settings/demo-mode');
+    const data = await apiCall<{ enabled: boolean; disable_locked?: boolean }>(
+      '/api/settings/demo-mode'
+    );
+    demoDisableLocked = data.disable_locked === true;
     updateDemoModeUI(data.enabled);
     return data.enabled;
   } catch (error) {
@@ -120,9 +129,18 @@ export async function checkDemoModeStatus(): Promise<boolean> {
 export function updateDemoModeUI(isEnabled: boolean): void {
   currentDemoMode = isEnabled;
 
-  // Update toggle checkbox
+  // Update toggle checkbox. When the server locks disabling (hosted site),
+  // grey out the toggle rather than letting the PUT bounce with a 403.
+  // Turning demo ON is always allowed, so only lock while it is enabled.
+  const locked = demoDisableLocked && isEnabled;
   const toggle = getElementById<HTMLInputElement>('demo-mode-toggle');
-  if (toggle) toggle.checked = isEnabled;
+  if (toggle) {
+    toggle.checked = isEnabled;
+    toggle.disabled = locked;
+  }
+
+  const lockedHint = getElementById<HTMLElement>('demo-mode-locked-hint');
+  if (lockedHint) lockedHint.classList.toggle('hidden', !locked);
 
   // Update status badge
   const statusBadge = getElementById<HTMLElement>('demo-mode-status');
