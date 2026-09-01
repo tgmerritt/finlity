@@ -994,6 +994,19 @@ class Database:
 
             return list(updatable - fresh_tickers)
 
+    def get_never_fetched_tickers(self) -> list[str]:
+        """Updatable position tickers with no price_cache row at all.
+
+        These have no last close to fall back on: market-hours gating must not
+        report them as "fresh" — they are missing, not stale. Force refreshes
+        use this so a ticker imported while the market is closed can still be
+        fetched immediately.
+        """
+        with self.get_session() as session:
+            updatable = self._get_updatable_tickers(session)
+            cached = {row[0] for row in session.query(PriceCache.ticker).distinct().all()}
+            return sorted(updatable - cached)
+
     def get_price_cache_status(self, max_age_hours: int = 24) -> dict:
         """Get status of the price cache, scoped to updatable positions only.
 
