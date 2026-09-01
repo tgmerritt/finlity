@@ -326,6 +326,10 @@ def get_price_status(timezone: str = "UTC", db: Database = Depends(get_db)) -> d
     When the market is open, a ticker is stale once its cache is older
     than 1 hour. When the market is closed nothing is due: the last
     fetched close is authoritative and stale_tickers reports 0.
+
+    Tickers that have NEVER been cached are reported separately as
+    ``missing_price_tickers`` — they have no last close, so they are
+    excluded from ``stale_tickers`` but keep ``all_fresh`` honest (False).
     """
     market_open = is_market_open()
     if market_open:
@@ -334,6 +338,12 @@ def get_price_status(timezone: str = "UTC", db: Database = Depends(get_db)) -> d
         status = db.get_price_cache_status(max_age_hours=24)
         status["stale_tickers"] = 0
         status["all_fresh"] = True
+
+    missing = db.get_never_fetched_tickers()
+    status["missing_price_tickers"] = len(missing)
+    if missing:
+        status["all_fresh"] = False
+        status["missing_tickers"] = missing
 
     decision = evaluate_refresh_gate(db)
     status["user_timezone"] = timezone
@@ -349,7 +359,8 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[
     Market-gated: no upstream fetch when the market is closed, and at most
     one refresh pass per hour during the trading day (see
     src/services/price_refresh_gate.py). ``force`` bypasses the hourly cap
-    but never the market-closed rule.
+    and, while the market is closed, still fetches tickers that have no
+    cached price at all (a just-imported ticker has no last close to show).
 
     Returns honest success / failure counts so the UI can decrement the
     "X stale" badge to the *actually-fresh* count, not the *attempted* count.
@@ -360,6 +371,34 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[
     decision = evaluate_refresh_gate(db, force=force)
 
     if not decision.allowed:
+        # An explicit force still fetches tickers that have NEVER been priced:
+        # the market-closed rule assumes a last close exists to fall back on,
+        # and for a just-imported ticker that is false. Stale-but-cached
+        # tickers remain gated (their last close is honest data).
+        missing = db.get_never_fetched_tickers() if (
+            force and decision.reason == MARKET_CLOSED
+        ) else []
+        if missing:
+            scanner = FolderScanner(db)
+            result = scanner._fetch_and_update_prices(missing, force=True)
+            record_refresh_pass(db)
+            success = result.get("success", [])
+            failed = result.get("failed", [])
+            return {
+                "message": (
+                    f"Markets closed: fetched {len(success)} ticker(s) with no "
+                    "cached price; others current as of last close"
+                ),
+                "updated": len(success),
+                "attempted": len(missing),
+                "failed": len(failed),
+                "failed_tickers": failed,
+                "tickers": success,
+                "all_fresh": not failed,
+                "newest_update": None,
+                "market_open": False,
+                "next_refresh_at": decision.next_refresh_at.isoformat() if decision.next_refresh_at else None,
+            }
         if decision.reason == MARKET_CLOSED:
             message = "Markets closed: prices current as of last close"
         else:

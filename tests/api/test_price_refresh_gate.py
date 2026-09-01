@@ -68,6 +68,27 @@ def _seed_stale_position(db, ticker: str = "VTI") -> None:
         session.commit()
 
 
+def _seed_position_without_price(db, ticker: str) -> None:
+    """One updatable equity position with NO price_cache row (just imported)."""
+    with db.get_session() as session:
+        account = Account(name="Missing Test", account_type="taxable")
+        session.add(account)
+        session.flush()
+        session.add(
+            Position(
+                account_id=account.id,
+                ticker=ticker,
+                name="Fresh Import",
+                shares=5.0,
+                current_price=100.0,
+                cost_basis=500.0,
+                position_type="equity",
+            )
+        )
+        session.commit()
+    # Deliberately no update_price_cache() call.
+
+
 def _gate(market_open: bool):
     if market_open:
         return GateDecision(True, ALLOWED, TUE_OPEN + timedelta(hours=1))
@@ -151,13 +172,97 @@ class TestRefreshPricesGate:
         assert response.json()["updated"] == 1
         fetch.assert_called()
 
-        # force with market closed is still a no-op.
+        # force with market closed and a cached (stale) ticker is still a no-op.
         monkeypatch.setattr(
             "src.api.imports.evaluate_refresh_gate", lambda db, force=False: _gate(False)
         )
         response = client.post("/api/imports/refresh-prices?force=true")
         assert response.json()["updated"] == 0
         assert response.json()["market_open"] is False
+
+
+class TestForceFetchesMissingPrices:
+    """force + market closed must still fetch tickers with NO cached price."""
+
+    @pytest.fixture(autouse=True)
+    def _cleanup_seeded_positions(self):
+        """Remove seeded positions so later status tests see a clean DB."""
+        def _purge():
+            db = get_database()
+            with db.get_session() as session:
+                session.query(Position).filter_by(
+                    name="Fresh Import"
+                ).delete(synchronize_session=False)
+                session.query(Account).filter_by(name="Missing Test").delete(
+                    synchronize_session=False
+                )
+                session.commit()
+
+        _purge()
+        yield
+        _purge()
+
+    def test_force_closed_market_fetches_never_cached_ticker(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "src.api.imports.evaluate_refresh_gate", lambda db, force=False: _gate(False)
+        )
+        db = get_database()
+        _clear_last_pass(db)
+        _seed_position_without_price(db, "NEWC")
+        fetch = _fake_fetch({"success": ["NEWC"], "skipped": [], "failed": []})
+        monkeypatch.setattr(FolderScanner, "_fetch_and_update_prices", fetch)
+
+        response = client.post("/api/imports/refresh-prices?force=true")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["updated"] == 1
+        assert data["tickers"] == ["NEWC"]
+        assert data["all_fresh"] is True
+        assert data["market_open"] is False
+        fetch.assert_called_once()
+        # Only missing tickers were attempted (the shared test DB may carry
+        # other demo tickers without caches — NEWC must be among them, and
+        # stale-but-cached VTI must NOT be).
+        attempted = fetch.call_args[0][0]
+        assert "NEWC" in attempted
+        assert "VTI" not in attempted
+
+    def test_no_force_no_fetch_when_closed(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "src.api.imports.evaluate_refresh_gate", lambda db, force=False: _gate(False)
+        )
+        db = get_database()
+        _clear_last_pass(db)
+        _seed_position_without_price(db, "NEWC2")
+        fetch = _fake_fetch()
+        monkeypatch.setattr(FolderScanner, "_fetch_and_update_prices", fetch)
+
+        response = client.post("/api/imports/refresh-prices")
+
+        assert response.json()["updated"] == 0
+        fetch.assert_not_called()
+
+    def test_price_status_flags_missing_tickers(self, client, monkeypatch):
+        monkeypatch.setattr("src.api.imports.is_market_open", lambda dt=None: False)
+        monkeypatch.setattr(
+            "src.api.imports.evaluate_refresh_gate",
+            lambda db, now=None, force=False: GateDecision(
+                False, MARKET_CLOSED, datetime(2026, 8, 17, 13, 30)
+            ),
+        )
+        _seed_position_without_price(get_database(), "NEWC3")
+
+        response = client.get("/api/imports/price-status")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["market_open"] is False
+        assert data["stale_tickers"] == 0
+        # A never-fetched ticker must not let the API claim all_fresh.
+        assert data["all_fresh"] is False
+        assert data["missing_price_tickers"] >= 1
+        assert "NEWC3" in data["missing_tickers"]
 
 
 class TestPriceStatusGate:
