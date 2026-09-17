@@ -90,7 +90,17 @@ python-multipart==0.0.31
 # Floor bumped 6.13.3 -> 6.15.0; clears PYSEC-2026-3655 and PYSEC-2026-3656
 # (unbounded memory/runtime when parsing malformed font /ToUnicode and width
 # entries in PDFs).
-pypdf>=6.15.0
+# Floor bumped 6.15.0 -> 6.16.1; clears PYSEC-2026-3910/3911 (crafted PDF
+# outline/XForm reuse -> memory exhaustion) and PYSEC-2026-3913 (infinite
+# loop via TreeObject.insert_child). Fixed in 6.16.0/6.16.1; floored there,
+# resolved to latest by pip-compile.
+pypdf>=6.16.1
+
+# Pin pygments directly (was transitive via rich/pytest).
+# Floor >=2.20.0 clears PYSEC-2026-2987 (ReDoS in ADL lexer, public exploit).
+# Formerly blocked by fastmcp's <2.20 pin; fastmcp was removed 2026-06-09 so
+# nothing upper-bounds it anymore.
+pygments>=2.20.0
 reportlab==4.4.6  # test-only: synthetic PDF generation in tests/test_bank_statement_pdf.py
 # Pinned transitive of yfinance.
 # Bumped 5.3.0 -> 6.1.0; clears CVE-2026-41066 (5.4.0 still flagged; fix in 6.1.0)

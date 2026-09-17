@@ -697,9 +697,9 @@ export function showEditPositionModal(
   // Handle interest/APY fields for cash, CD, bond positions
   const interestFields = document.getElementById('edit-interest-fields');
   const showInterestFields = ['cash', 'cd', 'bond', 'treasury'].includes(positionType);
-  if (interestFields) {
-    interestFields.style.display = showInterestFields ? 'block' : 'none';
-  }
+  // Section carries class="hidden" (display: none !important) in the markup,
+  // so visibility must be driven by the class, not inline style.
+  interestFields?.classList.toggle('hidden', !showInterestFields);
 
   if (showInterestFields) {
     const apyEl = document.getElementById('edit-position-apy') as HTMLInputElement | null;
@@ -812,6 +812,56 @@ export async function updatePosition(event: Event): Promise<void> {
 }
 
 /**
+ * Format a Date as a local-time YYYY-MM-DD string suitable for a date input.
+ * (toISOString would shift the day near midnight in non-UTC timezones.)
+ */
+function formatLocalDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Add calendar months to a YYYY-MM-DD date, clamping the day to the last day
+ * of the target month (2028-02-29 + 12 months → 2029-02-28, not 03-01).
+ */
+export function addMonthsClamped(isoDate: string, months: number): string {
+  const parts = isoDate.split('-').map(Number);
+  const y = parts[0] ?? 0;
+  const m = parts[1] ?? 1;
+  const d = parts[2] ?? 1;
+  const targetMonthIndex = m - 1 + months;
+  // Day 0 of the following month = last day of the target month.
+  const lastDay = new Date(y, targetMonthIndex + 1, 0).getDate();
+  return formatLocalDate(new Date(y, targetMonthIndex, Math.min(d, lastDay)));
+}
+
+/**
+ * Whether the CD maturity date should keep tracking purchase date + 12
+ * months. Cleared when the user hand-edits maturity; re-armed when they
+ * clear the field or the modal is reopened.
+ */
+let cdMaturityAutoFill = true;
+
+/** Set CD maturity from the purchase date while auto-fill is armed. */
+function syncCdMaturityFromPurchase(): void {
+  if (!cdMaturityAutoFill) return;
+  const purchase = (document.getElementById('cd-purchase-date') as HTMLInputElement | null)?.value;
+  const maturityEl = document.getElementById('cd-maturity') as HTMLInputElement | null;
+  if (!purchase || !maturityEl) return;
+  maturityEl.value = addMonthsClamped(purchase, 12);
+}
+
+/** Default CD dates for a fresh modal session: today and today + 12 months. */
+function resetCdDateDefaults(): void {
+  cdMaturityAutoFill = true;
+  const purchaseEl = document.getElementById('cd-purchase-date') as HTMLInputElement | null;
+  if (purchaseEl) purchaseEl.value = formatLocalDate(new Date());
+  syncCdMaturityFromPurchase();
+}
+
+/**
  * Show add position modal.
  */
 export async function showAddPositionModal(): Promise<void> {
@@ -820,6 +870,7 @@ export async function showAddPositionModal(): Promise<void> {
     positionTypeEl.value = 'equity';
   }
   togglePositionTypeFields();
+  resetCdDateDefaults();
   await loadAccountsForSelect();
   await loadAccountTypesForSelect();
 
@@ -859,12 +910,12 @@ export function togglePositionTypeFields(): void {
   const cdFields = document.getElementById('cd-fields');
   const realEstateFields = document.getElementById('real-estate-fields');
 
-  if (stockFields)
-    stockFields.style.display = posType === 'equity' || posType === 'fund' ? 'block' : 'none';
-  if (cashFields) cashFields.style.display = posType === 'cash' ? 'block' : 'none';
-  if (cdFields) cdFields.style.display = posType === 'cd' ? 'block' : 'none';
-  if (realEstateFields)
-    realEstateFields.style.display = posType === 'real_estate' ? 'block' : 'none';
+  // These sections carry class="hidden" (display: none !important) in the
+  // markup, so visibility must be driven by the class, not inline style.
+  stockFields?.classList.toggle('hidden', !(posType === 'equity' || posType === 'fund'));
+  cashFields?.classList.toggle('hidden', posType !== 'cash');
+  cdFields?.classList.toggle('hidden', posType !== 'cd');
+  realEstateFields?.classList.toggle('hidden', posType !== 'real_estate');
 }
 
 /**
@@ -1011,7 +1062,10 @@ export async function addManualPosition(event: Event): Promise<void> {
 
       showToast(`Account "${newAccountName}" created`, 'success');
       accountId = result.id;
-      newAccountForm.style.display = 'none';
+      // Hide via the class, matching showNewAccountForm's classList.toggle.
+      // An inline display:none here would survive the class toggle and leave
+      // the form permanently stuck hidden.
+      newAccountForm.classList.add('hidden');
       await loadAccountsForSelect();
       const select = document.getElementById('position-account') as HTMLSelectElement | null;
       if (select) select.value = accountId;
@@ -1099,14 +1153,26 @@ async function buildAndSubmitPosition(
       100;
     const maturity =
       (document.getElementById('cd-maturity') as HTMLInputElement | null)?.value || '';
+    const purchaseDate =
+      (document.getElementById('cd-purchase-date') as HTMLInputElement | null)?.value || '';
 
     if (!amount || !name || !rate || !maturity) {
       throw new Error('Please fill in all CD fields');
     }
 
+    const cdData: Record<string, unknown> = {
+      account_id: accountId,
+      amount,
+      name,
+      interest_rate: rate,
+      maturity_date: maturity,
+    };
+    // Optional; the backend records "now" when omitted.
+    if (purchaseDate) cdData.purchase_date = purchaseDate;
+
     return apiCall<CreatePositionResponse>('/api/portfolio/positions/cd', {
       method: 'POST',
-      body: { account_id: accountId, amount, name, interest_rate: rate, maturity_date: maturity },
+      body: cdData,
     });
   }
 
@@ -1212,6 +1278,19 @@ export function initHoldings(): void {
   const positionTypeSelect = document.getElementById('position-type');
   if (positionTypeSelect) {
     positionTypeSelect.addEventListener('change', togglePositionTypeFields);
+  }
+
+  // CD maturity tracks purchase date + 12 months until the user hand-edits
+  // it; clearing the maturity field re-arms the auto-fill.
+  const cdPurchaseInput = document.getElementById('cd-purchase-date');
+  if (cdPurchaseInput) {
+    cdPurchaseInput.addEventListener('change', syncCdMaturityFromPurchase);
+  }
+  const cdMaturityInput = document.getElementById('cd-maturity') as HTMLInputElement | null;
+  if (cdMaturityInput) {
+    cdMaturityInput.addEventListener('input', () => {
+      cdMaturityAutoFill = cdMaturityInput.value === '';
+    });
   }
 
   // Close dropdowns on outside click or Escape (idempotent, single delegated
