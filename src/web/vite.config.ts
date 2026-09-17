@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -12,7 +12,7 @@ export default defineConfig({
 
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
+      '@': resolve(import.meta.dirname, 'src'),
     },
   },
 
@@ -21,11 +21,13 @@ export default defineConfig({
     emptyOutDir: true,
     // Ship sourcemaps in dev builds only. Prod strips ~744 KB.
     sourcemap: !isProd,
-    minify: 'esbuild',
+    // Vite 8 (rolldown-powered) minifies with oxc by default; the old
+    // `minify: 'esbuild'` route now requires esbuild installed separately and
+    // leans on the deprecated transformWithEsbuild API. Let the default ride.
     target: 'es2022',
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'src/main.ts'),
+        main: resolve(import.meta.dirname, 'src/main.ts'),
       },
       output: {
         entryFileNames: 'app.js',

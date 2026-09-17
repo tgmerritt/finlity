@@ -5,7 +5,8 @@
 # 3.11, and ships with the perf improvements that benefit FastAPI/uvloop.
 
 # Stage 1: Build frontend with Node.js
-FROM node:20-alpine AS frontend-builder
+# Node 22+: vite 8 / vitest 5 require node ^22.12 || ^24 || >=26.
+FROM node:22-alpine AS frontend-builder
 
 WORKDIR /app/src/web
 

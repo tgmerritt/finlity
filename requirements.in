@@ -107,9 +107,13 @@ reportlab==4.4.6  # test-only: synthetic PDF generation in tests/test_bank_state
 lxml==6.1.0
 
 # Testing
-# Bumped 8.3.4 -> 8.4.2; clears CVE-2025-71176 (stays in 8.x line)
-pytest==8.4.2
-pytest-asyncio==0.24.0
+# Major bump 8.4.2 -> 9.x; clears PYSEC-2026-1845 (/tmp/pytest-of-{user}
+# predictable-dir DoS; fix in 9.0.3+). pytest-asyncio must move 0.24 -> 1.x
+# in lockstep (0.24 pins pytest<9; 1.x accepts pytest<10). 1.x removed the
+# legacy event_loop fixture and the asyncio_mode=auto default flipped to
+# strict — pytest.ini sets asyncio_mode = auto explicitly, so no test churn.
+pytest>=9.0.3
+pytest-asyncio>=1.0
 
 # Pin urllib3 directly (was transitive via requests at 2.3.0).
 # Bumped 2.3.0 -> 2.6.3; clears CVE-2025-50181/50182, CVE-2025-66418/66471,
