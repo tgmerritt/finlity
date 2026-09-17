@@ -29,9 +29,6 @@
 # moment its package leaves the lock or its fix lands.
 # ---------------------------------------------------------------------------
 
-# reason: pytest 8.4.2 is the latest 8.x line; the fix is in 9.0.3+, a major
-# bump (pytest-asyncio must move 0.24 -> 1.x in lockstep). Local-only DoS via
-# predictable /tmp/pytest-of-{user} dirs — not exploitable in CI containers or
-# single-user dev laptops. Deferred to the "pytest 9 + pytest-asyncio 1.x +
-# vitest 4 test-toolchain modernization" ticket.
-PYSEC-2026-1845
+# 2026-09-17: EMPTY. The pytest 9.1.1 + pytest-asyncio 1.4.0 bump landed
+# (chore/test-toolchain-modernization), so PYSEC-2026-1845 was the last entry.
+# If this file grows again, add `# reason: ...` lines above each ID.
