@@ -13,41 +13,25 @@
 # over allowlisting.
 #
 # ---------------------------------------------------------------------------
-# 2026-04-30 dependency-refresh sprint
+# 2026-09-17 cleanup
 # ---------------------------------------------------------------------------
-# The 59-entry baseline was triaged by bumping direct deps in requirements.in
-# (see commit history) and dropping `python-jose` (unused; removed entirely,
-# which also dropped its transitive `ecdsa` and `pyasn1` CVEs). The four
-# entries below are all transitive-only with no clean top-down fix yet, or
-# require a major version bump that is out-of-scope for this sprint.
+# All entries from the 2026-04-30 / 2026-06-01 sprints were purged:
+#   - CVE-2025-69872 (diskcache), CVE-2026-23949 (jaraco.context) and
+#     PYSEC-2024-277 (joblib): the hosting trees (fastmcp, keyring,
+#     scikit-learn) were dropped from requirements.in on 2026-06-09; the
+#     packages no longer appear in the lock.
+#   - CVE-2026-4539 / PYSEC-2026-2987 (pygments): cleared by raising the
+#     pygments floor to >=2.20.0 (pin resolved to 2.21.0).
+#   - CVE-2025-71176 (pytest): superseded — same /tmp/pytest-of-{user}
+#     flaw re-advised as PYSEC-2026-1845, retained below.
+# Stale allowlist entries are dangerous: they silently mask a future
+# advisory filed against a reintroduced dependency. Delete an entry the
+# moment its package leaves the lock or its fix lands.
 # ---------------------------------------------------------------------------
 
-# reason: transitive via fastmcp; no upstream fix released for diskcache.
-# fastmcp 2.x still depends on diskcache 5.6.3. Re-evaluate when fastmcp
-# bumps the diskcache pin or when diskcache cuts a fixed release.
-CVE-2025-69872
-
-# reason: transitive via keyring (jsonschema dependency chain). Fix is in
-# jaraco-context 6.1.0 but keyring 25.7.0 still constrains <= 6.0.x. Track
-# upstream keyring release that loosens the pin.
-CVE-2026-23949
-
-# reason: transitive via fastmcp / rich. Fix is in pygments 2.20.0; drop
-# this entry when fastmcp loosens its pygments pin (currently <2.20).
-CVE-2026-4539
-
-# reason: pytest 8.4.2 is the latest 8.x line. Fix is in 9.0.3, which is a
-# major bump (collect/fixture API changes). Local-only DoS via predictable
-# /tmp/pytest-of-{user} dirs — not exploitable in CI containers. Deferred
-# to a follow-up "pytest 8 -> 9" migration ticket.
-CVE-2025-71176
-
-# ---------------------------------------------------------------------------
-# 2026-06-01 advisory refresh
-# ---------------------------------------------------------------------------
-# reason: transitive via scikit-learn (joblib==1.4.2, the latest release).
-# No fixed version exists, and the maintainer DISPUTES the report:
-# NumpyArrayWrapper.read_array() is only reached when de-serializing joblib's
-# own cache of *trusted* content, which this app never loads from an untrusted
-# source. Revisit if joblib ships a fix or scikit-learn loosens its joblib pin.
-PYSEC-2024-277
+# reason: pytest 8.4.2 is the latest 8.x line; the fix is in 9.0.3+, a major
+# bump (pytest-asyncio must move 0.24 -> 1.x in lockstep). Local-only DoS via
+# predictable /tmp/pytest-of-{user} dirs — not exploitable in CI containers or
+# single-user dev laptops. Deferred to the "pytest 9 + pytest-asyncio 1.x +
+# vitest 4 test-toolchain modernization" ticket.
+PYSEC-2026-1845

@@ -141,3 +141,6 @@ orchestrator.py
 plan.jsonl*
 *.state.json
 *.builder.log
+
+# AI-managed quarantine (moved files, never committed)
+deleted_by_ai/
