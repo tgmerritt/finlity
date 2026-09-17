@@ -9,6 +9,7 @@ import { showLoading, hideLoading } from '@/ui/loading';
 import { getElementById, createSvgElement } from '@/utils/html';
 import { showTab } from '@/ui/tabs';
 import { emit } from '@/state/events';
+import { store } from '@/state/store';
 import { clientDB } from '@/database/client-database';
 import { getLocalAPI } from '@/api/dispatcher';
 
@@ -115,6 +116,7 @@ export async function checkDemoModeStatus(): Promise<boolean> {
       '/api/settings/demo-mode'
     );
     demoDisableLocked = data.disable_locked === true;
+    store.set('demoMode', data.enabled);
     updateDemoModeUI(data.enabled);
     return data.enabled;
   } catch (error) {

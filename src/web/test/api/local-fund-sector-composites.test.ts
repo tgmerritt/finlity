@@ -47,12 +47,21 @@ describe('local-mode fund/sector composites (F5) and sector plumbing (F6)', () =
     expect(payload.accounts[0]?.positions[0]?.sector).toBe('Technology');
   });
 
-  it('GET /api/settings/demo-mode returns a local stub matching the server shape', async () => {
+  it('GET /api/settings/demo-mode is a PASSTHROUGH (real server state, not a local stub)', async () => {
+    // Regression: a local stub used to return enabled:false unconditionally,
+    // which hid the demo banner/badge on the hosted demo site while the
+    // server was actually running demo.db. The read must hit the network.
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => ({ enabled: true, demo_initialized: true, protected: true, disable_locked: true }),
+    });
+
     const result = await apiCall<{ enabled: boolean; demo_initialized: boolean; protected: boolean }>(
       '/api/settings/demo-mode'
     );
-    expect(result).toEqual({ enabled: false, demo_initialized: false, protected: false });
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(result.enabled).toBe(true);
+    expect(global.fetch).toHaveBeenCalled();
   });
 
   it('POST /api/analysis/advisor/chat/clear succeeds without any network call', async () => {
