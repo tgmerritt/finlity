@@ -23,6 +23,7 @@
 
 import { clientDB } from '@/database/client-database';
 import { createLocalAPI, type LocalAPI } from '@/database/local-api';
+import { store } from '@/state/store';
 import type { ApiCallOptions } from './client';
 
 // =====================================================================
@@ -402,6 +403,10 @@ const PASSTHROUGH_ALLOWLIST: Array<{ method: HttpMethod | '*'; pattern: RegExp }
   { method: '*', pattern: /^\/api\/v2(?:\/.*)?$/ },
   { method: 'GET', pattern: /^\/api\/settings\/version$/ },
   { method: 'GET', pattern: /^\/api\/settings\/deployment-info$/ },
+  // Anonymous server-state read (is demo mode on?). Carries no user data;
+  // local mode must see the REAL server demo state so the demo banner/badge
+  // reflects reality on the hosted demo site (stubbing it hid the banner).
+  { method: 'GET', pattern: /^\/api\/settings\/demo-mode$/ },
   { method: 'GET', pattern: /^\/api\/inference\/providers$/ },
   { method: 'GET', pattern: /^\/health$/ },
 ];
@@ -538,9 +543,12 @@ local('GET', '/api/portfolio/dashboard-metrics', () => {
 // ---- Portfolio: dashboard/data composite ----
 //
 // Composed from LocalAPI pieces to match src/main.py's get_dashboard_data
-// shape ({summary, positions, history, imports, view_id, demo_mode}).
+// Shape ({summary, positions, history, imports, view_id, demo_mode}).
 // DEVIATION: `imports` is always [] (no local file-import-history tracking
-// in LocalAPI) and `demo_mode` is always false (server-only concept).
+// in LocalAPI). `demo_mode` mirrors the server's GLOBAL demo flag as fetched
+// at boot by checkDemoModeStatus (stored in `store`); it is not a hardcoded
+// false — the hosted demo site runs demo.db server-side and the banner/badge
+// must agree with that reality on every dashboard refresh.
 local('GET', '/api/dashboard/data', (req) => {
   const api = getLocalAPI();
   const viewId = req.query.get('view_id');
@@ -615,7 +623,7 @@ local('GET', '/api/dashboard/data', (req) => {
     history: api.getHistory(),
     imports: [],
     view_id: viewId ?? null,
-    demo_mode: false,
+    demo_mode: store.get('demoMode') ?? false,
   };
 });
 
@@ -733,14 +741,15 @@ local('PUT', '/api/analysis/triggers/{id}/toggle', (_req, m) => getLocalAPI().to
 // its own in-memory history array and re-rendering the placeholder.
 local('POST', '/api/analysis/advisor/chat/clear', () => ({ status: 'cleared' }));
 
-// ---- Settings: demo mode (local stub — demo mode is a server-only concept) ----
-
-/** Matches src/api/settings.py's get_demo_mode() response shape. */
-local('GET', '/api/settings/demo-mode', () => ({
-  enabled: false,
-  demo_initialized: false,
-  protected: false,
-}));
+// ---- Settings: demo mode -------------------------------------------------
+// GET is a PASSTHROUGH (see allowlist): demo mode is a SERVER-global state
+// (the hosted demo site boots with it on and locked). Intercepting it with a
+// local stub returned enabled:false and silently hid the demo banner/badge on
+// the hosted site even while the server ran demo.db — the stub contradicted
+// this module's documented PASSTHROUGH category. The read is anonymous and
+// carries no user data, so passthrough leaks nothing.
+// PUT stays DISABLED: toggling the server-wide demo DB from one visitor's
+// browser is exactly what the server-side lock (fc2ad4a) forbids.
 disabled('PUT', '/api/settings/demo-mode', () => {
   throw new LocalModeDisabledError('Demo mode is not available in hosted/local mode.');
 });

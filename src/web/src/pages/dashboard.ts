@@ -146,7 +146,10 @@ export async function refreshData(): Promise<void> {
     // Update account totals table
     updateAccountTotalsTable(data.summary.accounts || []);
 
-    // Update demo mode UI from response
+    // Update demo mode UI from response. NOTE: in local (hosted) mode the
+    // composite's demo_mode mirrors the server state fetched at boot
+    // (checkDemoModeStatus -> store), not a hardcoded false — the server's
+    // demo flag is global and the banner must agree with it.
     if (data.demo_mode !== undefined) {
       store.set('demoMode', data.demo_mode);
       updateDemoModeUI(data.demo_mode);
