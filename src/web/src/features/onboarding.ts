@@ -1150,6 +1150,12 @@ export async function ensureLocalDatabaseReady(): Promise<void> {
     );
   }
 
+  // Hosted demo site: a newcomer's fresh browser DB is empty, which made
+  // the showcase land on $0 despite the server running demo.db. Seed it
+  // from the server's read-only demo export (no-op unless demo mode is
+  // locked on AND the local DB has no accounts yet).
+  await seedDemoDatasetIfEmpty();
+
   startClientDbAutoSave();
 
   // Baseline snapshot so history/allocation charts have data on first load,
@@ -1159,6 +1165,100 @@ export async function ensureLocalDatabaseReady(): Promise<void> {
     getLocalAPI().takeSnapshot();
   } catch (error) {
     console.warn('Could not take initial snapshot:', error);
+  }
+}
+
+/**
+ * Seed a freshly-created local DB with the server's demo dataset when the
+ * hosted site runs in locked demo mode. Preserves the server's row IDs so
+ * positions/snapshots stay referentially coherent; skips entirely when the
+ * visitor already has data (never overwrites a real portfolio). Failures
+ * degrade to a warning — worst case the visitor sees the empty-DB flow,
+ * exactly the pre-seeding behavior.
+ */
+export async function seedDemoDatasetIfEmpty(): Promise<void> {
+  try {
+    const status = await apiCall<{ enabled?: boolean; disable_locked?: boolean }>(
+      '/api/settings/demo-mode'
+    );
+    if (!(status.enabled && status.disable_locked)) return;
+
+    const existing = clientDB.query<{ n: number }>('SELECT COUNT(*) AS n FROM accounts');
+    if ((existing[0]?.n ?? 0) > 0) return;
+
+    const data = await apiCall<{
+      entities: Array<Record<string, unknown>>;
+      accounts: Array<Record<string, unknown>>;
+      positions: Array<Record<string, unknown>>;
+      snapshots: Array<Record<string, unknown>>;
+    }>('/api/settings/demo-mode/export');
+
+    if (!data.accounts?.length) return;
+
+    for (const e of data.entities ?? []) {
+      clientDB.execute(
+        `INSERT OR IGNORE INTO entities (id, name, entity_type, is_default, is_household, color, icon)
+         VALUES (?, ?, ?, 0, 0, ?, ?)`,
+        [e.id, e.name, e.entity_type, e.color ?? '#4A90D9', e.icon ?? 'user']
+      );
+    }
+    for (const a of data.accounts) {
+      clientDB.execute(
+        `INSERT OR IGNORE INTO accounts (id, entity_id, name, account_type, brokerage, beneficiary, custom_type_name, is_retirement_account)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          a.id,
+          a.entity_id ?? null,
+          a.name,
+          a.account_type,
+          a.brokerage ?? 'other',
+          a.beneficiary ?? null,
+          a.custom_type_name ?? null,
+          a.is_retirement_account ? 1 : 0,
+        ]
+      );
+    }
+    for (const p of data.positions) {
+      clientDB.execute(
+        `INSERT OR IGNORE INTO positions (id, account_id, ticker, name, shares, cost_basis, current_price, sector, is_fund, asset_class, position_type, maturity_date, interest_rate, purchase_date, option_underlying, option_expiration, option_strike, option_type, contract_multiplier)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          p.id,
+          p.account_id,
+          p.ticker,
+          p.name ?? null,
+          p.shares,
+          p.cost_basis ?? null,
+          p.current_price ?? null,
+          p.sector ?? null,
+          p.is_fund ? 1 : 0,
+          p.asset_class ?? 'equity',
+          p.position_type ?? 'equity',
+          p.maturity_date ?? null,
+          p.interest_rate ?? null,
+          p.purchase_date ?? null,
+          p.option_underlying ?? null,
+          p.option_expiration ?? null,
+          p.option_strike ?? null,
+          p.option_type ?? null,
+          p.contract_multiplier ?? null,
+        ]
+      );
+    }
+    for (const s of data.snapshots ?? []) {
+      clientDB.execute(
+        `INSERT OR IGNORE INTO portfolio_snapshots (id, snapshot_date, total_value, retirement_value, taxable_value, positions_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [s.id, s.snapshot_date, s.total_value, s.retirement_value, s.taxable_value, s.positions_json, s.created_at]
+      );
+    }
+
+    await clientDB.saveToIndexedDB();
+    console.log(
+      `Seeded demo dataset locally: ${data.accounts.length} accounts, ${data.positions.length} positions`
+    );
+  } catch (error) {
+    console.warn('Demo dataset seeding skipped:', error);
   }
 }
 

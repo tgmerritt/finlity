@@ -636,6 +636,53 @@ def get_demo_mode() -> dict:
     return status
 
 
+@router.get("/demo-mode/export")
+def export_demo_dataset() -> dict:
+    """Export the server's demo dataset for seeding a visitor's local DB.
+
+    Hosted-mode visitors keep their portfolio in browser SQLite, so the
+    server-side demo.db is invisible to them. When demo mode is locked ON
+    (the hosted site), the client seeds an empty local DB from this export
+    so newcomers land on a populated showcase instead of $0.
+
+    SECURITY: enforced read-only (PRAGMA query_only), gated on demo mode
+    being enabled, and it only ever opens demo.db — never a profile DB — so
+    it cannot disclose real portfolios. Snapshots trimmed to most recent 30.
+    """
+    import sqlite3
+    from pathlib import Path
+
+    from src.services.demo_mode import get_demo_manager
+
+    manager = get_demo_manager()
+    demo_db_path = Path(manager.demo_db_path)
+    if not manager.is_enabled or not demo_db_path.exists():
+        raise HTTPException(status_code=404, detail="Demo dataset not available")
+
+    conn = sqlite3.connect(str(demo_db_path))
+    conn.execute("PRAGMA query_only = ON")
+    conn.row_factory = sqlite3.Row
+    try:
+        # Household entity intentionally excluded: clients seed their own
+        # household and its unique-index would collide. Accounts only ever
+        # reference individual entities (john-demo / jane-demo).
+        entities = [
+            dict(r) for r in conn.execute("SELECT * FROM entities WHERE is_household = 0")
+        ]
+        accounts = [dict(r) for r in conn.execute("SELECT * FROM accounts")]
+        positions = [dict(r) for r in conn.execute("SELECT * FROM positions")]
+        snaps = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM portfolio_snapshots ORDER BY snapshot_date DESC LIMIT 30"
+            )
+        ]
+    finally:
+        conn.close()
+
+    return {"entities": entities, "accounts": accounts, "positions": positions, "snapshots": snaps[::-1]}
+
+
 @router.put("/demo-mode")
 def set_demo_mode(settings: DemoModeSettings) -> dict:
     """Toggle demo mode on/off dynamically (no server restart needed).

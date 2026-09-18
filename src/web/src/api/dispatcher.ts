@@ -403,10 +403,11 @@ const PASSTHROUGH_ALLOWLIST: Array<{ method: HttpMethod | '*'; pattern: RegExp }
   { method: '*', pattern: /^\/api\/v2(?:\/.*)?$/ },
   { method: 'GET', pattern: /^\/api\/settings\/version$/ },
   { method: 'GET', pattern: /^\/api\/settings\/deployment-info$/ },
-  // Anonymous server-state read (is demo mode on?). Carries no user data;
-  // local mode must see the REAL server demo state so the demo banner/badge
-  // reflects reality on the hosted demo site (stubbing it hid the banner).
-  { method: 'GET', pattern: /^\/api\/settings\/demo-mode$/ },
+  // Anonymous server-state reads (is demo mode on? + demo dataset export for
+  // seeding empty local DBs). Carry no user data; local mode must see the
+  // REAL server demo state so the banner/badge reflect reality and newcomers
+  // land on a populated demo showcase instead of $0.
+  { method: 'GET', pattern: /^\/api\/settings\/demo-mode(?:\/export)?$/ },
   { method: 'GET', pattern: /^\/api\/inference\/providers$/ },
   { method: 'GET', pattern: /^\/health$/ },
 ];

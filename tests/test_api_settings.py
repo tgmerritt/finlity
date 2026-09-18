@@ -41,6 +41,51 @@ class TestSettingsAPI:
         # Either None (nothing saved yet) or an ISO 8601 string.
         assert data["updated_at"] is None or isinstance(data["updated_at"], str)
 
+    def test_demo_export_requires_demo_enabled(self, client):
+        """404 when demo mode is off — the export must never leak real data.
+
+        Flips demo mode OFF through the manager's own state API (the test
+        suite runs against a throwaway PORTFOLIO_DATA_DIR seeded at import
+        time), asserts the gate, then restores via enable().
+        """
+        from src.services.demo_mode import get_demo_manager
+
+        manager = get_demo_manager()
+        profile_id = manager.last_profile_id
+        manager.disable()
+        try:
+            response = client.get("/api/settings/demo-mode/export")
+            assert response.status_code == 404
+        finally:
+            manager.enable(profile_id)
+
+        # Sanity: with demo restored, the export is reachable again.
+        assert client.get("/api/settings/demo-mode/export").status_code == 200
+
+    def test_demo_export_returns_synthetic_dataset(self, client):
+        """Locked-demo servers export accounts/positions/snapshots for seeding.
+
+        conftest runs the whole suite with PORTFOLIO_DEMO_MODE=true against an
+        isolated data dir seeded from the tracked demo.db — the endpoint's
+        production posture, exercised as-is.
+        """
+        response = client.get("/api/settings/demo-mode/export")
+        assert response.status_code == 200
+        data = response.json()
+        # NB: not absolute counts — other suites legitimately create accounts
+        # in the shared isolated demo DB (demo mode redirects writes there).
+        # The contract is: canonical demo accounts present, positions cover
+        # them, individuals-only entities, snapshots exist.
+        names = {a["name"] for a in data["accounts"]}
+        assert {"Company 401k", "Roth IRA", "Taxable Brokerage"} <= names
+        assert len(data["positions"]) >= 48
+        assert len(data["entities"]) >= 2  # john-demo, jane-demo
+        assert all(not e.get("is_household") for e in data["entities"])
+        assert data["snapshots"], "expected at least one snapshot"
+        # Referential integrity: every position points at an exported account
+        account_ids = {a["id"] for a in data["accounts"]}
+        assert all(p["account_id"] in account_ids for p in data["positions"])
+
     def test_settings_version_advances_after_save(self, client):
         """Saving personal settings bumps the settings version forward.
 
