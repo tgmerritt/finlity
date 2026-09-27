@@ -27,6 +27,15 @@ pip-compile --resolver=backtracking --generate-hashes \
 
 Any new import must be added to `requirements.in` and recompiled before staging. "It's installed locally" is not sufficient: CI and the Heroku image both build from the hashed `requirements.txt`.
 
+## Deploying from GitHub Actions
+
+The `deploy` job in `.github/workflows/test.yml` is off by default so forks don't try to deploy. To enable it in your own repository:
+
+1. Add repository secrets `HEROKU_API_KEY` (a long-lived authorization from `heroku authorizations:create`) and `HEROKU_APP_NAME`.
+2. Add a repository variable `HEROKU_DEPLOY` with the value `true` (Settings > Secrets and variables > Actions > Variables).
+
+Pushes to `main` then build and release the container automatically.
+
 ## After deploying
 
 CI (`.github/workflows/test.yml`) runs ruff, mypy, pip-audit, bandit, pytest, vitest, vite build, and SBOM generation. Confirm it is green on the pushed commit, then check `heroku logs` for boot errors, especially around `PORTFOLIO_DATA_DIR` and `MULTI_USER_MODE` / `DYNO` gating.
