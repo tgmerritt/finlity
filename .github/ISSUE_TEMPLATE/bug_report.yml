@@ -1,0 +1,90 @@
+name: Bug Report
+description: Report a problem with Finlity
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Before you submit, please double check that no real account numbers, balances, or personal financial data are included anywhere in this report (text, screenshots, or attached files).
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the behavior. Use demo mode (`scripts/generate_demo.py`) data if screenshots or example data are needed.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened? Include error messages, stack traces, or console output if available.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Install Method
+      options:
+        - Docker
+        - Local (Python venv / npm)
+        - Hosted demo (app.finlity.net)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      placeholder: e.g. Chrome 128, Safari 17
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      placeholder: e.g. macOS 15, Ubuntu 24.04, Windows 11
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Finlity Version
+      description: Check the version shown in the app footer, or the git commit/tag you're running.
+      placeholder: e.g. 1.0.0 or commit hash
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: no-real-data
+    attributes:
+      label: Data Privacy Confirmation
+      options:
+        - label: I have removed any real account numbers, balances, or personal financial data from this report.
+          required: true

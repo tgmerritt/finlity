@@ -77,6 +77,11 @@ api_keys.txt
 # Track .claude folder for shared development configuration
 # (skills, agents, permission settings, etc.)
 # Note: Never store API keys or secrets in .claude/
+# Personal per-developer overrides, never shared:
+.claude/settings.local.json
+
+# ----- Codesight (generated codebase map) -----
+.codesight/
 
 # ----- Log Files (may contain URLs, account activity) -----
 *.log
@@ -129,9 +134,6 @@ screenshots/
 !src/web/images/*.jpg
 !docs/images/*.png
 !docs/images/*.jpg
-
-DESIGN_ITERATION_SESSION.md
-REFACTOR_PROGRESS.md
 
 # Local dev harness (parallel design-iteration worktrees, artifacts)
 .harness/
