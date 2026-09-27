@@ -64,8 +64,6 @@ logs/
 
 # Claude Code
 .claude/
-DESIGN_ITERATION_SESSION.md
-REFACTOR_PROGRESS.md
 
 # Dev-only tooling (not required in runtime image)
 .codesight/

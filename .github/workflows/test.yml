@@ -125,8 +125,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     # Deploy on: 1) push to main, or 2) manual workflow_dispatch with deploy_to_heroku=true
-    # Skip deploy on pull requests
+    # Skip deploy on pull requests, and in forks or clones that haven't opted in by
+    # setting the repository variable HEROKU_DEPLOY=true (see docs/deployment/heroku.md)
     if: |
+      vars.HEROKU_DEPLOY == 'true' &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_to_heroku == true))
 

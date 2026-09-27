@@ -1,6 +1,10 @@
-# Investment Portfolio Analyzer
+# Finlity
 
-A Python-based investment portfolio tracking and analysis system with FastAPI backend, automated CSV/Excel import, risk-adjusted analytics, allocation triggers, Monte Carlo retirement projections, and an extensible plugin system.
+[![CI](https://github.com/tgmerritt/finlity/actions/workflows/test.yml/badge.svg)](https://github.com/tgmerritt/finlity/actions/workflows/test.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Finlity is a self-hosted investment portfolio tracker with a FastAPI backend, automated CSV/Excel import, risk-adjusted analytics, allocation triggers, Monte Carlo retirement projections, and an extensible plugin system.
+
+A hosted demo with synthetic data runs at https://app.finlity.net.
 
 > **Privacy Note**: All data is stored locally. No financial information is transmitted to external servers (except optional Claude API for fund metadata enrichment).
 
@@ -57,8 +61,8 @@ A Python-based investment portfolio tracking and analysis system with FastAPI ba
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd investment-portfolio-analyzer
+git clone https://github.com/tgmerritt/finlity.git
+cd finlity
 
 # Build the Docker image
 docker build -t portfolio-analyzer .
@@ -97,8 +101,8 @@ The dashboard will be available at http://localhost:8000
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd investment-portfolio-analyzer
+git clone https://github.com/tgmerritt/finlity.git
+cd finlity
 
 # Create and activate virtual environment
 python3 -m venv .venv
@@ -435,7 +439,7 @@ You can use either aliases (`opus`, `sonnet`, `haiku`) or full model IDs.
 ## Project Structure
 
 ```
-investment-portfolio-analyzer/
+finlity/
 ├── src/
 │   ├── main.py               # FastAPI server & CLI
 │   ├── api/                   # REST API endpoints
@@ -532,10 +536,18 @@ investment-portfolio-analyzer/
 - `*.csv`, `*.xlsx`, `*.xls` - Spreadsheet files with financial data
 - `logs/` - Application logs
 
+## Deployment
+
+Finlity can optionally be deployed to Heroku as a container. See `docs/deployment/heroku.md` for details.
+
 ## Contributing
 
-Contributions are welcome! Please ensure no personal data is included in commits.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and our [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). If you discover a security vulnerability, please report it privately per [SECURITY.md](SECURITY.md) rather than opening a public issue.
+
+## Disclaimer
+
+Finlity is not financial, tax, or investment advice. Projections and calculations (Monte Carlo simulations, tax estimates, and similar outputs) are estimates provided for informational purposes only.
 
 ## License
 
-MIT License - See LICENSE file for details.
+Finlity is released under the [MIT License](LICENSE).

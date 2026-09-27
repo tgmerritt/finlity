@@ -1,4 +1,4 @@
-# Skills for Investment Portfolio Analyzer
+# Skills for Finlity
 
 This document describes special capabilities and modes for Claude Code when working with this project.
 
