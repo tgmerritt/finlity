@@ -1,6 +1,7 @@
 {
   "name": "finlity-frontend",
   "version": "1.0.0",
+  "license": "MIT",
   "description": "TypeScript frontend for Finlity Investment Dashboard",
   "type": "module",
   "scripts": {
