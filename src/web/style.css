@@ -1928,7 +1928,7 @@ body {
 /* Charts Grid */
 .charts-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr));
     gap: 16px;
     margin-bottom: 16px;
 }
@@ -1943,8 +1943,19 @@ body {
 /* Analysis/Settings Grid */
 .analysis-grid, .settings-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(350px, 100%), 1fr));
     gap: 16px;
+}
+
+/* Grid and flex children default to min-width: auto, which lets a wide chart
+   or table push its card past the viewport. */
+.charts-grid > *,
+.analysis-grid > *,
+.settings-grid > *,
+.stats-row > *,
+.card,
+.card-body {
+    min-width: 0;
 }
 
 /* Tables */
@@ -2734,7 +2745,7 @@ td.text-right {
 
 .budget-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr));
     gap: 16px;
 }
 
