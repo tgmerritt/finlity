@@ -3475,23 +3475,50 @@ td.text-right {
     .account-totals-table {
         min-width: 0;
         width: 100%;
-        font-size: 13px;
+        font-size: 12px;
     }
 
-    /* Type badge column: the account name already says what it is. */
-    .account-totals-table th:nth-child(2),
-    .account-totals-table td:nth-child(2) {
+    /* Type badge column: the account name already says what it is.
+       display: none on every cell of a column removes it from the
+       table's column count, which throws off the tfoot's colspan="2"
+       cell (it ends up spanning Account + Value instead of Account +
+       Type, shifting the Total row's value and percent one column to
+       the right). Collapse the column to zero width instead, which
+       keeps the column (and colspan math) intact. */
+    .account-totals-table thead th:nth-child(2),
+    .account-totals-table tbody td:nth-child(2) {
+        width: 0;
+        padding: 0;
+        overflow: hidden;
+        border: 0;
+        font-size: 0;
+    }
+
+    .account-totals-table tbody td:nth-child(2) .account-type-badge {
         display: none;
     }
 
-    .account-totals-table th {
-        font-size: 10px;
-        padding: 8px 6px;
-        white-space: nowrap;
+    /* Scoped to thead/tbody (rather than the bare th/td used elsewhere)
+       so these mobile rules reliably beat the desktop
+       .account-totals-table th / td padding declared later in this file,
+       regardless of source order. */
+    .account-totals-table thead th {
+        font-size: 12px;
+        padding: 6px 4px;
+        white-space: normal;
     }
 
-    .account-totals-table td {
-        padding: 8px 6px;
+    .account-totals-table tbody td,
+    .account-totals-table tfoot td {
+        padding: 6px 4px;
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    /* Keep dollar values and percentages on one line: only the account
+       name column needs to wrap to stay within the card width. */
+    .account-totals-table tbody td.text-right,
+    .account-totals-table tfoot td.text-right {
         white-space: nowrap;
     }
 
