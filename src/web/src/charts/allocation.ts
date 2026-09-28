@@ -9,6 +9,12 @@ import {
   chartPalette,
   getColorByIndex,
 } from './plotly-utils';
+import {
+  filterHistoryForRange,
+  hasPlottableHistory,
+  historyDateAxis,
+  HISTORY_EMPTY_MESSAGE,
+} from './history-range';
 import { getChartColors } from '@/state/theme';
 import { store } from '@/state/store';
 import { setStateView, clearStateView } from '@/ui/state-view';
@@ -176,22 +182,19 @@ export async function updateHistoryChart(
     store.set('fullHistoryData', history);
   }
 
-  if (!history || history.length === 0) {
+  if (!history || !hasPlottableHistory(history)) {
     if (container) {
-      showEmptyState(container, 'No history data yet');
+      showEmptyState(container, HISTORY_EMPTY_MESSAGE);
     }
     return;
   }
 
-  // Filter history based on selected time range
   const currentHistoryDays = store.get('currentHistoryDays');
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - currentHistoryDays);
-  const filteredHistory = history.filter((h) => new Date(h.date) >= cutoffDate);
+  const filteredHistory = filterHistoryForRange(history, currentHistoryDays);
 
-  if (filteredHistory.length === 0) {
+  if (!hasPlottableHistory(filteredHistory)) {
     if (container) {
-      showEmptyState(container, 'No data for selected time range');
+      showEmptyState(container, 'Not enough history for this range yet. Try a longer range.');
     }
     return;
   }
@@ -237,6 +240,7 @@ export async function updateHistoryChart(
       margin: { t: 20, b: 40, l: 70, r: 20 },
       xaxis: {
         ...getAxisConfig(),
+        ...historyDateAxis(),
       },
       yaxis: {
         ...getAxisConfig(),
