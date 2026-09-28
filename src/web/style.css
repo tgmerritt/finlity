@@ -5197,6 +5197,25 @@ th.sortable.sort-desc .sort-icon::after {
     height: 24px;
 }
 
+@media (max-width: 480px) {
+    .chat-fab {
+        width: 44px;
+        height: 44px;
+        right: 12px;
+        bottom: 12px;
+    }
+
+    .chat-fab svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    /* Keep the last card's content clear of the floating chat button. */
+    .main-content {
+        padding-bottom: 72px;
+    }
+}
+
 /* Chat Modal Specific Styles */
 .chat-modal .modal-content {
     max-width: 700px;
