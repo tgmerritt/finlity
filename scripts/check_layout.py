@@ -22,6 +22,13 @@ CHECKS_JS = """
 () => {
   const problems = [];
   const vw = window.innerWidth;
+
+  const dashboardTab = document.getElementById('tab-dashboard');
+  if (!dashboardTab || getComputedStyle(dashboardTab).display === 'none') {
+    problems.push('dashboard tab not visible; checks did not run');
+    return problems;
+  }
+
   if (document.documentElement.scrollWidth > vw + 1) {
     problems.push(`page scrolls horizontally (${document.documentElement.scrollWidth}px > ${vw}px)`);
   }
@@ -33,6 +40,8 @@ CHECKS_JS = """
   const mainWidth = main.getBoundingClientRect().width;
   if (vw <= 480) {
     document.querySelectorAll('#tab-dashboard .stats-row .stat-card').forEach((card, i) => {
+      const rendered = card.getBoundingClientRect().width > 0 && getComputedStyle(card).display !== 'none';
+      if (!rendered) return;
       const w = card.getBoundingClientRect().width;
       if (w < mainWidth * 0.7) problems.push(`stat card ${i} too narrow on phone (${Math.round(w)}px)`);
     });
@@ -59,9 +68,35 @@ CHECKS_JS = """
 
 
 def open_dashboard(page: Page, base_url: str, theme: str) -> None:
+    # Each new_page() is a fresh context, so with an empty localStorage the
+    # app always treats it as a first visit and lands on the welcome tab
+    # (main.ts's init() only calls refreshData() on the *returning* visitor
+    # branch; showTab('welcome') alone never loads portfolio data). Clicking
+    # the sidebar's Dashboard nav item after that only flips which tab is
+    # displayed, it does not trigger a data refresh, so the hero stat stays
+    # stuck at "$0" no matter how long we wait for it.
+    #
+    # A real returning user hits the populated dashboard directly, so mark
+    # the visit as returning before the app boots. That takes the same code
+    # path init() uses for every visit after the first: showTab('dashboard')
+    # followed by an awaited refreshData().
+    page.add_init_script("localStorage.setItem('hasVisitedBefore', 'true')")
+
     page.goto(base_url + "/", wait_until="networkidle", timeout=60000)
     page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
-    page.wait_for_timeout(3000)
+
+    # Wait for the dashboard tab to actually be visible and for demo data to
+    # have loaded (the hero stat shows a non-zero dollar amount), rather than
+    # relying on a fixed sleep.
+    page.wait_for_function(
+        """() => {
+          const tab = document.getElementById('tab-dashboard');
+          if (!tab || getComputedStyle(tab).display === 'none') return false;
+          const hero = document.querySelector('.stat-card--hero .stat-value');
+          return !!hero && /\\$[1-9]/.test(hero.textContent || '');
+        }""",
+        timeout=20000,
+    )
 
 
 def main() -> int:
