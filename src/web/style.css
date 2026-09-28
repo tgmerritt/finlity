@@ -3473,8 +3473,15 @@ td.text-right {
 
     /* Account totals table mobile */
     .account-totals-table {
-        min-width: 400px;
+        min-width: 0;
+        width: 100%;
         font-size: 13px;
+    }
+
+    /* Type badge column: the account name already says what it is. */
+    .account-totals-table th:nth-child(2),
+    .account-totals-table td:nth-child(2) {
+        display: none;
     }
 
     .account-totals-table th {
