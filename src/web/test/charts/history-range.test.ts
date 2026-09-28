@@ -28,6 +28,28 @@ describe('filterHistoryForRange', () => {
   it('returns everything for a range longer than the history', () => {
     expect(filterHistoryForRange(history, 3650, now)).toHaveLength(3);
   });
+
+  it('handles production format (ISO datetime with no offset) correctly', () => {
+    const prodHistory = [
+      snap('2026-08-28T00:00:00'),
+      snap('2026-08-29T00:00:00'),
+      snap('2026-09-27T00:00:00'),
+    ];
+    const result = filterHistoryForRange(prodHistory, 30, now);
+    expect(result.map((h) => h.date)).toEqual([
+      '2026-08-29T00:00:00',
+      '2026-09-27T00:00:00',
+    ]);
+  });
+
+  it('includes boundary case: snapshot exactly N calendar days before now', () => {
+    const prodHistory = [
+      snap('2026-08-29T00:00:00'), // exactly 30 calendar days before 2026-09-28
+      snap('2026-08-28T00:00:00'), // 31 calendar days before
+    ];
+    const result = filterHistoryForRange(prodHistory, 30, now);
+    expect(result.map((h) => h.date)).toEqual(['2026-08-29T00:00:00']);
+  });
 });
 
 describe('hasPlottableHistory', () => {
@@ -37,6 +59,15 @@ describe('hasPlottableHistory', () => {
     expect(hasPlottableHistory([snap('2026-09-27')])).toBe(false);
     expect(hasPlottableHistory([snap('2026-09-27T00:00:00'), snap('2026-09-27T23:59:59')])).toBe(false);
     expect(hasPlottableHistory([snap('2026-09-26'), snap('2026-09-27')])).toBe(true);
+  });
+
+  it('handles production format (ISO datetime) correctly', () => {
+    expect(hasPlottableHistory([snap('2026-09-27T00:00:00'), snap('2026-09-28T00:00:00')])).toBe(
+      true
+    );
+    expect(
+      hasPlottableHistory([snap('2026-09-27T00:00:00'), snap('2026-09-27T23:59:59')])
+    ).toBe(false);
   });
 });
 
