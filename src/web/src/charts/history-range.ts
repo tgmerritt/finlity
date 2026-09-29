@@ -37,12 +37,45 @@ export function hasPlottableHistory(history: SnapshotHistory[]): boolean {
   return days.size >= MIN_HISTORY_POINTS;
 }
 
-/** X axis settings that keep ticks at day resolution. */
-export function historyDateAxis(): {
+/** Maximum distinct calendar days for which we show one tick per day. */
+const MAX_DAYS_FOR_PER_DAY_TICKS = 6;
+
+interface HistoryDateAxisWithTickvals {
+  type: 'date';
+  tickformat: string;
+  hoverformat: string;
+  tickvals: string[];
+}
+
+interface HistoryDateAxisWithNticks {
   type: 'date';
   tickformat: string;
   hoverformat: string;
   nticks: number;
-} {
+}
+
+/**
+ * X axis settings that keep ticks at day resolution.
+ *
+ * When the filtered history spans a handful of distinct calendar days,
+ * Plotly's automatic date ticking can place more than one tick within the
+ * same day (e.g. every 12 hours), which repeats the same formatted label.
+ * In that case we pin one tick per distinct day instead. Longer ranges fall
+ * back to Plotly's automatic `nticks` spacing.
+ */
+export function historyDateAxis(
+  history: SnapshotHistory[]
+): HistoryDateAxisWithTickvals | HistoryDateAxisWithNticks {
+  const days = Array.from(new Set(history.map((h) => calendarDay(h.date)))).sort();
+
+  if (days.length <= MAX_DAYS_FOR_PER_DAY_TICKS) {
+    return {
+      type: 'date',
+      tickformat: '%b %d',
+      hoverformat: '%b %d, %Y',
+      tickvals: days,
+    };
+  }
+
   return { type: 'date', tickformat: '%b %d', hoverformat: '%b %d, %Y', nticks: 6 };
 }

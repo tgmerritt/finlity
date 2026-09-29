@@ -240,7 +240,7 @@ export async function updateHistoryChart(
       margin: { t: 20, b: 40, l: 70, r: 20 },
       xaxis: {
         ...getAxisConfig(),
-        ...historyDateAxis(),
+        ...historyDateAxis(filteredHistory),
       },
       yaxis: {
         ...getAxisConfig(),
