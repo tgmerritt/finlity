@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 WIDTHS = (1440, 390, 360)
 THEMES = ("light", "dark")
@@ -67,7 +68,7 @@ CHECKS_JS = """
 """
 
 
-def open_dashboard(page: Page, base_url: str, theme: str) -> None:
+def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) -> None:
     # Each new_page() is a fresh context, so with an empty localStorage the
     # app always treats it as a first visit and lands on the welcome tab
     # (main.ts's init() only calls refreshData() on the *returning* visitor
@@ -82,8 +83,30 @@ def open_dashboard(page: Page, base_url: str, theme: str) -> None:
     # followed by an awaited refreshData().
     page.add_init_script("localStorage.setItem('hasVisitedBefore', 'true')")
 
-    page.goto(base_url + "/", wait_until="networkidle", timeout=60000)
+    # "load" rather than "networkidle": hosted mode keeps requests in flight
+    # (CDN assets, background polling), so the network may never go idle.
+    # Readiness is decided by the wait_for_function below.
+    page.goto(base_url + "/", wait_until="load", timeout=60000)
     page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
+
+    if hosted:
+        # Hosted (browser storage) mode has no server-side database, so
+        # ensureLocalDatabaseReady() always finds IndexedDB empty on a fresh
+        # context and blocks on the "open or create your portfolio database"
+        # modal (onboarding.ts's showDatabaseGateModal). hasVisitedBefore only
+        # controls which tab a returning visitor lands on; it does not skip
+        # this gate. Click "Continue with browser storage" when it appears so
+        # the app creates a new IndexedDB database, seeds the demo dataset
+        # into it, and proceeds the same way a real hosted-mode user would.
+        browser_storage_button = page.get_by_role(
+            "button", name="Continue with browser storage", exact=False
+        )
+        try:
+            browser_storage_button.wait_for(state="visible", timeout=10000)
+        except PlaywrightTimeoutError:
+            pass
+        else:
+            browser_storage_button.click()
 
     # Wait for the dashboard tab to actually be visible and for demo data to
     # have loaded (the hero stat shows a non-zero dollar amount), rather than
@@ -93,9 +116,12 @@ def open_dashboard(page: Page, base_url: str, theme: str) -> None:
           const tab = document.getElementById('tab-dashboard');
           if (!tab || getComputedStyle(tab).display === 'none') return false;
           const hero = document.querySelector('.stat-card--hero .stat-value');
-          return !!hero && /\\$[1-9]/.test(hero.textContent || '');
+          // The hero fills in before the account table, so also wait for
+          // account rows or screenshots can catch a half-rendered page.
+          const accountRows = document.querySelectorAll('#account-totals-body tr').length;
+          return !!hero && /\\$[1-9]/.test(hero.textContent || '') && accountRows > 0;
         }""",
-        timeout=20000,
+        timeout=45000,
     )
 
 
@@ -103,6 +129,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="http://127.0.0.1:8790")
     parser.add_argument("--screenshots", type=Path, default=None)
+    parser.add_argument(
+        "--hosted",
+        action="store_true",
+        help="Click through the 'open or create your portfolio database' modal "
+        "(hosted/browser-storage mode) before running checks.",
+    )
     args = parser.parse_args()
 
     failures: list[str] = []
@@ -111,9 +143,13 @@ def main() -> int:
         for width in WIDTHS:
             for theme in THEMES:
                 page = browser.new_page(viewport={"width": width, "height": 900})
-                open_dashboard(page, args.base_url, theme)
-                for problem in page.evaluate(CHECKS_JS):
-                    failures.append(f"{width}px {theme}: {problem}")
+                try:
+                    open_dashboard(page, args.base_url, theme, hosted=args.hosted)
+                except PlaywrightTimeoutError:
+                    failures.append(f"{width}px {theme}: dashboard did not finish loading")
+                else:
+                    for problem in page.evaluate(CHECKS_JS):
+                        failures.append(f"{width}px {theme}: {problem}")
                 if args.screenshots:
                     args.screenshots.mkdir(parents=True, exist_ok=True)
                     page.screenshot(path=str(args.screenshots / f"dashboard-{width}-{theme}.png"), full_page=True)

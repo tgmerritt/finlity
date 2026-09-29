@@ -79,6 +79,6 @@ describe('historyDateAxis', () => {
   });
 
   it('has a plain empty-state message without em-dashes', () => {
-    expect(HISTORY_EMPTY_MESSAGE).not.toContain('—');
+    expect(HISTORY_EMPTY_MESSAGE).not.toContain('\u2014');
   });
 });
