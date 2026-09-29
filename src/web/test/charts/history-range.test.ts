@@ -73,9 +73,37 @@ describe('hasPlottableHistory', () => {
 
 describe('historyDateAxis', () => {
   it('uses a date axis with day-level ticks', () => {
-    const axis = historyDateAxis();
+    const axis = historyDateAxis([snap('2026-09-28'), snap('2026-09-29')]);
     expect(axis.type).toBe('date');
     expect(axis.tickformat).toBe('%b %d');
+  });
+
+  it('sets one tickval per distinct day for two adjacent days, with no duplicates', () => {
+    const history = [
+      snap('2026-09-28T00:00:00'),
+      snap('2026-09-28T12:00:00'),
+      snap('2026-09-29T00:00:00'),
+    ];
+    const axis = historyDateAxis(history);
+    expect('tickvals' in axis).toBe(true);
+    expect('nticks' in axis).toBe(false);
+    if ('tickvals' in axis) {
+      expect(axis.tickvals).toEqual(['2026-09-28', '2026-09-29']);
+    }
+  });
+
+  it('falls back to nticks for a long range with many distinct days, without tickvals', () => {
+    const history = Array.from({ length: 30 }, (_, i) => {
+      const d = new Date('2026-01-01T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + i);
+      return snap(d.toISOString().slice(0, 10));
+    });
+    const axis = historyDateAxis(history);
+    expect('nticks' in axis).toBe(true);
+    expect('tickvals' in axis).toBe(false);
+    if ('nticks' in axis) {
+      expect(axis.nticks).toBe(6);
+    }
   });
 
   it('has a plain empty-state message without em-dashes', () => {
