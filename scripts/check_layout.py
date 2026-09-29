@@ -6,6 +6,8 @@ and reports overflow and truncation problems. Run against a local server in
 demo mode:
 
     python scripts/check_layout.py --base-url http://127.0.0.1:8790
+
+Requires Playwright: pip install playwright && playwright install chromium
 """
 from __future__ import annotations
 
@@ -108,9 +110,11 @@ def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) 
         else:
             browser_storage_button.click()
 
-    # Wait for the dashboard tab to actually be visible and for demo data to
-    # have loaded (the hero stat shows a non-zero dollar amount), rather than
-    # relying on a fixed sleep.
+    # Wait for the dashboard tab to actually be visible, for demo data to
+    # have loaded (the hero stat shows a non-zero dollar amount), and for the
+    # global loading overlay to be hidden, rather than relying on a fixed
+    # sleep. Without the overlay check, a screenshot or the layout checks
+    # below can run while "Loading data..." is still covering the page.
     page.wait_for_function(
         """() => {
           const tab = document.getElementById('tab-dashboard');
@@ -119,7 +123,18 @@ def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) 
           // The hero fills in before the account table, so also wait for
           // account rows or screenshots can catch a half-rendered page.
           const accountRows = document.querySelectorAll('#account-totals-body tr').length;
-          return !!hero && /\\$[1-9]/.test(hero.textContent || '') && accountRows > 0;
+          const overlay = document.getElementById('loading-overlay');
+          const overlayHidden =
+            !overlay ||
+            overlay.classList.contains('hidden') ||
+            getComputedStyle(overlay).display === 'none' ||
+            getComputedStyle(overlay).visibility === 'hidden';
+          return (
+            !!hero &&
+            /\\$[1-9]/.test(hero.textContent || '') &&
+            accountRows > 0 &&
+            overlayHidden
+          );
         }""",
         timeout=45000,
     )
