@@ -369,7 +369,7 @@ def test_correlation_heatmap_excludes_option_rows():
     matrix rows (previously rendered with 0.5 filler correlations)."""
     widget = _load_widget("correlation-heatmap", "CorrelationHeatmapWidget")
     # Force the sector fallback so the test never touches the network.
-    widget._calculate_price_correlations = lambda tickers: None
+    widget._calculate_price_correlations = lambda tickers, position_types=None: None
     content = widget.render(_widget_positions(), [])
 
     assert "GOOG 06/17/2027 305.00 C" not in content.data["tickers"]
