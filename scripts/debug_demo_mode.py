@@ -69,14 +69,11 @@ def main():
         # Check what's in the DOM
         print("\n=== Step 5: Check DOM content ===")
         try:
-            page.wait_for_selector("#account-totals-body", timeout=5000)
-            table_html = page.locator("#account-totals-body").inner_html()
-            # Extract account names from the HTML
-            import re
-            names = re.findall(r'<td[^>]*>([^<]+)</td>', table_html)[:10]
-            print(f"DOM table cells: {names}")
+            page.wait_for_selector("#account-groups .account-row", timeout=5000)
+            names = page.locator("#account-groups .account-row-name").all_inner_texts()[:10]
+            print(f"DOM account rows: {names}")
         except Exception as e:
-            print(f"Could not read table: {e}")
+            print(f"Could not read account rows: {e}")
 
         # Check if there's a loading overlay blocking
         print("\n=== Step 6: Check for overlays ===")

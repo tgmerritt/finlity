@@ -46,7 +46,7 @@ CHECKS_JS = """
       const rendered = card.getBoundingClientRect().width > 0 && getComputedStyle(card).display !== 'none';
       if (!rendered) return;
       const w = card.getBoundingClientRect().width;
-      if (w < mainWidth * 0.7) problems.push(`stat card ${i} too narrow on phone (${Math.round(w)}px)`);
+      if (w < mainWidth * 0.7) problems.push(`dashboard card ${i} too narrow on phone (${Math.round(w)}px)`);
     });
   }
   document.querySelectorAll('#tab-dashboard .card').forEach((card, i) => {
