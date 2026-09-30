@@ -220,9 +220,13 @@ async def lifespan(app: FastAPI):
         from src.services.demo_history import ensure_recent_demo_history
         from src.services.demo_mode import get_demo_manager
         if get_demo_manager().is_enabled:
-            written = ensure_recent_demo_history(db)
-            if written:
-                print(f"Demo history refreshed: {written} daily snapshots")
+            # Cosmetic demo data must never block startup.
+            try:
+                written = ensure_recent_demo_history(db)
+                if written:
+                    print(f"Demo history refreshed: {written} daily snapshots")
+            except Exception:
+                logger.exception("Demo history refresh failed; continuing startup")
 
     # Shared async HTTP client for any async code paths (e.g. streaming
     # LLM providers). Sync endpoints continue to use `requests` in the
