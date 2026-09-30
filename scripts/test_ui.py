@@ -83,11 +83,9 @@ async def test_dashboard(page: Page):
     total_value = await page.locator('#total-value').text_content()
     print(f"  Total Value: {total_value}")
 
-    # Check for retirement metrics
-    retirement_value = page.locator('#retirement-value')
-    if await retirement_value.count() > 0:
-        val = await retirement_value.text_content()
-        print(f"  Retirement Value: {val}")
+    # Check the grouped account list rendered
+    account_rows = page.locator('#account-groups .account-row')
+    print(f"  Account rows: {await account_rows.count()}")
 
     return True
 
