@@ -52,3 +52,59 @@ def test_next_open_skips_holiday_weekend():
     nxt = next_market_open(_et(2026, 7, 2, 17, 0))
     assert nxt is not None
     assert nxt == datetime(2026, 7, 6, 13, 30)
+
+
+# ---- last_market_close ----
+
+from datetime import datetime as _dt  # noqa: E402
+
+from src.services.market_hours import last_market_close  # noqa: E402
+
+
+def _utc(y, m, d, hh, mm=0):
+    """Naive UTC datetime, the convention last_market_close returns."""
+    return _dt(y, m, d, hh, mm)
+
+
+def test_last_close_weekday_after_close():
+    # Tue 2026-09-29 18:00 ET (22:00 UTC): today's 16:00 ET close = 20:00 UTC.
+    assert last_market_close(_et(2026, 9, 29, 18, 0)) == _utc(2026, 9, 29, 20)
+
+
+def test_last_close_saturday_is_friday_close():
+    assert last_market_close(_et(2026, 9, 19, 11, 0)) == _utc(2026, 9, 18, 20)
+
+
+def test_last_close_monday_before_open_is_friday_close():
+    assert last_market_close(_et(2026, 9, 21, 8, 0)) == _utc(2026, 9, 18, 20)
+
+
+def test_last_close_holiday_skips_to_previous_session():
+    # Fri 2026-07-03 is the observed Independence Day holiday.
+    assert last_market_close(_et(2026, 7, 3, 11, 0)) == _utc(2026, 7, 2, 20)
+
+
+def test_last_close_half_day():
+    # Fri 2026-11-27 closes at 13:00 ET (18:00 UTC).
+    assert last_market_close(_et(2026, 11, 27, 20, 0)) == _utc(2026, 11, 27, 18)
+
+
+def test_last_close_during_session_is_previous_day():
+    assert last_market_close(_et(2026, 9, 29, 11, 0)) == _utc(2026, 9, 28, 20)
+
+
+def test_last_close_exactly_at_close_is_inclusive():
+    assert last_market_close(_et(2026, 9, 29, 16, 0)) == _utc(2026, 9, 29, 20)
+
+
+def test_last_close_aware_utc_input():
+    from datetime import timezone
+
+    assert last_market_close(_dt(2026, 9, 30, 22, 0, tzinfo=timezone.utc)) == _utc(2026, 9, 30, 20)
+
+
+def test_last_close_across_dst_boundary():
+    # DST ended Sun 2026-11-01; Fri 10-30 close was 16:00 EDT = 20:00 UTC.
+    assert last_market_close(_et(2026, 11, 2, 8, 0)) == _utc(2026, 10, 30, 20)
+    # Mon 11-02 close is 16:00 EST = 21:00 UTC.
+    assert last_market_close(_et(2026, 11, 2, 18, 0)) == _utc(2026, 11, 2, 21)

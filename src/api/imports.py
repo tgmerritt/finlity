@@ -12,9 +12,10 @@ from src.database import Database
 from src.importers import FolderScanner
 from src.models.position_types import is_updatable_position
 from src.services.ai_config import CLAUDE_MODEL_HAIKU
-from src.services.market_hours import is_market_open
+from src.services.market_hours import is_market_open, last_market_close
 from src.services.price_refresh_gate import (
     MARKET_CLOSED,
+    catch_up_tickers,
     evaluate_refresh_gate,
     record_refresh_pass,
 )
@@ -324,22 +325,33 @@ def get_price_status(timezone: str = "UTC", db: Database = Depends(get_db)) -> d
     """Get status of price cache under market-aware freshness rules.
 
     When the market is open, a ticker is stale once its cache is older
-    than 1 hour. When the market is closed nothing is due: the last
-    fetched close is authoritative and stale_tickers reports 0.
+    than 1 hour. When the market is closed a ticker is stale only if its
+    cache was written before the most recent close: a cache written after
+    the close is authoritative, but one from before it (a user who only
+    opens the app outside market hours) still needs the closing price.
 
     Tickers that have NEVER been cached are reported separately as
     ``missing_price_tickers`` — they have no last close, so they are
     excluded from ``stale_tickers`` but keep ``all_fresh`` honest (False).
     """
     market_open = is_market_open()
+    missing = db.get_never_fetched_tickers()
     if market_open:
         status = db.get_price_cache_status(max_age_hours=1)
     else:
-        status = db.get_price_cache_status(max_age_hours=24)
-        status["stale_tickers"] = 0
-        status["all_fresh"] = True
+        cutoff = last_market_close()
+        if cutoff is None:
+            logger.warning("last_market_close unavailable; treating cache as current")
+            status = db.get_price_cache_status(max_age_hours=24)
+            status["stale_tickers"] = 0
+            status["all_fresh"] = True
+        else:
+            status = db.get_price_cache_status(stale_before=cutoff)
+            # Never-cached tickers are reported as missing_price_tickers below,
+            # not as stale (they have no cached close to be older than).
+            status["stale_tickers"] = max(0, status["stale_tickers"] - len(missing))
+            status["all_fresh"] = status["stale_tickers"] == 0
 
-    missing = db.get_never_fetched_tickers()
     status["missing_price_tickers"] = len(missing)
     if missing:
         status["all_fresh"] = False
@@ -361,6 +373,8 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[
     src/services/price_refresh_gate.py). ``force`` bypasses the hourly cap
     and, while the market is closed, still fetches tickers that have no
     cached price at all (a just-imported ticker has no last close to show).
+    While closed, one catch-up pass fetches tickers whose cached price
+    predates the most recent close (see the gate for the rule).
 
     Returns honest success / failure counts so the UI can decrement the
     "X stale" badge to the *actually-fresh* count, not the *attempted* count.
@@ -415,12 +429,15 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[
             "tickers": [],
             "all_fresh": True,
             "newest_update": status.get("newest_update"),
-            "market_open": decision.reason != MARKET_CLOSED,
+            "market_open": is_market_open(),
             "next_refresh_at": decision.next_refresh_at.isoformat() if decision.next_refresh_at else None,
         }
 
+    catch_up = decision.catch_up_cutoff is not None
     stale_tickers: list[str]
-    if force:
+    if catch_up:
+        stale_tickers = catch_up_tickers(db, decision)
+    elif force:
         positions = db.get_all_positions()
         stale_tickers = list({
             cast(str, p.ticker) for p in positions
@@ -439,22 +456,24 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[
             "failed_tickers": [],
             "all_fresh": True,
             "newest_update": status.get("newest_update"),
-            "market_open": True,
+            "market_open": not catch_up,
             "next_refresh_at": decision.next_refresh_at.isoformat() if decision.next_refresh_at else None,
         }
 
     scanner = FolderScanner(db)
     # On an explicit force refresh, bypass the PriceService file cache so we
     # fetch live quotes — otherwise the cached (up to 4h old) value is returned
-    # and the DB timestamp is re-stamped fresh over a stale price.
-    result = scanner._fetch_and_update_prices(stale_tickers, force=force)
+    # and the DB timestamp is re-stamped fresh over a stale price. A closed-market
+    # catch-up must do the same: a cached intraday quote stamped after the close
+    # would be locked in as "the close" until the next session.
+    result = scanner._fetch_and_update_prices(stale_tickers, force=force or catch_up)
     record_refresh_pass(db)
     success = result.get("success", [])
     skipped = result.get("skipped", [])
     failed = result.get("failed", [])
 
     fresh_now = len(success) + len(skipped)
-    status = db.get_price_cache_status()
+    status = db.get_price_cache_status(stale_before=decision.catch_up_cutoff)
 
     if failed:
         message = (
@@ -473,7 +492,7 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[
         "tickers": success,
         "all_fresh": status.get("all_fresh", False),
         "newest_update": status.get("newest_update"),
-        "market_open": True,
+        "market_open": not catch_up,
         "next_refresh_at": decision.next_refresh_at.isoformat() if decision.next_refresh_at else None,
     }
 

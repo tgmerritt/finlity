@@ -1003,6 +1003,23 @@ class Database:
 
             return list(updatable - fresh_tickers)
 
+    def get_tickers_priced_before(self, cutoff: datetime) -> list[str]:
+        """Updatable tickers whose cached price was written before ``cutoff``.
+
+        ``cutoff`` and ``last_updated`` are naive UTC. Never-cached tickers
+        are excluded (see ``get_never_fetched_tickers``). Used to find prices
+        that predate the most recent market close.
+        """
+        with self.get_session() as session:
+            updatable = self._get_updatable_tickers(session)
+            rows = session.query(PriceCache.ticker, PriceCache.last_updated).all()
+            return sorted(
+                {
+                    ticker for ticker, updated in rows
+                    if ticker in updatable and (updated is None or updated < cutoff)
+                }
+            )
+
     def get_never_fetched_tickers(self) -> list[str]:
         """Updatable position tickers with no price_cache row at all.
 
@@ -1016,8 +1033,14 @@ class Database:
             cached = {row[0] for row in session.query(PriceCache.ticker).distinct().all()}
             return sorted(updatable - cached)
 
-    def get_price_cache_status(self, max_age_hours: int = 24) -> dict:
+    def get_price_cache_status(
+        self, max_age_hours: int = 24, stale_before: Optional[datetime] = None
+    ) -> dict:
         """Get status of the price cache, scoped to updatable positions only.
+
+        When ``stale_before`` (naive UTC) is given, an entry is stale iff it
+        was written before that instant (e.g. the last market close) and
+        ``max_age_hours`` is ignored.
 
         Counts ignore cash/CD/real-estate holdings (user-managed prices) and
         orphaned PriceCache rows whose ticker is no longer held in any
@@ -1054,7 +1077,12 @@ class Database:
                     "all_fresh": False,
                 }
 
-            fresh_count = sum(1 for c in caches if not c.is_stale(max_age_hours))
+            def _is_stale(c: PriceCache) -> bool:
+                if stale_before is None:
+                    return c.is_stale(max_age_hours)
+                return c.last_updated is None or c.last_updated < stale_before
+
+            fresh_count = sum(1 for c in caches if not _is_stale(c))
             uncached_count = len(updatable - {c.ticker for c in caches})
             stale_count = (len(caches) - fresh_count) + uncached_count
 
