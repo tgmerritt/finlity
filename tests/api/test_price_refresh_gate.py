@@ -116,6 +116,7 @@ class TestRefreshPricesGate:
         fetch.assert_not_called()
 
     def test_recent_pass_is_a_noop(self, client, monkeypatch):
+        monkeypatch.setattr("src.api.imports.is_market_open", lambda dt=None: True)
         too_soon = GateDecision(False, TOO_SOON, TUE_OPEN + timedelta(hours=1))
         monkeypatch.setattr(
             "src.api.imports.evaluate_refresh_gate", lambda db, force=False: too_soon
@@ -246,6 +247,9 @@ class TestForceFetchesMissingPrices:
     def test_price_status_flags_missing_tickers(self, client, monkeypatch):
         monkeypatch.setattr("src.api.imports.is_market_open", lambda dt=None: False)
         monkeypatch.setattr(
+            "src.api.imports.last_market_close", lambda dt=None: datetime(2000, 1, 1)
+        )
+        monkeypatch.setattr(
             "src.api.imports.evaluate_refresh_gate",
             lambda db, now=None, force=False: GateDecision(
                 False, MARKET_CLOSED, datetime(2026, 8, 17, 13, 30)
@@ -268,6 +272,9 @@ class TestForceFetchesMissingPrices:
 class TestPriceStatusGate:
     def test_closed_market_reports_zero_stale(self, client, monkeypatch):
         monkeypatch.setattr("src.api.imports.is_market_open", lambda dt=None: False)
+        monkeypatch.setattr(
+            "src.api.imports.last_market_close", lambda dt=None: datetime(2000, 1, 1)
+        )
         monkeypatch.setattr(
             "src.api.imports.evaluate_refresh_gate",
             lambda db, now=None, force=False: GateDecision(
@@ -320,3 +327,115 @@ class TestStaleTickersSemantics:
 
         assert "VTI" in stale  # 30h old -> due under the 1h rule
         assert "VOO" not in stale  # fresh under the 1h rule
+
+
+class TestClosedMarketCatchUp:
+    """Market closed but the cache predates the last close (NZ user scenario)."""
+
+    LAST_CLOSE = datetime(2026, 9, 30, 20, 0)
+
+    @pytest.fixture(autouse=True)
+    def _cleanup(self):
+        def _purge():
+            db = get_database()
+            with db.get_session() as session:
+                session.query(Position).filter_by(name="Vanguard Total Market").delete(
+                    synchronize_session=False
+                )
+                session.query(Account).filter_by(name="Gate Test").delete(
+                    synchronize_session=False
+                )
+                session.commit()
+
+        _purge()
+        yield
+        _purge()
+
+    def _closed(self, monkeypatch):
+        monkeypatch.setattr("src.api.imports.is_market_open", lambda dt=None: False)
+        monkeypatch.setattr(
+            "src.api.imports.last_market_close", lambda dt=None: self.LAST_CLOSE
+        )
+
+    def test_status_reports_pre_close_cache_as_stale(self, client, monkeypatch):
+        self._closed(monkeypatch)
+        monkeypatch.setattr(
+            "src.api.imports.evaluate_refresh_gate",
+            lambda db, now=None, force=False: GateDecision(
+                True, ALLOWED, None, catch_up_cutoff=self.LAST_CLOSE
+            ),
+        )
+        db = get_database()
+        _seed_stale_position(db, "VTI")  # cached 30h ago, before the fixed close
+        with db.get_session() as session:
+            cache = session.query(PriceCache).filter_by(ticker="VTI").first()
+            cache.last_updated = self.LAST_CLOSE - timedelta(days=12)  # type: ignore[assignment]
+            session.commit()
+
+        data = client.get("/api/imports/price-status").json()
+
+        assert data["market_open"] is False
+        assert data["stale_tickers"] >= 1
+        assert data["all_fresh"] is False
+
+    def test_refresh_catch_up_fetches_only_pre_close_tickers(self, client, monkeypatch):
+        self._closed(monkeypatch)
+        monkeypatch.setattr(
+            "src.api.imports.evaluate_refresh_gate",
+            lambda db, now=None, force=False: GateDecision(
+                True, ALLOWED, None, catch_up_cutoff=self.LAST_CLOSE
+            ),
+        )
+        db = get_database()
+        _seed_stale_position(db, "VTI")
+        with db.get_session() as session:
+            cache = session.query(PriceCache).filter_by(ticker="VTI").first()
+            cache.last_updated = self.LAST_CLOSE - timedelta(days=12)  # type: ignore[assignment]
+            session.commit()
+        db.update_price_cache("VOO", 500.0)
+        with db.get_session() as session:
+            voo = session.query(PriceCache).filter_by(ticker="VOO").first()
+            voo.last_updated = self.LAST_CLOSE + timedelta(hours=1)  # type: ignore[assignment]
+            session.commit()
+        fetch = _fake_fetch({"success": ["VTI"], "skipped": [], "failed": []})
+        monkeypatch.setattr(FolderScanner, "_fetch_and_update_prices", fetch)
+
+        data = client.post("/api/imports/refresh-prices?force=true").json()
+
+        fetch.assert_called_once()
+        attempted = fetch.call_args[0][0]
+        assert "VTI" in attempted
+        assert "VOO" not in attempted
+        assert data["updated"] == 1
+        assert data["market_open"] is False
+        assert data["attempted"] == len(attempted)
+
+    def test_unforced_catch_up_bypasses_price_file_cache(self, client, monkeypatch):
+        """A cached intraday quote must not be stamped as the close."""
+        self._closed(monkeypatch)
+        monkeypatch.setattr(
+            "src.api.imports.evaluate_refresh_gate",
+            lambda db, now=None, force=False: GateDecision(
+                True, ALLOWED, None, catch_up_cutoff=self.LAST_CLOSE
+            ),
+        )
+        db = get_database()
+        _seed_stale_position(db, "VTI")
+        fetch = _fake_fetch({"success": ["VTI"], "skipped": [], "failed": []})
+        monkeypatch.setattr(FolderScanner, "_fetch_and_update_prices", fetch)
+
+        client.post("/api/imports/refresh-prices")
+
+        fetch.assert_called_once()
+        assert fetch.call_args.kwargs.get("force") is True
+
+    def test_too_soon_response_reports_closed_market(self, client, monkeypatch):
+        self._closed(monkeypatch)
+        monkeypatch.setattr(
+            "src.api.imports.evaluate_refresh_gate",
+            lambda db, now=None, force=False: GateDecision(False, TOO_SOON, None),
+        )
+
+        data = client.post("/api/imports/refresh-prices").json()
+
+        assert data["market_open"] is False

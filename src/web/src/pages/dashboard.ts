@@ -583,8 +583,9 @@ async function renderAttention(positions: DashboardPosition[], gen: number): Pro
 
   if (gen !== renderGeneration) return;
 
-  // Markets closed means prices are as current as they can be (see updatePriceStatus).
-  const staleTickers = status && status.market_open !== false ? status.stale_tickers : 0;
+  // The server already scopes stale_tickers to the market clock: when closed it
+  // counts only prices cached before the last close (see updatePriceStatus).
+  const staleTickers = status ? status.stale_tickers : 0;
   const items = attentionItems({
     staleTickers,
     positions,
@@ -861,8 +862,10 @@ export async function updatePriceStatus(): Promise<void> {
     const statusEl = document.getElementById('price-status');
     if (!statusEl) return;
 
-    if (status.market_open === false) {
-      // Markets closed: prices are as current as they can be (last close).
+    if (status.market_open === false && status.stale_tickers === 0) {
+      // Markets closed and the cache is newer than the last close: prices are
+      // as current as they can be. (Prices that predate the last close fall
+      // through to the stale badge below so the user can fetch the close.)
       statusEl.className = 'price-status fresh';
       statusEl.textContent = '';
 
@@ -1020,8 +1023,8 @@ export async function autoRefreshIfStale(): Promise<void> {
       `/api/imports/price-status?timezone=${encodeURIComponent(tz)}`
     );
 
-    // Markets closed: nothing to fetch; prices are current as of last close.
-    if (status.market_open === false) return;
+    // The server reports stale_tickers relative to the last close when the
+    // market is closed, so a closed market with nothing stale is a no-op here.
     if (status.all_fresh && status.stale_tickers === 0) return;
 
     const result = await apiCall<PriceRefreshResponse>('/api/imports/refresh-prices', {

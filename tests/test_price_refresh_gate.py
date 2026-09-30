@@ -32,7 +32,16 @@ def _patched_open(monkeypatch):
     monkeypatch.setattr("src.services.price_refresh_gate.next_market_open", lambda dt=None: None)
 
 
+def _patched_nothing_stale_since_close(monkeypatch):
+    """Closed market with every cached price newer than the last close."""
+    monkeypatch.setattr(
+        "src.services.price_refresh_gate.last_market_close",
+        lambda dt=None: datetime(2000, 1, 1),
+    )
+
+
 def test_market_closed_blocks_refresh(monkeypatch):
+    _patched_nothing_stale_since_close(monkeypatch)
     monkeypatch.setattr(
         "src.services.price_refresh_gate.is_market_open", lambda dt=None: False
     )
@@ -95,8 +104,10 @@ def test_force_bypasses_hourly_cap_not_market_closed(monkeypatch):
     # force=True: the hourly cap is bypassed...
     assert evaluate_refresh_gate(db, now=TUE_OPEN, force=True).allowed is True
 
-    # ...but the market-closed rule still applies.
+    # ...but the market-closed rule still applies (nothing predates the
+    # last close; see test_price_staleness_after_close for the catch-up).
     monkeypatch.setattr("src.services.price_refresh_gate.is_market_open", lambda dt=None: False)
+    _patched_nothing_stale_since_close(monkeypatch)
     decision = evaluate_refresh_gate(db, now=TUE_OPEN, force=True)
     assert decision.allowed is False
     assert decision.reason == MARKET_CLOSED

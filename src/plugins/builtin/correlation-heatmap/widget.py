@@ -37,6 +37,7 @@ class CorrelationHeatmapWidget(WidgetPlugin):
 
         # Filter to positions with values and aggregate by ticker
         ticker_values = {}
+        position_types: dict[str, Optional[str]] = {}
         for p in positions:
             if p.get("current_price") and p.get("shares"):
                 ticker = p.get("ticker", "Unknown")
@@ -46,6 +47,7 @@ class CorrelationHeatmapWidget(WidgetPlugin):
                     continue
                 value = p.get("current_price", 0) * p.get("shares", 0)
                 ticker_values[ticker] = ticker_values.get(ticker, 0) + value
+                position_types.setdefault(ticker, p.get("position_type"))
 
         if len(ticker_values) < min_positions:
             return WidgetContent(
@@ -62,7 +64,7 @@ class CorrelationHeatmapWidget(WidgetPlugin):
         tickers = [t[0] for t in sorted_tickers[:max_positions]]
 
         # Calculate real correlation matrix from price history
-        matrix = self._calculate_price_correlations(tickers)
+        matrix = self._calculate_price_correlations(tickers, position_types)
 
         if matrix is None:
             # Fallback to sector-based if price data unavailable
@@ -112,15 +114,19 @@ class CorrelationHeatmapWidget(WidgetPlugin):
             styles=[],
         )
 
-    def _calculate_price_correlations(self, tickers: list[str]) -> Optional[list[list[float]]]:
+    def _calculate_price_correlations(
+        self,
+        tickers: list[str],
+        position_types: Optional[dict[str, Optional[str]]] = None,
+    ) -> Optional[list[list[float]]]:
         """Calculate actual correlations from price history using yfinance."""
         import pandas as pd
 
-        # Filter out non-tradeable tickers (CDs, cash, etc.)
+        # Only request history for quotable tickers; cash, CDs, bonds and real
+        # estate placeholders (RE) would otherwise be sent to Yahoo.
+        types = position_types or {}
         tradeable_tickers = [
-            t for t in tickers
-            if not t.startswith(("CD-", "CASH", "BOND-", "TBILL-"))
-            and t not in ("CASH", "CD", "MONEY")
+            t for t in tickers if PriceService.is_quotable(types.get(t), t)
         ]
 
         if len(tradeable_tickers) < 2:
@@ -153,7 +159,9 @@ class CorrelationHeatmapWidget(WidgetPlugin):
                 prices = data["Close"].copy()
 
             # Calculate daily returns (fill_method=None to avoid FutureWarning)
-            returns = prices.pct_change(fill_method=None).dropna()
+            # Drop dead (all-NaN) columns first: one of them would make the
+            # row-wise dropna discard every row and blank the matrix.
+            returns = prices.dropna(axis=1, how="all").pct_change(fill_method=None).dropna()
 
             if len(returns) < 20:
                 return None
