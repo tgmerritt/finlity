@@ -177,8 +177,12 @@ async def _background_bootstrap(demo_mode: bool) -> None:
             )
             if stale_tickers:
                 logger.info("Refreshing %d stale price(s)...", len(stale_tickers))
+                # Catch-up passes must bypass PriceService's file cache, or a
+                # cached intraday quote gets stamped as the close.
                 await asyncio.to_thread(
-                    scanner._fetch_and_update_prices, stale_tickers
+                    scanner._fetch_and_update_prices,
+                    stale_tickers,
+                    force=decision.catch_up_cutoff is not None,
                 )
                 record_refresh_pass(db)
 

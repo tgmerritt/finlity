@@ -116,6 +116,7 @@ class TestRefreshPricesGate:
         fetch.assert_not_called()
 
     def test_recent_pass_is_a_noop(self, client, monkeypatch):
+        monkeypatch.setattr("src.api.imports.is_market_open", lambda dt=None: True)
         too_soon = GateDecision(False, TOO_SOON, TUE_OPEN + timedelta(hours=1))
         monkeypatch.setattr(
             "src.api.imports.evaluate_refresh_gate", lambda db, force=False: too_soon
@@ -408,3 +409,33 @@ class TestClosedMarketCatchUp:
         assert data["updated"] == 1
         assert data["market_open"] is False
         assert data["attempted"] == len(attempted)
+
+    def test_unforced_catch_up_bypasses_price_file_cache(self, client, monkeypatch):
+        """A cached intraday quote must not be stamped as the close."""
+        self._closed(monkeypatch)
+        monkeypatch.setattr(
+            "src.api.imports.evaluate_refresh_gate",
+            lambda db, now=None, force=False: GateDecision(
+                True, ALLOWED, None, catch_up_cutoff=self.LAST_CLOSE
+            ),
+        )
+        db = get_database()
+        _seed_stale_position(db, "VTI")
+        fetch = _fake_fetch({"success": ["VTI"], "skipped": [], "failed": []})
+        monkeypatch.setattr(FolderScanner, "_fetch_and_update_prices", fetch)
+
+        client.post("/api/imports/refresh-prices")
+
+        fetch.assert_called_once()
+        assert fetch.call_args.kwargs.get("force") is True
+
+    def test_too_soon_response_reports_closed_market(self, client, monkeypatch):
+        self._closed(monkeypatch)
+        monkeypatch.setattr(
+            "src.api.imports.evaluate_refresh_gate",
+            lambda db, now=None, force=False: GateDecision(False, TOO_SOON, None),
+        )
+
+        data = client.post("/api/imports/refresh-prices").json()
+
+        assert data["market_open"] is False
