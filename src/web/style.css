@@ -1678,7 +1678,8 @@ body {
 }
 
 .stat-card--hero .stat-value {
-    font-size: 48px;
+    font-size: clamp(28px, 7vw, 48px);
+    overflow-wrap: anywhere;
     font-weight: 700;
     letter-spacing: -1.5px;
     font-family: var(--font-mono);
@@ -1927,7 +1928,7 @@ body {
 /* Charts Grid */
 .charts-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr));
     gap: 16px;
     margin-bottom: 16px;
 }
@@ -1942,8 +1943,19 @@ body {
 /* Analysis/Settings Grid */
 .analysis-grid, .settings-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(350px, 100%), 1fr));
     gap: 16px;
+}
+
+/* Grid and flex children default to min-width: auto, which lets a wide chart
+   or table push its card past the viewport. */
+.charts-grid > *,
+.analysis-grid > *,
+.settings-grid > *,
+.stats-row > *,
+.card,
+.card-body {
+    min-width: 0;
 }
 
 /* Tables */
@@ -2733,7 +2745,7 @@ td.text-right {
 
 .budget-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr));
     gap: 16px;
 }
 
@@ -3278,7 +3290,8 @@ td.text-right {
         grid-template-columns: 1fr;
     }
 
-    .stats-row {
+    .stats-row,
+    .stats-row.retirement-metrics {
         grid-template-columns: repeat(2, 1fr);
     }
 
@@ -3325,7 +3338,8 @@ td.text-right {
     }
 
     /* Single column stats on small mobile */
-    .stats-row {
+    .stats-row,
+    .stats-row.retirement-metrics {
         grid-template-columns: 1fr;
         gap: 12px;
     }
@@ -3459,24 +3473,66 @@ td.text-right {
 
     /* Account totals table mobile */
     .account-totals-table {
-        min-width: 400px;
-        font-size: 13px;
+        min-width: 0;
+        width: 100%;
+        font-size: 12px;
     }
 
-    .account-totals-table th {
-        font-size: 10px;
-        padding: 8px 6px;
+    /* Type badge column: the account name already says what it is.
+       display: none on every cell of a column removes it from the
+       table's column count, which throws off the tfoot's colspan="2"
+       cell (it ends up spanning Account + Value instead of Account +
+       Type, shifting the Total row's value and percent one column to
+       the right). Collapse the column to zero width instead, which
+       keeps the column (and colspan math) intact. */
+    .account-totals-table thead th:nth-child(2),
+    .account-totals-table tbody td:nth-child(2) {
+        width: 0;
+        padding: 0;
+        overflow: hidden;
+        border: 0;
+        font-size: 0;
+    }
+
+    /* Visually hidden rather than display: none, so the badge text (e.g.
+       "Retirement") stays in the accessibility tree even though the column
+       is collapsed to zero width. Without this, screen readers announce
+       the "Type" header with no corresponding cell content. */
+    .account-totals-table tbody td:nth-child(2) .account-type-badge {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
         white-space: nowrap;
+        border: 0;
     }
 
-    .account-totals-table td {
-        padding: 8px 6px;
+    /* Scoped to thead/tbody (rather than the bare th/td used elsewhere)
+       so these mobile rules reliably beat the desktop
+       .account-totals-table th / td padding declared later in this file,
+       regardless of source order. */
+    .account-totals-table thead th {
+        font-size: 12px;
+        padding: 6px 4px;
+        white-space: normal;
+    }
+
+    .account-totals-table tbody td,
+    .account-totals-table tfoot td {
+        padding: 6px 4px;
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    /* Keep dollar values and percentages on one line: only the account
+       name column needs to wrap to stay within the card width. */
+    .account-totals-table tbody td.text-right,
+    .account-totals-table tfoot td.text-right {
         white-space: nowrap;
-    }
-
-    .account-totals-table .account-type-badge {
-        font-size: 10px;
-        padding: 2px 6px;
     }
 
     /* General table mobile styles */
@@ -5147,6 +5203,25 @@ th.sortable.sort-desc .sort-icon::after {
 .chat-fab svg {
     width: 24px;
     height: 24px;
+}
+
+@media (max-width: 480px) {
+    .chat-fab {
+        width: 44px;
+        height: 44px;
+        right: 12px;
+        bottom: 12px;
+    }
+
+    .chat-fab svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    /* Keep the last card's content clear of the floating chat button. */
+    .main-content {
+        padding-bottom: 72px;
+    }
 }
 
 /* Chat Modal Specific Styles */
