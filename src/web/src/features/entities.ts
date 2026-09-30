@@ -6,7 +6,7 @@
 import { apiCall } from '@/api/client';
 import { store } from '@/state/store';
 import { showToast } from '@/ui/toast';
-import { loadRetirementMetrics } from '@/pages/dashboard';
+import { loadRetirementMetrics } from '@/pages/projections';
 import type { Entity } from '@/types/api';
 
 /**

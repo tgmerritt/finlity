@@ -25,17 +25,12 @@ import {
 import { apiCall } from '@/api/client';
 
 // Charts
-import {
-  updateAllocationCharts,
-  updateHistoryChart,
-  setHistoryTimeRange,
-} from '@/charts/allocation';
+import { updateHistoryChart, setHistoryRange } from '@/charts/allocation';
 
 // Pages
 import {
   initDashboard,
   refreshData as refreshDashboardData,
-  loadRetirementMetrics,
   checkForDuplicates,
   refreshPrices,
   showDuplicateDetails,
@@ -370,7 +365,6 @@ export async function refreshData(): Promise<void> {
   showLoading('Refreshing data...');
   try {
     await refreshDashboardData();
-    await loadRetirementMetrics();
     initAICommentaryButtons();
   } finally {
     hideLoading();
@@ -802,9 +796,8 @@ window.finlity = {
   refreshSocialFeed,
 
   // Charts
-  updateAllocationCharts,
   updateHistoryChart,
-  setHistoryTimeRange,
+  setHistoryRange,
 
   // Utilities
   formatCurrency,

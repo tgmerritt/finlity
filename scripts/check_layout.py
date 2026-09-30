@@ -35,18 +35,18 @@ CHECKS_JS = """
   if (document.documentElement.scrollWidth > vw + 1) {
     problems.push(`page scrolls horizontally (${document.documentElement.scrollWidth}px > ${vw}px)`);
   }
-  const hero = document.querySelector('.stat-card--hero .stat-value');
+  const hero = document.querySelector('#total-value');
   if (hero && hero.scrollWidth > hero.clientWidth + 1) {
     problems.push(`hero value truncated (${hero.scrollWidth}px in ${hero.clientWidth}px)`);
   }
   const main = document.querySelector('.main-content') || document.body;
   const mainWidth = main.getBoundingClientRect().width;
   if (vw <= 480) {
-    document.querySelectorAll('#tab-dashboard .stats-row .stat-card').forEach((card, i) => {
+    document.querySelectorAll('#tab-dashboard .dash-cards .dash-card').forEach((card, i) => {
       const rendered = card.getBoundingClientRect().width > 0 && getComputedStyle(card).display !== 'none';
       if (!rendered) return;
       const w = card.getBoundingClientRect().width;
-      if (w < mainWidth * 0.7) problems.push(`stat card ${i} too narrow on phone (${Math.round(w)}px)`);
+      if (w < mainWidth * 0.7) problems.push(`dashboard card ${i} too narrow on phone (${Math.round(w)}px)`);
     });
   }
   document.querySelectorAll('#tab-dashboard .card').forEach((card, i) => {
@@ -58,6 +58,10 @@ CHECKS_JS = """
     const host = plot.parentElement;
     if (svg && host && svg.getBoundingClientRect().width > host.getBoundingClientRect().width + 2) {
       problems.push(`chart ${plot.id || '?'} wider than its container`);
+    }
+    const card = plot.closest('.card');
+    if (svg && card && svg.getBoundingClientRect().bottom > card.getBoundingClientRect().bottom + 2) {
+      problems.push(`chart ${plot.id || '?'} taller than its card`);
     }
   });
   const fab = document.getElementById('global-chat-fab');
@@ -119,10 +123,13 @@ def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) 
         """() => {
           const tab = document.getElementById('tab-dashboard');
           if (!tab || getComputedStyle(tab).display === 'none') return false;
-          const hero = document.querySelector('.stat-card--hero .stat-value');
-          // The hero fills in before the account table, so also wait for
-          // account rows or screenshots can catch a half-rendered page.
-          const accountRows = document.querySelectorAll('#account-totals-body tr').length;
+          const hero = document.querySelector('#total-value');
+          // The hero fills in before the account list and the cards that load
+          // their own data, so also wait for account rows and the on-track and
+          // attention cards or screenshots can catch a half-rendered page.
+          const accountRows = document.querySelectorAll('#account-groups .account-row').length;
+          const onTrack = (document.getElementById('on-track-body')?.textContent || '').trim();
+          const attention = (document.getElementById('attention-list')?.textContent || '').trim();
           const overlay = document.getElementById('loading-overlay');
           const overlayHidden =
             !overlay ||
@@ -133,6 +140,8 @@ def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) 
             !!hero &&
             /\\$[1-9]/.test(hero.textContent || '') &&
             accountRows > 0 &&
+            onTrack.length > 0 &&
+            attention.length > 0 &&
             overlayHidden
           );
         }""",

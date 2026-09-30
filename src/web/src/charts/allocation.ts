@@ -2,13 +2,7 @@
  * Allocation and history chart rendering.
  */
 
-import {
-  renderChart,
-  getBaseLayout,
-  getAxisConfig,
-  chartPalette,
-  getColorByIndex,
-} from './plotly-utils';
+import { renderChart, getBaseLayout, getAxisConfig, chartPalette } from './plotly-utils';
 import {
   filterHistoryForRange,
   hasPlottableHistory,
@@ -18,7 +12,8 @@ import {
 import { getChartColors } from '@/state/theme';
 import { store } from '@/state/store';
 import { setStateView, clearStateView } from '@/ui/state-view';
-import type { DashboardPosition, SnapshotHistory, PortfolioSummary } from '@/types/api';
+import { rangeDays, type RangeKey } from '@/utils/portfolio-metrics';
+import type { SnapshotHistory } from '@/types/api';
 
 /**
  * Get hover label configuration for current theme.
@@ -48,123 +43,8 @@ function showEmptyState(container: HTMLElement, message: string): void {
   });
 }
 
-/**
- * Update allocation charts (account type and ticker allocation).
- * @param positions - Array of positions
- * @param _summary - Portfolio summary (unused but matches original signature)
- */
-export async function updateAllocationCharts(
-  positions: DashboardPosition[],
-  _summary?: PortfolioSummary
-): Promise<void> {
-  // No positions → render an inline empty state in each chart container
-  // instead of an empty Plotly canvas. Without this both pie charts show
-  // up as blank squares on a fresh install.
-  if (!positions || positions.length === 0) {
-    const accountContainer = document.getElementById('chart-account-type');
-    const allocContainer = document.getElementById('chart-allocation');
-    if (accountContainer) showEmptyState(accountContainer, 'No allocation to chart yet');
-    if (allocContainer) showEmptyState(allocContainer, 'No allocation to chart yet');
-    return;
-  }
-
-  // We have data — clear any prior state-view before Plotly renders into
-  // the container.
-  const accountContainer = document.getElementById('chart-account-type');
-  const allocContainer = document.getElementById('chart-allocation');
-  if (accountContainer) clearStateView(accountContainer);
-  if (allocContainer) clearStateView(allocContainer);
-
-  const chartLayout = {
-    ...getBaseLayout(),
-    margin: { t: 10, b: 10, l: 10, r: 10 },
-    showlegend: false,
-    hoverlabel: getHoverLabel(),
-  };
-
-  // Account type allocation
-  const accountAlloc: Record<string, number> = {};
-  positions.forEach((pos) => {
-    const type = pos.account_type || 'unknown';
-    accountAlloc[type] = (accountAlloc[type] || 0) + (pos.value || 0);
-  });
-
-  const accountLabels = Object.keys(accountAlloc).map((k) =>
-    k.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
-  );
-  const accountValues = Object.values(accountAlloc);
-
-  await renderChart(
-    'chart-account-type',
-    [
-      {
-        type: 'pie',
-        labels: accountLabels,
-        values: accountValues,
-        hole: 0.4,
-        textinfo: 'label+percent',
-        textposition: 'inside',
-        insidetextorientation: 'horizontal',
-        hovertemplate: '%{label}<br>%{value:$,.0f}<br>%{percent}<extra></extra>',
-        marker: {
-          colors: [
-            chartPalette.blue,
-            chartPalette.green,
-            chartPalette.purple,
-            chartPalette.orange,
-            chartPalette.teal,
-            chartPalette.red,
-          ],
-        },
-      },
-    ],
-    chartLayout,
-    { responsive: true, displayModeBar: false }
-  );
-
-  // Ticker allocation (top 10)
-  const tickerAlloc: Record<string, number> = {};
-  positions.forEach((pos) => {
-    tickerAlloc[pos.ticker] = (tickerAlloc[pos.ticker] || 0) + (pos.value || 0);
-  });
-
-  const sortedTickers = Object.entries(tickerAlloc)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10);
-
-  const totalValue = Object.values(tickerAlloc).reduce((a, b) => a + b, 0);
-  const topTenValue = sortedTickers.reduce((a, b) => a + b[1], 0);
-  const otherValue = totalValue - topTenValue;
-
-  const allocLabels = sortedTickers.map((t) => t[0]);
-  const allocValues = sortedTickers.map((t) => t[1]);
-
-  if (otherValue > 0) {
-    allocLabels.push('Other');
-    allocValues.push(otherValue);
-  }
-
-  await renderChart(
-    'chart-allocation',
-    [
-      {
-        type: 'pie',
-        labels: allocLabels,
-        values: allocValues,
-        hole: 0.4,
-        textinfo: 'label+percent',
-        textposition: 'inside',
-        insidetextorientation: 'horizontal',
-        hovertemplate: '%{label}<br>%{value:$,.0f}<br>%{percent}<extra></extra>',
-        marker: {
-          colors: allocLabels.map((_, i) => getColorByIndex(i)),
-        },
-      },
-    ],
-    chartLayout,
-    { responsive: true, displayModeBar: false }
-  );
-}
+/** Called with the filtered history and range key the chart is rendered for. */
+export type RangeListener = (filtered: SnapshotHistory[], key: RangeKey) => void;
 
 /**
  * Update portfolio history chart.
@@ -173,7 +53,8 @@ export async function updateAllocationCharts(
  */
 export async function updateHistoryChart(
   history: SnapshotHistory[] | null,
-  storeData = true
+  storeData = true,
+  onRange?: RangeListener
 ): Promise<void> {
   const container = document.getElementById('chart-history');
 
@@ -182,15 +63,21 @@ export async function updateHistoryChart(
     store.set('fullHistoryData', history);
   }
 
+  // One read of the selected range drives both the chart and the caller's
+  // range summary, so a click during a render cannot split the two.
+  const rangeKey = store.get('currentHistoryRange');
+  const rangeDayCount = store.get('currentHistoryDays');
+
   if (!history || !hasPlottableHistory(history)) {
+    onRange?.([], rangeKey);
     if (container) {
       showEmptyState(container, HISTORY_EMPTY_MESSAGE);
     }
     return;
   }
 
-  const currentHistoryDays = store.get('currentHistoryDays');
-  const filteredHistory = filterHistoryForRange(history, currentHistoryDays);
+  const filteredHistory = filterHistoryForRange(history, rangeDayCount);
+  onRange?.(filteredHistory, rangeKey);
 
   if (!hasPlottableHistory(filteredHistory)) {
     if (container) {
@@ -255,36 +142,23 @@ export async function updateHistoryChart(
 }
 
 /**
- * Set history time range and re-render chart.
- * @param days - Number of days to show
+ * Record the selected history range in the store and reflect it on the range
+ * buttons (active class and aria-pressed). Does not re-render the chart.
  */
-export function setHistoryTimeRange(days: number): void {
-  store.set('currentHistoryDays', days);
-
-  // Update button states
-  document.querySelectorAll('.time-range-btn').forEach((btn) => {
-    btn.classList.remove('active');
-    const btnDays = btn.getAttribute('data-days');
-    if (btnDays && parseInt(btnDays, 10) === days) {
-      btn.classList.add('active');
-    }
+export function applyHistoryRange(key: RangeKey): void {
+  store.set('currentHistoryRange', key);
+  store.set('currentHistoryDays', rangeDays(key));
+  document.querySelectorAll<HTMLElement>('.time-range-btn[data-range]').forEach((btn) => {
+    const active = btn.getAttribute('data-range') === key;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
-
-  // Re-render chart with filtered data
-  const fullHistoryData = store.get('fullHistoryData');
-  updateHistoryChart(fullHistoryData, false);
 }
 
 /**
- * Initialize time range button handlers.
+ * Select a history range and re-render the chart from the stored history.
  */
-export function initHistoryTimeRangeButtons(): void {
-  document.querySelectorAll('.time-range-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const days = btn.getAttribute('data-days');
-      if (days) {
-        setHistoryTimeRange(parseInt(days, 10));
-      }
-    });
-  });
+export async function setHistoryRange(key: RangeKey, onRange?: RangeListener): Promise<void> {
+  applyHistoryRange(key);
+  await updateHistoryChart(store.get('fullHistoryData'), false, onRange);
 }

@@ -968,6 +968,15 @@ class Database:
             caches = session.query(PriceCache).all()
             return {str(c.ticker): float(c.current_price) for c in caches if c.current_price}
 
+    def get_previous_closes(self) -> dict[str, float | None]:
+        """Map of ticker to previous close from the price cache (None when unset)."""
+        with self.get_session() as session:
+            rows = session.query(PriceCache).all()
+            return {
+                str(r.ticker): (float(r.previous_close) if r.previous_close is not None else None)
+                for r in rows
+            }
+
     def _get_updatable_tickers(self, session: Session) -> set[str]:
         """Tickers from active positions whose price can be refreshed via API.
 

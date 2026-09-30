@@ -258,7 +258,7 @@ interface PortfolioSnapshotRow {
   created_at: string;
 }
 
-interface PriceCacheRow {
+export interface PriceCacheRow {
   ticker: string;
   current_price: number | null;
   previous_close: number | null;
@@ -1880,6 +1880,11 @@ export class LocalAPI {
       all_fresh: staleTickers === 0,
       user_timezone: timezone,
     };
+  }
+
+  /** All price_cache rows (current and previous close, 52-week range). */
+  getPriceCacheRows(): PriceCacheRow[] {
+    return this.db.query<PriceCacheRow>('SELECT * FROM price_cache');
   }
 
   /** Tickers whose price_cache entry is missing or older than maxAgeHours. */
