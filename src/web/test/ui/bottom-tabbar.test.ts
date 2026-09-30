@@ -73,4 +73,14 @@ describe('bottom tab bar', () => {
     expect(more().getAttribute('aria-expanded')).toBe('false');
     expect((document.getElementById('app-sidebar') as HTMLElement).classList.contains('mobile-open')).toBe(false);
   });
+
+  it('creates the drawer overlay on body (outside any containing block) and closes on click', () => {
+    const overlay = document.querySelector('.mobile-nav-overlay') as HTMLElement;
+    expect(overlay.parentElement).toBe(document.body);
+    more().click();
+    expect(overlay.style.display).toBe('block');
+    overlay.click();
+    expect(overlay.style.display).toBe('none');
+    expect(more().getAttribute('aria-expanded')).toBe('false');
+  });
 });
