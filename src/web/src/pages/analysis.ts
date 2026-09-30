@@ -274,18 +274,19 @@ function buildPageContext(): PageContext {
   // Get portfolio summary from DOM
   try {
     const totalValueEl = document.getElementById('total-value');
-    const retirementValueEl = document.getElementById('retirement-value');
-    const taxableValueEl = document.getElementById('taxable-value');
 
     if (totalValueEl) {
+      const accounts = store.get('accounts');
+      const retirementValue = accounts
+        .filter((a) => a.is_retirement)
+        .reduce((sum, a) => sum + a.value, 0);
+      const taxableValue = accounts
+        .filter((a) => !a.is_retirement)
+        .reduce((sum, a) => sum + a.value, 0);
       context.visible_data.portfolio_summary = {
         total_value: parseFloat(totalValueEl.textContent?.replace(/[$,]/g, '') || '0') || 0,
-        retirement_value: retirementValueEl
-          ? parseFloat(retirementValueEl.textContent?.replace(/[$,]/g, '') || '0') || 0
-          : 0,
-        taxable_value: taxableValueEl
-          ? parseFloat(taxableValueEl.textContent?.replace(/[$,]/g, '') || '0') || 0
-          : 0,
+        retirement_value: retirementValue,
+        taxable_value: taxableValue,
       };
     }
   } catch {

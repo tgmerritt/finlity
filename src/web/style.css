@@ -1648,7 +1648,13 @@ body {
 }
 
 .stats-row.retirement-metrics {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1280px) and (min-width: 769px) {
+    .stats-row.retirement-metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 .stat-card {
@@ -1793,6 +1799,24 @@ body {
 .retirement-metrics .stat-card:nth-child(2) { border-left-color: var(--color-success); }
 .retirement-metrics .stat-card:nth-child(3) { border-left-color: var(--color-purple); }
 .retirement-metrics .stat-card:nth-child(4) { border-left-color: #eab308; }
+.retirement-metrics .stat-card:nth-child(5) { border-left-color: var(--color-primary); }
+
+/* Five tiles: drop the icons and tighten so values are not clipped or wrapped. */
+@media (min-width: 769px) {
+    .retirement-metrics .stat-card {
+        padding: 16px;
+        gap: 8px;
+    }
+
+    .retirement-metrics .stat-icon {
+        display: none;
+    }
+}
+
+.retirement-metrics .stat-value {
+    font-size: 20px;
+    overflow-wrap: anywhere;
+}
 
 /* Cards */
 .card {
@@ -7407,6 +7431,8 @@ th.sortable.sort-desc .sort-icon::after {
 }
 .attention-list li:last-child { border-bottom: 0; }
 .attention-clear { color: var(--color-text-secondary); }
+.dash-card a { color: var(--color-primary); }
+.alloc-empty, .on-track-note { color: var(--color-text-secondary); font-size: 14px; }
 
 .account-group + .account-group { margin-top: 16px; }
 .account-group-head {
@@ -7454,6 +7480,7 @@ th.sortable.sort-desc .sort-icon::after {
     #chart-history.dash-hero-chart { height: 220px; min-height: 220px; }
     .account-row { grid-template-columns: minmax(0, 1fr) auto; }
     .account-row-meta { grid-column: 2; }
+    .account-row-value { text-align: right; }
 }
 
 /* Settings grid improvement */
