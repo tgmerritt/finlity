@@ -43,6 +43,9 @@ function showEmptyState(container: HTMLElement, message: string): void {
   });
 }
 
+/** Called with the filtered history and range key the chart is rendered for. */
+export type RangeListener = (filtered: SnapshotHistory[], key: RangeKey) => void;
+
 /**
  * Update portfolio history chart.
  * @param history - Array of history snapshots
@@ -50,7 +53,8 @@ function showEmptyState(container: HTMLElement, message: string): void {
  */
 export async function updateHistoryChart(
   history: SnapshotHistory[] | null,
-  storeData = true
+  storeData = true,
+  onRange?: RangeListener
 ): Promise<void> {
   const container = document.getElementById('chart-history');
 
@@ -59,15 +63,21 @@ export async function updateHistoryChart(
     store.set('fullHistoryData', history);
   }
 
+  // One read of the selected range drives both the chart and the caller's
+  // range summary, so a click during a render cannot split the two.
+  const rangeKey = store.get('currentHistoryRange');
+  const rangeDayCount = store.get('currentHistoryDays');
+
   if (!history || !hasPlottableHistory(history)) {
+    onRange?.([], rangeKey);
     if (container) {
       showEmptyState(container, HISTORY_EMPTY_MESSAGE);
     }
     return;
   }
 
-  const currentHistoryDays = store.get('currentHistoryDays');
-  const filteredHistory = filterHistoryForRange(history, currentHistoryDays);
+  const filteredHistory = filterHistoryForRange(history, rangeDayCount);
+  onRange?.(filteredHistory, rangeKey);
 
   if (!hasPlottableHistory(filteredHistory)) {
     if (container) {
@@ -148,7 +158,7 @@ export function applyHistoryRange(key: RangeKey): void {
 /**
  * Select a history range and re-render the chart from the stored history.
  */
-export async function setHistoryRange(key: RangeKey): Promise<void> {
+export async function setHistoryRange(key: RangeKey, onRange?: RangeListener): Promise<void> {
   applyHistoryRange(key);
-  await updateHistoryChart(store.get('fullHistoryData'), false);
+  await updateHistoryChart(store.get('fullHistoryData'), false, onRange);
 }

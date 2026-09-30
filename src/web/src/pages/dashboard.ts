@@ -8,11 +8,10 @@ import { store } from '@/state/store';
 import { emit, on } from '@/state/events';
 import { showLoading, hideLoading } from '@/ui/loading';
 import { showToast } from '@/ui/toast';
-import { showTab } from '@/ui/tabs';
+import { onTabChange, showTab } from '@/ui/tabs';
 import { withSubmitGuard } from '@/ui/with-submit-guard';
 import { closeModal, showConfirmDialog, createDynamicModal } from '@/ui/modal';
 import { formatCurrency } from '@/utils/format';
-import { filterHistoryForRange } from '@/charts/history-range';
 import {
   allocationVsTarget,
   attentionItems,
@@ -297,11 +296,24 @@ export function deleteDuplicatePosition(positionId: string): void {
 // Overview dashboard rendering
 // ---------------------------------------------------------------------------
 
-/** Placeholder date of birth shipped with a fresh install. */
-const PLACEHOLDER_DOB = '1990-01-01';
-
 /** True once the range buttons have been set from the loaded history (or by the user). */
 let historyRangeInitialized = false;
+
+/**
+ * Bumped by every card render; a self-fetching card that resolves after a
+ * newer render started discards its result.
+ */
+let renderGeneration = 0;
+
+/** True once renderDashboard has run, so tab-show refreshes have data to use. */
+let dashboardRendered = false;
+
+/** Test-only: reset module-level render state. */
+export function resetDashboardRenderState(): void {
+  historyRangeInitialized = false;
+  renderGeneration = 0;
+  dashboardRendered = false;
+}
 
 /** Subset of GET /api/portfolio/dashboard-metrics the On track card reads. */
 interface OnTrackMetrics {
@@ -355,10 +367,9 @@ function rangeSuffix(key: RangeKey): string {
   return `over ${key}`;
 }
 
-/** Update #range-change from the stored history and the selected range. */
-export function renderRangeChange(history: SnapshotHistory[]): void {
-  const filtered = filterHistoryForRange(history, store.get('currentHistoryDays'));
-  setChange('range-change', historyChange(filtered), rangeSuffix(store.get('currentHistoryRange')));
+/** Update #range-change for a filtered history and the range it was filtered for. */
+function renderRangeChange(filtered: SnapshotHistory[], key: RangeKey): void {
+  setChange('range-change', historyChange(filtered), rangeSuffix(key));
 }
 
 function renderHero(data: DashboardData): void {
@@ -408,10 +419,11 @@ async function fetchAssetClassTargets(): Promise<Record<string, unknown> | null>
   }
 }
 
-async function renderAllocation(positions: DashboardPosition[]): Promise<void> {
+async function renderAllocation(positions: DashboardPosition[], gen: number): Promise<void> {
   const host = document.getElementById('allocation-bars');
   if (!host) return;
   const targets = await fetchAssetClassTargets();
+  if (gen !== renderGeneration) return;
   const rows = allocationVsTarget(positions, targets);
   host.textContent = '';
 
@@ -465,37 +477,43 @@ function runQuickCheck(): void {
   form?.requestSubmit();
 }
 
-async function renderOnTrack(): Promise<void> {
+async function renderOnTrack(gen: number): Promise<void> {
   const host = document.getElementById('on-track-body');
   if (!host) return;
 
+  const entityId = store.get('currentEntityId');
+  const metricsUrl = entityId
+    ? `/api/portfolio/dashboard-metrics?entity_id=${encodeURIComponent(entityId)}`
+    : '/api/portfolio/dashboard-metrics';
+  const [personalResult, metricsResult] = await Promise.allSettled([
+    apiCall<{ personal?: { dob?: string | null }; dob?: string | null }>(
+      '/api/settings/config/personal'
+    ),
+    apiCall<OnTrackMetrics>(metricsUrl),
+  ]);
+  if (gen !== renderGeneration) return;
+
   let dob: string | null = null;
   let metrics: OnTrackMetrics | null = null;
-  try {
-    const entityId = store.get('currentEntityId');
-    const metricsUrl = entityId
-      ? `/api/portfolio/dashboard-metrics?entity_id=${encodeURIComponent(entityId)}`
-      : '/api/portfolio/dashboard-metrics';
-    const [personal, dashboardMetrics] = await Promise.all([
-      apiCall<{ personal?: { dob?: string | null }; dob?: string | null }>(
-        '/api/settings/config/personal'
-      ),
-      apiCall<OnTrackMetrics>(metricsUrl),
-    ]);
-    dob = personal.personal?.dob ?? personal.dob ?? null;
-    metrics = dashboardMetrics;
-  } catch (error) {
-    console.error('Error loading on-track status:', error);
+  if (personalResult.status === 'fulfilled') {
+    dob = personalResult.value.personal?.dob ?? personalResult.value.dob ?? null;
+  } else {
+    console.error('Error loading personal settings for on-track card:', personalResult.reason);
+  }
+  if (metricsResult.status === 'fulfilled') {
+    metrics = metricsResult.value;
+  } else {
+    console.error('Error loading metrics for on-track card:', metricsResult.reason);
   }
 
   host.textContent = '';
 
-  if (!metrics && dob === null) {
+  if (personalResult.status === 'rejected' && metricsResult.status === 'rejected') {
     host.appendChild(h('p', 'on-track-note', 'On-track status is unavailable right now.'));
     return;
   }
 
-  if (!dob || dob === PLACEHOLDER_DOB) {
+  if (personalResult.status === 'fulfilled' && !dob) {
     const note = h('p', 'on-track-note', "Add your birth date to see if you're on track. ");
     note.appendChild(settingsLink('Open Settings'));
     host.appendChild(note);
@@ -547,7 +565,7 @@ const ATTENTION_ACTIONS: Record<AttentionItem['action'], { label: string; run: (
   'open-analysis': { label: 'View alerts', run: () => showTab('analysis') },
 };
 
-async function renderAttention(positions: DashboardPosition[]): Promise<void> {
+async function renderAttention(positions: DashboardPosition[], gen: number): Promise<void> {
   const list = document.getElementById('attention-list');
   if (!list) return;
 
@@ -562,6 +580,8 @@ async function renderAttention(positions: DashboardPosition[]): Promise<void> {
       return [] as TriggeredAlert[];
     }),
   ]);
+
+  if (gen !== renderGeneration) return;
 
   // Markets closed means prices are as current as they can be (see updatePriceStatus).
   const staleTickers = status && status.market_open !== false ? status.stale_tickers : 0;
@@ -663,13 +683,23 @@ export async function renderDashboard(data: DashboardData): Promise<void> {
 
   renderHero(data);
   renderAccounts(data);
-  await updateHistoryChart(history);
-  renderRangeChange(history);
+  await updateHistoryChart(history, true, renderRangeChange);
 
+  dashboardRendered = true;
+  await renderCards(data.positions);
+}
+
+/**
+ * Render the three cards that load their own data (allocation, on track,
+ * attention). Called on every dashboard render and whenever the Dashboard tab
+ * is shown, so changes made in Settings or Projections show up on return.
+ */
+export async function renderCards(positions: DashboardPosition[]): Promise<void> {
+  const gen = ++renderGeneration;
   await Promise.all([
-    renderAllocation(data.positions),
-    renderOnTrack(),
-    renderAttention(data.positions),
+    renderAllocation(positions, gen),
+    renderOnTrack(gen),
+    renderAttention(positions, gen),
   ]);
 }
 
@@ -681,9 +711,7 @@ function initRangeButtons(): void {
       const key = btn.getAttribute('data-range') as RangeKey | null;
       if (!key) return;
       historyRangeInitialized = true;
-      setHistoryRange(key)
-        .then(() => renderRangeChange(store.get('fullHistoryData')))
-        .catch(console.error);
+      setHistoryRange(key, renderRangeChange).catch(console.error);
     });
   });
 }
@@ -943,6 +971,14 @@ export function initDashboard(): void {
   }
 
   initRangeButtons();
+
+  // Re-render the self-fetching cards from the positions already in the store
+  // when the Dashboard tab becomes visible (no dashboard refetch, no chart).
+  onTabChange((tab) => {
+    if (tab === 'dashboard' && dashboardRendered) {
+      renderCards(store.get('currentPositions')).catch(console.error);
+    }
+  });
 
   // Initial price status update
   updatePriceStatus();
