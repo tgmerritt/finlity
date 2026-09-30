@@ -89,6 +89,10 @@ describe('historyDateAxis', () => {
     expect('nticks' in axis).toBe(false);
     if ('tickvals' in axis) {
       expect(axis.tickvals).toEqual(['2026-09-28', '2026-09-29']);
+      // Without automargin, Plotly hides (opacity: 0) a tick label that
+      // lands exactly on the axis's data-driven edge, which is routine
+      // when there are only a couple of distinct days.
+      expect(axis.automargin).toBe(true);
     }
   });
 
