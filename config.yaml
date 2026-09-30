@@ -11,12 +11,13 @@ personal:
 # Target allocations (these adjust with age)
 # Formula: if age <= 60, use base_target, else shift toward bonds
 targets:
-  # Asset class targets
+  # Asset class targets (fractions of the whole portfolio). Neutral defaults;
+  # change them in Settings to match your own plan.
   asset_class:
-    equities: 0.90
-    bonds: 0.025
-    alternatives: 0.05
-    cash: 0.025
+    equities: 0.60
+    bonds: 0.35
+    alternatives: 0.00
+    cash: 0.05
 
   # Sector targets (as % of equities)
   sector:

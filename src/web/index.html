@@ -407,212 +407,47 @@
 
             <!-- Dashboard Tab -->
             <div id="tab-dashboard" class="tab-content active">
-                <!-- Duplicate Warning Banner -->
-                <div id="duplicate-warning" class="alert alert-warning hidden">
-                    <div class="alert-icon">
-                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                            <line x1="12" y1="9" x2="12" y2="13"></line>
-                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                    </div>
-                    <div class="alert-content">
-                        <strong>Potential Duplicates Detected</strong>
-                        <p id="duplicate-message">Some positions may be entered twice.</p>
-                        <button class="btn btn-sm btn-default" onclick="showDuplicateDetails()">View Details</button>
-                    </div>
-                </div>
 
-                <!-- Summary Cards -->
-                <section class="stats-row">
-                    <div class="stat-card stat-card--hero">
-                        <div class="stat-icon blue">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="12" y1="1" x2="12" y2="23"></line>
-                                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                            </svg>
+                <section class="card dash-hero" id="dash-hero">
+                    <div class="dash-hero-top">
+                        <div class="dash-hero-figures">
+                            <div class="dash-hero-label">Portfolio value</div>
+                            <div class="dash-hero-value" id="total-value">$0</div>
+                            <div class="dash-hero-changes">
+                                <span class="dash-change" id="day-change" aria-label="Change today"></span>
+                                <span class="dash-change" id="range-change" aria-label="Change over the selected range"></span>
+                                <span class="dash-change dash-change--muted" id="total-gain" aria-label="Total gain since purchase"></span>
+                            </div>
                         </div>
-                        <div class="stat-content">
-                            <span class="stat-label">Total Portfolio Value</span>
-                            <span class="stat-value" id="total-value">$0</span>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon green">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                                <polyline points="17 6 23 6 23 12"></polyline>
-                            </svg>
-                        </div>
-                        <div class="stat-content">
-                            <span class="stat-label">Total Gain/Loss</span>
-                            <span class="stat-value" id="gain-loss">$0</span>
+                        <div class="time-range-selector" role="group" aria-label="History range">
+                            <button class="time-range-btn" data-range="1M">1M</button>
+                            <button class="time-range-btn" data-range="3M">3M</button>
+                            <button class="time-range-btn" data-range="YTD">YTD</button>
+                            <button class="time-range-btn" data-range="1Y">1Y</button>
+                            <button class="time-range-btn" data-range="ALL">All</button>
                         </div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-icon purple">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-                            </svg>
-                        </div>
-                        <div class="stat-content">
-                            <span class="stat-label">Retirement</span>
-                            <span class="stat-value" id="retirement-value">$0</span>
-                        </div>
+                    <div id="chart-history" class="dash-hero-chart"></div>
+                </section>
+
+                <section class="dash-cards">
+                    <div class="card dash-card" id="allocation-card">
+                        <div class="card-header"><h3>Allocation vs target</h3></div>
+                        <div class="card-body" id="allocation-bars"></div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-icon orange">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-                                <line x1="1" y1="10" x2="23" y2="10"></line>
-                            </svg>
-                        </div>
-                        <div class="stat-content">
-                            <span class="stat-label">Taxable</span>
-                            <span class="stat-value" id="taxable-value">$0</span>
-                        </div>
+                    <div class="card dash-card" id="on-track-card">
+                        <div class="card-header"><h3>On track</h3></div>
+                        <div class="card-body" id="on-track-body"></div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-icon blue">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M3 17l4-8 4 4 4-6 4 10"></path>
-                                <path d="M3 21h18"></path>
-                            </svg>
-                        </div>
-                        <div class="stat-content">
-                            <span class="stat-label">Coast Number</span>
-                            <span class="stat-value" id="coast-number">--</span>
-                            <span class="stat-sublabel" id="coast-sublabel">Today's value to retire at target</span>
-                        </div>
+                    <div class="card dash-card" id="attention-card">
+                        <div class="card-header"><h3>Needs attention</h3></div>
+                        <div class="card-body"><ul class="attention-list" id="attention-list"></ul></div>
                     </div>
                 </section>
 
-                <!-- Retirement Planning Metrics (Row 2) -->
-                <!-- Inline error host for retirement metrics row. Hidden by default; populated by loadRetirementMetrics() on failure. -->
-                <div id="retirement-metrics-error" class="hidden" style="margin-bottom: 16px;"></div>
-                <section class="stats-row retirement-metrics" id="retirement-metrics-row">
-                    <div class="stat-card">
-                        <div class="stat-icon teal">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <path d="M12 6v6l4 2"></path>
-                            </svg>
-                        </div>
-                        <div class="stat-content">
-                            <span class="stat-label">Retirement Income / mo</span>
-                            <span class="stat-value" id="monthly-retirement-income">--</span>
-                            <span class="stat-sublabel" id="withdrawal-rate-label">at 4% withdrawal</span>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon green">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                            </svg>
-                        </div>
-                        <div class="stat-content">
-                            <span class="stat-label">Success Probability</span>
-                            <span class="stat-value" id="success-probability">--</span>
-                            <span class="stat-sublabel" id="success-sublabel">Run simulation to calculate</span>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon purple">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                                <circle cx="9" cy="7" r="4"></circle>
-                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                            </svg>
-                        </div>
-                        <div class="stat-content">
-                            <span class="stat-label">Earliest Retirement Age</span>
-                            <span class="stat-value" id="earliest-retirement-age">--</span>
-                            <span class="stat-sublabel" id="retire-sublabel">with 80%+ success rate</span>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon yellow">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                            </svg>
-                        </div>
-                        <div class="stat-content">
-                            <span class="stat-label">FIRE Number</span>
-                            <span class="stat-value" id="fire-number">--</span>
-                            <span class="stat-sublabel" id="fire-sublabel">Target portfolio value</span>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Account Totals Table -->
-                <section class="card account-totals-card">
-                    <div class="card-header">
-                        <h3>Account Balances</h3>
-                    </div>
-                    <div class="card-body">
-                        <table class="data-table account-totals-table" id="account-totals-table">
-                            <thead>
-                                <tr>
-                                    <th>Account</th>
-                                    <th>Type</th>
-                                    <th class="text-right">Value</th>
-                                    <th class="text-right">% of Total</th>
-                                </tr>
-                            </thead>
-                            <tbody id="account-totals-body">
-                                <!-- Populated by JavaScript -->
-                            </tbody>
-                            <tfoot>
-                                <tr class="totals-row">
-                                    <td colspan="2"><strong>Total</strong></td>
-                                    <td class="text-right" id="account-totals-sum">$0</td>
-                                    <td class="text-right">100%</td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                </section>
-
-                <!-- Charts -->
-                <section class="charts-grid">
-                    <div class="card">
-                        <div class="card-header">
-                            <h3>Asset Allocation</h3>
-                            <button class="ai-info-btn" data-element-id="dashboard.allocation_chart" title="Get AI insight" onclick="showAICommentary(this)">?</button>
-                        </div>
-                        <div class="card-body">
-                            <div id="chart-allocation"></div>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <div class="card-header">
-                            <h3>By Account Type</h3>
-                            <button class="ai-info-btn" data-element-id="dashboard.account_type_chart" title="Get AI insight" onclick="showAICommentary(this)">?</button>
-                        </div>
-                        <div class="card-body">
-                            <div id="chart-account-type"></div>
-                        </div>
-                    </div>
-                </section>
-
-                <section class="card">
-                    <div class="card-header">
-                        <h3>Portfolio Value History</h3>
-                        <div class="time-range-selector">
-                            <button class="time-range-btn" data-days="365" onclick="setHistoryTimeRange(365)">1Y</button>
-                            <button class="time-range-btn" data-days="270" onclick="setHistoryTimeRange(270)">9M</button>
-                            <button class="time-range-btn" data-days="180" onclick="setHistoryTimeRange(180)">6M</button>
-                            <button class="time-range-btn" data-days="90" onclick="setHistoryTimeRange(90)">3M</button>
-                            <button class="time-range-btn active" data-days="30" onclick="setHistoryTimeRange(30)">1M</button>
-                            <button class="time-range-btn" data-days="7" onclick="setHistoryTimeRange(7)">1W</button>
-                            <button class="time-range-btn" data-days="1" onclick="setHistoryTimeRange(1)">1D</button>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div id="chart-history"></div>
-                    </div>
+                <section class="card" id="accounts-card">
+                    <div class="card-header"><h3>Accounts</h3></div>
+                    <div class="card-body" id="account-groups"></div>
                 </section>
             </div>
 
@@ -1130,6 +965,78 @@
 
             <!-- Projections Tab -->
             <div id="tab-projections" class="tab-content">
+                <!-- Retirement Planning Metrics (Row 2) -->
+                <!-- Inline error host for retirement metrics row. Hidden by default; populated by loadRetirementMetrics() on failure. -->
+                <div id="retirement-metrics-error" class="hidden" style="margin-bottom: 16px;"></div>
+                <section class="stats-row retirement-metrics" id="retirement-metrics-row">
+                    <div class="stat-card">
+                        <div class="stat-icon teal">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M12 6v6l4 2"></path>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Retirement Income / mo</span>
+                            <span class="stat-value" id="monthly-retirement-income">--</span>
+                            <span class="stat-sublabel" id="withdrawal-rate-label">at 4% withdrawal</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Success Probability</span>
+                            <span class="stat-value" id="success-probability">--</span>
+                            <span class="stat-sublabel" id="success-sublabel">Run simulation to calculate</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon purple">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Earliest Retirement Age</span>
+                            <span class="stat-value" id="earliest-retirement-age">--</span>
+                            <span class="stat-sublabel" id="retire-sublabel">with 80%+ success rate</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon yellow">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">FIRE Number</span>
+                            <span class="stat-value" id="fire-number">--</span>
+                            <span class="stat-sublabel" id="fire-sublabel">Target portfolio value</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 17l4-8 4 4 4-6 4 10"></path>
+                                <path d="M3 21h18"></path>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-label">Coast Number</span>
+                            <span class="stat-value" id="coast-number">--</span>
+                            <span class="stat-sublabel" id="coast-sublabel">Today's value to retire at target</span>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Projection Results - At Top -->
                 <div class="card" id="projection-results" class="hidden">
                     <div class="card-header">

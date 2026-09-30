@@ -216,6 +216,18 @@ async def lifespan(app: FastAPI):
         seed_callback = create_seed_callback()
         seed_callback(db)
 
+    if app.state.demo_mode:
+        from src.services.demo_history import ensure_recent_demo_history
+        from src.services.demo_mode import get_demo_manager
+        if get_demo_manager().is_enabled:
+            # Cosmetic demo data must never block startup.
+            try:
+                written = ensure_recent_demo_history(db)
+                if written:
+                    print(f"Demo history refreshed: {written} daily snapshots")
+            except Exception:
+                logger.exception("Demo history refresh failed; continuing startup")
+
     # Shared async HTTP client for any async code paths (e.g. streaming
     # LLM providers). Sync endpoints continue to use `requests` in the
     # threadpool FastAPI assigns to them.
@@ -476,6 +488,8 @@ async def get_dashboard_data(view_id: str = None):
     retirement_value = 0
     taxable_value = 0
 
+    previous_closes = db.get_previous_closes()
+
     for pos in db.get_all_positions():
         # Filter by view if specified
         if filter_account_ids and pos.account_id not in filter_account_ids:
@@ -515,6 +529,7 @@ async def get_dashboard_data(view_id: str = None):
             "contract_multiplier": pos.contract_multiplier if is_opt else None,
             "contracts": pos.shares if is_opt else None,
             "premium": pos.current_price if is_opt else None,
+            "previous_close": previous_closes.get(pos.ticker),
         })
 
         # Accumulate totals
