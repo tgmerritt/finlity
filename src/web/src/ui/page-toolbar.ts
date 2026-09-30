@@ -10,7 +10,6 @@ export interface ToolbarState {
 }
 
 const TOOLBAR_STATES: Record<TabName, ToolbarState> = {
-  welcome: { title: 'Welcome', showFilters: false },
   dashboard: { title: 'Dashboard', showFilters: true },
   holdings: { title: 'Holdings', showFilters: true },
   analysis: { title: 'Analysis', showFilters: true },
