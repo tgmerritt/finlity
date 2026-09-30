@@ -8,6 +8,7 @@ import { initSession } from '@/state/session';
 import { initTheme, toggleTheme, setTheme } from '@/state/theme';
 
 // UI components
+import { initPageToolbar } from '@/ui/page-toolbar';
 import { initTabs, initMobileNav, showTab, toggleMobileNav, onTabChange } from '@/ui/tabs';
 import type { TabName } from '@/ui/tabs';
 import { showToast, showError } from '@/ui/toast';
@@ -493,6 +494,7 @@ async function init(): Promise<void> {
 
   // Initialize UI components
   initTabs();
+  initPageToolbar();
   initMobileNav();
   initModal();
   initSidebarState();

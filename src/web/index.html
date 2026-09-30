@@ -74,36 +74,6 @@
                 </div>
             </div>
 
-            <!-- Portfolio View Selector -->
-            <div class="view-selector">
-                <label class="view-selector-label">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                        <circle cx="12" cy="12" r="3"></circle>
-                    </svg>
-                    View
-                </label>
-                <select id="view-selector" onchange="changeView(this.value)">
-                    <option value="">All Accounts</option>
-                </select>
-            </div>
-
-            <!-- Entity Selector (for per-person retirement metrics) -->
-            <div class="view-selector entity-selector">
-                <label class="view-selector-label">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="9" cy="7" r="4"></circle>
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                    </svg>
-                    Person
-                </label>
-                <select id="entity-selector" onchange="changeEntity(this.value)">
-                    <option value="">Household (All)</option>
-                </select>
-            </div>
-
             <nav class="sidebar-nav">
                 <button class="nav-item" onclick="showTab('welcome')" data-tab="welcome">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
@@ -242,6 +212,40 @@
                 <span class="demo-icon">🎭</span>
                 <span>DEMO MODE - Using fake portfolio data</span>
                 <button onclick="window.location.href='#settings'" class="demo-settings-link">Settings</button>
+            </div>
+
+            <div class="page-toolbar" id="page-toolbar">
+                <h1 class="page-title" id="page-title">Dashboard</h1>
+                <div class="page-filters">
+                    <div class="view-selector">
+                        <label class="view-selector-label">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                            View
+                        </label>
+                        <select id="view-selector" onchange="changeView(this.value)">
+                            <option value="">All Accounts</option>
+                        </select>
+                    </div>
+
+                    <!-- Entity Selector (for per-person retirement metrics) -->
+                    <div class="view-selector entity-selector">
+                        <label class="view-selector-label">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                            Person
+                        </label>
+                        <select id="entity-selector" onchange="changeEntity(this.value)">
+                            <option value="">Household (All)</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
             <!-- Welcome Tab -->
