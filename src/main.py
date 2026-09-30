@@ -42,7 +42,11 @@ from src.api.entities import router as entities_router
 from src.api.v2 import v2_router
 from src.database import get_profile_manager, get_database
 from src.importers import FolderScanner
-from src.services.price_refresh_gate import evaluate_refresh_gate, record_refresh_pass
+from src.services.price_refresh_gate import (
+    catch_up_tickers,
+    evaluate_refresh_gate,
+    record_refresh_pass,
+)
 from src.services.session import is_multi_user_mode
 
 logger = logging.getLogger(__name__)
@@ -166,7 +170,11 @@ async def _background_bootstrap(demo_mode: bool) -> None:
 
         decision = evaluate_refresh_gate(db)
         if decision.allowed:
-            stale_tickers = db.get_stale_tickers(max_age_hours=1)
+            stale_tickers = (
+                catch_up_tickers(db, decision)
+                if decision.catch_up_cutoff is not None
+                else db.get_stale_tickers(max_age_hours=1)
+            )
             if stale_tickers:
                 logger.info("Refreshing %d stale price(s)...", len(stale_tickers))
                 await asyncio.to_thread(

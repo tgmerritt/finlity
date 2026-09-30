@@ -4,7 +4,7 @@ Free and open source, no API key. The calendar is timezone-aware
 (America/New_York) and knows about holidays and half days.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import exchange_calendars as xcals
@@ -43,3 +43,19 @@ def next_market_open(dt: datetime | None = None) -> datetime | None:
     except ValueError:
         return None
     return nxt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def last_market_close(dt: datetime | None = None) -> datetime | None:
+    """Most recent NYSE session close at or before ``dt`` as naive UTC.
+
+    Handles weekends, holidays and half days via the calendar. None if the
+    calendar cannot answer (``dt`` outside its bounds).
+    """
+    et = _ensure_et(dt).replace(second=0, microsecond=0)
+    try:
+        # previous_close is strictly before its argument; nudge one minute so
+        # a ``dt`` that is exactly a close returns that close.
+        prev = _get_calendar().previous_close(et + timedelta(minutes=1))
+    except ValueError:
+        return None
+    return prev.to_pydatetime().astimezone(timezone.utc).replace(tzinfo=None)
