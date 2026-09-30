@@ -1,6 +1,6 @@
 /**
  * Onboarding Feature
- * Handles first-visit welcome flow, demo mode, and guided tour.
+ * Handles demo mode, and guided tour.
  */
 
 import { apiCall } from '@/api/client';
@@ -65,22 +65,6 @@ const tourSteps: TourStep[] = [
       'A Monte Carlo simulation evaluates future growth accounting for events like Black Swan events (market crashes) thousands of times, giving you a statistical view of the likelihood that your money will serve you for the rest of your life.',
   },
 ];
-
-/**
- * Check if this is the user's first visit.
- */
-export function isFirstVisit(): boolean {
-  return !localStorage.getItem('hasVisitedBefore');
-}
-
-/**
- * Mark welcome as complete and show dashboard.
- */
-export function completeWelcome(): void {
-  localStorage.setItem('hasVisitedBefore', 'true');
-  showTab('dashboard');
-  document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
-}
 
 /**
  * Start demo mode.
@@ -203,6 +187,19 @@ export function isDemoMode(): boolean {
 }
 
 /**
+ * Find a tour target. Tab buttons exist in both the sidebar and the phone
+ * bottom bar, and only one is displayed at a time, so prefer a visible match.
+ */
+function findTourTarget(selector: string): HTMLElement | null {
+  const matches = Array.from(document.querySelectorAll<HTMLElement>(selector));
+  const visible = matches.find((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  });
+  return visible ?? matches[0] ?? null;
+}
+
+/**
  * Start the guided tour.
  */
 export function startTour(): void {
@@ -224,7 +221,7 @@ function handleTourResize(): void {
   if (overlay && overlay.style.display !== 'none') {
     const step = tourSteps[currentTourStep];
     if (step) {
-      const targetEl = document.querySelector(step.target);
+      const targetEl = findTourTarget(step.target);
       if (targetEl instanceof HTMLElement) {
         positionTourElements(targetEl);
       }
@@ -298,7 +295,7 @@ export function showTourStep(stepIndex: number): void {
   }
 
   // Position spotlight and card
-  const targetEl = document.querySelector(step.target);
+  const targetEl = findTourTarget(step.target);
   if (targetEl instanceof HTMLElement) {
     positionTourElements(targetEl);
   }
@@ -432,7 +429,7 @@ export function closeProfileSetup(): void {
   const modal = getElementById<HTMLElement>('profile-setup-modal');
   if (modal) modal.style.display = 'none';
 
-  // If user cancels, still mark welcome as seen and go to dashboard
+  // If user cancels, still mark the app as visited and go to the dashboard
   localStorage.setItem('hasVisitedBefore', 'true');
   showTab('dashboard');
   document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
