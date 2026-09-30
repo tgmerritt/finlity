@@ -18,7 +18,7 @@ from pathlib import Path
 from playwright.sync_api import Page, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-WIDTHS = (1440, 390, 360)
+WIDTHS = (1440, 900, 390, 360)
 THEMES = ("light", "dark")
 
 CHECKS_JS = """
@@ -68,6 +68,23 @@ CHECKS_JS = """
   if (fab && vw <= 480) {
     const f = fab.getBoundingClientRect();
     if (f.width > 48) problems.push(`chat button too large on phone (${Math.round(f.width)}px)`);
+  }
+  if (vw <= 768) {
+    const bar = document.querySelector('.bottom-tabbar');
+    const b = bar ? bar.getBoundingClientRect() : null;
+    const barOk =
+      !!bar &&
+      getComputedStyle(bar).display !== 'none' &&
+      getComputedStyle(bar).position === 'fixed' &&
+      b.width > 0 &&
+      b.height > 0 &&
+      Math.abs(b.bottom - window.innerHeight) <= 1;
+    if (!barOk) problems.push('bottom tab bar missing');
+    if (barOk && fab) {
+      const f = fab.getBoundingClientRect();
+      const overlaps = f.left < b.right && f.right > b.left && f.top < b.bottom && f.bottom > b.top;
+      if (overlaps) problems.push('chat button overlaps tab bar');
+    }
   }
   return problems;
 }

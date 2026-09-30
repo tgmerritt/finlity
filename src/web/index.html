@@ -34,7 +34,7 @@
 
     <div class="app-layout">
         <!-- Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="app-sidebar">
             <div class="logo">
                 <img src="/static/images/finlity-logo.png" alt="Finlity - it's financial literacy" title="Finlity - it's financial literacy" width="32" height="32">
                 <span>Finlity</span>
@@ -174,13 +174,6 @@
         <main class="main-content">
             <!-- Mobile Header (visible only on small screens) -->
             <header class="mobile-header">
-                <button class="mobile-menu-toggle" onclick="toggleMobileNav()" aria-label="Toggle navigation">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="3" y1="6" x2="21" y2="6"></line>
-                        <line x1="3" y1="12" x2="21" y2="12"></line>
-                        <line x1="3" y1="18" x2="21" y2="18"></line>
-                    </svg>
-                </button>
                 <div class="mobile-logo">
                     <img src="/static/images/finlity-logo.png" alt="Finlity" width="28" height="28">
                     <span>Finlity</span>
@@ -2427,6 +2420,32 @@
                 </div>
             </div>
         </main>
+
+        <!-- Phone bottom tab bar (outside main: main-content uses contain: layout, which would trap position: fixed) -->
+        <nav class="bottom-tabbar" aria-label="Primary">
+                <button class="bottom-tab" data-tab="dashboard" onclick="showTab('dashboard')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="9"></rect>
+                        <rect x="14" y="3" width="7" height="5"></rect>
+                        <rect x="14" y="12" width="7" height="9"></rect>
+                        <rect x="3" y="16" width="7" height="5"></rect>
+                    </svg><span>Dashboard</span></button>
+                <button class="bottom-tab" data-tab="holdings" onclick="showTab('holdings')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    </svg><span>Holdings</span></button>
+                <button class="bottom-tab" data-tab="projections" onclick="showTab('projections')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"></polyline>
+                    </svg><span>Projections</span></button>
+                <button class="bottom-tab" data-tab="budget" onclick="showTab('budget')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg><span>Cash flow</span></button>
+                <button class="bottom-tab bottom-tab--more" id="bottom-tab-more" aria-expanded="false" aria-controls="app-sidebar"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg><span>More</span></button>
+        </nav>
     </div>
 
     <!-- Add Position Modal -->
