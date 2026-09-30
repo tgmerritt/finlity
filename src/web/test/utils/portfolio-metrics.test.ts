@@ -107,6 +107,22 @@ describe('allocationVsTarget', () => {
     expect(hasTargets({ equities: 0, bonds: 0 })).toBe(false);
     expect(hasTargets({ equities: 0.6 })).toBe(true);
   });
+
+  it('treats units per object based on sum of targets', () => {
+    const rows = allocationVsTarget(positions, {
+      equities: 60,
+      bonds: 34,
+      alternatives: 1,
+      cash: 5,
+    });
+    expect(rows.find((r) => r.cls === 'alternatives')!.targetPct).toBeCloseTo(1);
+  });
+
+  it('excludes negative position values from totals', () => {
+    const withShort = [pos({ ticker: 'VTI', value: 600 }), pos({ ticker: 'SHORT', value: -100 })];
+    const rows = allocationVsTarget(withShort, null);
+    expect(rows.find((r) => r.cls === 'stocks')!.actualPct).toBeCloseTo(100);
+  });
 });
 
 describe('day change', () => {
@@ -160,6 +176,10 @@ describe('history ranges', () => {
     expect(rangeDays('ALL', now)).toBeGreaterThan(3650);
   });
 
+  it('rangeDays YTD on 1 January returns 1, not 0', () => {
+    expect(rangeDays('YTD', new Date('2026-01-01T10:00:00Z'))).toBe(1);
+  });
+
   it('defaults to 1Y when history spans more than 30 days, otherwise ALL', () => {
     expect(defaultRange([snap('2026-01-01', 1), snap('2026-09-29', 1)])).toBe('1Y');
     expect(defaultRange([snap('2026-09-20', 1), snap('2026-09-29', 1)])).toBe('ALL');
@@ -207,6 +227,16 @@ describe('groupAccounts', () => {
   it('omits empty groups', () => {
     const groups = groupAccounts([account({ id: '2', name: 'Brokerage', value: 5 })], [], 5);
     expect(groups.map((g) => g.key)).toEqual(['taxable']);
+  });
+
+  it('sets dayChange to null when account name is not unique', () => {
+    const accounts = [
+      account({ id: '1', name: 'Brokerage', account_type: 'taxable', value: 500 }),
+      account({ id: '2', name: 'Brokerage', account_type: 'taxable', value: 300 }),
+    ];
+    const positions = [pos({ account: 'Brokerage', price: 100, previous_close: 98, shares: 10 })];
+    const groups = groupAccounts(accounts, positions, 800);
+    expect(groups[0]!.rows.every((r) => r.dayChange === null)).toBe(true);
   });
 });
 
@@ -265,5 +295,23 @@ describe('attentionItems', () => {
       today,
     });
     expect(items.every((i) => !i.message.includes('\u2014'))).toBe(true);
+  });
+
+  it('skips CDs with unparseable maturity_date', () => {
+    const items = attentionItems({
+      staleTickers: 0,
+      positions: [
+        pos({
+          ticker: 'CD',
+          name: 'Bad CD',
+          position_type: 'cd',
+          maturity_date: 'not-a-date',
+        }),
+      ],
+      duplicateCount: 0,
+      triggeredAlerts: [],
+      today,
+    });
+    expect(items).toEqual([]);
   });
 });

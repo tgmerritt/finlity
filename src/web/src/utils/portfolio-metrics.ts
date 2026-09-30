@@ -68,18 +68,22 @@ export interface AllocationRow {
   outOfBand: boolean;
 }
 
-/** Target as a percentage, accepting fractions (0.6) or percentages (60). */
+/** Target as a percentage, accepting fractions (0.6) or percentages (60). Units are decided per object. */
 function targetPercent(
   targets: Record<string, unknown> | null | undefined,
-  cls: AllocationClass
+  cls: AllocationClass,
+  usePercentages: boolean
 ): number | null {
   const raw = targets?.[TARGET_KEYS[cls]];
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return null;
-  return raw <= 1 ? raw * 100 : raw;
+  return usePercentages ? raw : raw * 100;
 }
 
 export function hasTargets(targets: Record<string, unknown> | null | undefined): boolean {
-  return ALLOCATION_CLASSES.some((cls) => (targetPercent(targets, cls) ?? 0) > 0);
+  return ALLOCATION_CLASSES.some((cls) => {
+    const raw = targets?.[TARGET_KEYS[cls]];
+    return typeof raw === 'number' && Number.isFinite(raw) && raw > 0;
+  });
 }
 
 export function allocationVsTarget(
@@ -90,14 +94,28 @@ export function allocationVsTarget(
   const totals: Record<AllocationClass, number> = { stocks: 0, bonds: 0, cash: 0, alternatives: 0 };
   let sum = 0;
   for (const p of positions) {
-    const value = p.value || 0;
+    const value = Math.max(0, p.value || 0);
     totals[classifyPosition(p)] += value;
     sum += value;
   }
+
+  // Determine if targets are fractions or percentages based on sum
+  let targetSum = 0;
+  let usePercentages = false;
+  if (targets) {
+    for (const cls of ALLOCATION_CLASSES) {
+      const raw = targets[TARGET_KEYS[cls]];
+      if (typeof raw === 'number' && Number.isFinite(raw)) {
+        targetSum += raw;
+      }
+    }
+    usePercentages = targetSum > 1.5;
+  }
+
   const withTargets = hasTargets(targets);
   return ALLOCATION_CLASSES.map((cls): AllocationRow => {
     const actualPct = sum > 0 ? (totals[cls] / sum) * 100 : 0;
-    const targetPct = withTargets ? (targetPercent(targets, cls) ?? 0) : null;
+    const targetPct = withTargets ? (targetPercent(targets, cls, usePercentages) ?? 0) : null;
     const driftPct = targetPct === null ? null : actualPct - targetPct;
     return {
       cls,
@@ -168,7 +186,7 @@ export function rangeDays(key: RangeKey, now: Date = new Date()): number {
     case 'YTD': {
       const startOfYear = Date.UTC(now.getUTCFullYear(), 0, 1);
       const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-      return Math.round((today - startOfYear) / 86_400_000);
+      return Math.max(1, Math.round((today - startOfYear) / 86_400_000));
     }
     case 'ALL':
       return 36_500;
@@ -224,6 +242,17 @@ export function groupAccounts(
   positions: DashboardPosition[],
   totalValue: number
 ): AccountGroup[] {
+  // Track which account names appear more than once
+  const nameCounts: Record<string, number> = {};
+  for (const a of accounts) {
+    nameCounts[a.name] = (nameCounts[a.name] ?? 0) + 1;
+  }
+  const duplicateNames = new Set(
+    Object.entries(nameCounts)
+      .filter(([, count]) => count > 1)
+      .map(([name]) => name)
+  );
+
   const order: AccountGroupKey[] = ['retirement', 'taxable', 'cash'];
   return order
     .map((key): AccountGroup => {
@@ -231,10 +260,12 @@ export function groupAccounts(
         .filter((a) => groupKey(a) === key)
         .map((a): AccountRow => {
           let dayChange: number | null = null;
-          for (const p of positions) {
-            if (p.account !== a.name) continue;
-            const change = positionDayChange(p);
-            if (change !== null) dayChange = (dayChange ?? 0) + change;
+          if (!duplicateNames.has(a.name)) {
+            for (const p of positions) {
+              if (p.account !== a.name) continue;
+              const change = positionDayChange(p);
+              if (change !== null) dayChange = (dayChange ?? 0) + change;
+            }
           }
           return {
             id: a.id,
@@ -305,6 +336,7 @@ export function attentionItems(input: {
   for (const p of input.positions) {
     if (p.position_type !== 'cd' || !p.maturity_date) continue;
     const maturity = Date.parse(`${p.maturity_date.slice(0, 10)}T00:00:00Z`);
+    if (Number.isNaN(maturity)) continue;
     const days = Math.round((maturity - todayUtc) / 86_400_000);
     if (days > MATURITY_WINDOW_DAYS) continue;
     const label = p.name || p.ticker;
