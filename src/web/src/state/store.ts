@@ -3,6 +3,7 @@
  * Uses a centralized store with typed accessors.
  */
 
+import type { RangeKey } from '@/utils/portfolio-metrics';
 import type {
   DashboardPosition,
   SnapshotHistory,
@@ -76,6 +77,7 @@ export interface AppState {
   currentViewId: string | null;
   availableViews: PortfolioView[];
   currentHistoryDays: number;
+  currentHistoryRange: RangeKey;
   currentAllocationTab: AllocationTab;
 
   // Profile state
@@ -138,7 +140,8 @@ const initialState: AppState = {
   selectedAccounts: new Set(),
   currentViewId: localStorage.getItem('portfolioViewId'),
   availableViews: [],
-  currentHistoryDays: 30,
+  currentHistoryDays: 365,
+  currentHistoryRange: '1Y',
   currentAllocationTab: 'asset-class',
 
   // Profile state

@@ -1207,9 +1207,6 @@ export function initAICommentaryButtons(): void {
   // Map value element IDs to commentary element IDs
   const elementMappings: Record<string, string> = {
     'total-value': 'dashboard.total_value',
-    'gain-loss': 'dashboard.total_gain_loss',
-    'retirement-value': 'dashboard.retirement_value',
-    'taxable-value': 'dashboard.taxable_value',
     'monthly-retirement-income': 'dashboard.monthly_retirement_income',
     'success-probability': 'dashboard.success_probability',
   };

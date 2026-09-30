@@ -4,10 +4,12 @@
  */
 
 import { apiCall, runAsyncApiCall } from '@/api/client';
+import { store } from '@/state/store';
+import { setStateView, clearStateView } from '@/ui/state-view';
 import { showLoading, hideLoading, updateLoadingMessage } from '@/ui/loading';
 import { onTabChange } from '@/ui/tabs';
 import { showToast } from '@/ui/toast';
-import { formatCurrency } from '@/utils/format';
+import { formatCurrency, formatNumber } from '@/utils/format';
 import {
   displayProjectionResults,
   renderTaxBurdenChart,
@@ -17,6 +19,22 @@ import {
   type TaxBurdenChartData,
   type TaxWithdrawalYear,
 } from '@/charts/projections';
+
+/**
+ * Retirement metrics response from API.
+ */
+export interface DashboardMetrics {
+  monthly_retirement_income: number | null;
+  withdrawal_rate: number | null;
+  success_probability: number | null;
+  earliest_retirement_age: number | null;
+  fire_number: number | null;
+  target_monthly_income: number | null;
+  target_retirement_age: number | null;
+  current_age: number | null;
+  simulation_required: boolean;
+  coast_number: number | null;
+}
 
 /**
  * Tax projection API result.
@@ -196,12 +214,162 @@ export async function runProjection(event: Event): Promise<void> {
     );
 
     await displayProjectionResults(result, params.retirement_age);
+    await loadRetirementMetrics();
   } catch (error) {
     console.error('Error running projection:', error);
     showToast('Failed to run projection: ' + (error as Error).message, 'error');
   } finally {
     form.classList.remove('loading');
     hideLoading();
+  }
+}
+
+/**
+ * Load the retirement metric tiles at the top of the Projections tab.
+ * If an entity is selected, loads metrics filtered to that entity.
+ *
+ * @returns true if metrics loaded successfully, false on error
+ */
+export async function loadRetirementMetrics(): Promise<boolean> {
+  const errorHost = document.getElementById('retirement-metrics-error');
+
+  try {
+    // Build URL with entity filter if one is selected
+    const currentEntityId = store.get('currentEntityId');
+    let url = '/api/portfolio/dashboard-metrics';
+    if (currentEntityId) {
+      url += `?entity_id=${encodeURIComponent(currentEntityId)}`;
+    }
+
+    const metrics = await apiCall<DashboardMetrics>(url);
+
+    // Success: scrub any prior inline error.
+    if (errorHost) {
+      clearStateView(errorHost);
+      errorHost.style.display = 'none';
+    }
+
+    // Update Monthly Retirement Income
+    const monthlyIncomeEl = document.getElementById('monthly-retirement-income');
+    const withdrawalLabel = document.getElementById('withdrawal-rate-label');
+    if (monthlyIncomeEl) {
+      if (metrics.monthly_retirement_income !== null) {
+        monthlyIncomeEl.textContent = formatCurrency(metrics.monthly_retirement_income);
+        if (withdrawalLabel) {
+          withdrawalLabel.textContent = `at ${metrics.withdrawal_rate}% of projected portfolio`;
+        }
+      } else {
+        monthlyIncomeEl.textContent = '--';
+        if (withdrawalLabel) {
+          withdrawalLabel.textContent = 'Run Monte Carlo simulation';
+        }
+      }
+    }
+
+    // Update Success Probability
+    const successProbEl = document.getElementById('success-probability');
+    const successSublabel = document.getElementById('success-sublabel');
+    if (successProbEl) {
+      if (metrics.success_probability !== null) {
+        successProbEl.textContent = `${metrics.success_probability}%`;
+        successProbEl.classList.remove('positive', 'negative');
+        if (metrics.success_probability >= 80) {
+          successProbEl.classList.add('positive');
+        } else if (metrics.success_probability < 50) {
+          successProbEl.classList.add('negative');
+        }
+        if (successSublabel) {
+          successSublabel.textContent = 'of not running out by age 90';
+        }
+      } else {
+        successProbEl.textContent = '--';
+        successProbEl.classList.remove('positive', 'negative');
+        if (successSublabel) {
+          successSublabel.textContent = 'Run Monte Carlo simulation';
+        }
+      }
+    }
+
+    // Update Earliest Retirement Age
+    const retireAgeEl = document.getElementById('earliest-retirement-age');
+    const retireSublabel = document.getElementById('retire-sublabel');
+    if (retireAgeEl) {
+      if (metrics.earliest_retirement_age != null) {
+        retireAgeEl.textContent = `Age ${metrics.earliest_retirement_age}`;
+        if (retireSublabel) {
+          retireSublabel.textContent = 'with 80%+ success rate';
+        }
+      } else {
+        retireAgeEl.textContent = '--';
+        if (retireSublabel) {
+          retireSublabel.textContent = 'Run Monte Carlo simulation';
+        }
+      }
+    }
+
+    // Update FIRE Number
+    const fireNumberEl = document.getElementById('fire-number');
+    const fireSublabel = document.getElementById('fire-sublabel');
+    if (fireNumberEl) {
+      if (metrics.fire_number !== null) {
+        fireNumberEl.textContent = formatCurrency(metrics.fire_number);
+        if (fireSublabel) {
+          if (metrics.target_monthly_income) {
+            fireSublabel.textContent = `for $${formatNumber(metrics.target_monthly_income, 0)}/yr target`;
+          } else {
+            fireSublabel.textContent = `projected at age ${metrics.target_retirement_age}`;
+          }
+        }
+      } else {
+        fireNumberEl.textContent = '--';
+        if (fireSublabel) {
+          fireSublabel.textContent = 'Run Monte Carlo simulation';
+        }
+      }
+    }
+
+    // Update Coast Number
+    const coastNumberEl = document.getElementById('coast-number');
+    const coastSublabel = document.getElementById('coast-sublabel');
+    if (coastNumberEl) {
+      if (metrics.coast_number !== null && metrics.coast_number !== undefined) {
+        coastNumberEl.textContent = formatCurrency(metrics.coast_number);
+        if (coastSublabel && metrics.current_age != null && metrics.target_retirement_age != null) {
+          const yearsLeft = metrics.target_retirement_age - metrics.current_age;
+          coastSublabel.textContent = `needed today to coast ${yearsLeft > 0 ? `${yearsLeft} yrs` : ''} to FIRE`;
+        } else if (coastSublabel) {
+          coastSublabel.textContent = "today's value to coast to FIRE";
+        }
+      } else {
+        coastNumberEl.textContent = '--';
+        if (coastSublabel) {
+          coastSublabel.textContent = 'Set DOB and retirement age in Settings';
+        }
+      }
+    }
+    return true;
+  } catch (error) {
+    console.error('Error loading retirement metrics:', error);
+    // Surface the failure inline above the metrics row so users see it
+    // even after the toast disappears, with a one-click retry.
+    if (errorHost) {
+      errorHost.style.display = '';
+      setStateView(errorHost, {
+        kind: 'error',
+        title: 'Could not load retirement metrics',
+        description: error instanceof Error ? error.message : 'Unknown error.',
+        action: {
+          label: 'Retry',
+          onClick: () => {
+            loadRetirementMetrics().catch((err) =>
+              console.error('Retirement metrics retry failed:', err)
+            );
+          },
+        },
+      });
+    }
+    showToast('Unable to load retirement metrics', 'error');
+    return false;
   }
 }
 
@@ -601,6 +769,9 @@ export function initProjections(): void {
 
   // Load taxes tab data when switching to taxes tab
   onTabChange((tab) => {
+    if (tab === 'projections') {
+      loadRetirementMetrics().catch((err) => console.error('Retirement metrics load failed:', err));
+    }
     if (tab === 'taxes') {
       loadTaxesTab();
     }
