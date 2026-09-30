@@ -484,6 +484,8 @@ async def get_dashboard_data(view_id: str = None):
     retirement_value = 0
     taxable_value = 0
 
+    previous_closes = db.get_previous_closes()
+
     for pos in db.get_all_positions():
         # Filter by view if specified
         if filter_account_ids and pos.account_id not in filter_account_ids:
@@ -523,6 +525,7 @@ async def get_dashboard_data(view_id: str = None):
             "contract_multiplier": pos.contract_multiplier if is_opt else None,
             "contracts": pos.shares if is_opt else None,
             "premium": pos.current_price if is_opt else None,
+            "previous_close": previous_closes.get(pos.ticker),
         })
 
         # Accumulate totals
