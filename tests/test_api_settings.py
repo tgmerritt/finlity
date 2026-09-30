@@ -86,6 +86,24 @@ class TestSettingsAPI:
         account_ids = {a["id"] for a in data["accounts"]}
         assert all(p["account_id"] in account_ids for p in data["positions"])
 
+    def test_demo_export_returns_full_year_of_snapshots(self, client):
+        """Hosted visitors must get the same year of history as the server
+        dashboard (src.main.py's lifespan hook uses get_snapshots(limit=365)),
+        not the old 30-day cap, or the hosted history chart shows a month
+        while the server-rendered demo shows a year."""
+        from datetime import date
+
+        from src.services.demo_history import ensure_recent_demo_history
+        from src.services.demo_mode import get_demo_manager
+
+        demo_db = get_demo_manager().get_demo_database()
+        ensure_recent_demo_history(demo_db, today=date(2026, 9, 30))
+
+        response = client.get("/api/settings/demo-mode/export")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["snapshots"]) == 365
+
     def test_settings_version_advances_after_save(self, client):
         """Saving personal settings bumps the settings version forward.
 

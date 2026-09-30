@@ -647,7 +647,9 @@ def export_demo_dataset() -> dict:
 
     SECURITY: enforced read-only (PRAGMA query_only), gated on demo mode
     being enabled, and it only ever opens demo.db — never a profile DB — so
-    it cannot disclose real portfolios. Snapshots trimmed to most recent 30.
+    it cannot disclose real portfolios. Snapshots trimmed to most recent
+    365, matching the server dashboard's window (get_snapshots(limit=365)
+    in src.main).
     """
     import sqlite3
     from pathlib import Path
@@ -674,7 +676,7 @@ def export_demo_dataset() -> dict:
         snaps = [
             dict(r)
             for r in conn.execute(
-                "SELECT * FROM portfolio_snapshots ORDER BY snapshot_date DESC LIMIT 30"
+                "SELECT * FROM portfolio_snapshots ORDER BY snapshot_date DESC LIMIT 365"
             )
         ]
     finally:
