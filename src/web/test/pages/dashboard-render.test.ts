@@ -20,13 +20,14 @@ vi.mock('@/ui/tabs', () => ({
 }));
 
 import { apiCall } from '@/api/client';
-import { showTab } from '@/ui/tabs';
+import { onTabChange, showTab } from '@/ui/tabs';
 import { store } from '@/state/store';
-import { renderDashboard } from '@/pages/dashboard';
+import { initDashboard, renderDashboard, resetDashboardRenderState } from '@/pages/dashboard';
 import type { AccountResponse, DashboardData, DashboardPosition } from '@/types/api';
 
 const apiCallMock = vi.mocked(apiCall);
 const showTabMock = vi.mocked(showTab);
+const onTabChangeMock = vi.mocked(onTabChange);
 
 const MARKUP = `
   <section id="dash-hero">
@@ -36,12 +37,18 @@ const MARKUP = `
     <span id="total-gain"></span>
     <button class="time-range-btn" data-range="1M"></button>
     <button class="time-range-btn" data-range="1Y"></button>
+    <button class="time-range-btn" data-range="ALL"></button>
     <div id="chart-history"></div>
   </section>
   <div id="allocation-bars"></div>
   <div id="on-track-body"></div>
   <ul id="attention-list"></ul>
   <div id="account-groups"></div>
+  <div id="account-filter-options">
+    <input type="checkbox" value="Roth IRA" checked />
+    <input type="checkbox" value="Brokerage" checked />
+  </div>
+  <form id="projection-form"></form>
 `;
 
 function account(id: string, name: string, value: number, retirement: boolean): AccountResponse {
@@ -139,6 +146,7 @@ function stubApi(overrides: Record<string, unknown> = {}): void {
 }
 
 beforeEach(() => {
+  resetDashboardRenderState();
   document.body.innerHTML = MARKUP;
   store.set('currentEntityId', null);
 });
@@ -198,8 +206,8 @@ describe('renderDashboard', () => {
     expect(host.querySelectorAll('.alloc-target').length).toBe(0);
   });
 
-  it('asks for a birth date when the placeholder is still in place', async () => {
-    stubApi({ '/api/settings/config/personal': { personal: { dob: '1990-01-01' } } });
+  it('asks for a birth date only when it is missing', async () => {
+    stubApi({ '/api/settings/config/personal': { personal: { dob: '' } } });
     await renderDashboard(fixture());
 
     expect(text('on-track-body')).toContain("Add your birth date to see if you're on track.");
@@ -207,12 +215,50 @@ describe('renderDashboard', () => {
     expect(showTabMock).toHaveBeenCalledWith('settings');
   });
 
+  it('treats the 1990-01-01 date as a real birth date', async () => {
+    stubApi({ '/api/settings/config/personal': { personal: { dob: '1990-01-01' } } });
+    await renderDashboard(fixture());
+
+    expect(text('on-track-body')).toContain('92%');
+  });
+
+  it('still shows the result when the personal call fails', async () => {
+    stubApi();
+    const base = apiCallMock.getMockImplementation()!;
+    apiCallMock.mockImplementation(async (url: string, ...rest: unknown[]) => {
+      if (url.startsWith('/api/settings/config/personal')) throw new Error('boom');
+      return (base as (u: string, ...r: unknown[]) => Promise<never>)(url, ...rest);
+    });
+    await renderDashboard(fixture());
+
+    expect(text('on-track-body')).toContain('92%');
+  });
+
+  it('uses ALL as the default range for a short history', async () => {
+    stubApi();
+    const data = fixture();
+    data.history = history60().slice(-20);
+    await renderDashboard(data);
+
+    const all = document.querySelector('.time-range-btn[data-range="ALL"]')!;
+    expect(all.getAttribute('aria-pressed')).toBe('true');
+    expect(text('range-change')).toContain('over all time');
+  });
+
   it('offers a quick check when there is no simulation yet', async () => {
     stubApi({ '/api/portfolio/dashboard-metrics': { success_probability: null } });
     await renderDashboard(fixture());
 
     expect(text('on-track-body')).toContain('No simulation yet.');
-    expect(document.querySelector('#on-track-body button')?.textContent).toBe('Run a quick check');
+    const button = document.querySelector<HTMLButtonElement>('#on-track-body button')!;
+    expect(button.textContent).toBe('Run a quick check');
+
+    const form = document.getElementById('projection-form') as HTMLFormElement;
+    const requestSubmit = vi.fn();
+    form.requestSubmit = requestSubmit;
+    button.click();
+    expect(showTabMock).toHaveBeenCalledWith('projections');
+    expect(requestSubmit).toHaveBeenCalledTimes(1);
   });
 
   it('lists attention items with actions', async () => {
@@ -242,7 +288,75 @@ describe('renderDashboard', () => {
 
     document.querySelectorAll<HTMLButtonElement>('#account-groups .account-row')[0]!.click();
     expect(showTabMock).toHaveBeenCalledWith('holdings');
-    expect([...store.get('selectedAccounts')]).toHaveLength(1);
+    expect([...store.get('selectedAccounts')]).toEqual(['Roth IRA']);
+    const checked = [
+      ...document.querySelectorAll<HTMLInputElement>('#account-filter-options input:checked'),
+    ].map((cb) => cb.value);
+    expect(checked).toEqual(['Roth IRA']);
+  });
+
+  it('updates the range change and aria-pressed when a range button is clicked', async () => {
+    stubApi();
+    initDashboard();
+    await renderDashboard(fixture());
+
+    document.querySelector<HTMLButtonElement>('.time-range-btn[data-range="1M"]')!.click();
+    await vi.waitFor(() => expect(text('range-change')).toContain('over 1M'));
+    expect(
+      document.querySelector('.time-range-btn[data-range="1M"]')!.getAttribute('aria-pressed')
+    ).toBe('true');
+    expect(
+      document.querySelector('.time-range-btn[data-range="1Y"]')!.getAttribute('aria-pressed')
+    ).toBe('false');
+  });
+
+  it('re-renders the cards when the Dashboard tab is shown, without refetching data', async () => {
+    stubApi({ '/api/settings/config/personal': { personal: { dob: '' } } });
+    initDashboard();
+    await renderDashboard(fixture());
+    expect(text('on-track-body')).toContain('Add your birth date');
+
+    // The user saves a birth date in Settings, then returns to the Dashboard.
+    stubApi();
+    apiCallMock.mockClear();
+    const callback = onTabChangeMock.mock.calls[onTabChangeMock.mock.calls.length - 1]![0];
+    store.set('currentPositions', fixture().positions);
+    callback('dashboard');
+    await vi.waitFor(() => expect(text('on-track-body')).toContain('92%'));
+
+    const urls = apiCallMock.mock.calls.map((c) => String(c[0]));
+    expect(urls).not.toContain('/api/dashboard/data');
+    expect(document.querySelectorAll('#allocation-bars .alloc-row').length).toBe(3);
+  });
+
+  it('discards a slow card response that resolves after a newer render', async () => {
+    stubApi();
+    const base = apiCallMock.getMockImplementation()! as (u: string) => Promise<never>;
+    let releaseFirst: () => void = () => undefined;
+    let calls = 0;
+    apiCallMock.mockImplementation(async (url: string) => {
+      if (url.startsWith('/api/settings/config/personal')) {
+        calls += 1;
+        if (calls === 1) {
+          await new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+          });
+          return { personal: { dob: '' } } as never;
+        }
+      }
+      return base(url);
+    });
+
+    const positions = fixture().positions;
+    const { renderCards } = await import('@/pages/dashboard');
+    const first = renderCards(positions);
+    await renderCards(positions);
+    expect(text('on-track-body')).toContain('92%');
+
+    releaseFirst();
+    await first;
+    expect(text('on-track-body')).toContain('92%');
+    expect(text('on-track-body')).not.toContain('Add your birth date');
   });
 
   it('hides day change when no previous close is known', async () => {
