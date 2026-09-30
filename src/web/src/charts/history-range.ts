@@ -45,6 +45,7 @@ interface HistoryDateAxisWithTickvals {
   tickformat: string;
   hoverformat: string;
   tickvals: string[];
+  automargin: true;
 }
 
 interface HistoryDateAxisWithNticks {
@@ -62,6 +63,12 @@ interface HistoryDateAxisWithNticks {
  * same day (e.g. every 12 hours), which repeats the same formatted label.
  * In that case we pin one tick per distinct day instead. Longer ranges fall
  * back to Plotly's automatic `nticks` spacing.
+ *
+ * `automargin` is set alongside explicit `tickvals`: when the first or last
+ * tick lands exactly on the axis's data-driven boundary (routine with only
+ * a couple of distinct days), Plotly hides that tick's label at opacity 0
+ * rather than let it clip the plot area. `automargin` lets Plotly grow the
+ * margin instead of hiding the label, so the edge day stays legible.
  */
 export function historyDateAxis(
   history: SnapshotHistory[]
@@ -74,6 +81,7 @@ export function historyDateAxis(
       tickformat: '%b %d',
       hoverformat: '%b %d, %Y',
       tickvals: days,
+      automargin: true,
     };
   }
 
