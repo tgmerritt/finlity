@@ -27,8 +27,17 @@ import {
 } from '@/utils/portfolio-metrics';
 import { applyHistoryRange, setHistoryRange, updateHistoryChart } from '@/charts/allocation';
 import { loadWidgets } from '@/features/plugins';
-import { updateAccountFilterLabel } from '@/pages/holdings';
-import { updateDemoModeUI } from '@/features/onboarding';
+import {
+  showAddPositionModal,
+  showNewAccountForm,
+  updateAccountFilterLabel,
+} from '@/pages/holdings';
+import {
+  seedDemoDatasetIfEmpty,
+  startDemoMode,
+  startTour,
+  updateDemoModeUI,
+} from '@/features/onboarding';
 import type { DashboardData, DashboardPosition, SnapshotHistory } from '@/types/api';
 
 /**
@@ -682,12 +691,67 @@ export async function renderDashboard(data: DashboardData): Promise<void> {
     historyRangeInitialized = true;
   }
 
+  // First run (or every account deleted): show the empty state in place of the
+  // hero, cards and accounts.
+  const isEmpty = (data.summary.accounts ?? []).length === 0;
+  setEmptyState(isEmpty);
+  if (isEmpty) {
+    dashboardRendered = false;
+    return;
+  }
+
   renderHero(data);
   renderAccounts(data);
   await updateHistoryChart(history, true, renderRangeChange);
 
   dashboardRendered = true;
   await renderCards(data.positions);
+}
+
+/** Show the first-run empty state and hide the populated dashboard sections, or the reverse. */
+function setEmptyState(isEmpty: boolean): void {
+  document.getElementById('dashboard-empty')?.classList.toggle('hidden', !isEmpty);
+  for (const sel of ['#dash-hero', '.dash-cards', '#accounts-card']) {
+    document.querySelector(sel)?.classList.toggle('hidden', isEmpty);
+  }
+}
+
+/** Run one of the empty state's actions, each reusing an existing flow. */
+async function runEmptyStateAction(action: string): Promise<void> {
+  switch (action) {
+    case 'import':
+      await showAddPositionModal();
+      break;
+    case 'add-account':
+      await showAddPositionModal();
+      if (document.getElementById('new-account-form')?.classList.contains('hidden') !== false) {
+        showNewAccountForm();
+      }
+      break;
+    case 'demo':
+      if (store.get('dataMode') === 'local') {
+        await seedDemoDatasetIfEmpty();
+        document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
+      } else {
+        await startDemoMode();
+      }
+      break;
+    case 'tour':
+      startTour();
+      break;
+  }
+}
+
+/** Wire the empty state's buttons and tour link. */
+function initEmptyState(): void {
+  document.getElementById('dashboard-empty')?.addEventListener('click', (event) => {
+    const target = (event.target as HTMLElement | null)?.closest<HTMLElement>(
+      '[data-empty-action]'
+    );
+    if (!target) return;
+    event.preventDefault();
+    runEmptyStateAction(target.dataset.emptyAction ?? '').catch(console.error);
+  });
 }
 
 /**
@@ -974,6 +1038,7 @@ export function initDashboard(): void {
   }
 
   initRangeButtons();
+  initEmptyState();
 
   // Re-render the self-fetching cards from the positions already in the store
   // when the Dashboard tab becomes visible (no dashboard refetch, no chart).
