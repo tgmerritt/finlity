@@ -62,6 +62,16 @@ def test_last_snapshot_matches_current_portfolio_totals(demo_db):
     assert abs((last.retirement_value + last.taxable_value) - last.total_value) < 0.01
 
 
+def test_history_has_a_steady_upward_trend(demo_db):
+    """The oldest snapshot sits one fixed +8% annual return below today's value."""
+    ensure_recent_demo_history(demo_db, today=date(2026, 9, 30))
+    with demo_db.get_session() as session:
+        first = session.query(PortfolioSnapshot).order_by(PortfolioSnapshot.snapshot_date).first()
+    current_total = sum(p.market_value for p in demo_db.get_all_positions())
+    expected = current_total / 1.08
+    assert abs(first.total_value - expected) / expected < 0.005
+
+
 def test_is_a_no_op_when_history_is_current(demo_db):
     today = date(2026, 9, 30)
     ensure_recent_demo_history(demo_db, today=today)

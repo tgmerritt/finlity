@@ -15,7 +15,7 @@ from pathlib import Path
 from src.database.models import PortfolioSnapshot
 
 _SEED = 20260930
-_ANNUAL_DRIFT = 0.07
+_TARGET_ANNUAL_RETURN = 0.08
 _DAILY_VOLATILITY = 0.009
 
 
@@ -76,15 +76,25 @@ def ensure_recent_demo_history(db, today: date | None = None, days: int = 365) -
         return 0
     retirement_share = retirement / total
 
-    # Walk backwards from today's value with a seeded random walk so the
-    # series ends exactly at the current totals.
+    # Seeded random walk in log space, built backwards from today (log 0).
+    # Its net drift is removed (a "bridge" pinned to 0 at both ends) and a
+    # fixed annual return is applied as a linear ramp, so the trend is
+    # deterministic while the day-to-day noise is kept. The series starts at
+    # total / (1 + return) and ends exactly at the current total.
     rng = random.Random(_SEED)
-    daily_drift = math.log(1 + _ANNUAL_DRIFT) / 365
-    values = [total]
+    walk = [0.0]
     for _ in range(days - 1):
-        step = daily_drift + rng.gauss(0, _DAILY_VOLATILITY)
-        values.append(values[-1] / math.exp(step))
-    values.reverse()
+        walk.append(walk[-1] - rng.gauss(0, _DAILY_VOLATILITY))
+    walk.reverse()  # chronological: walk[-1] == 0
+    span = max(days - 1, 1)
+    log_return = math.log(1 + _TARGET_ANNUAL_RETURN)
+    log_total = math.log(total)
+    values = []
+    for i, w in enumerate(walk):
+        bridge = w - walk[0] * (1 - i / span)
+        ramp = -log_return * (span - i) / span
+        values.append(math.exp(log_total + bridge + ramp))
+    values[-1] = total
 
     with db.get_session() as session:
         session.query(PortfolioSnapshot).delete()
