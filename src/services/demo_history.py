@@ -10,12 +10,34 @@ from __future__ import annotations
 import math
 import random
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 from src.database.models import PortfolioSnapshot
 
 _SEED = 20260930
 _ANNUAL_DRIFT = 0.07
 _DAILY_VOLATILITY = 0.009
+
+
+def _is_demo_database(db) -> bool:
+    """True only when `db` is (resolvably) the demo manager's demo database.
+
+    `app.state.demo_mode` (derived from the PORTFOLIO_DEMO_MODE env var) and
+    `get_demo_manager().is_enabled` (the on-disk demo_state.json flag) can
+    disagree. If a caller ever invokes this against a real profile database
+    in that situation, it must refuse rather than delete real history, so
+    this check is enforced here regardless of what the caller believes.
+    """
+    from src.services.demo_mode import get_demo_manager
+
+    db_path = getattr(db, "db_path", None)
+    if not db_path:
+        return False
+    try:
+        demo_path = Path(get_demo_manager().demo_db_path).resolve()
+        return Path(db_path).resolve() == demo_path
+    except OSError:
+        return False
 
 
 def _current_totals(db) -> tuple[float, float, float]:
@@ -36,8 +58,11 @@ def ensure_recent_demo_history(db, today: date | None = None, days: int = 365) -
     """Rewrite demo snapshots so they cover `days` days ending yesterday (UTC).
 
     Returns the number of snapshots written, or 0 if history already ends
-    yesterday or later.
+    yesterday or later, or if `db` is not the demo database.
     """
+    if not _is_demo_database(db):
+        return 0
+
     today = today or datetime.utcnow().date()
     yesterday = today - timedelta(days=1)
 
