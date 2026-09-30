@@ -205,7 +205,11 @@ function findTourTarget(selector: string): HTMLElement | null {
 export function startTour(): void {
   currentTourStep = 0;
   const overlay = getElementById<HTMLElement>('tour-overlay');
-  if (overlay) overlay.style.display = 'block';
+  if (overlay) {
+    // `hidden` is `display:none !important`; strip it so the overlay shows.
+    overlay.classList.remove('hidden');
+    overlay.style.display = 'block';
+  }
 
   showTourStep(0);
 
@@ -394,7 +398,10 @@ export function nextTourStep(): void {
  */
 export function endTour(): void {
   const overlay = getElementById<HTMLElement>('tour-overlay');
-  if (overlay) overlay.style.display = 'none';
+  if (overlay) {
+    overlay.style.display = 'none';
+    overlay.classList.add('hidden');
+  }
 
   localStorage.setItem('tourCompleted', 'true');
 

@@ -6832,6 +6832,56 @@ th.sortable.sort-desc .sort-icon::after {
     gap: 24px;
 }
 
+.dashboard-empty {
+    max-width: 640px;
+    margin: 32px auto;
+    text-align: center;
+}
+
+.dashboard-empty .card-body {
+    padding: 32px 24px;
+}
+
+.dashboard-empty h2 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    color: var(--color-text-primary);
+}
+
+.dashboard-empty p {
+    margin: 0 0 24px;
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+}
+
+.dashboard-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.dashboard-empty-tour {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    text-decoration: underline;
+}
+
+.dashboard-empty-tour:hover {
+    color: var(--color-text-primary);
+}
+
+@media (max-width: 480px) {
+    .dashboard-empty {
+        margin: 16px auto;
+    }
+
+    .dashboard-empty-actions .btn {
+        width: 100%;
+    }
+}
+
 /* Dashboard (overview) */
 .dash-hero {
     padding: 24px;
