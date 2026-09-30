@@ -34,9 +34,37 @@ def test_only_equities_are_sent_to_yfinance(monkeypatch):
         _position("CD-ALLY-1", "cd", price=1.0, shares=5000.0),
         _position("AAPL", "equity"),
         _position("MSFT", "equity"),
+        _position("BOND-TREAS-1", "equity"),
+        _position("MONEY", "equity"),
+        _position("TBILL-9", "equity"),
+        _position("IBOND-2", "equity"),
     ]
 
     widget.render(positions, [])
 
     assert len(requested) == 1
     assert sorted(requested[0]) == ["AAPL", "MSFT"]
+
+
+def test_dead_column_does_not_blank_the_matrix(monkeypatch):
+    import numpy as np
+
+    idx = pd.date_range("2026-01-01", periods=60)
+    rng = np.random.default_rng(0)
+    base = rng.normal(size=60).cumsum() + 100
+    frame = pd.DataFrame(
+        {
+            "AAA": base,
+            "BBB": base * 1.1 + rng.normal(size=60),
+            "DEAD": np.nan,
+        },
+        index=idx,
+    )
+    data = pd.concat({"Close": frame}, axis=1)
+    monkeypatch.setattr("yfinance.download", lambda symbols, **kw: data)
+    widget = _load_widget("correlation-heatmap", "CorrelationHeatmapWidget")
+
+    matrix = widget._calculate_price_correlations(["AAA", "BBB", "DEAD"], {})
+
+    assert matrix is not None
+    assert matrix[0][1] != 0.5  # real correlation, not the filler

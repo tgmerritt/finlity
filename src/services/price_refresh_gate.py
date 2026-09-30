@@ -14,11 +14,14 @@ The gate is DB-backed so the hourly cap survives dyno restarts and is
 shared across sessions.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from src.database.operations import Database
 from src.services.market_hours import is_market_open, last_market_close, next_market_open
+
+logger = logging.getLogger(__name__)
 
 REFRESH_INTERVAL_SECONDS = 3600
 LAST_REFRESH_KEY = "last_price_refresh_at"
@@ -73,6 +76,8 @@ def evaluate_refresh_gate(
 
     if not is_market_open(aware_utc):
         cutoff = last_market_close(aware_utc)
+        if cutoff is None:
+            logger.warning("last_market_close unavailable; no catch-up pass")
         if cutoff is None or not db.get_tickers_priced_before(cutoff):
             return GateDecision(False, MARKET_CLOSED, next_market_open(aware_utc))
     if last is not None and not force and (

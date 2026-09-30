@@ -101,3 +101,10 @@ def test_last_close_aware_utc_input():
     from datetime import timezone
 
     assert last_market_close(_dt(2026, 9, 30, 22, 0, tzinfo=timezone.utc)) == _utc(2026, 9, 30, 20)
+
+
+def test_last_close_across_dst_boundary():
+    # DST ended Sun 2026-11-01; Fri 10-30 close was 16:00 EDT = 20:00 UTC.
+    assert last_market_close(_et(2026, 11, 2, 8, 0)) == _utc(2026, 10, 30, 20)
+    # Mon 11-02 close is 16:00 EST = 21:00 UTC.
+    assert last_market_close(_et(2026, 11, 2, 18, 0)) == _utc(2026, 11, 2, 21)

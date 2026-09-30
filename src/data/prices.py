@@ -429,6 +429,23 @@ class PriceService:
     # Prefixes that indicate non-market securities (CDs, bonds, etc.)
     SKIP_PRICE_PREFIXES = ("CD-", "BOND-", "TBILL-", "IBOND-")
 
+    @classmethod
+    def is_quotable(cls, position_type: Optional[str], ticker: Optional[str]) -> bool:
+        """Whether a holding has a market quote that can be requested.
+
+        Combines the shared refresh rule (``is_updatable_position``) with this
+        service's own skip lists, so callers that bypass PriceService (e.g. a
+        direct yfinance download) never request tickers it would skip.
+        """
+        from src.models.position_types import is_updatable_position
+
+        if not is_updatable_position(position_type, ticker):
+            return False
+        upper = (ticker or "").strip().upper()
+        return upper not in cls.SKIP_PRICE_LOOKUP and not upper.startswith(
+            cls.SKIP_PRICE_PREFIXES
+        )
+
     # Manual price overrides for funds not available via standard APIs
     MANUAL_PRICES = {
         "UTVTX": 18.45,  # Utah 529 Total Stock Market - approximate NAV

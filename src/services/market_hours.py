@@ -48,6 +48,8 @@ def next_market_open(dt: datetime | None = None) -> datetime | None:
 def last_market_close(dt: datetime | None = None) -> datetime | None:
     """Most recent NYSE session close at or before ``dt`` as naive UTC.
 
+    Naive ``dt`` is interpreted as America/New_York wall time (like
+    ``is_market_open``); the result is naive UTC (like ``next_market_open``).
     Handles weekends, holidays and half days via the calendar. None if the
     calendar cannot answer (``dt`` outside its bounds).
     """

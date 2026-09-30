@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from src.plugins.base import WidgetPlugin, WidgetContent, PluginManifest
 from src.data import PriceService
-from src.models.position_types import is_option, is_updatable_position, parse_occ_ticker
+from src.models.position_types import is_option, parse_occ_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -122,11 +122,11 @@ class CorrelationHeatmapWidget(WidgetPlugin):
         """Calculate actual correlations from price history using yfinance."""
         import pandas as pd
 
-        # Only request history for tradeable tickers; cash, CDs and real
+        # Only request history for quotable tickers; cash, CDs, bonds and real
         # estate placeholders (RE) would otherwise be sent to Yahoo.
         types = position_types or {}
         tradeable_tickers = [
-            t for t in tickers if is_updatable_position(types.get(t), t)
+            t for t in tickers if PriceService.is_quotable(types.get(t), t)
         ]
 
         if len(tradeable_tickers) < 2:
@@ -159,7 +159,9 @@ class CorrelationHeatmapWidget(WidgetPlugin):
                 prices = data["Close"].copy()
 
             # Calculate daily returns (fill_method=None to avoid FutureWarning)
-            returns = prices.pct_change(fill_method=None).dropna()
+            # Drop dead (all-NaN) columns first: one of them would make the
+            # row-wise dropna discard every row and blank the matrix.
+            returns = prices.dropna(axis=1, how="all").pct_change(fill_method=None).dropna()
 
             if len(returns) < 20:
                 return None
