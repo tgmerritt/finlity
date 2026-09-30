@@ -114,6 +114,7 @@ export interface DashboardPosition {
   contract_multiplier?: number | null;
   contracts?: number | null;
   premium?: number | null;
+  previous_close?: number | null;
 }
 
 export interface SnapshotHistory {

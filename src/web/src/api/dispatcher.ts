@@ -565,6 +565,9 @@ local('GET', '/api/dashboard/data', (req) => {
   const accountsById = new Map(accounts.map((a) => [a.id, a]));
   const filteredAccounts = accountIds ? accounts.filter((a) => accountIds.has(a.id)) : accounts;
 
+  const previousCloses = new Map(
+    api.getPriceCacheRows().map((r) => [r.ticker, r.previous_close ?? null] as const)
+  );
   const allPositions = api.getPositions();
   const positions = (
     accountIds ? allPositions.filter((p) => accountIds.has(p.account_id)) : allPositions
@@ -593,6 +596,7 @@ local('GET', '/api/dashboard/data', (req) => {
       contract_multiplier: p.contract_multiplier,
       contracts: p.contracts,
       premium: p.premium,
+      previous_close: previousCloses.get(p.ticker) ?? null,
     };
   });
 
