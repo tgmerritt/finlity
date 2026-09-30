@@ -91,6 +91,28 @@ CHECKS_JS = """
 """
 
 
+DRAWER_JS = """
+() => {
+  const problems = [];
+  const more = document.getElementById('bottom-tab-more');
+  if (!more) return ['drawer check: More button missing'];
+  more.click();
+  const overlay = document.querySelector('.mobile-nav-overlay');
+  const sidebar = document.getElementById('app-sidebar');
+  const covered = (el) => {
+    if (!el) return true;
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!top && ((overlay && overlay.contains(top)) || (sidebar && sidebar.contains(top)));
+  };
+  if (!covered(document.getElementById('global-chat-fab'))) problems.push('drawer does not cover chat button');
+  if (!covered(document.querySelector('.bottom-tabbar'))) problems.push('drawer does not cover tab bar');
+  more.click();
+  return problems;
+}
+"""
+
+
 def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) -> None:
     # Each new_page() is a fresh context, so with an empty localStorage the
     # app always treats it as a first visit and lands on the welcome tab
@@ -190,6 +212,9 @@ def main() -> int:
                     failures.append(f"{width}px {theme}: dashboard did not finish loading")
                 else:
                     for problem in page.evaluate(CHECKS_JS):
+                        failures.append(f"{width}px {theme}: {problem}")
+                if width == 390:
+                    for problem in page.evaluate(DRAWER_JS):
                         failures.append(f"{width}px {theme}: {problem}")
                 if args.screenshots:
                     args.screenshots.mkdir(parents=True, exist_ok=True)

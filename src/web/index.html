@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Finlity - Financial Literacy Dashboard</title>
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
@@ -197,9 +197,6 @@
                 </button>
             </header>
 
-            <!-- Mobile Nav Overlay -->
-            <div class="mobile-nav-overlay" onclick="toggleMobileNav()"></div>
-
             <!-- Demo Mode Banner (hidden by default) -->
             <div id="demo-mode-banner" class="demo-mode-banner hidden">
                 <span class="demo-icon">🎭</span>
@@ -211,7 +208,7 @@
                 <h1 class="page-title" id="page-title">Dashboard</h1>
                 <div class="page-filters">
                     <div class="view-selector">
-                        <label class="view-selector-label">
+                        <label class="view-selector-label" for="view-selector">
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                                 <circle cx="12" cy="12" r="3"></circle>
@@ -225,7 +222,7 @@
 
                     <!-- Entity Selector (for per-person retirement metrics) -->
                     <div class="view-selector entity-selector">
-                        <label class="view-selector-label">
+                        <label class="view-selector-label" for="entity-selector">
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                                 <circle cx="9" cy="7" r="4"></circle>
