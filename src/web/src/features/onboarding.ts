@@ -1218,15 +1218,15 @@ export async function ensureLocalDatabaseReady(): Promise<void> {
  * degrade to a warning — worst case the visitor sees the empty-DB flow,
  * exactly the pre-seeding behavior.
  */
-export async function seedDemoDatasetIfEmpty(): Promise<void> {
+export async function seedDemoDatasetIfEmpty(): Promise<boolean> {
   try {
     const status = await apiCall<{ enabled?: boolean; disable_locked?: boolean }>(
       '/api/settings/demo-mode'
     );
-    if (!(status.enabled && status.disable_locked)) return;
+    if (!(status.enabled && status.disable_locked)) return false;
 
     const existing = clientDB.query<{ n: number }>('SELECT COUNT(*) AS n FROM accounts');
-    if ((existing[0]?.n ?? 0) > 0) return;
+    if ((existing[0]?.n ?? 0) > 0) return false;
 
     const data = await apiCall<{
       entities: Array<Record<string, unknown>>;
@@ -1235,7 +1235,7 @@ export async function seedDemoDatasetIfEmpty(): Promise<void> {
       snapshots: Array<Record<string, unknown>>;
     }>('/api/settings/demo-mode/export');
 
-    if (!data.accounts?.length) return;
+    if (!data.accounts?.length) return false;
 
     for (const e of data.entities ?? []) {
       clientDB.execute(
@@ -1299,8 +1299,10 @@ export async function seedDemoDatasetIfEmpty(): Promise<void> {
     console.log(
       `Seeded demo dataset locally: ${data.accounts.length} accounts, ${data.positions.length} positions`
     );
+    return true;
   } catch (error) {
     console.warn('Demo dataset seeding skipped:', error);
+    return false;
   }
 }
 

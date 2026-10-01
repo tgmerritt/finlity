@@ -692,8 +692,9 @@ export async function renderDashboard(data: DashboardData): Promise<void> {
   }
 
   // First run (or every account deleted): show the empty state in place of the
-  // hero, cards and accounts.
-  const isEmpty = (data.summary.accounts ?? []).length === 0;
+  // hero, cards and accounts. A view filter with no matching accounts is not
+  // first run, so the normal dashboard renders instead.
+  const isEmpty = !data.view_id && (data.summary.accounts ?? []).length === 0;
   setEmptyState(isEmpty);
   if (isEmpty) {
     dashboardRendered = false;
@@ -730,8 +731,11 @@ async function runEmptyStateAction(action: string): Promise<void> {
       break;
     case 'demo':
       if (store.get('dataMode') === 'local') {
-        await seedDemoDatasetIfEmpty();
-        document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
+        if (await seedDemoDatasetIfEmpty()) {
+          document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
+        } else {
+          showToast("Demo data isn't available on this site.", 'info');
+        }
       } else {
         await startDemoMode();
       }
