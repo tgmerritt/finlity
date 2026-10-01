@@ -76,7 +76,7 @@ async def test_dashboard(page: Page):
     print("\n=== Testing Dashboard ===")
 
     await close_any_modals(page)
-    await page.click('button[data-tab="dashboard"]')
+    await page.click('.nav-item[data-tab="dashboard"]')
     await page.wait_for_timeout(1500)
 
     # Check key elements exist
@@ -95,7 +95,7 @@ async def test_holdings(page: Page):
     print("\n=== Testing Holdings ===")
 
     await close_any_modals(page)
-    await page.click('button[data-tab="holdings"]')
+    await page.click('.nav-item[data-tab="holdings"]')
     await page.wait_for_timeout(2000)
 
     # Check positions exist
@@ -116,7 +116,7 @@ async def test_analysis(page: Page):
     print("\n=== Testing Analysis ===")
 
     await close_any_modals(page)
-    await page.click('button[data-tab="analysis"]')
+    await page.click('.nav-item[data-tab="analysis"]')
     await page.wait_for_timeout(2500)
 
     # Check allocation data loaded
@@ -136,7 +136,7 @@ async def test_projections(page: Page):
     print("\n=== Testing Projections ===")
 
     await close_any_modals(page)
-    await page.click('button[data-tab="projections"]')
+    await page.click('.nav-item[data-tab="projections"]')
     await page.wait_for_timeout(1500)
 
     # Check form fields exist
@@ -161,7 +161,7 @@ async def test_taxes(page: Page):
     print("\n=== Testing Taxes ===")
 
     await close_any_modals(page)
-    await page.click('button[data-tab="taxes"]')
+    await page.click('.nav-item[data-tab="taxes"]')
     await page.wait_for_timeout(1500)
 
     # Check for sub-tabs
@@ -179,7 +179,7 @@ async def test_budget(page: Page):
     await close_any_modals(page)
 
     # Navigate to taxes first
-    await page.click('button[data-tab="taxes"]')
+    await page.click('.nav-item[data-tab="taxes"]')
     await page.wait_for_timeout(1000)
 
     # Click on Income & Taxes sub-tab
@@ -228,7 +228,7 @@ async def test_settings(page: Page):
     await close_any_modals(page)
     await page.wait_for_timeout(500)
 
-    await page.click('button[data-tab="settings"]', force=True)
+    await page.click('.nav-item[data-tab="settings"]', force=True)
     await page.wait_for_timeout(1500)
 
     # Check for settings sections
@@ -279,7 +279,7 @@ async def test_add_position_modal(page: Page):
     print("\n=== Testing Add Position Modal ===")
 
     await close_any_modals(page)
-    await page.click('button[data-tab="holdings"]', force=True)
+    await page.click('.nav-item[data-tab="holdings"]', force=True)
     await page.wait_for_timeout(1000)
 
     # Open Add Position modal via JavaScript (more reliable than clicking)
@@ -322,7 +322,7 @@ async def main():
         page.on("response", lambda response: network_errors.append(f"{response.status} {response.url}") if response.status >= 400 else None)
 
         try:
-            # Set localStorage to bypass first-visit welcome screen
+            # Mark the app as visited before the first load
             # This must be done after navigating to the domain
             print(f"\nLoading {BASE_URL}...")
             await page.goto(BASE_URL)

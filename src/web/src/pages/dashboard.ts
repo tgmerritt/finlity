@@ -650,7 +650,13 @@ function renderAccounts(data: DashboardData): void {
   );
   if (groups.length === 0) {
     host.appendChild(
-      h('p', 'alloc-empty', 'No accounts yet. Add your first account from the Holdings tab.')
+      h(
+        'p',
+        'alloc-empty',
+        data.view_id
+          ? 'No accounts match this view.'
+          : 'No accounts yet. Add your first account from the Holdings tab.'
+      )
     );
     return;
   }

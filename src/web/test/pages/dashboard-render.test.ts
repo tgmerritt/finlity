@@ -371,4 +371,17 @@ describe('renderDashboard', () => {
     expect(day.hidden).toBe(true);
     expect(day.textContent).toBe('');
   });
+
+  it('says no accounts match when a view filter hides every account', async () => {
+    stubApi();
+    const data = fixture();
+    data.summary.accounts = [];
+    data.positions = [];
+    data.view_id = 'view-1';
+    await renderDashboard(data);
+
+    expect(document.getElementById('account-groups')!.textContent).toBe(
+      'No accounts match this view.'
+    );
+  });
 });

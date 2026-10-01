@@ -382,7 +382,7 @@ function positionTourElements(targetEl: HTMLElement): void {
   card.style.visibility = 'visible';
 
   // Check if we're on mobile (sidebar is hidden or narrow viewport)
-  const isMobile = viewportWidth < 768;
+  const isMobile = viewportWidth <= 768;
   const sidebarWidth = isMobile ? 0 : 240; // var(--sidebar-width)
 
   if (isMobile) {
