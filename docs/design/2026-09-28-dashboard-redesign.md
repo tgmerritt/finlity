@@ -38,10 +38,11 @@ Phones (640px and below): a single column in the same order. The hero value uses
 
 ## Navigation
 
-- Desktop keeps the sidebar: Dashboard, Holdings, Analysis, Projections, Expenses & Income, Taxes, Settings. Welcome is removed.
-- Phones get a fixed bottom tab bar: Dashboard, Holdings, Projections, Cash flow (Expenses & Income), More. More opens a sheet with Analysis, Taxes and Settings. The chat button moves above the tab bar and shrinks.
-- First run with an empty database: the dashboard shows an empty state with three actions (import a brokerage or bank file, add an account by hand, explore demo data) instead of zero-valued cards.
-- The demo banner becomes a slim bar that can be dismissed for the session.
+- A page toolbar at the top of every page shows the page title and, on Dashboard, Holdings, Analysis and Projections, the View and Person filters (moved out of the sidebar; this also makes them reachable on tablets, where the icon-only sidebar used to hide them). On phones the two filters sit side by side under the title. The Profile selector stays in the sidebar.
+- Desktop keeps the sidebar: Dashboard, Holdings, Analysis, Projections, Expenses & Income, Taxes, Settings. Welcome is removed, along with its marketing content and social feed; the app always opens on the Dashboard.
+- Phones (768px and below) get a fixed bottom tab bar: Dashboard, Holdings, Projections, Cash flow (Expenses & Income), More. More opens the existing slide-out sidebar, which holds every page, the profile selector and the theme toggle. The chat button sits above the tab bar, and the drawer's overlay covers both while open.
+- First run with no accounts and no view filter: the dashboard shows an empty state with import a brokerage or bank file, add an account, explore demo data, and a link to the guided tour. Where demo data cannot be loaded, the demo action says so instead of doing nothing.
+- The demo banner is a slim one-line bar with a Settings link and a dismiss button; dismissal lasts for the browser session.
 
 ## Other pages
 
