@@ -26,11 +26,12 @@ vi.mock('@/pages/holdings', async (importOriginal) => ({
 vi.mock('@/features/onboarding', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/features/onboarding')>()),
   startDemoMode: vi.fn().mockResolvedValue(undefined),
-  seedDemoDatasetIfEmpty: vi.fn().mockResolvedValue(undefined),
+  seedDemoDatasetIfEmpty: vi.fn().mockResolvedValue(true),
   startTour: vi.fn(),
 }));
 
 import { store } from '@/state/store';
+import { showToast } from '@/ui/toast';
 import { showAddPositionModal, showNewAccountForm } from '@/pages/holdings';
 import { seedDemoDatasetIfEmpty, startDemoMode, startTour } from '@/features/onboarding';
 import { initDashboard, renderDashboard, resetDashboardRenderState } from '@/pages/dashboard';
@@ -155,6 +156,32 @@ describe('dashboard first-run empty state', () => {
     document.removeEventListener('dashboard:refreshRequested', refresh);
     expect(seedDemoDatasetIfEmpty).toHaveBeenCalledTimes(1);
     expect(startDemoMode).not.toHaveBeenCalled();
+  });
+
+  it('demo in local mode toasts and does not refresh when nothing was seeded', async () => {
+    store.set('dataMode', 'local');
+    vi.mocked(seedDemoDatasetIfEmpty).mockResolvedValueOnce(false);
+    const refresh = vi.fn();
+    document.addEventListener('dashboard:refreshRequested', refresh);
+    await renderDashboard(data([]));
+    click('demo');
+    await vi.waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith("Demo data isn't available on this site.", 'info')
+    );
+    document.removeEventListener('dashboard:refreshRequested', refresh);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('with a view filter and zero accounts shows the normal dashboard, not the first-run state', async () => {
+    await renderDashboard({ ...data([]), view_id: 'v1' } as DashboardData);
+    expect(hidden('#dashboard-empty')).toBe(true);
+    expect(hidden('#dash-hero')).toBe(false);
+    expect(hidden('#accounts-card')).toBe(false);
+  });
+
+  it('an empty string view_id counts as no filter', async () => {
+    await renderDashboard({ ...data([]), view_id: '' } as DashboardData);
+    expect(hidden('#dashboard-empty')).toBe(false);
   });
 
   it('the tour link starts the tour without navigating', async () => {
