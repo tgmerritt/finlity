@@ -1,6 +1,6 @@
 /**
  * Onboarding Feature
- * Handles first-visit welcome flow, demo mode, and guided tour.
+ * Handles demo mode, and guided tour.
  */
 
 import { apiCall } from '@/api/client';
@@ -67,22 +67,6 @@ const tourSteps: TourStep[] = [
 ];
 
 /**
- * Check if this is the user's first visit.
- */
-export function isFirstVisit(): boolean {
-  return !localStorage.getItem('hasVisitedBefore');
-}
-
-/**
- * Mark welcome as complete and show dashboard.
- */
-export function completeWelcome(): void {
-  localStorage.setItem('hasVisitedBefore', 'true');
-  showTab('dashboard');
-  document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
-}
-
-/**
  * Start demo mode.
  */
 export async function startDemoMode(): Promise<void> {
@@ -96,9 +80,7 @@ export async function startDemoMode(): Promise<void> {
     showTab('dashboard');
     document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
 
-    // Show demo mode banner
-    const banner = getElementById<HTMLElement>('demo-mode-banner');
-    if (banner) banner.style.display = 'flex';
+    setDemoBannerVisible(true);
 
     showToast('Demo mode enabled! Explore with sample data.', 'success');
   } catch (error) {
@@ -151,10 +133,50 @@ export function updateDemoModeUI(isEnabled: boolean): void {
     statusBadge.className = `status-badge ${isEnabled ? 'active' : 'inactive'}`;
   }
 
-  // Show/hide demo mode banner — toggle class instead of inline style
-  // because style.css defines .hidden { display: none !important; }
+  setDemoBannerVisible(isEnabled);
+}
+
+const DEMO_BANNER_DISMISSED_KEY = 'demoBannerDismissed';
+
+/** Dismissal for this page load, used when sessionStorage is unavailable. */
+let demoBannerDismissedInPage = false;
+
+function isDemoBannerDismissed(): boolean {
+  if (demoBannerDismissedInPage) return true;
+  try {
+    return sessionStorage.getItem(DEMO_BANNER_DISMISSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The single place the demo banner is shown or hidden. A dismissed banner
+ * stays hidden for the browser session even when demo mode is on. Uses the
+ * .hidden class because style.css defines .hidden { display: none !important; }.
+ */
+function setDemoBannerVisible(show: boolean): void {
   const banner = getElementById<HTMLElement>('demo-mode-banner');
-  if (banner) banner.classList.toggle('hidden', !isEnabled);
+  if (banner) banner.classList.toggle('hidden', !show || isDemoBannerDismissed());
+}
+
+/**
+ * Wire the demo banner's Settings link and dismiss button.
+ */
+export function initDemoBanner(): void {
+  demoBannerDismissedInPage = false;
+  getElementById<HTMLElement>('demo-banner-settings')?.addEventListener('click', () => {
+    showTab('settings');
+  });
+  getElementById<HTMLElement>('demo-banner-dismiss')?.addEventListener('click', () => {
+    demoBannerDismissedInPage = true;
+    try {
+      sessionStorage.setItem(DEMO_BANNER_DISMISSED_KEY, '1');
+    } catch {
+      // Storage blocked: the in-page flag still hides it until reload.
+    }
+    setDemoBannerVisible(false);
+  });
 }
 
 /**
@@ -203,12 +225,29 @@ export function isDemoMode(): boolean {
 }
 
 /**
+ * Find a tour target. Tab buttons exist in both the sidebar and the phone
+ * bottom bar, and only one is displayed at a time, so prefer a visible match.
+ */
+function findTourTarget(selector: string): HTMLElement | null {
+  const matches = Array.from(document.querySelectorAll<HTMLElement>(selector));
+  const visible = matches.find((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  });
+  return visible ?? matches[0] ?? null;
+}
+
+/**
  * Start the guided tour.
  */
 export function startTour(): void {
   currentTourStep = 0;
   const overlay = getElementById<HTMLElement>('tour-overlay');
-  if (overlay) overlay.style.display = 'block';
+  if (overlay) {
+    // `hidden` is `display:none !important`; strip it so the overlay shows.
+    overlay.classList.remove('hidden');
+    overlay.style.display = 'block';
+  }
 
   showTourStep(0);
 
@@ -224,7 +263,7 @@ function handleTourResize(): void {
   if (overlay && overlay.style.display !== 'none') {
     const step = tourSteps[currentTourStep];
     if (step) {
-      const targetEl = document.querySelector(step.target);
+      const targetEl = findTourTarget(step.target);
       if (targetEl instanceof HTMLElement) {
         positionTourElements(targetEl);
       }
@@ -298,7 +337,7 @@ export function showTourStep(stepIndex: number): void {
   }
 
   // Position spotlight and card
-  const targetEl = document.querySelector(step.target);
+  const targetEl = findTourTarget(step.target);
   if (targetEl instanceof HTMLElement) {
     positionTourElements(targetEl);
   }
@@ -343,7 +382,7 @@ function positionTourElements(targetEl: HTMLElement): void {
   card.style.visibility = 'visible';
 
   // Check if we're on mobile (sidebar is hidden or narrow viewport)
-  const isMobile = viewportWidth < 768;
+  const isMobile = viewportWidth <= 768;
   const sidebarWidth = isMobile ? 0 : 240; // var(--sidebar-width)
 
   if (isMobile) {
@@ -397,7 +436,10 @@ export function nextTourStep(): void {
  */
 export function endTour(): void {
   const overlay = getElementById<HTMLElement>('tour-overlay');
-  if (overlay) overlay.style.display = 'none';
+  if (overlay) {
+    overlay.style.display = 'none';
+    overlay.classList.add('hidden');
+  }
 
   localStorage.setItem('tourCompleted', 'true');
 
@@ -432,7 +474,7 @@ export function closeProfileSetup(): void {
   const modal = getElementById<HTMLElement>('profile-setup-modal');
   if (modal) modal.style.display = 'none';
 
-  // If user cancels, still mark welcome as seen and go to dashboard
+  // If user cancels, still mark the app as visited and go to the dashboard
   localStorage.setItem('hasVisitedBefore', 'true');
   showTab('dashboard');
   document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
@@ -1176,15 +1218,15 @@ export async function ensureLocalDatabaseReady(): Promise<void> {
  * degrade to a warning — worst case the visitor sees the empty-DB flow,
  * exactly the pre-seeding behavior.
  */
-export async function seedDemoDatasetIfEmpty(): Promise<void> {
+export async function seedDemoDatasetIfEmpty(): Promise<boolean> {
   try {
     const status = await apiCall<{ enabled?: boolean; disable_locked?: boolean }>(
       '/api/settings/demo-mode'
     );
-    if (!(status.enabled && status.disable_locked)) return;
+    if (!(status.enabled && status.disable_locked)) return false;
 
     const existing = clientDB.query<{ n: number }>('SELECT COUNT(*) AS n FROM accounts');
-    if ((existing[0]?.n ?? 0) > 0) return;
+    if ((existing[0]?.n ?? 0) > 0) return false;
 
     const data = await apiCall<{
       entities: Array<Record<string, unknown>>;
@@ -1193,7 +1235,7 @@ export async function seedDemoDatasetIfEmpty(): Promise<void> {
       snapshots: Array<Record<string, unknown>>;
     }>('/api/settings/demo-mode/export');
 
-    if (!data.accounts?.length) return;
+    if (!data.accounts?.length) return false;
 
     for (const e of data.entities ?? []) {
       clientDB.execute(
@@ -1257,8 +1299,10 @@ export async function seedDemoDatasetIfEmpty(): Promise<void> {
     console.log(
       `Seeded demo dataset locally: ${data.accounts.length} accounts, ${data.positions.length} positions`
     );
+    return true;
   } catch (error) {
     console.warn('Demo dataset seeding skipped:', error);
+    return false;
   }
 }
 
@@ -1276,6 +1320,8 @@ export function initOnboarding(): void {
   if (skipBtn) {
     skipBtn.addEventListener('click', skipTour);
   }
+
+  initDemoBanner();
 
   // Set up demo mode toggle
   const demoToggle = getElementById<HTMLInputElement>('demo-mode-toggle');

@@ -18,7 +18,7 @@ from pathlib import Path
 from playwright.sync_api import Page, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-WIDTHS = (1440, 390, 360)
+WIDTHS = (1440, 900, 390, 360)
 THEMES = ("light", "dark")
 
 CHECKS_JS = """
@@ -69,25 +69,56 @@ CHECKS_JS = """
     const f = fab.getBoundingClientRect();
     if (f.width > 48) problems.push(`chat button too large on phone (${Math.round(f.width)}px)`);
   }
+  if (vw <= 768) {
+    const bar = document.querySelector('.bottom-tabbar');
+    const b = bar ? bar.getBoundingClientRect() : null;
+    const barOk =
+      !!bar &&
+      getComputedStyle(bar).display !== 'none' &&
+      getComputedStyle(bar).position === 'fixed' &&
+      b.width > 0 &&
+      b.height > 0 &&
+      Math.abs(b.bottom - window.innerHeight) <= 1;
+    if (!barOk) problems.push('bottom tab bar missing');
+    if (barOk && fab) {
+      const f = fab.getBoundingClientRect();
+      const overlaps = f.left < b.right && f.right > b.left && f.top < b.bottom && f.bottom > b.top;
+      if (overlaps) problems.push('chat button overlaps tab bar');
+    }
+  }
+  return problems;
+}
+"""
+
+
+DRAWER_JS = """
+() => {
+  const problems = [];
+  const more = document.getElementById('bottom-tab-more');
+  if (!more) return ['drawer check: More button missing'];
+  more.click();
+  const overlay = document.querySelector('.mobile-nav-overlay');
+  const sidebar = document.getElementById('app-sidebar');
+  const covered = (el) => {
+    if (!el) return true;
+    const r = el.getBoundingClientRect();
+    // Sample near the right edge: the 280px drawer always covers the bar's
+    // horizontal centre, so only the overlay (right side) can prove coverage.
+    const top = document.elementFromPoint(el.id === 'global-chat-fab' ? r.left + r.width / 2 : r.right - 10, r.top + r.height / 2);
+    return !!top && ((overlay && overlay.contains(top)) || (sidebar && sidebar.contains(top)));
+  };
+  if (!covered(document.getElementById('global-chat-fab'))) problems.push('drawer does not cover chat button');
+  if (!covered(document.querySelector('.bottom-tabbar'))) problems.push('drawer does not cover tab bar');
+  more.click();
   return problems;
 }
 """
 
 
 def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) -> None:
-    # Each new_page() is a fresh context, so with an empty localStorage the
-    # app always treats it as a first visit and lands on the welcome tab
-    # (main.ts's init() only calls refreshData() on the *returning* visitor
-    # branch; showTab('welcome') alone never loads portfolio data). Clicking
-    # the sidebar's Dashboard nav item after that only flips which tab is
-    # displayed, it does not trigger a data refresh, so the hero stat stays
-    # stuck at "$0" no matter how long we wait for it.
-    #
-    # A real returning user hits the populated dashboard directly, so mark
-    # the visit as returning before the app boots. That takes the same code
-    # path init() uses for every visit after the first: showTab('dashboard')
-    # followed by an awaited refreshData().
-    page.add_init_script("localStorage.setItem('hasVisitedBefore', 'true')")
+    # Each new_page() is a fresh context, so the app boots as a first-time
+    # visitor. Boot always lands on the Dashboard and loads data, so no
+    # localStorage priming is needed.
 
     # "load" rather than "networkidle": hosted mode keeps requests in flight
     # (CDN assets, background polling), so the network may never go idle.
@@ -99,10 +130,8 @@ def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) 
         # Hosted (browser storage) mode has no server-side database, so
         # ensureLocalDatabaseReady() always finds IndexedDB empty on a fresh
         # context and blocks on the "open or create your portfolio database"
-        # modal (onboarding.ts's showDatabaseGateModal). hasVisitedBefore only
-        # controls which tab a returning visitor lands on; it does not skip
-        # this gate. Click "Continue with browser storage" when it appears so
-        # the app creates a new IndexedDB database, seeds the demo dataset
+        # modal (onboarding.ts's showDatabaseGateModal). Click "Continue with
+        # browser storage" when it appears so the app creates a new IndexedDB database, seeds the demo dataset
         # into it, and proceeds the same way a real hosted-mode user would.
         browser_storage_button = page.get_by_role(
             "button", name="Continue with browser storage", exact=False
@@ -174,6 +203,9 @@ def main() -> int:
                 else:
                     for problem in page.evaluate(CHECKS_JS):
                         failures.append(f"{width}px {theme}: {problem}")
+                    if width == 390:
+                        for problem in page.evaluate(DRAWER_JS):
+                            failures.append(f"{width}px {theme}: {problem}")
                 if args.screenshots:
                     args.screenshots.mkdir(parents=True, exist_ok=True)
                     page.screenshot(path=str(args.screenshots / f"dashboard-{width}-{theme}.png"), full_page=True)

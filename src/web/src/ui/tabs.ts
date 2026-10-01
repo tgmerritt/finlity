@@ -8,20 +8,12 @@ import { querySelectorAll, querySelector, toggleClass } from '@/utils/html';
  * Available tab names.
  */
 export type TabName =
-  | 'welcome'
-  | 'dashboard'
-  | 'holdings'
-  | 'analysis'
-  | 'projections'
-  | 'budget'
-  | 'taxes'
-  | 'settings';
+  'dashboard' | 'holdings' | 'analysis' | 'projections' | 'budget' | 'taxes' | 'settings';
 
 /**
  * Valid tab names for runtime validation.
  */
 const VALID_TABS: readonly TabName[] = [
-  'welcome',
   'dashboard',
   'holdings',
   'analysis',
@@ -37,6 +29,12 @@ const VALID_TABS: readonly TabName[] = [
 function isValidTab(tab: string | null): tab is TabName {
   return tab !== null && VALID_TABS.includes(tab as TabName);
 }
+
+/** Elements that navigate between tabs: sidebar items and bottom tab bar buttons. */
+const NAV_SELECTOR = '.nav-item[data-tab], .bottom-tab[data-tab]';
+
+/** Tabs that have their own button in the phone bottom bar. */
+const BOTTOM_BAR_TABS: readonly TabName[] = ['dashboard', 'holdings', 'projections', 'budget'];
 
 /**
  * Current active tab.
@@ -59,11 +57,24 @@ export function showTab(tabName: TabName): void {
     content.style.display = 'none';
   });
 
-  // Remove active class from all nav items
-  const navItems = querySelectorAll<HTMLElement>('.nav-item');
+  // Clear the active state on every navigation element (sidebar and bottom bar).
+  // Other markup also uses data-tab (install modal tabs), so stay scoped.
+  const navItems = querySelectorAll<HTMLElement>(NAV_SELECTOR);
   navItems.forEach((item) => {
-    toggleClass(item, 'active', false);
+    const isActive = item.getAttribute('data-tab') === tabName;
+    toggleClass(item, 'active', isActive);
+    if (isActive) {
+      item.setAttribute('aria-current', 'page');
+    } else {
+      item.removeAttribute('aria-current');
+    }
   });
+
+  // "More" stands in for every page that has no bottom-bar tab of its own
+  const moreButton = querySelector<HTMLElement>('#bottom-tab-more');
+  if (moreButton) {
+    toggleClass(moreButton, 'active', !BOTTOM_BAR_TABS.includes(tabName));
+  }
 
   // Show selected tab content
   const selectedContent = querySelector<HTMLElement>(`#tab-${tabName}`);
@@ -71,12 +82,6 @@ export function showTab(tabName: TabName): void {
     selectedContent.style.display = 'block';
   } else {
     console.error(`Tab content element not found: #tab-${tabName}`);
-  }
-
-  // Add active class to selected nav item
-  const selectedNav = querySelector<HTMLElement>(`[data-tab="${tabName}"]`);
-  if (selectedNav) {
-    toggleClass(selectedNav, 'active', true);
   }
 
   // Update current tab
@@ -132,11 +137,22 @@ export function initTabs(): void {
 }
 
 /**
+ * Keep the bottom bar's More button in sync with the drawer state.
+ */
+function setMoreExpanded(expanded: boolean): void {
+  const moreButton = querySelector<HTMLElement>('#bottom-tab-more');
+  if (moreButton) {
+    moreButton.setAttribute('aria-expanded', String(expanded));
+  }
+}
+
+/**
  * Close mobile navigation menu.
  */
 function closeMobileNav(): void {
   const sidebar = querySelector<HTMLElement>('.sidebar');
   const overlay = querySelector<HTMLElement>('.mobile-nav-overlay');
+  setMoreExpanded(false);
 
   if (sidebar) {
     toggleClass(sidebar, 'mobile-open', false);
@@ -157,6 +173,7 @@ export function toggleMobileNav(): void {
   if (sidebar) {
     const isOpen = sidebar.classList.contains('mobile-open');
     toggleClass(sidebar, 'mobile-open', !isOpen);
+    setMoreExpanded(!isOpen);
 
     if (overlay) {
       overlay.style.display = !isOpen ? 'block' : 'none';
@@ -177,9 +194,9 @@ export function initMobileNav(): void {
     document.body.appendChild(overlay);
   }
 
-  // Add click handler to mobile menu button
-  const menuButton = querySelector<HTMLElement>('.mobile-menu-btn');
-  if (menuButton) {
-    menuButton.addEventListener('click', toggleMobileNav);
+  // Bottom bar "More" button opens the drawer
+  const moreButton = querySelector<HTMLElement>('#bottom-tab-more');
+  if (moreButton) {
+    moreButton.addEventListener('click', toggleMobileNav);
   }
 }

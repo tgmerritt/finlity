@@ -8,6 +8,7 @@ import { initSession } from '@/state/session';
 import { initTheme, toggleTheme, setTheme } from '@/state/theme';
 
 // UI components
+import { initPageToolbar } from '@/ui/page-toolbar';
 import { initTabs, initMobileNav, showTab, toggleMobileNav, onTabChange } from '@/ui/tabs';
 import type { TabName } from '@/ui/tabs';
 import { showToast, showError } from '@/ui/toast';
@@ -180,7 +181,6 @@ import {
 } from '@/features/import-export';
 import {
   initOnboarding,
-  isFirstVisit,
   startDemoMode,
   checkDemoModeStatus,
   toggleDemoMode,
@@ -189,7 +189,6 @@ import {
   endTour,
   showProfileSetup,
   closeProfileSetup,
-  completeWelcome,
   selectStorageMode,
   setStorageMode,
   loadDeploymentInfo,
@@ -204,7 +203,6 @@ import {
   ensureLocalDatabaseReady,
 } from '@/features/onboarding';
 import { store } from '@/state/store';
-import { initSocialFeed, destroySocialFeed, refreshSocialFeed } from '@/features/social-feed';
 
 // Utilities
 import { formatCurrency, formatPercent, formatNumber } from '@/utils/format';
@@ -493,6 +491,7 @@ async function init(): Promise<void> {
 
   // Initialize UI components
   initTabs();
+  initPageToolbar();
   initMobileNav();
   initModal();
   initSidebarState();
@@ -520,7 +519,6 @@ async function init(): Promise<void> {
   initPlugins();
   initImportExport();
   initOnboarding();
-  initSocialFeed();
 
   // Initialize pages
   initDashboard();
@@ -568,14 +566,15 @@ async function init(): Promise<void> {
     await checkDemoModeStatus();
     await loadDeploymentInfo();
 
-    // Show welcome tab for first-time visitors
-    const firstVisit = isFirstVisit();
-    if (firstVisit) {
-      showTab('welcome');
-    } else {
-      showTab('dashboard');
-      await refreshData();
+    // Always land on the Dashboard; with no accounts it shows the first-run
+    // empty state.
+    try {
+      localStorage.setItem('hasVisitedBefore', 'true');
+    } catch {
+      // Storage unavailable (private mode): nothing depends on the flag.
     }
+    showTab('dashboard');
+    await refreshData();
 
     // Fire the market-gated price refresh in the background: it must not
     // block first paint. The server-side gate makes it a cheap no-op when
@@ -777,7 +776,6 @@ window.finlity = {
   endTour,
   showProfileSetup,
   closeProfileSetup,
-  completeWelcome,
   selectStorageMode,
   setStorageMode,
   loadDeploymentInfo,
@@ -789,11 +787,6 @@ window.finlity = {
   loadFromBrowserStorage,
   saveToBrowserStorage,
   clearBrowserStorage,
-
-  // Social Feed
-  initSocialFeed,
-  destroySocialFeed,
-  refreshSocialFeed,
 
   // Charts
   updateHistoryChart,

@@ -377,6 +377,10 @@ async def serve_dashboard():
                 'src="/static/dist/app.js"',
                 f'src="/static/dist/app.js?v={_build_version}"',
             )
+            html_content = html_content.replace(
+                'href="/static/style.css"',
+                f'href="/static/style.css?v={_build_version}"',
+            )
             # Warn if cache-busting replacement didn't match
             if html_content == original_content:
                 logger.warning(
