@@ -141,7 +141,7 @@ export function updateAccountFilterLabel(): void {
   if (total === 0 || selected === 0) {
     labelEl.textContent = 'No Accounts';
   } else if (selected === total) {
-    labelEl.textContent = 'All Accounts';
+    labelEl.textContent = 'All accounts';
   } else if (selected === 1) {
     labelEl.textContent = checkedBoxes[0]?.value ?? 'Account';
   } else {
@@ -256,13 +256,17 @@ export function groupPositionsByAccount(positions: DashboardPosition[]): Account
 function createGroupHeaderRow(group: AccountGroup): HTMLTableRowElement {
   const row = document.createElement('tr');
   row.className = 'holdings-group-row';
+  row.setAttribute('role', 'row');
   row.dataset.account = group.account;
 
   const cell = document.createElement('td');
+  cell.setAttribute('role', 'cell');
   cell.colSpan = HOLDINGS_COLUMN_COUNT;
 
   const name = document.createElement('strong');
   name.className = 'holdings-group-name';
+  name.setAttribute('role', 'heading');
+  name.setAttribute('aria-level', '3');
   name.textContent = group.account;
 
   const count = document.createElement('span');
@@ -279,12 +283,34 @@ function createGroupHeaderRow(group: AccountGroup): HTMLTableRowElement {
     gl.textContent = `${formatCurrency(group.gainLoss)} (${formatPercent(group.gainLossPct)})`;
   } else {
     gl.className = 'holdings-group-gl';
-    gl.textContent = '-';
+    gl.textContent = 'No cost basis';
   }
 
   cell.append(name, count, value, gl);
   row.appendChild(cell);
   return row;
+}
+
+/**
+ * Replace the table with an empty/no-match state view. setStateView wipes its
+ * container, so the (hidden) table is put back for the next render to find.
+ */
+function showTableState(
+  table: HTMLTableElement,
+  container: HTMLElement,
+  options: Parameters<typeof setStateView>[1]
+): void {
+  table.style.display = 'none';
+  setStateView(container, options);
+  container.appendChild(table);
+}
+
+/**
+ * Sort holdings to an explicit field and direction (phone sort controls).
+ */
+export function setHoldingsSort(field: string, direction: 'asc' | 'desc'): void {
+  store.set('currentSort', { field, direction });
+  updateHoldings(store.get('currentPositions'));
 }
 
 /**
@@ -309,6 +335,8 @@ export function updateHoldings(positions: DashboardPosition[]): void {
   const grouped = isHoldingsGroupingEnabled();
   const groupToggle = document.getElementById('holdings-group-toggle') as HTMLInputElement | null;
   if (groupToggle) groupToggle.checked = grouped;
+  // Set before any early return so the Account column and sort option follow the toggle.
+  table.classList.toggle('holdings-grouped', grouped);
 
   // Apply sorting
   const currentSort = store.get('currentSort');
@@ -321,8 +349,7 @@ export function updateHoldings(positions: DashboardPosition[]): void {
   //  - No positions at all → onboarding empty state with "Add Position" CTA.
   //  - Filter excludes everything → "Clear filter" CTA (positions exist).
   if (equityPositions.length === 0) {
-    table.style.display = 'none';
-    setStateView(tableContainer, {
+    showTableState(table, tableContainer, {
       kind: 'empty',
       title: 'No holdings yet',
       description: 'Import from a broker CSV or add a position manually to get started.',
@@ -333,16 +360,12 @@ export function updateHoldings(positions: DashboardPosition[]): void {
         },
       },
     });
-    // setStateView wipes the container; put the (hidden) table back so the
-    // next render can find it and restore the rows.
-    tableContainer.appendChild(table);
     updateSortIndicators();
     return;
   }
 
   if (filtered.length === 0) {
-    table.style.display = 'none';
-    setStateView(tableContainer, {
+    showTableState(table, tableContainer, {
       kind: 'empty',
       title: 'No holdings match the current filter',
       description: 'Try adjusting the search or account filter.',
@@ -363,9 +386,6 @@ export function updateHoldings(positions: DashboardPosition[]): void {
         },
       },
     });
-    // setStateView wipes the container; put the (hidden) table back so the
-    // next render can find it and restore the rows.
-    tableContainer.appendChild(table);
     updateSortIndicators();
     return;
   }
@@ -374,7 +394,6 @@ export function updateHoldings(positions: DashboardPosition[]): void {
   table.style.display = '';
   clearStateView(tableContainer);
 
-  table.classList.toggle('holdings-grouped', grouped);
   if (grouped) {
     groupPositionsByAccount(filtered).forEach((group) => {
       tbody.appendChild(createGroupHeaderRow(group));
@@ -396,6 +415,7 @@ function createPositionRow(pos: DashboardPosition): HTMLTableRowElement {
   const gainLossPct = pos.cost_basis ? ((pos.value - pos.cost_basis) / pos.cost_basis) * 100 : null;
 
   const row = document.createElement('tr');
+  row.setAttribute('role', 'row');
   row.dataset.account = pos.account;
 
   // Ticker cell
@@ -404,18 +424,21 @@ function createPositionRow(pos: DashboardPosition): HTMLTableRowElement {
   tickerStrong.textContent = pos.ticker;
   tickerCell.appendChild(tickerStrong);
   tickerCell.dataset.label = 'Ticker';
+  tickerCell.setAttribute('role', 'cell');
   row.appendChild(tickerCell);
 
   // Name cell
   const nameCell = document.createElement('td');
   nameCell.textContent = pos.name || '-';
   nameCell.dataset.label = 'Name';
+  nameCell.setAttribute('role', 'cell');
   row.appendChild(nameCell);
 
   // Account cell
   const accountCell = document.createElement('td');
   accountCell.textContent = pos.account;
   accountCell.dataset.label = 'Account';
+  accountCell.setAttribute('role', 'cell');
   row.appendChild(accountCell);
 
   // Shares cell
@@ -423,6 +446,7 @@ function createPositionRow(pos: DashboardPosition): HTMLTableRowElement {
   sharesCell.className = 'text-right';
   sharesCell.textContent = formatShares(pos.shares);
   sharesCell.dataset.label = 'Shares';
+  sharesCell.setAttribute('role', 'cell');
   row.appendChild(sharesCell);
 
   // Price cell
@@ -449,6 +473,7 @@ function createPositionRow(pos: DashboardPosition): HTMLTableRowElement {
     }
   }
   priceCell.dataset.label = 'Price';
+  priceCell.setAttribute('role', 'cell');
   row.appendChild(priceCell);
 
   // Value cell with optional APY indicator
@@ -464,6 +489,7 @@ function createPositionRow(pos: DashboardPosition): HTMLTableRowElement {
     valueCell.textContent = formatCurrency(pos.value);
   }
   valueCell.dataset.label = 'Value';
+  valueCell.setAttribute('role', 'cell');
   row.appendChild(valueCell);
 
   // Gain/Loss cell
@@ -475,12 +501,15 @@ function createPositionRow(pos: DashboardPosition): HTMLTableRowElement {
     gainLossCell.textContent = '-';
   }
   gainLossCell.dataset.label = 'Gain/Loss';
+  gainLossCell.setAttribute('role', 'cell');
   row.appendChild(gainLossCell);
 
   // Actions cell: inline icon buttons (edit / delete)
   const actionsCell = document.createElement('td');
   actionsCell.className = 'actions-cell';
   actionsCell.dataset.label = 'Actions';
+  actionsCell.setAttribute('role', 'cell');
+  actionsCell.setAttribute('role', 'cell');
 
   const editBtn = document.createElement('button');
   editBtn.type = 'button';
@@ -704,10 +733,31 @@ export function sortHoldings(field: string): void {
 }
 
 /**
+ * Keep the phone sort selects in step with the store, and offer Account only
+ * while ungrouped (grouped rows are already split by account).
+ */
+function syncSortControls(sort: SortConfig): void {
+  const fieldEl = document.getElementById('holdings-sort-field') as HTMLSelectElement | null;
+  const dirEl = document.getElementById('holdings-sort-direction') as HTMLSelectElement | null;
+  const grouped = isHoldingsGroupingEnabled();
+  if (fieldEl) {
+    Array.from(fieldEl.options).forEach((opt) => {
+      if (opt.value === 'account') {
+        opt.hidden = grouped;
+        opt.disabled = grouped;
+      }
+    });
+    fieldEl.value = sort.field;
+  }
+  if (dirEl) dirEl.value = sort.direction;
+}
+
+/**
  * Update sort indicators on table headers.
  */
 function updateSortIndicators(): void {
   const currentSort = store.get('currentSort');
+  syncSortControls(currentSort);
   document.querySelectorAll('th.sortable').forEach((th) => {
     th.classList.remove('sort-asc', 'sort-desc');
     if ((th as HTMLElement).dataset.sort === currentSort.field) {
@@ -1405,6 +1455,17 @@ export function initHoldings(): void {
   // Group-by-account toggle
   const groupToggle = document.getElementById('holdings-group-toggle') as HTMLInputElement | null;
   groupToggle?.addEventListener('change', () => setHoldingsGrouping(groupToggle.checked));
+
+  // Phone sort controls
+  const sortField = document.getElementById('holdings-sort-field') as HTMLSelectElement | null;
+  const sortDir = document.getElementById('holdings-sort-direction') as HTMLSelectElement | null;
+  const applySelects = (): void => {
+    if (sortField && sortDir) {
+      setHoldingsSort(sortField.value, sortDir.value === 'asc' ? 'asc' : 'desc');
+    }
+  };
+  sortField?.addEventListener('change', applySelects);
+  sortDir?.addEventListener('change', applySelects);
 
   // Sort handlers for table headers
   document.querySelectorAll('#holdings-table th.sortable').forEach((th) => {

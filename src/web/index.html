@@ -296,13 +296,13 @@
             <div id="tab-holdings" class="tab-content">
                 <div class="card">
                     <div class="card-header">
-                        <h3>Holdings</h3>
+                        <h3 class="visually-hidden">Holdings</h3>
                         <div class="card-actions">
                             <div class="filter-group">
-                                <label>Accounts:</label>
+                                <label class="holdings-filter-label">Filter accounts:</label>
                                 <div class="multi-select-dropdown" id="account-filter-dropdown">
                                     <button type="button" class="multi-select-trigger" onclick="toggleMultiSelect('account-filter-dropdown')">
-                                        <span class="multi-select-label" id="account-filter-label">All Accounts</span>
+                                        <span class="multi-select-label" id="account-filter-label">All accounts</span>
                                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                                             <polyline points="6 9 12 15 18 9"></polyline>
                                         </svg>
@@ -323,14 +323,32 @@
                                 Group by account
                             </label>
                             <input type="text" id="holdings-search" placeholder="Search holdings..." class="search-input" oninput="filterHoldings()">
-                            <span id="price-status" class="price-status" title="Price data freshness"></span>
-                            <button id="update-prices-btn" class="btn btn-default btn-sm" title="Force refresh ALL prices from APIs">
+                            <div class="holdings-sort-mobile">
+                                <label class="visually-hidden" for="holdings-sort-field">Sort holdings by</label>
+                                <select id="holdings-sort-field" class="holdings-sort-select">
+                                    <option value="value">Value</option>
+                                    <option value="gain_loss">Gain/Loss</option>
+                                    <option value="ticker">Ticker</option>
+                                    <option value="name">Name</option>
+                                    <option value="shares">Shares</option>
+                                    <option value="price">Price</option>
+                                    <option value="account">Account</option>
+                                </select>
+                                <label class="visually-hidden" for="holdings-sort-direction">Sort direction</label>
+                                <select id="holdings-sort-direction" class="holdings-sort-select">
+                                    <option value="desc">Desc</option>
+                                    <option value="asc">Asc</option>
+                                </select>
+                            </div>
+                            <div class="holdings-actions-row">
+                            <span id="price-status" class="price-status" title="Price data freshness" role="status"></span>
+                            <button id="update-prices-btn" class="btn btn-default btn-sm" title="Force refresh ALL prices from APIs" aria-label="Update prices">
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                                     <circle cx="12" cy="12" r="10"></circle>
                                     <line x1="12" y1="8" x2="12" y2="12"></line>
                                     <line x1="12" y1="16" x2="12.01" y2="16"></line>
                                 </svg>
-                                Update Prices
+                                <span class="btn-label">Update Prices</span>
                             </button>
                             <button onclick="showAddPositionModal()" class="btn btn-primary btn-sm">
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
@@ -339,24 +357,25 @@
                                 </svg>
                                 Add Position
                             </button>
+                            </div>
                         </div>
                     </div>
                     <div class="card-body">
                         <div class="table-container">
-                            <table id="holdings-table">
-                                <thead>
-                                    <tr>
-                                        <th class="sortable" data-sort="ticker" onclick="sortHoldings('ticker')">Ticker <span class="sort-icon"></span></th>
-                                        <th class="sortable" data-sort="name" onclick="sortHoldings('name')">Name <span class="sort-icon"></span></th>
-                                        <th class="sortable" data-sort="account" onclick="sortHoldings('account')">Account <span class="sort-icon"></span></th>
-                                        <th class="sortable text-right" data-sort="shares" onclick="sortHoldings('shares')">Shares <span class="sort-icon"></span></th>
-                                        <th class="sortable text-right" data-sort="price" onclick="sortHoldings('price')">Price <span class="sort-icon"></span></th>
-                                        <th class="sortable text-right" data-sort="value" onclick="sortHoldings('value')">Value <span class="sort-icon"></span></th>
-                                        <th class="sortable text-right" data-sort="gain_loss" onclick="sortHoldings('gain_loss')">Gain/Loss <span class="sort-icon"></span></th>
-                                        <th>Actions</th>
+                            <table id="holdings-table" role="table">
+                                <thead role="rowgroup">
+                                    <tr role="row">
+                                        <th role="columnheader" class="sortable" data-sort="ticker" onclick="sortHoldings('ticker')">Ticker <span class="sort-icon"></span></th>
+                                        <th role="columnheader" class="sortable" data-sort="name" onclick="sortHoldings('name')">Name <span class="sort-icon"></span></th>
+                                        <th role="columnheader" class="sortable" data-sort="account" onclick="sortHoldings('account')">Account <span class="sort-icon"></span></th>
+                                        <th role="columnheader" class="sortable text-right" data-sort="shares" onclick="sortHoldings('shares')">Shares <span class="sort-icon"></span></th>
+                                        <th role="columnheader" class="sortable text-right" data-sort="price" onclick="sortHoldings('price')">Price <span class="sort-icon"></span></th>
+                                        <th role="columnheader" class="sortable text-right" data-sort="value" onclick="sortHoldings('value')">Value <span class="sort-icon"></span></th>
+                                        <th role="columnheader" class="sortable text-right" data-sort="gain_loss" onclick="sortHoldings('gain_loss')">Gain/Loss <span class="sort-icon"></span></th>
+                                        <th role="columnheader">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody></tbody>
+                                <tbody role="rowgroup"></tbody>
                             </table>
                         </div>
                     </div>

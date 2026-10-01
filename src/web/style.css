@@ -7405,19 +7405,45 @@ html {
     cursor: pointer;
 }
 
-/* The extra toggle makes the header actions wrap; keep the title level with
-   the first row of controls and the controls on the right. */
+/* Text for assistive tech only. */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* The page toolbar already titles this tab, so the card title is hidden and
+   the controls sit on the right. */
 #tab-holdings > .card:first-child .card-header {
-    align-items: flex-start;
-    gap: 16px;
-}
-
-#tab-holdings > .card:first-child .card-header h3 {
-    padding-top: 8px;
-}
-
-#tab-holdings > .card:first-child .card-actions {
     justify-content: flex-end;
+}
+
+/* Wrapper is layout-neutral on desktop; it becomes a row on phones. */
+.holdings-actions-row {
+    display: contents;
+}
+
+/* Phone-only sort control (the sortable headers are hidden on phones). */
+.holdings-sort-mobile {
+    display: none;
+}
+
+/* Grouped rows already show the account, so the column goes away. The
+   group header row has a single spanning cell and is unaffected. */
+#holdings-table.holdings-grouped th:nth-child(3),
+#holdings-table.holdings-grouped tr:not(.holdings-group-row) td:nth-child(3) {
+    display: none;
+}
+
+/* Header rows would shift the zebra phase, so stripe grouped tables not at all. */
+#holdings-table.holdings-grouped tbody tr:nth-child(even):not(:hover) td {
+    background: transparent;
 }
 
 #holdings-table tr.holdings-group-row td {
@@ -7534,9 +7560,16 @@ html {
     /* Value and gain/loss: right-align the gain/loss against the card edge. */
     #holdings-table tbody tr td:nth-child(7) { text-align: right; }
 
-    /* The account header already names the account when grouped. */
-    #holdings-table.holdings-grouped tbody tr td:nth-child(3) {
-        display: none;
+    /* Value and gain/loss carry small labels too, so each figure is named. */
+    #holdings-table tbody tr:not(.holdings-group-row) td:nth-child(6)::before,
+    #holdings-table tbody tr:not(.holdings-group-row) td:nth-child(7)::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 10px;
+        font-weight: 400;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--color-text-tertiary);
     }
 
     /* Icon buttons need a comfortable tap target on cards. */
@@ -7572,5 +7605,98 @@ html {
     #holdings-table tbody tr.holdings-group-row .holdings-group-name {
         display: block;
         font-size: 15px;
+    }
+}
+
+/* Holdings card header on phones: filter and group toggle on one row, search
+   and sort on the next, then price dot, icon-only refresh and Add Position. */
+@media (max-width: 768px) {
+    #tab-holdings > .card:first-child .card-header {
+        padding: 10px 12px;
+    }
+
+    #tab-holdings > .card:first-child .card-actions {
+        width: 100%;
+        gap: 6px 8px;
+        justify-content: flex-start;
+    }
+
+    #tab-holdings .holdings-filter-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+    }
+
+    #tab-holdings > .card:first-child .filter-group {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    #tab-holdings > .card:first-child .multi-select-dropdown,
+    #tab-holdings > .card:first-child .multi-select-trigger {
+        width: 100%;
+    }
+
+    #tab-holdings .holdings-group-toggle {
+        flex: 0 0 auto;
+    }
+
+    #tab-holdings > .card:first-child .search-input {
+        flex: 1 1 120px;
+        min-width: 0;
+        width: auto;
+    }
+
+    .holdings-sort-mobile {
+        display: flex;
+        gap: 6px;
+        flex: 0 0 auto;
+    }
+
+    .holdings-sort-select {
+        padding: 7px 8px;
+        font-size: 13px;
+        font-family: var(--font-sans);
+        color: var(--color-text-primary);
+        background: var(--color-bg-container);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius-sm);
+        max-width: 110px;
+    }
+
+    .holdings-actions-row {
+        display: flex;
+        flex: 1 1 100%;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* Price status shrinks to its dot; the text stays for assistive tech. */
+    .holdings-actions-row .price-status {
+        font-size: 0;
+        gap: 0;
+        padding: 6px;
+        background: transparent;
+    }
+
+    .holdings-actions-row .price-status .status-dot {
+        width: 10px;
+        height: 10px;
+    }
+
+    #update-prices-btn .btn-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+    }
+
+    .holdings-actions-row .btn-primary {
+        margin-left: 0;
     }
 }

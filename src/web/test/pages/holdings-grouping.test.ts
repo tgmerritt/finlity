@@ -28,6 +28,8 @@ import {
   updateHoldings,
   groupPositionsByAccount,
   setHoldingsGrouping,
+  setHoldingsSort,
+  initHoldings,
   isHoldingsGroupingEnabled,
 } from '@/pages/holdings';
 import type { DashboardPosition } from '@/types/api';
@@ -64,6 +66,13 @@ const MARKUP = `
     <table id="holdings-table"><thead><tr><th class="sortable" data-sort="value"></th></tr></thead><tbody></tbody></table>
   </div>
   <label><input type="checkbox" id="holdings-group-toggle" /></label>
+  <select id="holdings-sort-field">
+    <option value="value">Value</option><option value="gain_loss">Gain/Loss</option>
+    <option value="ticker">Ticker</option><option value="name">Name</option>
+    <option value="shares">Shares</option><option value="price">Price</option>
+    <option value="account">Account</option>
+  </select>
+  <select id="holdings-sort-direction"><option value="desc">High</option><option value="asc">Low</option></select>
 `;
 
 function mockStorage(map: Map<string, string> | 'throws') {
@@ -261,6 +270,97 @@ describe('updateHoldings state views', () => {
     search.value = 'zzz';
     updateHoldings(POSITIONS);
     search.value = '';
+    updateHoldings(POSITIONS);
+    expect(describeRows()).toContain('CCC');
+    expect(document.querySelector('.state-view')).toBeNull();
+  });
+});
+
+describe('holdings accessibility and sort controls', () => {
+  beforeEach(() => {
+    document.body.innerHTML = MARKUP;
+    store.set('currentPositions', POSITIONS);
+    store.set('selectedAccounts', new Set());
+    store.set('currentSort', { field: 'ticker', direction: 'asc' });
+    mockStorage(new Map());
+    setHoldingsGrouping(true);
+  });
+
+  it('gives rows and cells explicit roles and the group name a heading role', () => {
+    updateHoldings(POSITIONS);
+    const rows = bodyRows();
+    expect(rows.every((r) => r.getAttribute('role') === 'row')).toBe(true);
+    const dataRow = rows.find((r) => !r.classList.contains('holdings-group-row'))!;
+    expect(
+      Array.from(dataRow.querySelectorAll('td')).every((c) => c.getAttribute('role') === 'cell')
+    ).toBe(true);
+    expect(dataRow.querySelector('td')!.dataset.label).toBe('Ticker');
+    expect(Array.from(dataRow.querySelectorAll('td')).map((c) => c.dataset.label)).toContain(
+      'Gain/Loss'
+    );
+    const name = document.querySelector('.holdings-group-name')!;
+    expect(name.getAttribute('role')).toBe('heading');
+    expect(name.getAttribute('aria-level')).toBe('3');
+  });
+
+  it('flags the table as grouped (Account column hidden by CSS) and clears it when ungrouped', () => {
+    const table = document.getElementById('holdings-table')!;
+    updateHoldings(POSITIONS);
+    expect(table.classList.contains('holdings-grouped')).toBe(true);
+    setHoldingsGrouping(false);
+    expect(table.classList.contains('holdings-grouped')).toBe(false);
+  });
+
+  it('offers Account in the sort select only while ungrouped', () => {
+    const field = document.getElementById('holdings-sort-field') as HTMLSelectElement;
+    const account = Array.from(field.options).find((o) => o.value === 'account')!;
+    updateHoldings(POSITIONS);
+    expect(account.hidden).toBe(true);
+    expect(account.disabled).toBe(true);
+    setHoldingsGrouping(false);
+    expect(account.hidden).toBe(false);
+    expect(account.disabled).toBe(false);
+  });
+
+  it('drives the sort from the phone selects and reflects the store', () => {
+    initHoldings();
+    const field = document.getElementById('holdings-sort-field') as HTMLSelectElement;
+    const dir = document.getElementById('holdings-sort-direction') as HTMLSelectElement;
+    setHoldingsGrouping(false);
+
+    field.value = 'value';
+    dir.value = 'desc';
+    field.dispatchEvent(new Event('change'));
+    expect(store.get('currentSort')).toEqual({ field: 'value', direction: 'desc' });
+    expect(describeRows()).toEqual(
+      ['CCC', 'BBB', 'AAA', 'EEE', 'DDD'].sort((a, b) => {
+        const v: Record<string, number> = { CCC: 9000, BBB: 3000, AAA: 1000, EEE: 1000, DDD: 500 };
+        return v[b]! - v[a]!;
+      })
+    );
+
+    dir.value = 'asc';
+    dir.dispatchEvent(new Event('change'));
+    expect(store.get('currentSort').direction).toBe('asc');
+    expect(describeRows()[0]).toBe('DDD');
+
+    setHoldingsSort('ticker', 'desc');
+    expect(field.value).toBe('ticker');
+    expect(dir.value).toBe('desc');
+    expect(describeRows()[0]).toBe('EEE');
+  });
+
+  it('labels a group without cost basis instead of a bare dash', () => {
+    updateHoldings(POSITIONS);
+    const row = bodyRows().find(
+      (r) => r.classList.contains('holdings-group-row') && r.textContent?.includes('401k')
+    )!;
+    expect(row.textContent).toContain('No cost basis');
+  });
+
+  it('brings the rows back after the No holdings yet state', () => {
+    updateHoldings([]);
+    expect(document.querySelector('.table-container')!.textContent).toContain('No holdings yet');
     updateHoldings(POSITIONS);
     expect(describeRows()).toContain('CCC');
     expect(document.querySelector('.state-view')).toBeNull();

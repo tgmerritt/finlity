@@ -1041,9 +1041,8 @@ export function initDashboard(): void {
     document.getElementById('update-prices-btn')) as HTMLButtonElement | null;
   if (forceRefreshBtn) {
     forceRefreshBtn.addEventListener('click', () => {
-      withSubmitGuard(forceRefreshBtn, 'Updating...', () => refreshPrices(true)).catch(
-        console.error
-      );
+      // Empty label: keep the icon and label markup (the guard still disables the button).
+      withSubmitGuard(forceRefreshBtn, '', () => refreshPrices(true)).catch(console.error);
     });
   }
 

@@ -247,19 +247,24 @@ def main() -> int:
         for width in WIDTHS:
             for theme in THEMES:
                 page = browser.new_page(viewport={"width": width, "height": 900})
+
+                def save_dashboard_shot(page: Page = page, width: int = width, theme: str = theme) -> None:
+                    if args.screenshots:
+                        args.screenshots.mkdir(parents=True, exist_ok=True)
+                        page.screenshot(path=str(args.screenshots / f"dashboard-{width}-{theme}.png"), full_page=True)
+
                 try:
                     open_dashboard(page, args.base_url, theme, hosted=args.hosted)
                 except PlaywrightTimeoutError:
                     failures.append(f"{width}px {theme}: dashboard did not finish loading")
+                    save_dashboard_shot()
                 else:
                     for problem in page.evaluate(CHECKS_JS):
                         failures.append(f"{width}px {theme}: {problem}")
                     if width == 390:
                         for problem in page.evaluate(DRAWER_JS):
                             failures.append(f"{width}px {theme}: {problem}")
-                    if args.screenshots:
-                        args.screenshots.mkdir(parents=True, exist_ok=True)
-                        page.screenshot(path=str(args.screenshots / f"dashboard-{width}-{theme}.png"), full_page=True)
+                    save_dashboard_shot()
                     for tab in extra_tabs:
                         try:
                             open_tab(page, tab, width)
