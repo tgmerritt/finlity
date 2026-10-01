@@ -7393,3 +7393,62 @@ html {
         bottom: calc(var(--bottom-tabbar-height) + env(safe-area-inset-bottom) + 12px);
     }
 }
+
+/* Holdings: account group headers and the "Group by account" toggle */
+.holdings-group-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+/* The extra toggle makes the header actions wrap; keep the title level with
+   the first row of controls and the controls on the right. */
+#tab-holdings > .card:first-child .card-header {
+    align-items: flex-start;
+    gap: 16px;
+}
+
+#tab-holdings > .card:first-child .card-header h3 {
+    padding-top: 8px;
+}
+
+#tab-holdings > .card:first-child .card-actions {
+    justify-content: flex-end;
+}
+
+#holdings-table tr.holdings-group-row td {
+    padding: 10px 16px;
+    background: var(--color-bg-spotlight);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 13px;
+}
+
+#holdings-table tr.holdings-group-row:hover td {
+    background: var(--color-bg-spotlight);
+}
+
+.holdings-group-name {
+    margin-right: 12px;
+    color: var(--color-text-primary);
+}
+
+.holdings-group-count {
+    margin-right: 12px;
+    color: var(--color-text-tertiary);
+    font-size: 12px;
+}
+
+.holdings-group-value,
+.holdings-group-gl {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    margin-right: 12px;
+}
+
+.holdings-group-value {
+    font-weight: 600;
+}

@@ -171,6 +171,122 @@ export function handleAccountFilterChange(): void {
   updateHoldings(positions);
 }
 
+const GROUPING_STORAGE_KEY = 'finlity.holdings.groupByAccount';
+const HOLDINGS_COLUMN_COUNT = 8;
+
+// Used only when localStorage is unreadable, so the toggle still works per page load.
+let groupingWhenStorageFails = true;
+
+/**
+ * Whether holdings are grouped by account. On by default; storage failures
+ * (private mode, blocked storage) fall back to the default.
+ */
+export function isHoldingsGroupingEnabled(): boolean {
+  try {
+    return window.localStorage.getItem(GROUPING_STORAGE_KEY) !== 'off';
+  } catch {
+    return groupingWhenStorageFails;
+  }
+}
+
+/**
+ * Turn account grouping on or off, remember the choice, and re-render.
+ */
+export function setHoldingsGrouping(enabled: boolean): void {
+  groupingWhenStorageFails = enabled;
+  try {
+    window.localStorage.setItem(GROUPING_STORAGE_KEY, enabled ? 'on' : 'off');
+  } catch {
+    // Not persisted; the choice still applies until the page reloads.
+  }
+  updateHoldings(store.get('currentPositions'));
+}
+
+export interface AccountGroup {
+  account: string;
+  positions: DashboardPosition[];
+  count: number;
+  value: number;
+  /** Sum of gain or loss over positions with a cost basis; null when none has one. */
+  gainLoss: number | null;
+  /** Gain or loss as a percent of that cost basis; null when unavailable. */
+  gainLossPct: number | null;
+}
+
+/**
+ * Group positions by account, largest account value first. Positions keep
+ * their incoming order within each group, so pass them already sorted.
+ */
+export function groupPositionsByAccount(positions: DashboardPosition[]): AccountGroup[] {
+  const byAccount = new Map<string, DashboardPosition[]>();
+  positions.forEach((pos) => {
+    const list = byAccount.get(pos.account);
+    if (list) list.push(pos);
+    else byAccount.set(pos.account, [pos]);
+  });
+
+  const groups = Array.from(byAccount, ([account, list]): AccountGroup => {
+    let value = 0;
+    let gainLoss = 0;
+    let costBasis = 0;
+    let hasCost = false;
+    list.forEach((p) => {
+      value += p.value || 0;
+      if (p.cost_basis) {
+        hasCost = true;
+        gainLoss += p.value - p.cost_basis;
+        costBasis += p.cost_basis;
+      }
+    });
+    return {
+      account,
+      positions: list,
+      count: list.length,
+      value,
+      gainLoss: hasCost ? gainLoss : null,
+      gainLossPct: hasCost && costBasis ? (gainLoss / costBasis) * 100 : null,
+    };
+  });
+  return groups.sort((a, b) => b.value - a.value);
+}
+
+/**
+ * Build the account header row: name, position count, value, gain or loss.
+ */
+function createGroupHeaderRow(group: AccountGroup): HTMLTableRowElement {
+  const row = document.createElement('tr');
+  row.className = 'holdings-group-row';
+  row.dataset.account = group.account;
+
+  const cell = document.createElement('td');
+  cell.colSpan = HOLDINGS_COLUMN_COUNT;
+
+  const name = document.createElement('strong');
+  name.className = 'holdings-group-name';
+  name.textContent = group.account;
+
+  const count = document.createElement('span');
+  count.className = 'holdings-group-count';
+  count.textContent = `${group.count} ${group.count === 1 ? 'position' : 'positions'}`;
+
+  const value = document.createElement('span');
+  value.className = 'holdings-group-value';
+  value.textContent = formatCurrency(group.value);
+
+  const gl = document.createElement('span');
+  if (group.gainLoss !== null) {
+    gl.className = `holdings-group-gl ${group.gainLoss >= 0 ? 'text-success' : 'text-error'}`;
+    gl.textContent = `${formatCurrency(group.gainLoss)} (${formatPercent(group.gainLossPct)})`;
+  } else {
+    gl.className = 'holdings-group-gl';
+    gl.textContent = '-';
+  }
+
+  cell.append(name, count, value, gl);
+  row.appendChild(cell);
+  return row;
+}
+
 /**
  * Update holdings table with positions.
  */
@@ -189,6 +305,10 @@ export function updateHoldings(positions: DashboardPosition[]): void {
 
   // Clear existing rows
   tbody.textContent = '';
+
+  const grouped = isHoldingsGroupingEnabled();
+  const groupToggle = document.getElementById('holdings-group-toggle') as HTMLInputElement | null;
+  if (groupToggle) groupToggle.checked = grouped;
 
   // Apply sorting
   const currentSort = store.get('currentSort');
@@ -213,6 +333,9 @@ export function updateHoldings(positions: DashboardPosition[]): void {
         },
       },
     });
+    // setStateView wipes the container; put the (hidden) table back so the
+    // next render can find it and restore the rows.
+    tableContainer.appendChild(table);
     updateSortIndicators();
     return;
   }
@@ -240,6 +363,9 @@ export function updateHoldings(positions: DashboardPosition[]): void {
         },
       },
     });
+    // setStateView wipes the container; put the (hidden) table back so the
+    // next render can find it and restore the rows.
+    tableContainer.appendChild(table);
     updateSortIndicators();
     return;
   }
@@ -248,128 +374,147 @@ export function updateHoldings(positions: DashboardPosition[]): void {
   table.style.display = '';
   clearStateView(tableContainer);
 
-  filtered.forEach((pos) => {
-    const gainLoss = pos.cost_basis ? pos.value - pos.cost_basis : null;
-    const gainLossPct = pos.cost_basis
-      ? ((pos.value - pos.cost_basis) / pos.cost_basis) * 100
-      : null;
-
-    const row = document.createElement('tr');
-    row.dataset.account = pos.account;
-
-    // Ticker cell
-    const tickerCell = document.createElement('td');
-    const tickerStrong = document.createElement('strong');
-    tickerStrong.textContent = pos.ticker;
-    tickerCell.appendChild(tickerStrong);
-    row.appendChild(tickerCell);
-
-    // Name cell
-    const nameCell = document.createElement('td');
-    nameCell.textContent = pos.name || '-';
-    row.appendChild(nameCell);
-
-    // Account cell
-    const accountCell = document.createElement('td');
-    accountCell.textContent = pos.account;
-    row.appendChild(accountCell);
-
-    // Shares cell
-    const sharesCell = document.createElement('td');
-    sharesCell.className = 'text-right';
-    sharesCell.textContent = formatShares(pos.shares);
-    row.appendChild(sharesCell);
-
-    // Price cell
-    const priceCell = document.createElement('td');
-    priceCell.className = 'text-right';
-    const isRealEstate = pos.position_type === 'real_estate';
-    if (isRealEstate) {
-      if (pos.cost_basis) {
-        priceCell.textContent = formatCurrency(pos.cost_basis);
-      } else {
-        const warning = document.createElement('span');
-        warning.className = 'text-warning';
-        warning.textContent = '$0.00';
-        priceCell.appendChild(warning);
-      }
-    } else {
-      if (pos.price) {
-        priceCell.textContent = formatPrice(pos.price, pos.ticker);
-      } else {
-        const warning = document.createElement('span');
-        warning.className = 'text-warning';
-        warning.textContent = '$0.00';
-        priceCell.appendChild(warning);
-      }
-    }
-    row.appendChild(priceCell);
-
-    // Value cell with optional APY indicator
-    const valueCell = document.createElement('td');
-    valueCell.className = 'text-right';
-    if (pos.interest_rate && pos.interest_rate > 0) {
-      const apyPct = (pos.interest_rate * 100).toFixed(2);
-      const span = document.createElement('span');
-      span.title = `Includes accrued interest at ${apyPct}% APY`;
-      span.textContent = `${formatCurrency(pos.value)} 📈`;
-      valueCell.appendChild(span);
-    } else {
-      valueCell.textContent = formatCurrency(pos.value);
-    }
-    row.appendChild(valueCell);
-
-    // Gain/Loss cell
-    const gainLossCell = document.createElement('td');
-    gainLossCell.className = `text-right ${gainLoss !== null && gainLoss >= 0 ? 'text-success' : 'text-error'}`;
-    if (gainLoss !== null) {
-      gainLossCell.textContent = `${formatCurrency(gainLoss)} (${formatPercent(gainLossPct)})`;
-    } else {
-      gainLossCell.textContent = '-';
-    }
-    row.appendChild(gainLossCell);
-
-    // Actions cell — inline icon buttons (edit / delete)
-    const actionsCell = document.createElement('td');
-    actionsCell.className = 'actions-cell';
-
-    const editBtn = document.createElement('button');
-    editBtn.type = 'button';
-    editBtn.className = 'icon-btn icon-btn-edit';
-    editBtn.title = 'Edit position';
-    editBtn.setAttribute('aria-label', 'Edit position');
-    editBtn.appendChild(createEditIcon());
-    editBtn.addEventListener('click', () => {
-      showEditPositionModal(
-        pos.id,
-        pos.ticker,
-        pos.shares,
-        pos.price || 0,
-        pos.cost_basis || 0,
-        pos.position_type || 'equity',
-        pos.interest_rate || null,
-        pos.purchase_date || '',
-        pos.maturity_date || ''
-      );
+  table.classList.toggle('holdings-grouped', grouped);
+  if (grouped) {
+    groupPositionsByAccount(filtered).forEach((group) => {
+      tbody.appendChild(createGroupHeaderRow(group));
+      group.positions.forEach((pos) => tbody.appendChild(createPositionRow(pos)));
     });
-    actionsCell.appendChild(editBtn);
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'icon-btn icon-btn-delete';
-    deleteBtn.title = 'Delete position';
-    deleteBtn.setAttribute('aria-label', 'Delete position');
-    deleteBtn.appendChild(createTrashIcon());
-    deleteBtn.addEventListener('click', () => deletePosition(pos.id));
-    actionsCell.appendChild(deleteBtn);
-
-    row.appendChild(actionsCell);
-
-    tbody.appendChild(row);
-  });
+  } else {
+    filtered.forEach((pos) => tbody.appendChild(createPositionRow(pos)));
+  }
 
   // Update sort indicators
   updateSortIndicators();
+}
+
+/**
+ * Build one equity position row (cells, inline edit and delete buttons).
+ */
+function createPositionRow(pos: DashboardPosition): HTMLTableRowElement {
+  const gainLoss = pos.cost_basis ? pos.value - pos.cost_basis : null;
+  const gainLossPct = pos.cost_basis ? ((pos.value - pos.cost_basis) / pos.cost_basis) * 100 : null;
+
+  const row = document.createElement('tr');
+  row.dataset.account = pos.account;
+
+  // Ticker cell
+  const tickerCell = document.createElement('td');
+  const tickerStrong = document.createElement('strong');
+  tickerStrong.textContent = pos.ticker;
+  tickerCell.appendChild(tickerStrong);
+  tickerCell.dataset.label = 'Ticker';
+  row.appendChild(tickerCell);
+
+  // Name cell
+  const nameCell = document.createElement('td');
+  nameCell.textContent = pos.name || '-';
+  nameCell.dataset.label = 'Name';
+  row.appendChild(nameCell);
+
+  // Account cell
+  const accountCell = document.createElement('td');
+  accountCell.textContent = pos.account;
+  accountCell.dataset.label = 'Account';
+  row.appendChild(accountCell);
+
+  // Shares cell
+  const sharesCell = document.createElement('td');
+  sharesCell.className = 'text-right';
+  sharesCell.textContent = formatShares(pos.shares);
+  sharesCell.dataset.label = 'Shares';
+  row.appendChild(sharesCell);
+
+  // Price cell
+  const priceCell = document.createElement('td');
+  priceCell.className = 'text-right';
+  const isRealEstate = pos.position_type === 'real_estate';
+  if (isRealEstate) {
+    if (pos.cost_basis) {
+      priceCell.textContent = formatCurrency(pos.cost_basis);
+    } else {
+      const warning = document.createElement('span');
+      warning.className = 'text-warning';
+      warning.textContent = '$0.00';
+      priceCell.appendChild(warning);
+    }
+  } else {
+    if (pos.price) {
+      priceCell.textContent = formatPrice(pos.price, pos.ticker);
+    } else {
+      const warning = document.createElement('span');
+      warning.className = 'text-warning';
+      warning.textContent = '$0.00';
+      priceCell.appendChild(warning);
+    }
+  }
+  priceCell.dataset.label = 'Price';
+  row.appendChild(priceCell);
+
+  // Value cell with optional APY indicator
+  const valueCell = document.createElement('td');
+  valueCell.className = 'text-right';
+  if (pos.interest_rate && pos.interest_rate > 0) {
+    const apyPct = (pos.interest_rate * 100).toFixed(2);
+    const span = document.createElement('span');
+    span.title = `Includes accrued interest at ${apyPct}% APY`;
+    span.textContent = `${formatCurrency(pos.value)} 📈`;
+    valueCell.appendChild(span);
+  } else {
+    valueCell.textContent = formatCurrency(pos.value);
+  }
+  valueCell.dataset.label = 'Value';
+  row.appendChild(valueCell);
+
+  // Gain/Loss cell
+  const gainLossCell = document.createElement('td');
+  gainLossCell.className = `text-right ${gainLoss !== null && gainLoss >= 0 ? 'text-success' : 'text-error'}`;
+  if (gainLoss !== null) {
+    gainLossCell.textContent = `${formatCurrency(gainLoss)} (${formatPercent(gainLossPct)})`;
+  } else {
+    gainLossCell.textContent = '-';
+  }
+  gainLossCell.dataset.label = 'Gain/Loss';
+  row.appendChild(gainLossCell);
+
+  // Actions cell — inline icon buttons (edit / delete)
+  const actionsCell = document.createElement('td');
+  actionsCell.className = 'actions-cell';
+  actionsCell.dataset.label = 'Actions';
+
+  const editBtn = document.createElement('button');
+  editBtn.type = 'button';
+  editBtn.className = 'icon-btn icon-btn-edit';
+  editBtn.title = 'Edit position';
+  editBtn.setAttribute('aria-label', 'Edit position');
+  editBtn.appendChild(createEditIcon());
+  editBtn.addEventListener('click', () => {
+    showEditPositionModal(
+      pos.id,
+      pos.ticker,
+      pos.shares,
+      pos.price || 0,
+      pos.cost_basis || 0,
+      pos.position_type || 'equity',
+      pos.interest_rate || null,
+      pos.purchase_date || '',
+      pos.maturity_date || ''
+    );
+  });
+  actionsCell.appendChild(editBtn);
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.className = 'icon-btn icon-btn-delete';
+  deleteBtn.title = 'Delete position';
+  deleteBtn.setAttribute('aria-label', 'Delete position');
+  deleteBtn.appendChild(createTrashIcon());
+  deleteBtn.addEventListener('click', () => deletePosition(pos.id));
+  actionsCell.appendChild(deleteBtn);
+
+  row.appendChild(actionsCell);
+
+  return row;
 }
 
 /**
@@ -1256,6 +1401,10 @@ export function initHoldings(): void {
   if (searchInput) {
     searchInput.addEventListener('input', filterHoldings);
   }
+
+  // Group-by-account toggle
+  const groupToggle = document.getElementById('holdings-group-toggle') as HTMLInputElement | null;
+  groupToggle?.addEventListener('change', () => setHoldingsGrouping(groupToggle.checked));
 
   // Sort handlers for table headers
   document.querySelectorAll('#holdings-table th.sortable').forEach((th) => {
