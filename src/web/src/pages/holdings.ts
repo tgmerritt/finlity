@@ -477,7 +477,7 @@ function createPositionRow(pos: DashboardPosition): HTMLTableRowElement {
   gainLossCell.dataset.label = 'Gain/Loss';
   row.appendChild(gainLossCell);
 
-  // Actions cell — inline icon buttons (edit / delete)
+  // Actions cell: inline icon buttons (edit / delete)
   const actionsCell = document.createElement('td');
   actionsCell.className = 'actions-cell';
   actionsCell.dataset.label = 'Actions';
