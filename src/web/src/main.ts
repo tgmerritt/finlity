@@ -467,20 +467,6 @@ function applyLocalModeUiRestrictions(): void {
 }
 
 /**
- * Initialize collapsible config panels.
- */
-function initConfigPanels(): void {
-  document.querySelectorAll('.config-header').forEach((header) => {
-    header.addEventListener('click', () => {
-      const panel = header.closest('.config-panel');
-      if (panel) {
-        panel.classList.toggle('expanded');
-      }
-    });
-  });
-}
-
-/**
  * Initialize the application.
  */
 async function init(): Promise<void> {
@@ -496,7 +482,6 @@ async function init(): Promise<void> {
   initModal();
   initSidebarState();
   initStorageMode();
-  initConfigPanels();
 
   // Initialize session (resolves dataMode: 'server' unchanged v1 behavior,
   // or 'local' for hosted/multi-user mode — see src/state/session.ts).

@@ -19,9 +19,7 @@ import {
   type TaxBurdenChartData,
   type TaxWithdrawalYear,
 } from '@/charts/projections';
-
-/** Phone breakpoint, matching the 768px rules in style.css. */
-const PHONE_MAX_WIDTH = 768;
+import { PHONE_MAX_WIDTH } from '@/charts/plotly-utils';
 
 /**
  * Retirement metrics response from API.

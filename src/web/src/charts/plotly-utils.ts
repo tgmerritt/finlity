@@ -135,8 +135,8 @@ export function getChartConfig(): Partial<PlotlyConfig> {
   };
 }
 
-/** Viewport width at or below which legends move below the plot. */
-const PHONE_MAX_WIDTH = 768;
+/** Phone breakpoint (px), matching the 768px rules in style.css. Legends move below the plot at or under it. */
+export const PHONE_MAX_WIDTH = 768;
 
 /** Extra bottom margin (px) reserved for a legend placed below the plot. */
 const PHONE_LEGEND_MARGIN = 70;

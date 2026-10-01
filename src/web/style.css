@@ -7726,25 +7726,51 @@ html {
     }
 }
 
-/* Projections on phones: inputs first, results below (order, no DOM copy).
-   showTab() sets an inline display, so the flex layout needs !important and a
-   guard so a hidden tab stays hidden. */
+/* Projections on phones: inputs first, results below (order, no DOM copy) */
+.projections-body {
+    display: block;
+}
+
 @media (max-width: 768px) {
-    #tab-projections:not([style*="display: none"]) {
-        display: flex !important;
+    .projections-body {
+        display: flex;
         flex-direction: column;
     }
 
-    #tab-projections > #projection-form {
+    .projections-body > #projection-form {
         order: 1;
     }
 
-    #tab-projections > #projection-results {
+    .projections-body > #projection-results {
         order: 2;
         margin-bottom: 24px;
     }
 
-    #tab-projections > .card:not(#projection-results) {
+    .projections-body > .card:not(#projection-results) {
         order: 3;
+    }
+
+    /* Compact retirement tiles: two columns, no icons, fifth tile full width */
+    #retirement-metrics-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 16px;
+    }
+
+    #retirement-metrics-row .stat-icon {
+        display: none;
+    }
+
+    #retirement-metrics-row .stat-card {
+        padding: 12px;
+        gap: 6px;
+    }
+
+    #retirement-metrics-row .stat-card:nth-child(5) {
+        grid-column: 1 / -1;
+    }
+
+    #retirement-metrics-row .stat-value {
+        font-size: 17px;
     }
 }
