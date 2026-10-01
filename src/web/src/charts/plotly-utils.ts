@@ -135,6 +135,43 @@ export function getChartConfig(): Partial<PlotlyConfig> {
   };
 }
 
+/** Viewport width at or below which legends move below the plot. */
+const PHONE_MAX_WIDTH = 768;
+
+/** Extra bottom margin (px) reserved for a legend placed below the plot. */
+const PHONE_LEGEND_MARGIN = 70;
+
+/**
+ * On phones, place a shown legend horizontally below the plot, left aligned,
+ * and grow the bottom margin to fit. Returns the same layout object when the
+ * viewport is wider than a phone or the chart shows no legend.
+ * @param layout - Chart layout (before merging with the base layout)
+ * @param viewportWidth - Current viewport width in px
+ */
+export function phoneLegendLayout(
+  layout: Partial<PlotlyLayout>,
+  viewportWidth: number
+): Partial<PlotlyLayout> {
+  if (viewportWidth > PHONE_MAX_WIDTH) return layout;
+  if (layout.showlegend === false) return layout;
+  if (layout.showlegend !== true && !layout.legend) return layout;
+
+  const baseBottom = layout.margin?.b ?? getBaseLayout().margin?.b ?? 40;
+  return {
+    ...layout,
+    showlegend: true,
+    legend: {
+      ...(layout.legend as Record<string, unknown> | undefined),
+      orientation: 'h',
+      x: 0,
+      xanchor: 'left',
+      y: -0.35,
+      yanchor: 'top',
+    },
+    margin: { ...getBaseLayout().margin, ...layout.margin, b: baseBottom + PHONE_LEGEND_MARGIN },
+  };
+}
+
 /**
  * Create or update a Plotly chart.
  * @param elementId - DOM element ID
@@ -156,7 +193,7 @@ export async function renderChart(
 
   const mergedLayout = {
     ...getBaseLayout(),
-    ...layout,
+    ...phoneLegendLayout(layout, window.innerWidth),
   };
 
   const mergedConfig = {
@@ -179,7 +216,10 @@ export async function updateChartLayout(
   const element = document.getElementById(elementId);
   if (!element) return;
 
+  // The margin is chart specific (and grows on phones to fit a legend below
+  // the plot), so a theme change must not reset it to the base value.
   const baseUpdates = getBaseLayout();
+  delete baseUpdates.margin;
   await Plotly.relayout(elementId, { ...baseUpdates, ...layoutUpdates });
 }
 
