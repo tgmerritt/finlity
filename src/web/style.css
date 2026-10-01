@@ -5902,7 +5902,8 @@ th.sortable.sort-desc .sort-icon::after {
 /* Small button variant */
 .btn-sm {
     padding: 0.375rem 0.75rem;
-    font-size: 0.75rem;
+    --btn-font-size: 0.75rem;
+    font-size: var(--btn-font-size);
 }
 
 /* File upload label styling */
@@ -7698,5 +7699,29 @@ html {
 
     .holdings-actions-row .btn-primary {
         margin-left: 0;
+    }
+}
+
+/* Update Prices: show "Updating..." (desktop) and spin the icon while the
+   refresh runs. The label text is swapped in CSS so the icon markup survives.
+   On phones the label stays visually hidden (icon-only), so only the spin shows. */
+@media (min-width: 769px) {
+    #update-prices-btn[aria-busy="true"] .btn-label {
+        font-size: 0;
+    }
+
+    #update-prices-btn[aria-busy="true"] .btn-label::after {
+        content: "Updating...";
+        font-size: var(--btn-font-size, 0.75rem);
+    }
+}
+
+#update-prices-btn[aria-busy="true"] svg {
+    animation: spin 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #update-prices-btn[aria-busy="true"] svg {
+        animation: none;
     }
 }
