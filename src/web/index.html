@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Finlity - Financial Literacy Dashboard</title>
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
@@ -34,7 +34,7 @@
 
     <div class="app-layout">
         <!-- Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="app-sidebar">
             <div class="logo">
                 <img src="/static/images/finlity-logo.png" alt="Finlity - it's financial literacy" title="Finlity - it's financial literacy" width="32" height="32">
                 <span>Finlity</span>
@@ -74,44 +74,7 @@
                 </div>
             </div>
 
-            <!-- Portfolio View Selector -->
-            <div class="view-selector">
-                <label class="view-selector-label">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                        <circle cx="12" cy="12" r="3"></circle>
-                    </svg>
-                    View
-                </label>
-                <select id="view-selector" onchange="changeView(this.value)">
-                    <option value="">All Accounts</option>
-                </select>
-            </div>
-
-            <!-- Entity Selector (for per-person retirement metrics) -->
-            <div class="view-selector entity-selector">
-                <label class="view-selector-label">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="9" cy="7" r="4"></circle>
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                    </svg>
-                    Person
-                </label>
-                <select id="entity-selector" onchange="changeEntity(this.value)">
-                    <option value="">Household (All)</option>
-                </select>
-            </div>
-
             <nav class="sidebar-nav">
-                <button class="nav-item" onclick="showTab('welcome')" data-tab="welcome">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
-                    </svg>
-                    <span>Welcome</span>
-                </button>
                 <button class="nav-item active" onclick="showTab('dashboard')" data-tab="dashboard">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="9"></rect>
@@ -204,13 +167,6 @@
         <main class="main-content">
             <!-- Mobile Header (visible only on small screens) -->
             <header class="mobile-header">
-                <button class="mobile-menu-toggle" onclick="toggleMobileNav()" aria-label="Toggle navigation">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="3" y1="6" x2="21" y2="6"></line>
-                        <line x1="3" y1="12" x2="21" y2="12"></line>
-                        <line x1="3" y1="18" x2="21" y2="18"></line>
-                    </svg>
-                </button>
                 <div class="mobile-logo">
                     <img src="/static/images/finlity-logo.png" alt="Finlity" width="28" height="28">
                     <span>Finlity</span>
@@ -234,179 +190,64 @@
                 </button>
             </header>
 
-            <!-- Mobile Nav Overlay -->
-            <div class="mobile-nav-overlay" onclick="toggleMobileNav()"></div>
-
             <!-- Demo Mode Banner (hidden by default) -->
             <div id="demo-mode-banner" class="demo-mode-banner hidden">
-                <span class="demo-icon">🎭</span>
-                <span>DEMO MODE - Using fake portfolio data</span>
-                <button onclick="window.location.href='#settings'" class="demo-settings-link">Settings</button>
+                <span class="demo-banner-text">Demo mode: sample data</span>
+                <button type="button" class="demo-banner-link" id="demo-banner-settings">Settings</button>
+                <button type="button" class="demo-banner-dismiss" id="demo-banner-dismiss" aria-label="Dismiss demo banner">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+                </button>
             </div>
 
-            <!-- Welcome Tab -->
-            <div id="tab-welcome" class="tab-content">
-                <div class="welcome-page">
-                    <!-- Hero Section -->
-                    <section class="welcome-hero">
-                        <div class="welcome-hero-content">
-                            <div class="welcome-logo">
-                                <img src="/static/images/finlity-logo-medium.png" alt="Finlity - it's financial literacy" title="Finlity - it's financial literacy" width="64" height="64">
-                            </div>
-                            <h1 class="welcome-headline">Financial Literacy, Illuminated.</h1>
-                            <p class="welcome-subheadline">Stop guessing. Start projecting. The personal finance dashboard that answers: <em>"Will my money last?"</em></p>
-                            <div class="welcome-cta-group">
-                                <button class="btn btn-primary btn-lg" onclick="startTour()">
-                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M5 12h14M12 5l7 7-7 7"></path>
-                                    </svg>
-                                    Get Started
-                                </button>
-                                <button class="btn btn-default btn-lg" onclick="startDemoMode()">
-                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                                    </svg>
-                                    Explore Demo
-                                </button>
-                            </div>
-                        </div>
-                        <div class="welcome-hero-image">
-                            <div class="welcome-hero-glow"></div>
-                            <img src="/static/images/hero-dashboard.png" alt="Finlity Dashboard Preview" class="welcome-screenshot" />
-                        </div>
-                    </section>
-
-                    <!-- Intro Video Section -->
-                    <section class="welcome-intro-video">
-                        <div class="intro-video-header">
-                            <h2 class="intro-video-title">Watch the Introduction</h2>
-                            <p class="intro-video-subtitle">A quick walkthrough to get you started with Finlity</p>
-                        </div>
-                        <div class="intro-video-container">
-                            <iframe
-                                src="https://www.youtube.com/embed/ns-TlV9d0-I"
-                                title="Finlity Introduction Video"
-                                frameborder="0"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                referrerpolicy="strict-origin-when-cross-origin"
-                                allowfullscreen>
-                            </iframe>
-                        </div>
-                    </section>
-
-                    <!-- Social Media Feed - Financial Literacy Carousel -->
-                    <section class="welcome-social-feed">
-                        <div class="social-feed-header">
-                            <h2 class="social-feed-title">Learn From The Best</h2>
-                            <p class="social-feed-subtitle">Curated financial wisdom from trusted creators</p>
-                        </div>
-                        <div class="social-feed-carousel" id="social-feed-carousel">
-                            <div class="carousel-track" id="carousel-track" aria-live="polite" aria-label="Financial literacy content carousel">
-                                <!-- Cards injected dynamically by social-feed.ts -->
-                            </div>
-                        </div>
-                        <div class="social-feed-controls">
-                            <button class="carousel-control prev" id="carousel-prev" aria-label="Previous">
-                                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polyline points="15 18 9 12 15 6"></polyline>
-                                </svg>
-                            </button>
-                            <button class="carousel-control next" id="carousel-next" aria-label="Next">
-                                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polyline points="9 18 15 12 9 6"></polyline>
-                                </svg>
-                            </button>
-                        </div>
-                    </section>
-
-                    <!-- Features Section -->
-                    <section class="welcome-features">
-                        <h2 class="welcome-section-title">Your Financial Command Center</h2>
-                        <div class="welcome-features-grid">
-                            <!-- Feature 1: Track Everything -->
-                            <div class="feature-tile" onclick="completeWelcome(); showTab('holdings');">
-                                <div class="feature-icon blue">
-                                    <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <path d="M12 6v6l4 2"></path>
-                                    </svg>
-                                </div>
-                                <h3 class="feature-title">Track Everything</h3>
-                                <p class="feature-description">Import from any brokerage. See all accounts—401k, IRA, taxable, 529, real estate—in one unified view.</p>
-                                <img src="/static/images/dashboard-charts.png" alt="Portfolio Charts" class="feature-image" />
-                            </div>
-
-                            <!-- Feature 2: Know Your Cash Flow -->
-                            <div class="feature-tile" onclick="completeWelcome(); showTab('budget');">
-                                <div class="feature-icon green">
-                                    <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="12" y1="1" x2="12" y2="23"></line>
-                                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                                    </svg>
-                                </div>
-                                <h3 class="feature-title">Know Your Cash Flow</h3>
-                                <p class="feature-description">Track income sources, paycheck deductions, expenses, and taxes. See exactly where your money flows.</p>
-                                <img src="/static/images/projections-overview.png" alt="Budget Overview" class="feature-image" />
-                            </div>
-
-                            <!-- Feature 3: See Your Future -->
-                            <div class="feature-tile" onclick="completeWelcome(); showTab('projections');">
-                                <div class="feature-icon purple">
-                                    <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"></polyline>
-                                    </svg>
-                                </div>
-                                <h3 class="feature-title">See Your Future</h3>
-                                <p class="feature-description">Run thousands of simulations to answer the ultimate question: Will my money last through retirement?</p>
-                                <img src="/static/images/monte-carlo-results.png" alt="Monte Carlo Simulation" class="feature-image" />
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- Trust Strip -->
-                    <section class="welcome-trust">
-                        <div class="trust-item">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            <div class="page-toolbar" id="page-toolbar">
+                <h1 class="page-title" id="page-title">Dashboard</h1>
+                <div class="page-filters">
+                    <div class="view-selector">
+                        <label class="view-selector-label" for="view-selector">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
                             </svg>
-                            <span>100% Local</span>
-                            <small>Your data never leaves your device</small>
-                        </div>
-                        <div class="trust-item">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                                <circle cx="12" cy="7" r="4"></circle>
-                            </svg>
-                            <span>No Account Required</span>
-                            <small>Start immediately</small>
-                        </div>
-                        <div class="trust-item">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                            </svg>
-                            <span>Bank-Level Privacy</span>
-                            <small>You control everything</small>
-                        </div>
-                    </section>
+                            View
+                        </label>
+                        <select id="view-selector" onchange="changeView(this.value)">
+                            <option value="">All Accounts</option>
+                        </select>
+                    </div>
 
-                    <!-- Final CTA -->
-                    <section class="welcome-final-cta">
-                        <h2>Ready to take control of your financial future?</h2>
-                        <div class="welcome-cta-group">
-                            <button class="btn btn-primary btn-lg" onclick="startTour()">
-                                Create Your Profile
-                            </button>
-                            <button class="btn btn-link" onclick="startDemoMode()">
-                                or continue with Demo Mode
-                            </button>
-                        </div>
-                    </section>
+                    <!-- Entity Selector (for per-person retirement metrics) -->
+                    <div class="view-selector entity-selector">
+                        <label class="view-selector-label" for="entity-selector">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                            Person
+                        </label>
+                        <select id="entity-selector" onchange="changeEntity(this.value)">
+                            <option value="">Household (All)</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
             <!-- Dashboard Tab -->
             <div id="tab-dashboard" class="tab-content active">
+
+                <section class="card dashboard-empty hidden" id="dashboard-empty">
+                    <div class="card-body">
+                        <h2>Let's add your first account</h2>
+                        <p>Finlity works from the files your brokerage and bank already give you. Your data stays on this device.</p>
+                        <div class="dashboard-empty-actions">
+                            <button class="btn btn-primary" data-empty-action="import">Import a brokerage or bank file</button>
+                            <button class="btn btn-default" data-empty-action="add-account">Add an account</button>
+                            <button class="btn btn-default" data-empty-action="demo">Explore demo data</button>
+                        </div>
+                        <a href="#" class="dashboard-empty-tour" data-empty-action="tour">Take the tour</a>
+                    </div>
+                </section>
 
                 <section class="card dash-hero" id="dash-hero">
                     <div class="dash-hero-top">
@@ -2423,6 +2264,32 @@
                 </div>
             </div>
         </main>
+
+        <!-- Phone bottom tab bar (outside main: main-content uses contain: layout, which would trap position: fixed) -->
+        <nav class="bottom-tabbar" aria-label="Primary">
+                <button class="bottom-tab" data-tab="dashboard" onclick="showTab('dashboard')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="9"></rect>
+                        <rect x="14" y="3" width="7" height="5"></rect>
+                        <rect x="14" y="12" width="7" height="9"></rect>
+                        <rect x="3" y="16" width="7" height="5"></rect>
+                    </svg><span>Dashboard</span></button>
+                <button class="bottom-tab" data-tab="holdings" onclick="showTab('holdings')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    </svg><span>Holdings</span></button>
+                <button class="bottom-tab" data-tab="projections" onclick="showTab('projections')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"></polyline>
+                    </svg><span>Projections</span></button>
+                <button class="bottom-tab" data-tab="budget" onclick="showTab('budget')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg><span>Cash flow</span></button>
+                <button class="bottom-tab bottom-tab--more" id="bottom-tab-more" aria-expanded="false" aria-controls="app-sidebar"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg><span>More</span></button>
+        </nav>
     </div>
 
     <!-- Add Position Modal -->

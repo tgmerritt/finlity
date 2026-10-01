@@ -89,7 +89,7 @@ describe('seedDemoDatasetIfEmpty', () => {
       url.endsWith('/export') ? Promise.reject(new Error('boom')) : Promise.resolve(LOCKED)
     );
     mockQuery.mockReturnValue([{ n: 0 }]);
-    await expect(seedDemoDatasetIfEmpty()).resolves.toBeUndefined();
+    await expect(seedDemoDatasetIfEmpty()).resolves.toBe(false);
     expect(mockSave).not.toHaveBeenCalled();
   });
 });
