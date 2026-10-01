@@ -80,9 +80,7 @@ export async function startDemoMode(): Promise<void> {
     showTab('dashboard');
     document.dispatchEvent(new CustomEvent('dashboard:refreshRequested'));
 
-    // Show demo mode banner
-    const banner = getElementById<HTMLElement>('demo-mode-banner');
-    if (banner) banner.style.display = 'flex';
+    setDemoBannerVisible(true);
 
     showToast('Demo mode enabled! Explore with sample data.', 'success');
   } catch (error) {
@@ -135,10 +133,50 @@ export function updateDemoModeUI(isEnabled: boolean): void {
     statusBadge.className = `status-badge ${isEnabled ? 'active' : 'inactive'}`;
   }
 
-  // Show/hide demo mode banner — toggle class instead of inline style
-  // because style.css defines .hidden { display: none !important; }
+  setDemoBannerVisible(isEnabled);
+}
+
+const DEMO_BANNER_DISMISSED_KEY = 'demoBannerDismissed';
+
+/** Dismissal for this page load, used when sessionStorage is unavailable. */
+let demoBannerDismissedInPage = false;
+
+function isDemoBannerDismissed(): boolean {
+  if (demoBannerDismissedInPage) return true;
+  try {
+    return sessionStorage.getItem(DEMO_BANNER_DISMISSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The single place the demo banner is shown or hidden. A dismissed banner
+ * stays hidden for the browser session even when demo mode is on. Uses the
+ * .hidden class because style.css defines .hidden { display: none !important; }.
+ */
+function setDemoBannerVisible(show: boolean): void {
   const banner = getElementById<HTMLElement>('demo-mode-banner');
-  if (banner) banner.classList.toggle('hidden', !isEnabled);
+  if (banner) banner.classList.toggle('hidden', !show || isDemoBannerDismissed());
+}
+
+/**
+ * Wire the demo banner's Settings link and dismiss button.
+ */
+export function initDemoBanner(): void {
+  demoBannerDismissedInPage = false;
+  getElementById<HTMLElement>('demo-banner-settings')?.addEventListener('click', () => {
+    showTab('settings');
+  });
+  getElementById<HTMLElement>('demo-banner-dismiss')?.addEventListener('click', () => {
+    demoBannerDismissedInPage = true;
+    try {
+      sessionStorage.setItem(DEMO_BANNER_DISMISSED_KEY, '1');
+    } catch {
+      // Storage blocked: the in-page flag still hides it until reload.
+    }
+    setDemoBannerVisible(false);
+  });
 }
 
 /**
@@ -1280,6 +1318,8 @@ export function initOnboarding(): void {
   if (skipBtn) {
     skipBtn.addEventListener('click', skipTour);
   }
+
+  initDemoBanner();
 
   // Set up demo mode toggle
   const demoToggle = getElementById<HTMLInputElement>('demo-mode-toggle');
