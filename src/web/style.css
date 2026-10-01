@@ -7725,3 +7725,26 @@ html {
         animation: none;
     }
 }
+
+/* Projections on phones: inputs first, results below (order, no DOM copy).
+   showTab() sets an inline display, so the flex layout needs !important and a
+   guard so a hidden tab stays hidden. */
+@media (max-width: 768px) {
+    #tab-projections:not([style*="display: none"]) {
+        display: flex !important;
+        flex-direction: column;
+    }
+
+    #tab-projections > #projection-form {
+        order: 1;
+    }
+
+    #tab-projections > #projection-results {
+        order: 2;
+        margin-bottom: 24px;
+    }
+
+    #tab-projections > .card:not(#projection-results) {
+        order: 3;
+    }
+}
