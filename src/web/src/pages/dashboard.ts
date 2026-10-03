@@ -9,6 +9,7 @@ import { emit, on } from '@/state/events';
 import { showLoading, hideLoading } from '@/ui/loading';
 import { showToast } from '@/ui/toast';
 import { onTabChange, showTab } from '@/ui/tabs';
+import { goToSection } from '@/ui/settings-sections';
 import { withSubmitGuard } from '@/ui/with-submit-guard';
 import { closeModal, showConfirmDialog, createDynamicModal } from '@/ui/modal';
 import { formatCurrency } from '@/utils/format';
@@ -403,16 +404,20 @@ function renderHero(data: DashboardData): void {
   }
 }
 
-function openSettings(event: Event): void {
-  event.preventDefault();
-  showTab('settings');
-}
-
-function settingsLink(text: string, action = 'open-settings'): HTMLAnchorElement {
+/** Open Settings on the section the link is about (expanded on phones, where sections collapse). */
+function settingsLink(
+  text: string,
+  sectionId: string,
+  action = 'open-settings'
+): HTMLAnchorElement {
   const link = h('a', undefined, text);
   link.href = '#';
   link.dataset.action = action;
-  link.addEventListener('click', openSettings);
+  link.addEventListener('click', (event) => {
+    event.preventDefault();
+    showTab('settings');
+    goToSection(sectionId);
+  });
   return link;
 }
 
@@ -474,7 +479,7 @@ async function renderAllocation(positions: DashboardPosition[], gen: number): Pr
 
   if (!hasTargets(targets)) {
     const note = h('p', 'alloc-empty', 'No targets set. ');
-    note.appendChild(settingsLink('Set targets'));
+    note.appendChild(settingsLink('Set targets', 'settings-targets'));
     host.appendChild(note);
   }
 }
@@ -524,7 +529,7 @@ async function renderOnTrack(gen: number): Promise<void> {
 
   if (personalResult.status === 'fulfilled' && !dob) {
     const note = h('p', 'on-track-note', "Add your birth date to see if you're on track. ");
-    note.appendChild(settingsLink('Open Settings'));
+    note.appendChild(settingsLink('Open Settings', 'settings-profile'));
     host.appendChild(note);
     return;
   }
@@ -1041,9 +1046,8 @@ export function initDashboard(): void {
     document.getElementById('update-prices-btn')) as HTMLButtonElement | null;
   if (forceRefreshBtn) {
     forceRefreshBtn.addEventListener('click', () => {
-      withSubmitGuard(forceRefreshBtn, 'Updating...', () => refreshPrices(true)).catch(
-        console.error
-      );
+      // Empty label: keep the icon and label markup (the guard still disables the button).
+      withSubmitGuard(forceRefreshBtn, '', () => refreshPrices(true)).catch(console.error);
     });
   }
 

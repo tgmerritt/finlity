@@ -1051,24 +1051,27 @@ export async function loadPluginSecurity(): Promise<void> {
 
       // Permissions
       const permTd = document.createElement('td');
-      const perms: string[] = [];
+      const perms: Array<string | HTMLElement> = [];
+      const warning = (text: string): HTMLElement => {
+        const span = document.createElement('span');
+        span.className = 'text-warning';
+        span.textContent = text;
+        return span;
+      };
       if (plugin.requested.file_read) perms.push('file_read');
-      if (plugin.requested.file_write) {
-        const span = document.createElement('span');
-        span.className = 'text-warning';
-        span.textContent = 'file_write';
-        perms.push(span.outerHTML);
-      }
-      if (plugin.requested.network) {
-        const span = document.createElement('span');
-        span.className = 'text-warning';
-        span.textContent = 'network';
-        perms.push(span.outerHTML);
-      }
+      if (plugin.requested.file_write) perms.push(warning('file_write'));
+      if (plugin.requested.network) perms.push(warning('network'));
       if (plugin.requested.database !== 'none') {
         perms.push('db:' + plugin.requested.database);
       }
-      permTd.textContent = perms.length > 0 ? perms.join(', ') : 'None';
+      if (perms.length === 0) {
+        permTd.textContent = 'None';
+      } else {
+        perms.forEach((perm, i) => {
+          if (i > 0) permTd.appendChild(document.createTextNode(', '));
+          permTd.appendChild(typeof perm === 'string' ? document.createTextNode(perm) : perm);
+        });
+      }
       tr.appendChild(permTd);
 
       // Status

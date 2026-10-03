@@ -46,10 +46,10 @@ Phones (640px and below): a single column in the same order. The hero value uses
 
 ## Other pages
 
-- **Holdings.** Rows grouped by account under subtotal headers (a toggle turns grouping off), row actions collapsed into a single overflow menu, and on phones each position rendered as a card showing ticker, name, value and gain.
-- **Projections.** Gains the tiles moved off the dashboard. On phones the inputs collapse into a panel above the results.
-- **Settings.** Split into sections with a sticky section index on desktop and an accordion on phones: Profile & goals, Targets, Market assumptions, Data sources, Import & export, Plugins, Advanced.
-- **Charts everywhere.** Plotly charts are responsive (`responsive: true`, autosize, legends below the plot on phones) and chart containers get `min-width: 0` so no chart overflows its card.
+- **Holdings.** Rows are grouped by account under header rows that show the account name, position count, value and gain or loss, and sorting applies within each group. Grouping is on by default; a "Group by account" toggle turns it off and is remembered per browser. The account column is hidden while grouped. Edit and delete stay inline as labelled icon buttons: with only two actions, an overflow menu would add a tap to the most common tasks. On phones each position row is restyled as a card (ticker and name, then value and gain), using CSS on the same table rows so sorting, filtering and handlers are shared, and sort selects replace the column headers.
+- **Projections.** Gains the tiles moved off the dashboard. On phones the inputs panel sits above the results (CSS `order`, no duplicated markup), stays open until the first result appears, then collapses so the results are in view; the user can reopen it. The results card is hidden until a simulation has run. Desktop is unchanged.
+- **Settings.** The 17 cards are grouped into sections, each a standard `<h2><button aria-expanded>` heading: Profile & goals, Targets, Assumptions, Accounts & data, Data sources & AI, Plugins, Appearance. Desktop shows a sticky section index that highlights the section in view; phones hide the index and show each section as an accordion, first section open.
+- **Charts everywhere.** Plotly charts are responsive (`responsive: true`, autosize, legends placed horizontally below the plot at 768px and below, set centrally in `renderChart`) and chart containers get `min-width: 0` so no chart overflows its card.
 
 ## Data
 

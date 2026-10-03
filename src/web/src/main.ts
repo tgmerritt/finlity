@@ -11,6 +11,7 @@ import { initTheme, toggleTheme, setTheme } from '@/state/theme';
 import { initPageToolbar } from '@/ui/page-toolbar';
 import { initTabs, initMobileNav, showTab, toggleMobileNav, onTabChange } from '@/ui/tabs';
 import type { TabName } from '@/ui/tabs';
+import { initSettingsSections, refreshSettingsSectionVisibility } from '@/ui/settings-sections';
 import { showToast, showError } from '@/ui/toast';
 import { hideLoading, showLoading } from '@/ui/loading';
 import {
@@ -467,20 +468,6 @@ function applyLocalModeUiRestrictions(): void {
 }
 
 /**
- * Initialize collapsible config panels.
- */
-function initConfigPanels(): void {
-  document.querySelectorAll('.config-header').forEach((header) => {
-    header.addEventListener('click', () => {
-      const panel = header.closest('.config-panel');
-      if (panel) {
-        panel.classList.toggle('expanded');
-      }
-    });
-  });
-}
-
-/**
  * Initialize the application.
  */
 async function init(): Promise<void> {
@@ -493,10 +480,10 @@ async function init(): Promise<void> {
   initTabs();
   initPageToolbar();
   initMobileNav();
+  initSettingsSections();
   initModal();
   initSidebarState();
   initStorageMode();
-  initConfigPanels();
 
   // Initialize session (resolves dataMode: 'server' unchanged v1 behavior,
   // or 'local' for hosted/multi-user mode — see src/state/session.ts).
@@ -509,6 +496,7 @@ async function init(): Promise<void> {
   if (store.get('dataMode') === 'local') {
     await ensureLocalDatabaseReady();
     applyLocalModeUiRestrictions();
+    refreshSettingsSectionVisibility();
   }
 
   // Initialize features
