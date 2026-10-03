@@ -11,6 +11,7 @@ import { initTheme, toggleTheme, setTheme } from '@/state/theme';
 import { initPageToolbar } from '@/ui/page-toolbar';
 import { initTabs, initMobileNav, showTab, toggleMobileNav, onTabChange } from '@/ui/tabs';
 import type { TabName } from '@/ui/tabs';
+import { initSettingsSections, refreshSettingsSectionVisibility } from '@/ui/settings-sections';
 import { showToast, showError } from '@/ui/toast';
 import { hideLoading, showLoading } from '@/ui/loading';
 import {
@@ -479,6 +480,7 @@ async function init(): Promise<void> {
   initTabs();
   initPageToolbar();
   initMobileNav();
+  initSettingsSections();
   initModal();
   initSidebarState();
   initStorageMode();
@@ -494,6 +496,7 @@ async function init(): Promise<void> {
   if (store.get('dataMode') === 'local') {
     await ensureLocalDatabaseReady();
     applyLocalModeUiRestrictions();
+    refreshSettingsSectionVisibility();
   }
 
   // Initialize features
