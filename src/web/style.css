@@ -3122,11 +3122,15 @@ td.text-right {
 .paycheck-tax-rates-callout {
     display: flex;
     gap: 24px;
-    background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
+    /* Neutral themed card: the old gradient referenced an undefined
+       --color-primary-light, so the whole declaration was dropped and the
+       callout fell back to a transparent box with hard-coded white text. */
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--color-primary);
     border-radius: 12px;
     padding: 20px 24px;
     margin-bottom: 20px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .tax-rate-item {
@@ -3137,7 +3141,7 @@ td.text-right {
 
 .tax-rate-label {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--color-text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     font-weight: 500;
@@ -3146,7 +3150,7 @@ td.text-right {
 .tax-rate-value {
     font-size: 28px;
     font-weight: 700;
-    color: white;
+    color: var(--color-text-primary);
 }
 
 @media (max-width: 600px) {
