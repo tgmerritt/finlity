@@ -147,4 +147,61 @@ describe('phone navigation drawer accessibility', () => {
     expect(sidebar().hasAttribute('inert')).toBe(true);
     expect(document.activeElement).toBe(more());
   });
+
+  it('keeps focus in the nav when widening past the breakpoint with the drawer open', () => {
+    showTab('holdings');
+    more().focus();
+    more().click();
+    expect(sidebar().contains(document.activeElement)).toBe(true);
+    phone = false;
+    listeners.forEach((cb) => cb());
+    expect(sidebar().classList.contains('mobile-open')).toBe(false);
+    expect(sidebar().hasAttribute('inert')).toBe(false);
+    expect(sidebar().hasAttribute('aria-hidden')).toBe(false);
+    expect(document.activeElement).toBe(item('holdings'));
+  });
+
+  it('is neither inert nor aria-hidden when initialised on a wide layout', () => {
+    phone = false;
+    initMobileNav();
+    expect(sidebar().hasAttribute('inert')).toBe(false);
+    expect(sidebar().hasAttribute('aria-hidden')).toBe(false);
+  });
+
+  it('falls back to addListener when addEventListener is missing', () => {
+    const added: Listener[] = [];
+    window.matchMedia = vi.fn().mockImplementation(() => ({
+      get matches() {
+        return phone;
+      },
+      addListener: (cb: Listener) => added.push(cb),
+    })) as unknown as typeof window.matchMedia;
+    initMobileNav();
+    expect(added).toHaveLength(1);
+    phone = false;
+    added.forEach((cb) => cb());
+    expect(sidebar().hasAttribute('inert')).toBe(false);
+  });
+
+  it('skips visibility:hidden controls when choosing the first and last item', () => {
+    item('dashboard').style.visibility = 'hidden';
+    more().focus();
+    more().click();
+    expect(document.activeElement).toBe(item('holdings'));
+  });
+
+  it('closes only an open profile dropdown on the first Escape', () => {
+    sidebar().insertAdjacentHTML(
+      'beforeend',
+      '<button id="profile-selector-btn">P</button><div id="profile-dropdown" style="display: block"></div>'
+    );
+    more().focus();
+    more().click();
+    press('Escape');
+    expect(sidebar().classList.contains('mobile-open')).toBe(true);
+    expect((document.getElementById('profile-dropdown') as HTMLElement).style.display).toBe('none');
+    expect(document.activeElement).toBe(document.getElementById('profile-selector-btn'));
+    press('Escape');
+    expect(sidebar().classList.contains('mobile-open')).toBe(false);
+  });
 });

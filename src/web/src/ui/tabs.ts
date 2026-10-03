@@ -186,7 +186,9 @@ function drawerFocusables(sidebar: HTMLElement): HTMLElement[] {
       node && node !== sidebar.parentElement;
       node = node.parentElement
     ) {
-      if (node.hidden || getComputedStyle(node).display === 'none') return false;
+      if (node.hidden) return false;
+      const style = getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
     }
     return true;
   });
@@ -199,6 +201,13 @@ function handleDrawerKeydown(event: KeyboardEvent): void {
   if (!isDrawerOpen()) return;
   if (event.key === 'Escape') {
     event.preventDefault();
+    // An open profile dropdown inside the drawer takes the first Escape.
+    const dropdown = document.getElementById('profile-dropdown');
+    if (dropdown?.closest('.sidebar') && getComputedStyle(dropdown).display !== 'none') {
+      dropdown.style.display = 'none';
+      document.getElementById('profile-selector-btn')?.focus();
+      return;
+    }
     closeMobileNav();
     return;
   }
@@ -238,7 +247,7 @@ function setMoreExpanded(expanded: boolean): void {
 /**
  * Close mobile navigation menu and return focus to the button that opened it.
  */
-function closeMobileNav(): void {
+function closeMobileNav(restoreFocus = true): void {
   const sidebar = querySelector<HTMLElement>('.sidebar');
   const overlay = querySelector<HTMLElement>('.mobile-nav-overlay');
   const wasOpen = isDrawerOpen();
@@ -254,7 +263,7 @@ function closeMobileNav(): void {
 
   syncDrawerAvailability();
 
-  if (wasOpen) {
+  if (wasOpen && restoreFocus) {
     const opener = drawerOpener ?? querySelector<HTMLElement>('#bottom-tab-more');
     drawerOpener = null;
     opener?.focus();
@@ -296,7 +305,7 @@ export function initMobileNav(): void {
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.className = 'mobile-nav-overlay';
-    overlay.addEventListener('click', closeMobileNav);
+    overlay.addEventListener('click', () => closeMobileNav());
     document.body.appendChild(overlay);
   }
 
@@ -314,13 +323,29 @@ export function initMobileNav(): void {
   // Resizing across the phone breakpoint switches the sidebar between a
   // drawer and a permanent nav.
   if (typeof window.matchMedia === 'function') {
-    window.matchMedia(PHONE_QUERY).addEventListener?.('change', () => {
+    const mql = window.matchMedia(PHONE_QUERY);
+    const onBreakpointChange = (): void => {
       if (!isPhoneLayout() && isDrawerOpen()) {
-        closeMobileNav();
+        // The opener is hidden on wider layouts; keep focus in the nav instead.
+        const sidebar = querySelector<HTMLElement>('.sidebar');
+        const hadFocus = !!sidebar?.contains(document.activeElement);
+        drawerOpener = null;
+        closeMobileNav(false);
+        if (hadFocus) {
+          const target =
+            querySelector<HTMLElement>('.sidebar .nav-item.active') ??
+            querySelector<HTMLElement>('.sidebar .nav-item');
+          target?.focus();
+        }
       } else {
         syncDrawerAvailability();
       }
-    });
+    };
+    if (typeof mql.addEventListener === 'function') {
+      mql.addEventListener('change', onBreakpointChange);
+    } else if (typeof mql.addListener === 'function') {
+      mql.addListener(onBreakpointChange);
+    }
   }
   syncDrawerAvailability();
 }
