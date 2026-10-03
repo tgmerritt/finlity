@@ -746,7 +746,8 @@ function syncSortControls(sort: SortConfig): void {
         opt.disabled = grouped;
       }
     });
-    fieldEl.value = sort.field;
+    // A stored Account sort has no option while grouped; show Value instead of a hidden choice.
+    fieldEl.value = grouped && sort.field === 'account' ? 'value' : sort.field;
   }
   if (dirEl) dirEl.value = sort.direction;
 }

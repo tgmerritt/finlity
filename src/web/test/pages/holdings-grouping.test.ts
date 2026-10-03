@@ -322,6 +322,15 @@ describe('holdings accessibility and sort controls', () => {
     expect(account.disabled).toBe(false);
   });
 
+  it('shows Value in the sort select when grouped with a stored Account sort', () => {
+    const field = document.getElementById('holdings-sort-field') as HTMLSelectElement;
+    store.set('currentSort', { field: 'account', direction: 'asc' });
+    updateHoldings(POSITIONS);
+    expect(field.value).toBe('value');
+    setHoldingsGrouping(false);
+    expect(field.value).toBe('account');
+  });
+
   it('drives the sort from the phone selects and reflects the store', () => {
     initHoldings();
     const field = document.getElementById('holdings-sort-field') as HTMLSelectElement;
