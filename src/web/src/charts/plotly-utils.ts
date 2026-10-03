@@ -138,25 +138,70 @@ export function getChartConfig(): Partial<PlotlyConfig> {
 /** Phone breakpoint (px), matching the 768px rules in style.css. Legends move below the plot at or under it. */
 export const PHONE_MAX_WIDTH = 768;
 
-/** Extra bottom margin (px) reserved for a legend placed below the plot. */
-const PHONE_LEGEND_MARGIN = 70;
+/** Bottom margin (px) reserved per row of legend entries placed below the plot. */
+const PHONE_LEGEND_ROW_HEIGHT = 24;
+
+/** Rough width (px) of one legend entry: swatch plus padding, and per character of its label. */
+const LEGEND_ENTRY_BASE_WIDTH = 34;
+const LEGEND_CHAR_WIDTH = 6.5;
+
+/** Labels Plotly would list in the legend for these traces (pies list their slice labels). */
+function legendLabels(data: PlotlyData[]): string[] {
+  const labels: string[] = [];
+  for (const trace of data) {
+    if (trace.visible === false || trace.showlegend === false) continue;
+    if (trace.type === 'pie' && Array.isArray(trace.labels)) {
+      labels.push(...trace.labels.map(String));
+    } else {
+      labels.push(trace.name ?? '');
+    }
+  }
+  return labels;
+}
+
+/** Estimate how many rows a horizontal legend wraps to at this width. Keeps it simple: greedy packing. */
+function estimateLegendRows(labels: string[], availableWidth: number): number {
+  const width = Math.max(availableWidth, 100);
+  let rows = 1;
+  let used = 0;
+  for (const label of labels) {
+    const entry = LEGEND_ENTRY_BASE_WIDTH + label.length * LEGEND_CHAR_WIDTH;
+    if (used > 0 && used + entry > width) {
+      rows += 1;
+      used = 0;
+    }
+    used += entry;
+  }
+  return rows;
+}
 
 /**
- * On phones, place a shown legend horizontally below the plot, left aligned,
- * and grow the bottom margin to fit. Returns the same layout object when the
- * viewport is wider than a phone or the chart shows no legend.
+ * On phones, place a shown legend horizontally at the bottom of the chart
+ * container, left aligned, and grow the bottom margin by about one row height
+ * per estimated legend row. Anchoring to the container (not the plot) keeps the
+ * plot area from shrinking under the legend on short charts. Returns the same
+ * layout object when the viewport is wider than a phone or no legend shows.
+ * A legend counts as shown when asked for, or when Plotly would show it by
+ * default (more than one visible trace and showlegend/legend both unset).
  * @param layout - Chart layout (before merging with the base layout)
  * @param viewportWidth - Current viewport width in px
+ * @param data - Chart traces, used for the default-legend case and row estimate
  */
 export function phoneLegendLayout(
   layout: Partial<PlotlyLayout>,
-  viewportWidth: number
+  viewportWidth: number,
+  data: PlotlyData[] = []
 ): Partial<PlotlyLayout> {
   if (viewportWidth > PHONE_MAX_WIDTH) return layout;
   if (layout.showlegend === false) return layout;
-  if (layout.showlegend !== true && !layout.legend) return layout;
+  const labels = legendLabels(data);
+  const defaultLegend = layout.showlegend === undefined && !layout.legend && labels.length > 1;
+  if (layout.showlegend !== true && !layout.legend && !defaultLegend) return layout;
 
-  const baseBottom = layout.margin?.b ?? getBaseLayout().margin?.b ?? 40;
+  const baseMargin = getBaseLayout().margin;
+  const margin = { ...baseMargin, ...layout.margin };
+  const available = viewportWidth - (margin.l ?? 0) - (margin.r ?? 0);
+  const rows = estimateLegendRows(labels, available);
   return {
     ...layout,
     showlegend: true,
@@ -165,10 +210,11 @@ export function phoneLegendLayout(
       orientation: 'h',
       x: 0,
       xanchor: 'left',
-      y: -0.35,
-      yanchor: 'top',
+      yref: 'container',
+      y: 0,
+      yanchor: 'bottom',
     },
-    margin: { ...getBaseLayout().margin, ...layout.margin, b: baseBottom + PHONE_LEGEND_MARGIN },
+    margin: { ...margin, b: (margin.b ?? 40) + rows * PHONE_LEGEND_ROW_HEIGHT },
   };
 }
 
@@ -193,7 +239,7 @@ export async function renderChart(
 
   const mergedLayout = {
     ...getBaseLayout(),
-    ...phoneLegendLayout(layout, window.innerWidth),
+    ...phoneLegendLayout(layout, window.innerWidth, data),
   };
 
   const mergedConfig = {
