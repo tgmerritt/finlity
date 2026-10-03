@@ -103,12 +103,23 @@ TAB_CHECKS_JS = """
     problems.push(`${name} tab not visible; checks did not run`);
     return problems;
   }
+  if (name === 'settings' && vw <= 768) {
+    // Phone Settings is an accordion: open every collapsed section so each
+    // card is laid out and measured.
+    tab.querySelectorAll('.settings-section-header[aria-expanded="false"]').forEach((h) => h.click());
+  }
   if (document.documentElement.scrollWidth > vw + 1) {
     problems.push(`${name}: page scrolls horizontally (${document.documentElement.scrollWidth}px > ${vw}px)`);
   }
   tab.querySelectorAll('.card').forEach((card, i) => {
     const r = card.getBoundingClientRect();
     if (r.width > 0 && r.right > vw + 1) problems.push(`${name}: card ${i} overflows viewport (right edge ${Math.round(r.right)}px)`);
+    // body.on-settings sets overflow-x: clip, which hides page-level overflow
+    // (documentElement.scrollWidth stays at the viewport), so measure the
+    // content itself: a card whose content is wider than the viewport.
+    if (name === 'settings' && r.width > 0 && card.scrollWidth > vw + 1) {
+      problems.push(`${name}: card ${i} content is wider than the viewport (${card.scrollWidth}px > ${vw}px)`);
+    }
   });
   return problems;
 }
