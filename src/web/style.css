@@ -7835,11 +7835,6 @@ html {
     font-size: var(--font-xl);
 }
 
-.settings-section-header {
-    font-size: inherit;
-    font-weight: inherit;
-}
-
 .settings-section:focus {
     outline: none;
 }
