@@ -3042,7 +3042,6 @@ td.text-right {
         align-items: center;
         gap: 8px 12px;
         padding: 12px;
-        min-width: 0;
     }
 
     .income-item-info,
