@@ -204,8 +204,14 @@ def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) 
 def open_tab(page: Page, name: str, width: int) -> None:
     """Switch to a tab through its nav button: the bottom tab bar on phones
     (768px and below), the sidebar nav item otherwise."""
-    selector = ".bottom-tab" if width <= 768 else ".nav-item"
-    page.locator(f'{selector}[data-tab="{name}"]').click()
+    if width <= 768 and page.locator(f'.bottom-tab[data-tab="{name}"]').count():
+        page.locator(f'.bottom-tab[data-tab="{name}"]').click()
+    elif width <= 768:
+        # Tabs without a bottom-bar button (Settings) live in the More drawer.
+        page.locator("#bottom-tab-more").click()
+        page.locator(f'.nav-item[data-tab="{name}"]').click()
+    else:
+        page.locator(f'.nav-item[data-tab="{name}"]').click()
     page.wait_for_function(
         """n => {
           const tab = document.getElementById('tab-' + n);

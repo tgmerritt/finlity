@@ -1523,7 +1523,8 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    overflow-x: hidden;
+    /* clip, not hidden: hidden makes this a scroll container and breaks position: sticky inside */
+    overflow-x: clip;
     contain: layout style;
 }
 
@@ -1701,7 +1702,7 @@ body {
     display: none;
     padding: 32px;
     flex: 1;
-    overflow-x: hidden;
+    overflow-x: clip; /* not hidden: keeps position: sticky working inside tabs */
     max-width: 100%;
     content-visibility: auto;
     contain-intrinsic-size: auto 2000px;
