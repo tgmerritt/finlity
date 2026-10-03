@@ -29,6 +29,23 @@ function isPhone(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia(PHONE_QUERY).matches;
 }
 
+/**
+ * Open state of each section as the user left it. Null until the user first
+ * opens or closes a section on a phone: until then the phone layout is the
+ * default of "first visible section open". Kept across breakpoint changes so
+ * rotating or resizing does not collapse what the user opened.
+ */
+let savedOpen: Map<string, boolean> | null = null;
+
+/** Record a user driven open/close, snapshotting the current states on the first one. */
+function setOpenByUser(section: HTMLElement, open: boolean): void {
+  if (!savedOpen) {
+    savedOpen = new Map(sections().map((s) => [s.id, s.classList.contains('is-open')]));
+  }
+  savedOpen.set(section.id, open);
+  setOpen(section, open);
+}
+
 function setOpen(section: HTMLElement, open: boolean): void {
   const header = headerOf(section);
   const body = bodyOf(section);
@@ -54,11 +71,17 @@ export function applySettingsLayoutMode(): void {
     if (phone) {
       header?.removeAttribute('tabindex');
       header?.removeAttribute('aria-disabled');
-      setOpen(section, i === 0);
+      header?.removeAttribute('role');
+      header?.setAttribute('aria-controls', `${section.id}-body`);
+      setOpen(section, savedOpen ? (savedOpen.get(section.id) ?? false) : i === 0);
     } else {
+      // The button is only a heading label here; keep it out of the
+      // accessibility tree's interactive controls ("button, dimmed").
       header?.removeAttribute('aria-expanded');
+      header?.removeAttribute('aria-controls');
+      header?.removeAttribute('aria-disabled');
+      header?.setAttribute('role', 'presentation');
       header?.setAttribute('tabindex', '-1');
-      header?.setAttribute('aria-disabled', 'true');
       const body = bodyOf(section);
       if (body) body.hidden = false;
       section.classList.remove('is-open');
@@ -82,7 +105,7 @@ export function refreshSettingsSectionVisibility(): void {
 
 function toggleSection(section: HTMLElement): void {
   if (!isPhone()) return;
-  setOpen(section, !section.classList.contains('is-open'));
+  setOpenByUser(section, !section.classList.contains('is-open'));
 }
 
 /** While a smooth scroll from an index click runs, ignore observer highlights. */
@@ -100,13 +123,14 @@ function lockHighlight(): void {
 /** Open the section containing el when it is collapsed (phone accordion). */
 export function revealInSettings(el: HTMLElement): void {
   const section = el.closest<HTMLElement>('.settings-section');
-  if (section && isPhone() && !section.classList.contains('is-open')) setOpen(section, true);
+  if (section && isPhone() && !section.classList.contains('is-open')) setOpenByUser(section, true);
 }
 
-function goToSection(id: string): void {
+/** Scroll to a settings section, opening it first on phones, and focus it. */
+export function goToSection(id: string): void {
   const section = document.getElementById(id);
   if (!section) return;
-  if (isPhone() && !section.classList.contains('is-open')) setOpen(section, true);
+  if (isPhone() && !section.classList.contains('is-open')) setOpenByUser(section, true);
   lockHighlight();
   section.scrollIntoView({ behavior: 'smooth', block: 'start' });
   section.tabIndex = -1;
@@ -118,33 +142,50 @@ function atPageBottom(): boolean {
   return window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
 }
 
+function onSettingsTab(): boolean {
+  return document.body.classList.contains('on-settings');
+}
+
 function highlightLastAtBottom(): void {
-  if (scrollLock || !atPageBottom()) return;
+  if (!onSettingsTab() || scrollLock || !atPageBottom()) return;
   const last = visibleSections().pop();
   if (last) setActive(last.id);
 }
 
+/** Aborts the listeners of the previous init so repeat calls do not stack them. */
+let listeners: AbortController | null = null;
+
 export function initSettingsSections(): void {
+  listeners?.abort();
   clearTimeout(scrollLockTimer);
   scrollLock = false;
+  savedOpen = null;
   const index = document.getElementById('settings-index');
   if (!index || sections().length === 0) return;
 
+  const controller = new AbortController();
+  listeners = controller;
+  const { signal } = controller;
+
   sections().forEach((section) => {
-    headerOf(section)?.addEventListener('click', () => toggleSection(section));
+    headerOf(section)?.addEventListener('click', () => toggleSection(section), { signal });
   });
 
   index.querySelectorAll<HTMLAnchorElement>('.settings-index-link').forEach((link) => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      if (link.dataset.section) goToSection(link.dataset.section);
-    });
+    link.addEventListener(
+      'click',
+      (e) => {
+        e.preventDefault();
+        if (link.dataset.section) goToSection(link.dataset.section);
+      },
+      { signal }
+    );
   });
 
   if (typeof window.matchMedia === 'function') {
     const mq = window.matchMedia(PHONE_QUERY);
     if (typeof mq.addEventListener === 'function') {
-      mq.addEventListener('change', () => applySettingsLayoutMode());
+      mq.addEventListener('change', () => applySettingsLayoutMode(), { signal });
     }
   }
 
@@ -157,12 +198,17 @@ export function initSettingsSections(): void {
       { rootMargin: '-10% 0px -75% 0px' }
     );
     sections().forEach((s) => observer.observe(s));
+    signal.addEventListener('abort', () => observer.disconnect());
   }
 
-  window.addEventListener('scroll', highlightLastAtBottom, { passive: true });
-  window.addEventListener('scrollend', () => {
-    scrollLock = false;
-  });
+  window.addEventListener('scroll', highlightLastAtBottom, { passive: true, signal });
+  window.addEventListener(
+    'scrollend',
+    () => {
+      if (onSettingsTab()) scrollLock = false;
+    },
+    { signal }
+  );
 
   const first = visibleSections()[0];
   if (first) setActive(first.id);

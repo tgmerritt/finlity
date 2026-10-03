@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
+  goToSection,
   initSettingsSections,
   refreshSettingsSectionVisibility,
   revealInSettings,
@@ -49,6 +50,17 @@ describe('settings sections on desktop', () => {
     expect(body('settings-targets').hidden).toBe(false);
   });
 
+  it('makes the header button inert to assistive tech', () => {
+    for (const el of document.querySelectorAll('.settings-section')) {
+      const h = header(el.id);
+      expect(h.hasAttribute('aria-expanded')).toBe(false);
+      expect(h.hasAttribute('aria-controls')).toBe(false);
+      expect(h.hasAttribute('aria-disabled')).toBe(false);
+      expect(h.getAttribute('role')).toBe('presentation');
+      expect(h.getAttribute('tabindex')).toBe('-1');
+    }
+  });
+
   it('scrolls to the section when an index link is clicked', () => {
     const link = document.querySelector<HTMLElement>('#settings-index [data-section="settings-plugins"]')!;
     link.click();
@@ -86,6 +98,7 @@ describe('settings sections navigation details', () => {
   });
 
   it('highlights the last section at the page bottom', () => {
+    document.body.classList.add('on-settings');
     Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
     Object.defineProperty(window, 'scrollY', { value: 1200, configurable: true });
     Object.defineProperty(document.documentElement, 'scrollHeight', { value: 2000, configurable: true });
@@ -94,7 +107,30 @@ describe('settings sections navigation details', () => {
     expect(active.dataset.section).toBe('settings-appearance');
   });
 
+  it('ignores scrolling at the page bottom when Settings is not the open tab', () => {
+    document.body.classList.remove('on-settings');
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    Object.defineProperty(window, 'scrollY', { value: 1200, configurable: true });
+    Object.defineProperty(document.documentElement, 'scrollHeight', { value: 2000, configurable: true });
+    window.dispatchEvent(new Event('scroll'));
+    expect((document.querySelector('#settings-index .active') as HTMLElement).dataset.section).toBe('settings-profile');
+  });
+
+  it('does not stack listeners when initialised repeatedly', () => {
+    document.body.classList.add('on-settings');
+    const spy = vi.spyOn(window, 'addEventListener');
+    initSettingsSections();
+    initSettingsSections();
+    const removed = spy.mock.calls.filter(([type]) => type === 'scroll');
+    expect(removed.length).toBe(2);
+    const signals = removed.map(([, , opts]) => (opts as AddEventListenerOptions).signal!);
+    expect(signals[0]!.aborted).toBe(true);
+    expect(signals[1]!.aborted).toBe(false);
+    spy.mockRestore();
+  });
+
   it('does not let the bottom highlight override an index click scroll', () => {
+    document.body.classList.add('on-settings');
     Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
     Object.defineProperty(window, 'scrollY', { value: 1200, configurable: true });
     Object.defineProperty(document.documentElement, 'scrollHeight', { value: 2000, configurable: true });
@@ -176,5 +212,52 @@ describe('settings sections on phones', () => {
     changeHandler!();
     expect(body('settings-plugins').hidden).toBe(false);
     expect(header('settings-plugins').hasAttribute('aria-expanded')).toBe(false);
+  });
+});
+
+describe('settings sections accordion state', () => {
+  beforeEach(() => {
+    phone = true;
+    changeHandler = null;
+    stubMatchMedia();
+    Element.prototype.scrollIntoView = vi.fn();
+    load();
+  });
+
+  it('restores the header semantics when entering phone mode', () => {
+    const h = header('settings-targets');
+    expect(h.getAttribute('aria-controls')).toBe('settings-targets-body');
+    expect(h.hasAttribute('role')).toBe(false);
+    expect(h.hasAttribute('tabindex')).toBe(false);
+    expect(h.hasAttribute('aria-disabled')).toBe(false);
+  });
+
+  it('opens a collapsed section with goToSection', () => {
+    expect(body('settings-targets').hidden).toBe(true);
+    goToSection('settings-targets');
+    expect(body('settings-targets').hidden).toBe(false);
+    expect(header('settings-targets').getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('keeps what the user opened across breakpoint changes', () => {
+    header('settings-targets').click();
+    header('settings-profile').click(); // close the default-open section
+    phone = false;
+    changeHandler!();
+    expect(body('settings-profile').hidden).toBe(false);
+    phone = true;
+    changeHandler!();
+    expect(body('settings-profile').hidden).toBe(true);
+    expect(body('settings-targets').hidden).toBe(false);
+    expect(body('settings-plugins').hidden).toBe(true);
+  });
+
+  it('uses first-open when the user never touched an accordion', () => {
+    phone = false;
+    changeHandler!();
+    phone = true;
+    changeHandler!();
+    expect(body('settings-profile').hidden).toBe(false);
+    expect(body('settings-targets').hidden).toBe(true);
   });
 });
