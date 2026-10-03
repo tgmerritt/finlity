@@ -7774,3 +7774,19 @@ html {
         font-size: 17px;
     }
 }
+
+/* Settings sections */
+.settings-section { margin-bottom: 24px; }
+.settings-section-header {
+    display: block;
+    width: 100%;
+    margin: 0 0 12px;
+    padding: 0;
+    background: none;
+    border: 0;
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: default;
+}
+.settings-section-header h2 { margin: 0; font-size: 1.15rem; }
