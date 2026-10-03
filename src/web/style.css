@@ -3424,9 +3424,9 @@ td.text-right {
         padding: 16px 12px;
     }
 
-    /* Single column stats on small mobile */
-    .stats-row,
-    .stats-row.retirement-metrics {
+    /* Single column stats on small mobile. The retirement tile row is left out
+       on purpose: it stays two-up (see #retirement-metrics-row above). */
+    .stats-row {
         grid-template-columns: 1fr;
         gap: 12px;
     }
