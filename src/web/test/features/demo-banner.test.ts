@@ -3,15 +3,17 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { mockApiCall, mockShowTab } = vi.hoisted(() => ({
+const { mockApiCall, mockShowTab, mockGoToSection } = vi.hoisted(() => ({
   mockApiCall: vi.fn(),
   mockShowTab: vi.fn(),
+  mockGoToSection: vi.fn(),
 }));
 
 vi.mock('@/api/client', () => ({ apiCall: mockApiCall }));
 vi.mock('@/ui/toast', () => ({ showToast: vi.fn() }));
 vi.mock('@/ui/loading', () => ({ showLoading: vi.fn(), hideLoading: vi.fn() }));
 vi.mock('@/ui/tabs', () => ({ showTab: mockShowTab }));
+vi.mock('@/ui/settings-sections', () => ({ goToSection: mockGoToSection }));
 vi.mock('@/database/client-database', () => ({ clientDB: {} }));
 vi.mock('@/api/dispatcher', () => ({ getLocalAPI: vi.fn() }));
 
@@ -82,5 +84,10 @@ describe('demo banner', () => {
   it('the Settings link opens the settings tab', () => {
     document.getElementById('demo-banner-settings')!.click();
     expect(mockShowTab).toHaveBeenCalledWith('settings');
+  });
+
+  it('the Settings link opens the section holding Demo Mode', () => {
+    document.getElementById('demo-banner-settings')!.click();
+    expect(mockGoToSection).toHaveBeenCalledWith('settings-accounts-data');
   });
 });

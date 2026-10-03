@@ -13,6 +13,7 @@ vi.mock('@/ui/toast', () => ({
   showWarning: vi.fn(),
   showInfo: vi.fn(),
 }));
+vi.mock('@/ui/settings-sections', () => ({ goToSection: vi.fn() }));
 vi.mock('@/ui/tabs', () => ({
   showTab: vi.fn(),
   onTabChange: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('@/ui/tabs', () => ({
 }));
 
 import { apiCall } from '@/api/client';
+import { goToSection } from '@/ui/settings-sections';
 import { onTabChange, showTab } from '@/ui/tabs';
 import { store } from '@/state/store';
 import { initDashboard, renderDashboard, resetDashboardRenderState } from '@/pages/dashboard';
@@ -202,7 +204,11 @@ describe('renderDashboard', () => {
 
     const host = document.getElementById('allocation-bars')!;
     expect(host.textContent).toContain('No targets set.');
-    expect(host.querySelector('a[data-action="open-settings"]')).not.toBeNull();
+    const link = host.querySelector<HTMLAnchorElement>('a[data-action="open-settings"]');
+    expect(link).not.toBeNull();
+    link!.click();
+    expect(showTabMock).toHaveBeenCalledWith('settings');
+    expect(goToSection).toHaveBeenCalledWith('settings-targets');
     expect(host.querySelectorAll('.alloc-target').length).toBe(0);
   });
 
@@ -213,6 +219,7 @@ describe('renderDashboard', () => {
     expect(text('on-track-body')).toContain("Add your birth date to see if you're on track.");
     document.querySelector<HTMLAnchorElement>('#on-track-body a')!.click();
     expect(showTabMock).toHaveBeenCalledWith('settings');
+    expect(goToSection).toHaveBeenCalledWith('settings-profile');
   });
 
   it('treats the 1990-01-01 date as a real birth date', async () => {
