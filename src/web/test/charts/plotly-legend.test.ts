@@ -67,10 +67,10 @@ describe('phoneLegendLayout', () => {
     const few = phoneLegendLayout(layout, 390, [{ name: 'A' }, { name: 'B' }]);
     const names = ['Checking account', 'Brokerage account', 'Retirement account', 'Savings account', 'Crypto wallet'];
     const many = phoneLegendLayout(layout, 390, names.map((name) => ({ name })));
-    expect(few.margin?.b).toBe(40 + 24);
-    expect(many.margin!.b!).toBeGreaterThanOrEqual(40 + 24 * 3);
+    expect(few.margin?.b).toBe(40 + 28 + 24);
+    expect(many.margin!.b!).toBeGreaterThanOrEqual(40 + 28 + 24 * 3);
     expect(many.margin!.b!).toBeGreaterThan(few.margin!.b!);
-    expect((many.margin!.b! - 40) % 24).toBe(0);
+    expect((many.margin!.b! - 40 - 28) % 24).toBe(0);
   });
 });
 

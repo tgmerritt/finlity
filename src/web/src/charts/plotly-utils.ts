@@ -141,6 +141,9 @@ export const PHONE_MAX_WIDTH = 768;
 /** Bottom margin (px) reserved per row of legend entries placed below the plot. */
 const PHONE_LEGEND_ROW_HEIGHT = 24;
 
+/** Gap (px) between the axis tick labels and the legend (rotated date labels need the room). */
+const PHONE_LEGEND_GAP = 28;
+
 /** Rough width (px) of one legend entry: swatch plus padding, and per character of its label. */
 const LEGEND_ENTRY_BASE_WIDTH = 34;
 const LEGEND_CHAR_WIDTH = 6.5;
@@ -214,7 +217,7 @@ export function phoneLegendLayout(
       y: 0,
       yanchor: 'bottom',
     },
-    margin: { ...margin, b: (margin.b ?? 40) + rows * PHONE_LEGEND_ROW_HEIGHT },
+    margin: { ...margin, b: (margin.b ?? 40) + PHONE_LEGEND_GAP + rows * PHONE_LEGEND_ROW_HEIGHT },
   };
 }
 
