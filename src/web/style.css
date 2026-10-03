@@ -1523,8 +1523,7 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    /* clip, not hidden: hidden makes this a scroll container and breaks position: sticky inside */
-    overflow-x: clip;
+    overflow-x: hidden;
     contain: layout style;
 }
 
@@ -1702,7 +1701,7 @@ body {
     display: none;
     padding: 32px;
     flex: 1;
-    overflow-x: clip; /* not hidden: keeps position: sticky working inside tabs */
+    overflow-x: hidden;
     max-width: 100%;
     content-visibility: auto;
     contain-intrinsic-size: auto 2000px;
@@ -7890,4 +7889,12 @@ html {
     .settings-section-body {
         padding: 0 12px 12px;
     }
+}
+
+/* Settings only: hidden would make these scroll containers and break the
+   sticky section index. Hidden first as the fallback where clip is unsupported. */
+body.on-settings .main-content,
+body.on-settings #tab-settings {
+    overflow-x: hidden;
+    overflow-x: clip;
 }
