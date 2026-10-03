@@ -557,6 +557,32 @@ class MyWidget(WidgetPlugin):
         }
 ```
 
+#### Charts: use the chart contract, not scripts
+
+The Content-Security-Policy blocks inline scripts, and the frontend never
+executes a `<script>` found in widget HTML. To show a Plotly chart, return it
+declaratively in `WidgetContent.data["chart"]` and leave an empty container in
+the HTML:
+
+```python
+html = '<div class="my-widget"><div data-chart-container style="height: 320px"></div></div>'
+return WidgetContent(
+    html=html,
+    data={
+        "chart": {
+            "data": [{"type": "bar", "x": ["A", "B"], "y": [1, 2]}],
+            "layout": {"margin": {"t": 30}},   # optional
+            "config": {"displayModeBar": False},  # optional
+        }
+    },
+)
+```
+
+The frontend renders it into the first `[data-chart-container]` (or appends one)
+with the shared chart helper, so theme colors, responsiveness and phone legends
+apply automatically. Do not set theme colors yourself. Escape any plugin or
+user text you put in `html` with `html.escape`.
+
 ### 4. Built-in Widget Plugins
 
 The following widget plugins are included:
