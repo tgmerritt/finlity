@@ -138,6 +138,40 @@ DRAWER_JS = """
 """
 
 
+QUIET_JS = """
+() => {
+  const overlay = document.getElementById('loading-overlay');
+  const overlayHidden =
+    !overlay ||
+    overlay.classList.contains('hidden') ||
+    getComputedStyle(overlay).display === 'none' ||
+    getComputedStyle(overlay).visibility === 'hidden';
+  const toastShown = Array.from(document.querySelectorAll('.toast')).some((t) => {
+    const r = t.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(t).visibility !== 'hidden';
+  });
+  return overlayHidden && !toastShown;
+}
+"""
+
+
+def drawer_problems(page: Page, attempts: int = 3) -> list[str]:
+    """Run the drawer check once the page is quiet. A background price refresh
+    can show the loading overlay or a toast above the drawer while it samples,
+    so wait for them to clear and retry the sample before reporting."""
+    problems: list[str] = []
+    for _ in range(attempts):
+        try:
+            page.wait_for_function(QUIET_JS, timeout=10000)
+        except PlaywrightTimeoutError:
+            pass
+        page.wait_for_timeout(400)
+        problems = page.evaluate(DRAWER_JS)
+        if not problems:
+            return []
+    return problems
+
+
 def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) -> None:
     # Each new_page() is a fresh context, so the app boots as a first-time
     # visitor. Boot always lands on the Dashboard and loads data, so no
@@ -268,7 +302,7 @@ def main() -> int:
                     for problem in page.evaluate(CHECKS_JS):
                         failures.append(f"{width}px {theme}: {problem}")
                     if width == 390:
-                        for problem in page.evaluate(DRAWER_JS):
+                        for problem in drawer_problems(page):
                             failures.append(f"{width}px {theme}: {problem}")
                     save_dashboard_shot()
                     for tab in extra_tabs:
