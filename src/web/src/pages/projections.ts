@@ -19,6 +19,7 @@ import {
   type TaxBurdenChartData,
   type TaxWithdrawalYear,
 } from '@/charts/projections';
+import { PHONE_MAX_WIDTH } from '@/charts/plotly-utils';
 
 /**
  * Retirement metrics response from API.
@@ -214,6 +215,7 @@ export async function runProjection(event: Event): Promise<void> {
     );
 
     await displayProjectionResults(result, params.retirement_age);
+    collapseConfigPanelOnPhone('monte-carlo-config-panel');
     await loadRetirementMetrics();
   } catch (error) {
     console.error('Error running projection:', error);
@@ -392,13 +394,23 @@ export function toggleTaxAwareSettings(): void {
 }
 
 /**
- * Toggle a collapsible config panel's expanded state.
+ * Toggle a collapsible config panel. The `collapsed` class is what the
+ * stylesheet keys off (hides the body, shows the summary).
  */
 export function toggleConfigPanel(panelId: string): void {
   const panel = document.getElementById(panelId);
   if (panel) {
-    panel.classList.toggle('expanded');
+    panel.classList.toggle('collapsed');
   }
+}
+
+/**
+ * On phones the inputs panel sits above the results, so collapse it once a
+ * result is on screen. Desktop keeps it as the user left it.
+ */
+export function collapseConfigPanelOnPhone(panelId: string): void {
+  if (window.innerWidth > PHONE_MAX_WIDTH) return;
+  document.getElementById(panelId)?.classList.add('collapsed');
 }
 
 /**

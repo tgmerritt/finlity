@@ -86,6 +86,7 @@ export function showTab(tabName: TabName): void {
 
   // Update current tab
   currentTab = tabName;
+  document.body.classList.toggle('on-settings', tabName === 'settings');
 
   // Notify callbacks
   tabChangeCallbacks.forEach((callback) => callback(tabName));

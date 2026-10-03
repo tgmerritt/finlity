@@ -8,6 +8,7 @@ import { showToast } from '@/ui/toast';
 import { showLoading, hideLoading } from '@/ui/loading';
 import { getElementById, createSvgElement } from '@/utils/html';
 import { showTab } from '@/ui/tabs';
+import { goToSection } from '@/ui/settings-sections';
 import { emit } from '@/state/events';
 import { store } from '@/state/store';
 import { clientDB } from '@/database/client-database';
@@ -167,6 +168,8 @@ export function initDemoBanner(): void {
   demoBannerDismissedInPage = false;
   getElementById<HTMLElement>('demo-banner-settings')?.addEventListener('click', () => {
     showTab('settings');
+    // Demo Mode lives in Accounts & data; open it on phones, where sections collapse.
+    goToSection('settings-accounts-data');
   });
   getElementById<HTMLElement>('demo-banner-dismiss')?.addEventListener('click', () => {
     demoBannerDismissedInPage = true;

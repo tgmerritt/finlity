@@ -20,6 +20,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 WIDTHS = (1440, 900, 390, 360)
 THEMES = ("light", "dark")
+EXTRA_TABS = ("holdings", "projections", "settings", "taxes", "analysis", "budget")
 
 CHECKS_JS = """
 () => {
@@ -91,6 +92,39 @@ CHECKS_JS = """
 """
 
 
+# Checks for the non-dashboard tabs, run after switching to the tab the way a
+# user does. Scoped to "#tab-<name>"; the argument is the tab name.
+TAB_CHECKS_JS = """
+(name) => {
+  const problems = [];
+  const vw = window.innerWidth;
+  const tab = document.getElementById('tab-' + name);
+  if (!tab || getComputedStyle(tab).display === 'none') {
+    problems.push(`${name} tab not visible; checks did not run`);
+    return problems;
+  }
+  if (name === 'settings' && vw <= 768) {
+    // Phone Settings is an accordion: open every collapsed section so each
+    // card is laid out and measured.
+    tab.querySelectorAll('.settings-section-header[aria-expanded="false"]').forEach((h) => h.click());
+  }
+  if (document.documentElement.scrollWidth > vw + 1) {
+    problems.push(`${name}: page scrolls horizontally (${document.documentElement.scrollWidth}px > ${vw}px)`);
+  }
+  tab.querySelectorAll('.card').forEach((card, i) => {
+    const r = card.getBoundingClientRect();
+    if (r.width > 0 && r.right > vw + 1) problems.push(`${name}: card ${i} overflows viewport (right edge ${Math.round(r.right)}px)`);
+    // body.on-settings sets overflow-x: clip, which hides page-level overflow
+    // (documentElement.scrollWidth stays at the viewport), so measure the
+    // content itself: a card whose content is wider than the viewport.
+    if (name === 'settings' && r.width > 0 && card.scrollWidth > vw + 1) {
+      problems.push(`${name}: card ${i} content is wider than the viewport (${card.scrollWidth}px > ${vw}px)`);
+    }
+  });
+  return problems;
+}
+"""
+
 DRAWER_JS = """
 () => {
   const problems = [];
@@ -113,6 +147,40 @@ DRAWER_JS = """
   return problems;
 }
 """
+
+
+QUIET_JS = """
+() => {
+  const overlay = document.getElementById('loading-overlay');
+  const overlayHidden =
+    !overlay ||
+    overlay.classList.contains('hidden') ||
+    getComputedStyle(overlay).display === 'none' ||
+    getComputedStyle(overlay).visibility === 'hidden';
+  const toastShown = Array.from(document.querySelectorAll('.toast')).some((t) => {
+    const r = t.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(t).visibility !== 'hidden';
+  });
+  return overlayHidden && !toastShown;
+}
+"""
+
+
+def drawer_problems(page: Page, attempts: int = 3) -> list[str]:
+    """Run the drawer check once the page is quiet. A background price refresh
+    can show the loading overlay or a toast above the drawer while it samples,
+    so wait for them to clear and retry the sample before reporting."""
+    problems: list[str] = []
+    for _ in range(attempts):
+        try:
+            page.wait_for_function(QUIET_JS, timeout=10000)
+        except PlaywrightTimeoutError:
+            pass
+        page.wait_for_timeout(400)
+        problems = page.evaluate(DRAWER_JS)
+        if not problems:
+            return []
+    return problems
 
 
 def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) -> None:
@@ -178,6 +246,29 @@ def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) 
     )
 
 
+def open_tab(page: Page, name: str, width: int) -> None:
+    """Switch to a tab through its nav button: the bottom tab bar on phones
+    (768px and below), the sidebar nav item otherwise."""
+    if width <= 768 and page.locator(f'.bottom-tab[data-tab="{name}"]').count():
+        page.locator(f'.bottom-tab[data-tab="{name}"]').click()
+    elif width <= 768:
+        # Tabs without a bottom-bar button (Settings) live in the More drawer.
+        page.locator("#bottom-tab-more").click()
+        page.locator(f'.nav-item[data-tab="{name}"]').click()
+    else:
+        page.locator(f'.nav-item[data-tab="{name}"]').click()
+    page.wait_for_function(
+        """n => {
+          const tab = document.getElementById('tab-' + n);
+          return !!tab && getComputedStyle(tab).display !== 'none';
+        }""",
+        arg=name,
+        timeout=10000,
+    )
+    # Let tab-specific rendering settle (tables, charts) before measuring.
+    page.wait_for_timeout(500)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="http://127.0.0.1:8790")
@@ -188,7 +279,18 @@ def main() -> int:
         help="Click through the 'open or create your portfolio database' modal "
         "(hosted/browser-storage mode) before running checks.",
     )
+    parser.add_argument(
+        "--tabs",
+        default="dashboard",
+        help="Comma-separated tabs to check (dashboard, holdings, projections, "
+        "settings, taxes, analysis, budget). The dashboard checks always run; each extra tab is opened "
+        "through its nav button and checked for overflow. Default: dashboard.",
+    )
     args = parser.parse_args()
+    extra_tabs = [t.strip() for t in args.tabs.split(",") if t.strip() and t.strip() != "dashboard"]
+    unknown = [t for t in extra_tabs if t not in EXTRA_TABS]
+    if unknown:
+        parser.error(f"unknown tab(s): {', '.join(unknown)} (choose from dashboard, {', '.join(EXTRA_TABS)})")
 
     failures: list[str] = []
     with sync_playwright() as p:
@@ -196,19 +298,34 @@ def main() -> int:
         for width in WIDTHS:
             for theme in THEMES:
                 page = browser.new_page(viewport={"width": width, "height": 900})
+
+                def save_dashboard_shot(page: Page = page, width: int = width, theme: str = theme) -> None:
+                    if args.screenshots:
+                        args.screenshots.mkdir(parents=True, exist_ok=True)
+                        page.screenshot(path=str(args.screenshots / f"dashboard-{width}-{theme}.png"), full_page=True)
+
                 try:
                     open_dashboard(page, args.base_url, theme, hosted=args.hosted)
                 except PlaywrightTimeoutError:
                     failures.append(f"{width}px {theme}: dashboard did not finish loading")
+                    save_dashboard_shot()
                 else:
                     for problem in page.evaluate(CHECKS_JS):
                         failures.append(f"{width}px {theme}: {problem}")
                     if width == 390:
-                        for problem in page.evaluate(DRAWER_JS):
+                        for problem in drawer_problems(page):
                             failures.append(f"{width}px {theme}: {problem}")
-                if args.screenshots:
-                    args.screenshots.mkdir(parents=True, exist_ok=True)
-                    page.screenshot(path=str(args.screenshots / f"dashboard-{width}-{theme}.png"), full_page=True)
+                    save_dashboard_shot()
+                    for tab in extra_tabs:
+                        try:
+                            open_tab(page, tab, width)
+                        except PlaywrightTimeoutError:
+                            failures.append(f"{width}px {theme}: {tab} tab did not open")
+                            continue
+                        for problem in page.evaluate(TAB_CHECKS_JS, tab):
+                            failures.append(f"{width}px {theme}: {problem}")
+                        if args.screenshots:
+                            page.screenshot(path=str(args.screenshots / f"{tab}-{width}-{theme}.png"), full_page=True)
                 page.close()
         browser.close()
 
