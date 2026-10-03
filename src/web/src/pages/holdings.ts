@@ -139,13 +139,13 @@ export function updateAccountFilterLabel(): void {
   const selected = checkedBoxes.length;
 
   if (total === 0 || selected === 0) {
-    labelEl.textContent = 'No Accounts';
+    labelEl.textContent = 'No accounts';
   } else if (selected === total) {
-    labelEl.textContent = 'All accounts';
+    labelEl.textContent = 'All in view';
   } else if (selected === 1) {
     labelEl.textContent = checkedBoxes[0]?.value ?? 'Account';
   } else {
-    labelEl.textContent = `${selected} of ${total} Accounts`;
+    labelEl.textContent = `${selected} of ${total} accounts`;
   }
 }
 

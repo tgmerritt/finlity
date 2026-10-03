@@ -426,3 +426,27 @@ def test_commentary_tax_projection_counts_option():
     service._get_user_context = lambda: {"user_age": 44, "retirement_age": 60}
     data = service._get_tax_projection_data()
     assert data["traditional_balance"] == pytest.approx(9990.0)
+
+
+def test_sector_treemap_returns_chart_contract_without_script():
+    """The CSP blocks inline scripts, so the treemap must ship its chart as data."""
+    widget = _load_widget("sector-treemap", "SectorTreemapWidget")
+    content = widget.render(_widget_positions(), [])
+    assert "<script" not in content.html.lower()
+    assert "data-chart-container" in content.html
+    chart = content.data["chart"]
+    assert chart["data"][0]["type"] == "treemap"
+    assert "Portfolio" in chart["data"][0]["labels"]
+    assert "AAPL" in chart["data"][0]["labels"]
+    assert chart["config"]["responsive"] is True
+    assert "paper_bgcolor" not in chart["layout"]
+
+
+def test_sector_treemap_escapes_sector_names_in_summary():
+    widget = _load_widget("sector-treemap", "SectorTreemapWidget")
+    positions = _widget_positions()
+    for pos in positions:
+        pos["sector"] = "<img src=x onerror=alert(1)>"
+    content = widget.render(positions, [])
+    assert "<img" not in content.html.lower()
+    assert "&lt;img" in content.html.lower()

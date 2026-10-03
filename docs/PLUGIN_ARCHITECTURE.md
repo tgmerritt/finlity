@@ -344,7 +344,13 @@ class WidgetPlugin(PluginBase):
         pass
 
     def get_javascript(self) -> str:
-        """Return JavaScript for interactivity."""
+        """Return JavaScript for interactivity.
+
+        Note: the CSP blocks inline scripts and widget HTML is never executed.
+        Charts are returned declaratively as WidgetContent.data["chart"]
+        ({"data", "layout", "config"}) and rendered by the frontend; see
+        src/plugins/README.md.
+        """
         pass
 
     def get_api_endpoints(self) -> list[APIEndpoint]:
