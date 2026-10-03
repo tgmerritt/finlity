@@ -509,7 +509,6 @@ function createPositionRow(pos: DashboardPosition): HTMLTableRowElement {
   actionsCell.className = 'actions-cell';
   actionsCell.dataset.label = 'Actions';
   actionsCell.setAttribute('role', 'cell');
-  actionsCell.setAttribute('role', 'cell');
 
   const editBtn = document.createElement('button');
   editBtn.type = 'button';
