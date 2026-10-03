@@ -11,6 +11,7 @@ import { emit } from '@/state/events';
 import { refreshData } from '@/pages/dashboard';
 import { clearCommentaryCache } from '@/features/commentary';
 import { showTab } from '@/ui/tabs';
+import { revealInSettings } from '@/ui/settings-sections';
 import { clientDB } from '@/database/client-database';
 import type { Profile } from '@/types/api';
 
@@ -297,6 +298,7 @@ export function showManageProfilesModal(): void {
   setTimeout(() => {
     const profilesSection = document.getElementById('profiles-management-list');
     if (profilesSection) {
+      revealInSettings(profilesSection);
       profilesSection.scrollIntoView({ behavior: 'smooth' });
     }
   }, 100);

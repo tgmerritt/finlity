@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import {
   initSettingsSections,
   refreshSettingsSectionVisibility,
+  revealInSettings,
 } from '@/ui/settings-sections';
 
 let phone = false;
@@ -67,6 +68,68 @@ describe('settings sections on desktop', () => {
     section('settings-accounts-data').querySelector('#data-storage-card')!.classList.add('hidden');
     refreshSettingsSectionVisibility();
     expect(section('settings-accounts-data').classList.contains('hidden')).toBe(false);
+  });
+});
+
+describe('settings sections navigation details', () => {
+  beforeEach(() => {
+    phone = false;
+    stubMatchMedia();
+    Element.prototype.scrollIntoView = vi.fn();
+    load();
+  });
+
+  it('moves focus to the target section on an index click', () => {
+    document.querySelector<HTMLElement>('#settings-index [data-section="settings-targets"]')!.click();
+    expect(document.activeElement).toBe(section('settings-targets'));
+    expect(section('settings-targets').getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('highlights the last section at the page bottom', () => {
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    Object.defineProperty(window, 'scrollY', { value: 1200, configurable: true });
+    Object.defineProperty(document.documentElement, 'scrollHeight', { value: 2000, configurable: true });
+    window.dispatchEvent(new Event('scroll'));
+    const active = document.querySelector('#settings-index .active') as HTMLElement;
+    expect(active.dataset.section).toBe('settings-appearance');
+  });
+
+  it('does not let the bottom highlight override an index click scroll', () => {
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    Object.defineProperty(window, 'scrollY', { value: 1200, configurable: true });
+    Object.defineProperty(document.documentElement, 'scrollHeight', { value: 2000, configurable: true });
+    document.querySelector<HTMLElement>('#settings-index [data-section="settings-targets"]')!.click();
+    window.dispatchEvent(new Event('scroll'));
+    expect((document.querySelector('#settings-index .active') as HTMLElement).dataset.section).toBe('settings-targets');
+  });
+
+  it('puts each button inside an h2', () => {
+    const headings = document.querySelectorAll('.settings-section > h2');
+    expect(headings.length).toBe(7);
+    for (const h of headings) {
+      expect(h.querySelector(':scope > button.settings-section-header')).not.toBeNull();
+    }
+  });
+});
+
+describe('revealInSettings on phones', () => {
+  it('opens the collapsed section containing an element', () => {
+    phone = true;
+    stubMatchMedia();
+    load();
+    const card = section('settings-plugins').querySelector('.card') as HTMLElement;
+    expect(body('settings-plugins').hidden).toBe(true);
+    revealInSettings(card);
+    expect(body('settings-plugins').hidden).toBe(false);
+    expect(header('settings-plugins').getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('covers the Manage profiles target', () => {
+    phone = true;
+    stubMatchMedia();
+    load();
+    revealInSettings(document.getElementById('profiles-management-list')!);
+    expect(body('settings-profile').hidden).toBe(false);
   });
 });
 

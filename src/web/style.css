@@ -7830,9 +7830,18 @@ html {
     cursor: default;
 }
 
-.settings-section-header h2 {
+.settings-section-heading {
     margin: 0;
     font-size: var(--font-xl);
+}
+
+.settings-section-header {
+    font-size: inherit;
+    font-weight: inherit;
+}
+
+.settings-section:focus {
+    outline: none;
 }
 
 @media (max-width: 768px) {
@@ -7859,7 +7868,7 @@ html {
         cursor: pointer;
     }
 
-    .settings-section-header h2 {
+    .settings-section-heading {
         font-size: var(--font-lg);
     }
 

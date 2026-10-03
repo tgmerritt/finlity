@@ -32,7 +32,7 @@ describe('settings markup', () => {
     const sections = Array.from(document.querySelectorAll('#tab-settings .settings-section'));
     expect(sections.map((s) => s.id)).toEqual(SECTIONS.map((s) => s.id));
     sections.forEach((section, i) => {
-      expect(section.querySelector('.settings-section-header h2')!.textContent).toBe(SECTIONS[i].title);
+      expect(section.querySelector('.settings-section-heading > .settings-section-header')!.textContent).toBe(SECTIONS[i].title);
       const cards = Array.from(section.querySelectorAll('.settings-grid > .card')).map(cardTitle);
       expect(cards).toEqual(SECTIONS[i].cards);
     });

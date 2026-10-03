@@ -85,15 +85,48 @@ function toggleSection(section: HTMLElement): void {
   setOpen(section, !section.classList.contains('is-open'));
 }
 
+/** While a smooth scroll from an index click runs, ignore observer highlights. */
+let scrollLock = false;
+let scrollLockTimer: ReturnType<typeof setTimeout> | undefined;
+
+function lockHighlight(): void {
+  scrollLock = true;
+  clearTimeout(scrollLockTimer);
+  scrollLockTimer = setTimeout(() => {
+    scrollLock = false;
+  }, 1200);
+}
+
+/** Open the section containing el when it is collapsed (phone accordion). */
+export function revealInSettings(el: HTMLElement): void {
+  const section = el.closest<HTMLElement>('.settings-section');
+  if (section && isPhone() && !section.classList.contains('is-open')) setOpen(section, true);
+}
+
 function goToSection(id: string): void {
   const section = document.getElementById(id);
   if (!section) return;
   if (isPhone() && !section.classList.contains('is-open')) setOpen(section, true);
+  lockHighlight();
   section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  section.tabIndex = -1;
+  section.focus({ preventScroll: true });
   setActive(id);
 }
 
+function atPageBottom(): boolean {
+  return window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+}
+
+function highlightLastAtBottom(): void {
+  if (scrollLock || !atPageBottom()) return;
+  const last = visibleSections().pop();
+  if (last) setActive(last.id);
+}
+
 export function initSettingsSections(): void {
+  clearTimeout(scrollLockTimer);
+  scrollLock = false;
   const index = document.getElementById('settings-index');
   if (!index || sections().length === 0) return;
 
@@ -119,12 +152,17 @@ export function initSettingsSections(): void {
     const observer = new IntersectionObserver(
       (entries) => {
         const hit = entries.filter((e) => e.isIntersecting).pop();
-        if (hit) setActive((hit.target as HTMLElement).id);
+        if (hit && !scrollLock) setActive((hit.target as HTMLElement).id);
       },
       { rootMargin: '-10% 0px -75% 0px' }
     );
     sections().forEach((s) => observer.observe(s));
   }
+
+  window.addEventListener('scroll', highlightLastAtBottom, { passive: true });
+  window.addEventListener('scrollend', () => {
+    scrollLock = false;
+  });
 
   const first = visibleSections()[0];
   if (first) setActive(first.id);
