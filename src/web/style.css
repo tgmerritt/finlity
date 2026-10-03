@@ -3032,6 +3032,44 @@ td.text-right {
     font-size: 12px;
 }
 
+/* Phones: stack name and meta on top, amount and actions on one wrapping row.
+   Must follow the base rules above. */
+@media (max-width: 768px) {
+    .income-item,
+    .expense-item,
+    .deduction-item {
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        padding: 12px;
+        min-width: 0;
+    }
+
+    .income-item-info,
+    .expense-item-info,
+    .deduction-item-info {
+        flex: 1 1 100%;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .income-item-amount,
+    .expense-item-amount,
+    .deduction-item-amount {
+        margin-right: auto;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .income-item-actions,
+    .expense-item-actions,
+    .deduction-item-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        max-width: 100%;
+    }
+}
+
 /* Paycheck Breakdown Preview */
 .paycheck-breakdown-grid {
     display: grid;
