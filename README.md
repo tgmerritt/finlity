@@ -494,7 +494,6 @@ finlity/
 │   │       └── sector-treemap/
 │   └── web/                   # Dashboard UI
 │       ├── index.html         # Single-page dashboard
-│       ├── app.js             # Frontend JavaScript
 │       └── style.css          # Styles
 ├── scripts/
 │   └── generate_demo.py       # Demo data generator
