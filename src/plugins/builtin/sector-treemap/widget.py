@@ -3,9 +3,12 @@ Sector Treemap Widget Plugin.
 
 Displays an interactive Plotly.js treemap visualization showing portfolio allocation
 by sector with individual holdings, colored by daily performance (red/green).
+The chart is returned declaratively in ``WidgetContent.data["chart"]``; the frontend
+renders it (the CSP forbids inline scripts, so widget HTML must not carry any).
 """
 
-import json
+import html as html_lib
+
 from src.plugins.base import WidgetPlugin, WidgetContent
 from src.data import PriceService
 
@@ -25,7 +28,7 @@ class SectorTreemapWidget(WidgetPlugin):
         return self._price_service
 
     def render(self, positions: list[dict], accounts: list[dict]) -> WidgetContent:
-        """Render the sector treemap widget with Plotly.js."""
+        """Render the sector treemap widget as a declarative Plotly chart."""
         min_percent = self.get_setting("min_percent", 1)
 
         # Calculate total portfolio value
@@ -156,9 +159,6 @@ class SectorTreemapWidget(WidgetPlugin):
                     "daily_change": pos["daily_change_pct"],
                 })
 
-        # Generate unique container ID
-        container_id = "sector-treemap-chart"
-
         # Build Plotly config
         treemap_data = {
             "type": "treemap",
@@ -201,8 +201,7 @@ class SectorTreemapWidget(WidgetPlugin):
 
         layout = {
             "margin": {"t": 30, "l": 10, "r": 10, "b": 10},
-            "paper_bgcolor": "rgba(0,0,0,0)",
-            "plot_bgcolor": "rgba(0,0,0,0)",
+            # Theme colors (paper, font) come from the frontend's renderChart.
         }
 
         config = {
@@ -215,7 +214,9 @@ class SectorTreemapWidget(WidgetPlugin):
         top_sector = max(sectors.items(), key=lambda x: x[1]["value"])[0] if sectors else "N/A"
         top_sector_pct = (sectors[top_sector]["value"] / total_value * 100) if top_sector in sectors else 0
 
-        # Generate HTML with embedded script
+        top_sector_label = html_lib.escape(str(top_sector))
+
+        # Summary markup plus an empty container the frontend renders the chart into.
         html = f"""
         <div class="treemap-widget plotly-treemap">
             <div class="treemap-summary">
@@ -225,33 +226,15 @@ class SectorTreemapWidget(WidgetPlugin):
                 </div>
                 <div class="summary-item">
                     <span class="label">Top Sector:</span>
-                    <span class="value">{top_sector} ({top_sector_pct:.1f}%)</span>
+                    <span class="value">{top_sector_label} ({top_sector_pct:.1f}%)</span>
                 </div>
                 <div class="summary-item">
                     <span class="label">Sectors:</span>
                     <span class="value">{len(sector_list)}</span>
                 </div>
             </div>
-            <div id="{container_id}" class="treemap-plotly-container"></div>
+            <div data-chart-container class="treemap-plotly-container"></div>
         </div>
-        <script>
-        (function() {{
-            var data = [{json.dumps(treemap_data)}];
-            var layout = {json.dumps(layout)};
-            var config = {json.dumps(config)};
-
-            // Adjust colors for dark mode
-            var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-            if (isDark) {{
-                layout.font = {{ color: '#e0e0e0' }};
-                data[0].textfont = {{ color: '#ffffff' }};
-                data[0].marker.colorbar.tickfont = {{ color: '#e0e0e0' }};
-                data[0].marker.colorbar.title.font = {{ color: '#e0e0e0' }};
-            }}
-
-            Plotly.newPlot('{container_id}', data, layout, config);
-        }})();
-        </script>
         """
 
         return WidgetContent(
@@ -260,6 +243,7 @@ class SectorTreemapWidget(WidgetPlugin):
                 "sectors": list(sectors.keys()),
                 "total_value": total_value,
                 "position_count": sum(len(s["positions"]) for s in sectors.values()),
+                "chart": {"data": [treemap_data], "layout": layout, "config": config},
             },
             scripts=[],
             styles=[],

@@ -79,3 +79,17 @@ def test_hsts_present_when_forwarded_proto_https(client: TestClient) -> None:
 def test_hsts_picks_first_forwarded_proto_value(client: TestClient) -> None:
     resp = client.get("/ping", headers={"X-Forwarded-Proto": "https, http"})
     assert "strict-transport-security" in {k.lower() for k in resp.headers}
+
+
+def test_csp_allows_cloudflare_web_analytics_only_where_needed(client: TestClient) -> None:
+    """The Cloudflare Web Analytics beacon loads from static.cloudflareinsights.com
+    and reports to cloudflareinsights.com; nothing else may be loosened."""
+    csp = client.get("/ping").headers["content-security-policy"]
+    directives = {d.strip().split(" ", 1)[0]: d.strip() for d in csp.split(";") if d.strip()}
+    assert "https://static.cloudflareinsights.com" in directives["script-src"].split()
+    assert "https://cloudflareinsights.com" in directives["connect-src"].split()
+    assert "cloudflareinsights" not in " ".join(
+        v for k, v in directives.items() if k not in ("script-src", "connect-src")
+    )
+    assert "'unsafe-inline'" not in directives["script-src"]
+    assert directives["default-src"] == "default-src 'self'"
