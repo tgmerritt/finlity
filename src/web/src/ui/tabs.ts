@@ -137,6 +137,94 @@ export function initTabs(): void {
   });
 }
 
+const PHONE_QUERY = '(max-width: 768px)';
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// The element that opened the drawer, so closing can hand focus back to it.
+let drawerOpener: HTMLElement | null = null;
+let drawerKeysBound = false;
+
+/**
+ * Whether the sidebar is currently a slide-out drawer (phone layout).
+ */
+function isPhoneLayout(): boolean {
+  if (typeof window.matchMedia === 'function') {
+    return window.matchMedia(PHONE_QUERY).matches;
+  }
+  return window.innerWidth <= 768;
+}
+
+function isDrawerOpen(): boolean {
+  return querySelector<HTMLElement>('.sidebar')?.classList.contains('mobile-open') ?? false;
+}
+
+/**
+ * Keep the closed phone drawer out of the tab order and the accessibility
+ * tree. `inert` does the work; aria-hidden covers browsers without it. On
+ * wider layouts the sidebar is a normal visible nav and must stay reachable.
+ */
+function syncDrawerAvailability(): void {
+  const sidebar = querySelector<HTMLElement>('.sidebar');
+  if (!sidebar) return;
+  if (isPhoneLayout() && !isDrawerOpen()) {
+    sidebar.setAttribute('inert', '');
+    sidebar.setAttribute('aria-hidden', 'true');
+  } else {
+    sidebar.removeAttribute('inert');
+    sidebar.removeAttribute('aria-hidden');
+  }
+}
+
+/**
+ * Visible, enabled focusable elements inside the drawer, in DOM order.
+ */
+function drawerFocusables(sidebar: HTMLElement): HTMLElement[] {
+  return Array.from(sidebar.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((el) => {
+    for (
+      let node: HTMLElement | null = el;
+      node && node !== sidebar.parentElement;
+      node = node.parentElement
+    ) {
+      if (node.hidden || getComputedStyle(node).display === 'none') return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Escape closes the open drawer; Tab and Shift+Tab wrap inside it.
+ */
+function handleDrawerKeydown(event: KeyboardEvent): void {
+  if (!isDrawerOpen()) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeMobileNav();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const sidebar = querySelector<HTMLElement>('.sidebar');
+  if (!sidebar) return;
+  const items = drawerFocusables(sidebar);
+  if (items.length === 0) {
+    event.preventDefault();
+    return;
+  }
+  const first = items[0] as HTMLElement;
+  const last = items[items.length - 1] as HTMLElement;
+  const active = document.activeElement;
+  if (!sidebar.contains(active)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  } else if (event.shiftKey && active === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 /**
  * Keep the bottom bar's More button in sync with the drawer state.
  */
@@ -148,11 +236,12 @@ function setMoreExpanded(expanded: boolean): void {
 }
 
 /**
- * Close mobile navigation menu.
+ * Close mobile navigation menu and return focus to the button that opened it.
  */
 function closeMobileNav(): void {
   const sidebar = querySelector<HTMLElement>('.sidebar');
   const overlay = querySelector<HTMLElement>('.mobile-nav-overlay');
+  const wasOpen = isDrawerOpen();
   setMoreExpanded(false);
 
   if (sidebar) {
@@ -161,6 +250,14 @@ function closeMobileNav(): void {
 
   if (overlay) {
     overlay.style.display = 'none';
+  }
+
+  syncDrawerAvailability();
+
+  if (wasOpen) {
+    const opener = drawerOpener ?? querySelector<HTMLElement>('#bottom-tab-more');
+    drawerOpener = null;
+    opener?.focus();
   }
 }
 
@@ -171,15 +268,23 @@ export function toggleMobileNav(): void {
   const sidebar = querySelector<HTMLElement>('.sidebar');
   const overlay = querySelector<HTMLElement>('.mobile-nav-overlay');
 
-  if (sidebar) {
-    const isOpen = sidebar.classList.contains('mobile-open');
-    toggleClass(sidebar, 'mobile-open', !isOpen);
-    setMoreExpanded(!isOpen);
-
-    if (overlay) {
-      overlay.style.display = !isOpen ? 'block' : 'none';
-    }
+  if (!sidebar) return;
+  if (isDrawerOpen()) {
+    closeMobileNav();
+    return;
   }
+
+  drawerOpener =
+    document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+      ? document.activeElement
+      : querySelector<HTMLElement>('#bottom-tab-more');
+  toggleClass(sidebar, 'mobile-open', true);
+  setMoreExpanded(true);
+  syncDrawerAvailability();
+  if (overlay) {
+    overlay.style.display = 'block';
+  }
+  drawerFocusables(sidebar)[0]?.focus();
 }
 
 /**
@@ -200,4 +305,22 @@ export function initMobileNav(): void {
   if (moreButton) {
     moreButton.addEventListener('click', toggleMobileNav);
   }
+
+  if (!drawerKeysBound) {
+    document.addEventListener('keydown', handleDrawerKeydown);
+    drawerKeysBound = true;
+  }
+
+  // Resizing across the phone breakpoint switches the sidebar between a
+  // drawer and a permanent nav.
+  if (typeof window.matchMedia === 'function') {
+    window.matchMedia(PHONE_QUERY).addEventListener?.('change', () => {
+      if (!isPhoneLayout() && isDrawerOpen()) {
+        closeMobileNav();
+      } else {
+        syncDrawerAvailability();
+      }
+    });
+  }
+  syncDrawerAvailability();
 }
