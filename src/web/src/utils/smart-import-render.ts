@@ -112,9 +112,7 @@ const ERROR_COPY: Record<string, string> = {
  */
 export function analyzeErrorType(status: number, data?: unknown): string {
   const sent =
-    typeof data === 'object' && data !== null && 'error_type' in data
-      ? (data as { error_type: unknown }).error_type
-      : undefined;
+    typeof data === 'object' && data !== null && 'error_type' in data ? data.error_type : undefined;
   if (typeof sent === 'string' && Object.hasOwn(ERROR_COPY, sent)) return sent;
   if (status === 0) return 'network';
   if (status === 413) return 'file_too_large';
@@ -126,7 +124,7 @@ export function analyzeErrorType(status: number, data?: unknown): string {
 /** The `error_type` of an ApiError body, if it has one. */
 export function errorTypeOf(data: unknown): string | undefined {
   if (typeof data === 'object' && data !== null && 'error_type' in data) {
-    const t = (data as { error_type: unknown }).error_type;
+    const t = data.error_type;
     return typeof t === 'string' ? t : undefined;
   }
   return undefined;
