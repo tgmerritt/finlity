@@ -1,18 +1,46 @@
 /**
  * Debts page: summary strip and one card per liability, grouped by type, with
- * archived debts in a collapsed "Paid off" section. All data is written with
- * textContent. Detail, edit and delete arrive with the detail view.
+ * archived debts in a collapsed "Paid off" section, plus the detail view,
+ * Update balance, Edit, Delete and the plain Add form. All data is written
+ * with textContent.
  */
 
 import { apiCall } from '@/api/client';
+import { renderChart, ensureThemeUpdates, getAxisConfig } from '@/charts/plotly-utils';
+import {
+  openDebtForm,
+  debtErrorMessage,
+  applyFieldErrors,
+  showFormError,
+} from '@/features/debt-form';
 import { store, subscribe } from '@/state/store';
-import { on } from '@/state/events';
+import { on, emit } from '@/state/events';
+import { createDynamicModal, closeDynamicModal } from '@/ui/modal';
+import { withSubmitGuard } from '@/ui/with-submit-guard';
 import { onTabChange, getCurrentTab } from '@/ui/tabs';
 import { setStateView } from '@/ui/state-view';
 import { showToast } from '@/ui/toast';
 import { formatCurrency } from '@/utils/format';
-import { LIABILITY_TYPE_LABELS, formatApr, formatMonthYear } from '@/utils/liabilities';
-import type { LiabilityFrequency, LiabilityResponse, LiabilityType } from '@/types/api';
+import {
+  schedule,
+  summarize as amortizationSummary,
+  shift,
+  type ScheduleRow,
+} from '@/utils/amortization';
+import { today } from '@/utils/clock';
+import {
+  LIABILITY_TYPE_LABELS,
+  formatApr,
+  formatMonthDay,
+  formatMonthYear,
+} from '@/utils/liabilities';
+import type {
+  LiabilityFrequency,
+  LiabilityHistoryResponse,
+  LiabilityResponse,
+  LiabilityType,
+  RecordBalanceInput,
+} from '@/types/api';
 
 const TYPE_ORDER = Object.keys(LIABILITY_TYPE_LABELS) as LiabilityType[];
 
@@ -143,8 +171,19 @@ function renderCard(d: LiabilityResponse): HTMLElement {
     card.appendChild(h('span', 'debt-progress-label', `${pct}% paid`));
   }
 
-  // Update balance, Edit and Delete land here with the detail view.
-  card.appendChild(h('div', 'debt-card-actions'));
+  const actions = h('div', 'debt-card-actions');
+  const act = (label: string, run: () => void): void => {
+    const b = h('button', 'btn btn-default btn-sm', label);
+    b.type = 'button';
+    b.setAttribute('aria-label', `${label}: ${d.name}`);
+    b.addEventListener('click', run);
+    actions.appendChild(b);
+  };
+  act('Details', () => openDetail(d.id));
+  act('Update balance', () => openBalanceDialog(d));
+  act('Edit', () => openEdit(d));
+  act('Delete', () => openDeleteDialog(d));
+  card.appendChild(actions);
   return card;
 }
 
@@ -158,9 +197,7 @@ function renderEmpty(host: HTMLElement): void {
   const add = h('button', 'btn btn-primary', 'Add a debt');
   add.type = 'button';
   add.setAttribute('data-debts-action', 'add');
-  add.addEventListener('click', () => {
-    showToast('Adding a debt is not available yet.', 'info');
-  });
+  add.addEventListener('click', openAdd);
   body.appendChild(add);
   box.appendChild(body);
   host.appendChild(box);
@@ -174,6 +211,13 @@ function renderList(list: readonly LiabilityResponse[]): void {
     renderEmpty(host);
     return;
   }
+  const toolbar = h('div', 'debts-toolbar');
+  const addButton = h('button', 'btn btn-primary', 'Add a debt');
+  addButton.type = 'button';
+  addButton.setAttribute('data-debts-action', 'add');
+  addButton.addEventListener('click', openAdd);
+  toolbar.appendChild(addButton);
+  host.appendChild(toolbar);
 
   // One grid across all types, ordered by type; each card carries its type.
   const active = list.filter((d) => d.is_active);
@@ -197,6 +241,475 @@ function renderList(list: readonly LiabilityResponse[]): void {
     details.appendChild(cards);
     host.appendChild(details);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Writes: Add, Edit, Update balance, Delete, relink
+// ---------------------------------------------------------------------------
+
+/**
+ * Refresh the list after any write and tell the dashboard so its net worth
+ * updates. The dashboard refetches on accounts:changed 'added'; there is no
+ * liabilities event on the bus yet.
+ */
+async function afterWrite(): Promise<void> {
+  generation += 1;
+  inflight = null;
+  emit({ type: 'accounts:changed', reason: 'added' });
+  await loadDebts().catch(console.error);
+}
+
+function find(id: string): LiabilityResponse | undefined {
+  return (all ?? []).find((d) => d.id === id);
+}
+
+/** PR C swaps the plain form for the wizard here. */
+function openAdd(): void {
+  openDebtForm({ entities: store.get('entities'), onSaved: afterWrite });
+}
+
+function openEdit(d: LiabilityResponse, reopen = false): void {
+  openDebtForm({
+    debt: d,
+    entities: store.get('entities'),
+    onSaved: async () => {
+      await afterWrite();
+      if (reopen) openDetail(d.id);
+    },
+  });
+}
+
+function parseMoney(raw: string): number {
+  const t = raw.replace(/[$,\s]/g, '');
+  return t === '' ? NaN : Number(t);
+}
+
+function formGroup(label: string, key: string, input: HTMLInputElement): HTMLElement {
+  const wrap = h('div', 'form-group');
+  const lab = h('label', undefined, label);
+  input.id = `debt-field-${key}`;
+  input.setAttribute('data-debt-field', key);
+  lab.htmlFor = input.id;
+  wrap.appendChild(lab);
+  wrap.appendChild(input);
+  return wrap;
+}
+
+function openBalanceDialog(d: LiabilityResponse, reopen = false): void {
+  const form = h('form', 'debt-form');
+  form.noValidate = true;
+  form.addEventListener('submit', (e) => e.preventDefault());
+  form.appendChild(h('p', 'debt-form-lead', `What does ${d.name} owe right now?`));
+  const balance = h('input');
+  balance.type = 'text';
+  balance.inputMode = 'decimal';
+  const asOf = h('input');
+  asOf.type = 'date';
+  const now = today();
+  asOf.value = now;
+  asOf.max = now;
+  form.appendChild(formGroup('Balance', 'balance', balance));
+  form.appendChild(formGroup('As of', 'asOf', asOf));
+
+  createDynamicModal({
+    title: 'Update balance',
+    content: form,
+    saveButtonText: 'Save balance',
+    modalClass: 'debt-form-modal',
+    onSave: async (event) => {
+      const errors: Record<string, string> = {};
+      const amount = parseMoney(balance.value);
+      if (!Number.isFinite(amount) || amount < 0 || amount > 1e10) {
+        errors.balance = 'Enter an amount of zero or more';
+      }
+      // Compare calendar days as text, against the local clock.
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf.value)) errors.asOf = 'Choose a date';
+      else if (asOf.value > today()) errors.asOf = 'The date cannot be in the future';
+      applyFieldErrors(form, errors);
+      if (Object.keys(errors).length > 0) return;
+      const body: RecordBalanceInput = { balance: amount, as_of: asOf.value };
+      const button = event.currentTarget as HTMLButtonElement | null;
+      try {
+        await withSubmitGuard(button, 'Saving...', () =>
+          apiCall(`/api/liabilities/${encodeURIComponent(d.id)}/balance`, {
+            method: 'POST',
+            body,
+          })
+        );
+        closeDynamicModal();
+        showToast('Balance updated', 'success');
+        await afterWrite();
+        if (reopen) openDetail(d.id);
+      } catch (error) {
+        console.error('Balance update failed:', error instanceof Error ? error.name : 'error');
+        showFormError(form, debtErrorMessage(error));
+      }
+    },
+  });
+  balance.focus();
+}
+
+function openDeleteDialog(d: LiabilityResponse): void {
+  const body = h('div', 'debt-delete');
+  body.appendChild(
+    h(
+      'p',
+      undefined,
+      `Delete ${d.name}? Its balance history is removed too. This cannot be undone.`
+    )
+  );
+  let alsoExpense: HTMLInputElement | null = null;
+  if (d.expense) {
+    const label = h('label', 'debt-delete-option');
+    alsoExpense = h('input');
+    alsoExpense.type = 'checkbox';
+    alsoExpense.checked = false;
+    label.appendChild(alsoExpense);
+    label.appendChild(h('span', undefined, 'Also delete the linked budget expense'));
+    body.appendChild(label);
+    body.appendChild(h('p', 'debt-field-hint', `Expense: ${d.expense.name}`));
+  }
+  const modal = createDynamicModal({
+    title: 'Delete debt',
+    content: body,
+    saveButtonText: 'Delete',
+    modalClass: 'modal-danger',
+    onSave: async (event) => {
+      const button = event.currentTarget as HTMLButtonElement | null;
+      const withExpense = alsoExpense?.checked === true;
+      try {
+        await withSubmitGuard(button, 'Deleting...', () =>
+          apiCall(`/api/liabilities/${encodeURIComponent(d.id)}?delete_expense=${withExpense}`, {
+            method: 'DELETE',
+          })
+        );
+        closeDynamicModal();
+        showToast('Debt deleted', 'success');
+        await afterWrite();
+      } catch (error) {
+        console.error('Debt delete failed:', error instanceof Error ? error.name : 'error');
+        showFormError(body, debtErrorMessage(error));
+      }
+    },
+  });
+  const save = modal.querySelector('[data-action="save"]');
+  save?.classList.replace('btn-primary', 'btn-danger');
+}
+
+// ---------------------------------------------------------------------------
+// Detail view
+// ---------------------------------------------------------------------------
+
+const CHART_ID = 'debt-detail-chart';
+
+interface YearGroup {
+  year: string;
+  rows: ScheduleRow[];
+}
+
+/** First payment date on or after today, rolled forward from the stored one. */
+function firstDue(d: LiabilityResponse): string {
+  const now = today();
+  const freq = d.payment_frequency || 'monthly';
+  const anchor = d.next_payment_date?.slice(0, 10) || now;
+  let k = 0;
+  let due = anchor;
+  while (due < now && k < 1000) {
+    k += 1;
+    due = shift(anchor, freq, k);
+  }
+  return due;
+}
+
+/** Payments left, grouped by calendar year; null when there is no payoff plan. */
+function scheduleYears(d: LiabilityResponse): YearGroup[] | 'never' | null {
+  if (!d.is_amortizing || !d.payment_amount || d.estimated_balance <= 0) return null;
+  const freq = d.payment_frequency || 'monthly';
+  const apr = d.interest_rate ?? 0;
+  const due = firstDue(d);
+  if (amortizationSummary(d.estimated_balance, apr, d.payment_amount, freq, due).neverPaysOff) {
+    return 'never';
+  }
+  const rows = schedule(d.estimated_balance, apr, d.payment_amount, freq, due);
+  const groups: YearGroup[] = [];
+  for (const row of rows) {
+    const year = row.date.slice(0, 4);
+    const last = groups[groups.length - 1];
+    if (last && last.year === year) last.rows.push(row);
+    else groups.push({ year, rows: [row] });
+  }
+  return groups;
+}
+
+function renderSchedule(d: LiabilityResponse): HTMLElement | null {
+  const years = scheduleYears(d);
+  if (years === null) return null;
+  const section = h('section', 'debt-detail-section');
+  section.appendChild(h('h3', undefined, 'Payment schedule'));
+  if (years === 'never') {
+    section.appendChild(
+      h(
+        'p',
+        'debt-field-hint',
+        'At this payment the balance never reaches zero. Raise the payment to see a payoff plan.'
+      )
+    );
+    return section;
+  }
+  for (const group of years) {
+    const sum = (pick: (r: ScheduleRow) => number): number =>
+      group.rows.reduce((total, r) => total + pick(r), 0);
+    const details = h('details', 'debt-year');
+    const summary = h('summary');
+    summary.appendChild(h('span', 'debt-year-label', group.year));
+    summary.appendChild(h('span', undefined, `Paid ${formatCurrency(sum((r) => r.payment))}`));
+    summary.appendChild(h('span', undefined, `Interest ${formatCurrency(sum((r) => r.interest))}`));
+    const end = group.rows[group.rows.length - 1]!;
+    summary.appendChild(h('span', undefined, `Left ${formatCurrency(end.balance)}`));
+    details.appendChild(summary);
+    for (const row of group.rows) {
+      const line = h('div', 'debt-year-row');
+      line.appendChild(h('span', undefined, formatMonthDay(row.date)));
+      line.appendChild(h('span', undefined, formatCurrency(row.payment)));
+      line.appendChild(h('span', undefined, `Interest ${formatCurrency(row.interest)}`));
+      line.appendChild(h('span', undefined, `Left ${formatCurrency(row.balance)}`));
+      details.appendChild(line);
+    }
+    section.appendChild(details);
+  }
+  return section;
+}
+
+function cssVar(name: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+async function drawHistory(id: string, host: HTMLElement): Promise<void> {
+  try {
+    const history = await apiCall<LiabilityHistoryResponse>(
+      `/api/liabilities/${encodeURIComponent(id)}/history`
+    );
+    if (!host.isConnected) return;
+    if (!history || !Array.isArray(history.series) || history.series.length === 0) {
+      host.textContent = 'No balance history yet.';
+      return;
+    }
+    host.textContent = '';
+    const color = cssVar('--color-primary', '#4f8cff');
+    const traces = [
+      {
+        x: history.series.map((p) => p.date),
+        y: history.series.map((p) => p.balance),
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Estimated balance',
+        line: { color, width: 2 },
+        hovertemplate: '%{x|%b %-d, %Y}: $%{y:,.2f}<extra></extra>',
+      },
+      {
+        x: history.reported.map((p) => p.date),
+        y: history.reported.map((p) => p.balance),
+        type: 'scatter',
+        mode: 'markers',
+        name: 'Reported',
+        marker: { color, size: 8 },
+        hovertemplate: '%{x|%b %-d, %Y}: $%{y:,.2f} (reported)<extra></extra>',
+      },
+    ] as unknown as Parameters<typeof renderChart>[1];
+    await renderChart(CHART_ID, traces, {
+      height: 220,
+      showlegend: false,
+      margin: { t: 8, r: 12, b: 32, l: 64 },
+      xaxis: { ...getAxisConfig(), type: 'date', nticks: 4, tickangle: 0, tickformat: '%b %Y' },
+      yaxis: { ...getAxisConfig(), tickprefix: '$', tickformat: ',.0f' },
+    });
+    ensureThemeUpdates(CHART_ID);
+  } catch (error) {
+    console.error('Debt history failed:', error instanceof Error ? error.name : 'error');
+    if (host.isConnected) host.textContent = 'Balance history is not available right now.';
+  }
+}
+
+interface RelinkKind {
+  field: 'linked_position_id' | 'expense_id';
+  noun: string;
+  missing: string;
+  list: () => Promise<Array<{ id: string; name: string }>>;
+}
+
+const RELINK: Record<'home' | 'expense', RelinkKind> = {
+  home: {
+    field: 'linked_position_id',
+    noun: 'home',
+    missing: 'The linked home was deleted or can no longer be found.',
+    list: async () => {
+      const rows = await apiCall<Array<{ id: string; name: string; position_type?: string }>>(
+        '/api/portfolio/positions'
+      );
+      return (Array.isArray(rows) ? rows : []).filter((r) => r.position_type === 'real_estate');
+    },
+  },
+  expense: {
+    field: 'expense_id',
+    noun: 'budget expense',
+    missing: 'The linked budget expense was deleted or can no longer be found.',
+    list: async () => {
+      const rows = await apiCall<Array<{ id: string; name: string }>>('/api/budget/expenses');
+      return Array.isArray(rows) ? rows : [];
+    },
+  },
+};
+
+async function relink(
+  d: LiabilityResponse,
+  kind: RelinkKind,
+  value: string | null,
+  host: HTMLElement
+): Promise<void> {
+  try {
+    await apiCall(`/api/liabilities/${encodeURIComponent(d.id)}`, {
+      method: 'PUT',
+      body: { [kind.field]: value },
+    });
+    await afterWrite();
+    openDetail(d.id);
+  } catch (error) {
+    console.error('Relink failed:', error instanceof Error ? error.name : 'error');
+    showFormError(host, debtErrorMessage(error));
+  }
+}
+
+function renderWarning(d: LiabilityResponse, which: 'home' | 'expense'): HTMLElement {
+  const kind = RELINK[which];
+  const box = h('div', 'debt-link-warning');
+  box.setAttribute('role', 'status');
+  box.appendChild(h('p', undefined, kind.missing));
+  const row = h('div', 'debt-link-actions');
+  const choose = h('button', 'btn btn-default btn-sm', 'Choose another');
+  choose.type = 'button';
+  const remove = h('button', 'btn btn-default btn-sm', 'Remove link');
+  remove.type = 'button';
+  remove.addEventListener('click', () => {
+    relink(d, kind, null, box).catch(console.error);
+  });
+  choose.addEventListener('click', () => {
+    kind
+      .list()
+      .then((options) => {
+        row.textContent = '';
+        const select = h('select');
+        select.setAttribute('data-debt-relink', kind.field);
+        select.setAttribute('aria-label', `Choose a ${kind.noun}`);
+        for (const o of options) {
+          const opt = h('option', undefined, o.name);
+          opt.value = o.id;
+          select.appendChild(opt);
+        }
+        const link = h('button', 'btn btn-primary btn-sm', 'Link');
+        link.type = 'button';
+        link.disabled = options.length === 0;
+        link.addEventListener('click', () => {
+          relink(d, kind, select.value, box).catch(console.error);
+        });
+        row.appendChild(
+          options.length > 0
+            ? select
+            : h('span', 'debt-field-hint', `No ${kind.noun}s to choose from.`)
+        );
+        row.appendChild(link);
+      })
+      .catch((error: unknown) => {
+        console.error('Relink options failed:', error instanceof Error ? error.name : 'error');
+        showFormError(box, debtErrorMessage(error));
+      });
+  });
+  row.appendChild(choose);
+  row.appendChild(remove);
+  box.appendChild(row);
+  return box;
+}
+
+function openDetail(id: string): void {
+  const d = find(id);
+  if (!d) return;
+  const body = h('div', 'debt-detail');
+  body.appendChild(
+    h(
+      'p',
+      'debt-detail-sub',
+      [LIABILITY_TYPE_LABELS[d.liability_type], d.lender].filter(Boolean).join(' · ')
+    )
+  );
+
+  const facts = h('dl', 'debt-card-facts');
+  const fact = (label: string, value: string): void => {
+    if (!value) return;
+    const item = h('div', 'debt-card-fact');
+    item.appendChild(h('dt', undefined, label));
+    item.appendChild(h('dd', undefined, value));
+    facts.appendChild(item);
+  };
+  fact('Estimated balance', formatCurrency(d.estimated_balance));
+  fact('APR', d.interest_rate == null ? '' : formatApr(d.interest_rate));
+  fact('Payment', paymentText(d));
+  fact('Paid off', d.payoff_date ? formatMonthYear(d.payoff_date) : '');
+  fact(
+    'Interest left',
+    d.total_interest_remaining == null ? '' : formatCurrency(d.total_interest_remaining)
+  );
+  fact('Last reported', d.last_reported_date ? formatMonthDay(d.last_reported_date) : '');
+  body.appendChild(facts);
+
+  const chart = h('div', 'debt-detail-chart');
+  chart.id = CHART_ID;
+  chart.setAttribute('role', 'img');
+  chart.setAttribute('aria-label', `Balance history for ${d.name}`);
+  chart.textContent = 'Loading balance history...';
+  const chartSection = h('section', 'debt-detail-section');
+  chartSection.appendChild(h('h3', undefined, 'Balance history'));
+  chartSection.appendChild(chart);
+  body.appendChild(chartSection);
+
+  const links = h('section', 'debt-detail-section');
+  if (d.linked_position) {
+    const value =
+      d.linked_position.value == null ? '' : `, ${formatCurrency(d.linked_position.value)}`;
+    links.appendChild(h('p', undefined, `Home: ${d.linked_position.name ?? 'Unnamed'}${value}`));
+  }
+  if (d.expense) {
+    const monthly =
+      d.expense.monthly_amount == null
+        ? ''
+        : `, ${formatCurrency(d.expense.monthly_amount)} a month`;
+    links.appendChild(h('p', undefined, `Budget expense: ${d.expense.name}${monthly}`));
+  }
+  if (d.linked_position_missing) links.appendChild(renderWarning(d, 'home'));
+  if (d.expense_missing) links.appendChild(renderWarning(d, 'expense'));
+  if (links.childElementCount > 0) body.appendChild(links);
+
+  const schedSection = renderSchedule(d);
+  if (schedSection) body.appendChild(schedSection);
+
+  const actions = h('div', 'debt-detail-actions');
+  const act = (label: string, run: () => void, cls = 'btn btn-default'): void => {
+    const b = h('button', cls, label);
+    b.type = 'button';
+    b.addEventListener('click', run);
+    actions.appendChild(b);
+  };
+  act('Update balance', () => openBalanceDialog(d, true), 'btn btn-primary');
+  act('Edit', () => openEdit(d, true));
+  act('Delete', () => openDeleteDialog(d));
+  body.appendChild(actions);
+
+  createDynamicModal({
+    title: d.name,
+    content: body,
+    showFooter: false,
+    modalClass: 'debt-detail-modal',
+  });
+  drawHistory(d.id, chart).catch(console.error);
 }
 
 let all: LiabilityResponse[] | null = null;

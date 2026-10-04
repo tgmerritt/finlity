@@ -8095,3 +8095,110 @@ body.on-settings #tab-settings {
     .debts-empty .btn { width: 100%; min-height: 44px; }
     .debt-card { padding: 14px 16px; }
 }
+
+/* Debts: toolbar, add/edit form, detail view */
+.debts-toolbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.debt-card-actions .btn-sm { padding: 6px 12px; font-size: 13px; }
+.debt-form-modal .modal-content,
+.debt-detail-modal .modal-content {
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+/* Header and footer stay put; only the body scrolls, so Save is always reachable. */
+.debt-form-modal .modal-body,
+.debt-detail-modal .modal-body { min-height: 0; overflow-y: auto; }
+.debt-form-lead { margin: 0 0 16px; color: var(--color-text-secondary); }
+.debt-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 16px;
+}
+.debt-form-grid .form-group { min-width: 0; }
+.debt-form-grid .form-group input,
+.debt-form-grid .form-group select,
+.debt-form .form-group input,
+.debt-form .form-group select { width: 100%; box-sizing: border-box; min-height: 40px; }
+.debt-form-more { margin: 4px 0 8px; }
+.debt-form-more summary {
+    cursor: pointer;
+    padding: 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+.debt-field-hint { font-size: 12px; color: var(--color-text-secondary); }
+.debt-field-error { font-size: 13px; color: var(--color-error); }
+.debt-form [aria-invalid='true'] { border-color: var(--color-error); }
+.debt-form-error {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border: 1px solid var(--color-error);
+    border-radius: 6px;
+    color: var(--color-error);
+    font-size: 14px;
+}
+.debt-delete p { margin: 0 0 12px; line-height: 1.5; color: var(--color-text-primary); }
+.debt-delete-option { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.debt-delete-option input { width: 20px; height: 20px; flex: none; }
+.debt-detail { display: flex; flex-direction: column; gap: 20px; }
+.debt-detail-sub { margin: 0; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.debt-detail-section h3 { margin: 0 0 8px; font-size: 15px; color: var(--color-text-primary); }
+.debt-detail-section p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.debt-detail-chart { min-height: 220px; color: var(--color-text-secondary); font-size: 14px; }
+.debt-link-warning {
+    padding: 10px 12px;
+    border: 1px solid var(--color-warning, var(--color-error));
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+.debt-link-warning p { margin: 0 0 8px; color: var(--color-text-primary); }
+.debt-link-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.debt-link-actions select { min-width: 0; max-width: 100%; min-height: 36px; }
+.debt-year {
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    background: var(--color-bg-container);
+}
+.debt-year summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-secondary);
+}
+.debt-year-label { font-weight: 600; color: var(--color-text-primary); min-width: 44px; }
+.debt-year-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 16px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--color-border);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-primary);
+}
+.debt-year-row span:first-child { min-width: 48px; color: var(--color-text-secondary); }
+.debt-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+
+@media (max-width: 768px) {
+    .debts-toolbar .btn { width: 100%; min-height: 44px; }
+    .debt-form-grid { grid-template-columns: 1fr; }
+    .debt-form .form-group input,
+    .debt-form .form-group select { font-size: 16px; min-height: 44px; }
+    .debt-detail-actions .btn,
+    .debt-link-actions .btn,
+    .debt-form-modal .modal-footer .btn { min-height: 44px; }
+    .debt-detail-actions .btn { flex: 1 1 auto; }
+    .debt-year summary { padding: 12px; }
+}
+
+@media (max-width: 480px) {
+    .debt-form-modal .modal-content,
+    .debt-detail-modal .modal-content { width: 100%; margin: 0; }
+}
