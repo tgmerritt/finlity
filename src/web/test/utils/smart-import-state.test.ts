@@ -1,11 +1,20 @@
 import { describe, it, expect } from 'vitest';
+import { createHash } from 'node:crypto';
 import {
   addFile,
   applyCategorizeResponse,
   applyPreview,
   acceptAllSuggestions,
   buildAnalyzeContext,
+  ApplyTooLargeError,
   buildApplyRequest,
+  buildSettingsPatch,
+  csvHeaderSignature,
+  forgetMerchant,
+  layoutFor,
+  setAiProvider,
+  setFileMapping,
+  accountKey,
   buildCategorizeRequest,
   buildPreviewRequest,
   createWizardState,
@@ -358,21 +367,23 @@ describe('buildCategorizeRequest', () => {
         institution: 'SecretBank',
       },
     });
-    const json = JSON.stringify(buildCategorizeRequest(s, CATS).request);
-    for (const leak of [
-      'SECRETDESC',
-      'secret-file',
-      'SECRETKEY',
-      '9876',
-      'SecretBank',
-      '2026-09',
-      'posted',
-      'description',
-      'account',
-      'file',
-    ]) {
-      expect(json).not.toContain(leak);
-    }
+    const { request, chunks } = buildCategorizeRequest(s, CATS);
+    const keys = new Set<string>();
+    const walk = (v: unknown): void => {
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === 'object') {
+        for (const [k, x] of Object.entries(v)) {
+          keys.add(k);
+          walk(x);
+        }
+      }
+    };
+    walk(request);
+    walk(chunks);
+    expect([...keys].sort()).toEqual(
+      ['categories', 'count', 'direction', 'id', 'items', 'merchant', 'typical_amount'].sort()
+    );
+    expect(request.items.map((i) => i.merchant)).toEqual(['SHOP']);
   });
 
   it('cuts merchants to 48 characters and skips keys with fewer than 3 letters', () => {
@@ -892,5 +903,294 @@ describe('reviewCounts', () => {
         },
       ],
     });
+  });
+});
+
+describe('CSV layouts and settings patch', () => {
+  const HEADERS = ['Date', 'Memo', 'Amount'];
+
+  it('csvHeaderSignature is 64 lowercase hex and matches sha256 of the normalized headers', () => {
+    const sig = csvHeaderSignature(HEADERS);
+    expect(sig).toMatch(/^[0-9a-f]{64}$/);
+    expect(sig).toBe(createHash('sha256').update('date\nmemo\namount').digest('hex'));
+    expect(csvHeaderSignature([' DATE', 'memo ', 'Amount'])).toBe(sig);
+    const long = ['h\u00e9ader ' + 'x'.repeat(300), 'b'];
+    expect(csvHeaderSignature(long)).toBe(
+      createHash('sha256').update(long.join('\n').toLowerCase()).digest('hex')
+    );
+  });
+
+  it('buildAnalyzeContext applies a remembered layout by header signature, not an explicit mapping', () => {
+    const layouts = { [csvHeaderSignature(HEADERS)]: { date: 'Date', amount: 'Amount' } };
+    const ctx = { ...CTX, csv_layouts: layouts };
+    expect(layoutFor(ctx, HEADERS)).toEqual({ date: 'Date', amount: 'Amount' });
+    expect(buildAnalyzeContext(ctx, { headers: HEADERS })).toMatchObject({
+      mapping: { date: 'Date', amount: 'Amount' },
+    });
+    expect(buildAnalyzeContext(ctx, { headers: HEADERS })).not.toHaveProperty('headers');
+    expect(buildAnalyzeContext(ctx, { headers: HEADERS, mapping: { date: 'X' } }).mapping).toEqual({
+      date: 'X',
+    });
+    expect(buildAnalyzeContext(ctx, { headers: ['Other'] })).not.toHaveProperty('mapping');
+  });
+
+  it('records the mapping by signature and merges it into the settings patch', () => {
+    let s = mergeAnalyze(fresh(), 'f1', {
+      status: 'needs_mapping',
+      headers: HEADERS,
+      sample_rows: [],
+    });
+    s = setFileMapping(s, 'f1', { date: 'Date', amount: 'Amount' });
+    expect(s.files[0]!.layout_signature).toBe(csvHeaderSignature(HEADERS));
+    s = mergeAnalyze(
+      s,
+      'f1',
+      ok(
+        stmt([txn()], { account: { kind: 'checking', key: null, last4: null, institution: null } })
+      )
+    );
+    s = setStatement(s, 'f1:0', { account_label: ' Everyday ' });
+    const patch = buildSettingsPatch(s, {
+      csv_layouts: { ['b'.repeat(64)]: { date: 'D' } },
+      accounts: { 'acct:old': 'Old' },
+    });
+    expect(patch.csv_layouts).toEqual({
+      ['b'.repeat(64)]: { date: 'D' },
+      [csvHeaderSignature(HEADERS)]: { date: 'Date', amount: 'Amount' },
+    });
+    expect(patch.accounts).toEqual({ 'acct:old': 'Old', 'label:everyday': 'Everyday' });
+  });
+
+  it('keeps the patch within 50 layouts and 200 accounts, dropping the oldest', () => {
+    let s = mergeAnalyze(fresh(), 'f1', {
+      status: 'needs_mapping',
+      headers: HEADERS,
+      sample_rows: [],
+    });
+    s = setFileMapping(s, 'f1', { date: 'Date' });
+    s = mergeAnalyze(
+      s,
+      'f1',
+      ok(
+        stmt([txn()], { account: { kind: 'checking', key: null, last4: null, institution: null } })
+      )
+    );
+    s = setStatement(s, 'f1:0', { account_label: 'Mine' });
+    const layouts = Object.fromEntries(
+      Array.from({ length: 50 }, (_, i) => [i.toString(16).padStart(64, '0'), { date: 'D' }])
+    );
+    const accounts = Object.fromEntries(
+      Array.from({ length: 200 }, (_, i) => [`acct:${i}`, `L${i}`])
+    );
+    const patch = buildSettingsPatch(s, { csv_layouts: layouts, accounts });
+    expect(Object.keys(patch.csv_layouts)).toHaveLength(50);
+    expect(patch.csv_layouts[csvHeaderSignature(HEADERS)]).toBeDefined();
+    expect(Object.keys(patch.csv_layouts)[0]).toBe('1'.padStart(64, '0'));
+    expect(Object.keys(patch.accounts)).toHaveLength(200);
+    expect(patch.accounts['label:mine']).toBe('Mine');
+    expect(patch.accounts['acct:0']).toBeUndefined();
+  });
+});
+
+describe('accountKey', () => {
+  it('caps the label part so the key stays within the server limits', () => {
+    const key = accountKey({ account_key: null, account_label: 'A'.repeat(500) })!;
+    expect(key.length).toBeLessThanOrEqual(200);
+    expect(key).toMatch(/^label:a{190}$/);
+  });
+
+  it('drops control characters from a label', () => {
+    expect(accountKey({ account_key: null, account_label: 'My\u0000 Acct\n' })).toBe(
+      'label:my acct'
+    );
+  });
+});
+
+describe('apply caps and AI provider', () => {
+  it('throws a typed error past the transaction cap', () => {
+    const s = loaded(Array.from({ length: 10_001 }, () => txn()));
+    expect(() => buildApplyRequest(s)).toThrow(ApplyTooLargeError);
+    try {
+      buildApplyRequest(s);
+    } catch (e) {
+      expect(e).toMatchObject({ limit: 'transactions', max: 10_000 });
+    }
+  });
+
+  it('throws past 12 statements and past 5000 rules', () => {
+    let s = fresh();
+    for (let i = 0; i < 13; i++) {
+      s = addFile(s, { id: `g${i}`, file_name: 'x.csv' });
+      s = mergeAnalyze(s, `g${i}`, ok(stmt([txn()], { file_hash: String(i).padStart(64, '0') })));
+    }
+    expect(() => buildApplyRequest(s)).toThrow(expect.objectContaining({ limit: 'statements' }));
+    const t = loaded([txn()]);
+    const remembered = Object.fromEntries(
+      Array.from({ length: 5001 }, (_, i) => [`M${i}`, { category_id: 'c-food' }])
+    );
+    expect(() => buildApplyRequest({ ...t, remembered })).toThrow(
+      expect.objectContaining({ limit: 'rules' })
+    );
+  });
+
+  it('sends ai_provider for a pdf:ai statement once the provider is set', () => {
+    let s = loaded([txn()], { parser: 'pdf:ai', format: 'pdf' });
+    expect(buildApplyRequest(s).statements[0]).toMatchObject({ ai_used: true });
+    expect(buildApplyRequest(s).statements[0]).not.toHaveProperty('ai_provider');
+    s = setAiProvider(s, 'Claude');
+    expect(buildApplyRequest(s).statements[0]).toMatchObject({ ai_provider: 'Claude' });
+  });
+
+  it('returns no chunks when there are no categories', () => {
+    const s = loaded([txn({ merchant_key: 'CAFE' })]);
+    const { request, chunks } = buildCategorizeRequest(s, []);
+    expect(request.items).toHaveLength(1);
+    expect(chunks).toEqual([]);
+  });
+});
+
+describe('remembered rules merge', () => {
+  const stored = (r: Partial<SmartImportContext['rules'][number]>): WizardState => {
+    rowNo = 0;
+    const ctx = {
+      ...CTX,
+      rules: [{ id: 'r', merchant_key: 'CAFE', category_id: 'c-home', kind: 'fee', ...r }],
+    };
+    let s = createWizardState(ctx, 'b');
+    s = addFile(s, { id: 'f1', file_name: 'a.csv' });
+    return mergeAnalyze(s, 'f1', ok(stmt([txn({ merchant_key: 'CAFE' })])));
+  };
+
+  it('a category choice keeps the stored kind', () => {
+    const s = setCategory(stored({}), ['f1:0:1'], 'c-food', true);
+    expect(buildApplyRequest(s).rules).toEqual([
+      { merchant_key: 'CAFE', category_id: 'c-food', kind: 'fee', source: 'user' },
+    ]);
+  });
+
+  it('a kind choice keeps the stored category', () => {
+    const s = setKind(stored({ kind: null }), ['f1:0:1'], 'refund', true);
+    expect(buildApplyRequest(s).rules).toEqual([
+      { merchant_key: 'CAFE', category_id: 'c-home', kind: 'refund', source: 'user' },
+    ]);
+  });
+
+  it('a non-spending kind overrides the stored category', () => {
+    const s = setKind(stored({}), ['f1:0:1'], 'transfer', true);
+    expect(buildApplyRequest(s).rules).toEqual([
+      { merchant_key: 'CAFE', category_id: null, kind: 'transfer', source: 'user' },
+    ]);
+  });
+
+  it('skips an empty entry but sends an explicit forget', () => {
+    let s = stored({ category_id: null, kind: null });
+    s = setCategory(s, ['f1:0:1'], null, true);
+    expect(buildApplyRequest(s).rules).toEqual([]);
+    expect(reviewCounts(s).merchants_to_remember).toBe(0);
+    s = forgetMerchant(s, 'CAFE');
+    expect(buildApplyRequest(s).rules).toEqual([
+      { merchant_key: 'CAFE', category_id: null, source: 'user' },
+    ]);
+  });
+});
+
+// Field lists copied from the pydantic models in src/api/smart_import.py
+// (ApplyRequest and the models it nests). All of them forbid extra keys.
+const CONTRACT: Record<string, { required: string[]; optional: string[] }> = {
+  request: { required: ['batch_id', 'statements'], optional: ['entity_id', 'rules', 'recurring'] },
+  statement: {
+    required: ['file_hash', 'file_name', 'origin', 'format', 'parser', 'account', 'transactions'],
+    optional: ['period', 'closing_balance', 'liability_id', 'ai_used', 'ai_provider'],
+  },
+  account: { required: ['kind', 'key'], optional: ['label', 'last4', 'institution'] },
+  period: { required: [], optional: ['start', 'end'] },
+  closing_balance: { required: ['amount', 'as_of'], optional: [] },
+  transaction: {
+    required: [
+      'posted_date',
+      'amount',
+      'description',
+      'merchant_key',
+      'kind',
+      'category_source',
+      'dedupe_key',
+    ],
+    optional: ['category_id', 'ai_confidence', 'external_id', 'excluded'],
+  },
+  rule: { required: ['merchant_key'], optional: ['category_id', 'kind', 'source'] },
+  recurring: {
+    required: [
+      'merchant_key',
+      'name',
+      'amount',
+      'frequency',
+      'category_id',
+      'occurrences',
+      'file_hash',
+      'decision',
+    ],
+    optional: ['expense_id'],
+  },
+};
+
+function conforms(name: string, obj: object): void {
+  const spec = CONTRACT[name]!;
+  const keys = Object.keys(obj);
+  for (const r of spec.required) expect(keys, `${name} needs ${r}`).toContain(r);
+  for (const k of keys)
+    expect([...spec.required, ...spec.optional], `${name} has unknown ${k}`).toContain(k);
+}
+
+describe('apply body contract', () => {
+  it('a realistic body uses exactly the fields the server models allow', () => {
+    let s = loaded(
+      [
+        txn({
+          merchant_key: 'NETFLIX',
+          category_id: 'c-fun',
+          category_source: 'rule',
+          external_id: 'F1',
+        }),
+        txn({ merchant_key: 'CAFE' }),
+        txn({ merchant_key: 'SALARY', kind: 'income', amount: 100 }),
+      ],
+      { closing_balance: { amount: 10, as_of: '2026-09-30' } }
+    );
+    const { request } = buildCategorizeRequest(s, CATS);
+    s = applyCategorizeResponse(s, {
+      suggestions: [{ id: request.items[0]!.id, category: 'Food', kind: null, confidence: 0.9 }],
+      provider: 'Claude',
+      model: 'm',
+    });
+    s = setCategory(s, [s.rows[0]!.id], 'c-fun', true);
+    s = setStatement(s, 'f1:0', { liability_id: 'L1', account_label: 'Everyday' });
+    s = setRecurring(s, [
+      {
+        merchant_key: 'NETFLIX',
+        name: 'Netflix',
+        amount: 15,
+        frequency: 'monthly',
+        occurrences: 3,
+        last_date: '2026-09-01',
+        category_id: 'c-fun',
+        already_budgeted: true,
+        matched_expense_id: 'e1',
+      },
+    ]);
+    s = updateRecurring(s, 'NETFLIX', { checked: true });
+    const body = buildApplyRequest({ ...s, entity_id: 'ent' });
+    conforms('request', body);
+    for (const st of body.statements) {
+      conforms('statement', st);
+      conforms('account', st.account);
+      if (st.period) conforms('period', st.period);
+      if (st.closing_balance) conforms('closing_balance', st.closing_balance);
+      expect(st.file_hash).toMatch(/^[A-Za-z0-9_-]{1,100}$/);
+      st.transactions.forEach((t) => conforms('transaction', t));
+    }
+    body.rules!.forEach((r) => conforms('rule', r));
+    expect(body.rules!.length).toBeGreaterThan(0);
+    body.recurring!.forEach((r) => conforms('recurring', r));
+    expect(body.recurring!.length).toBe(1);
   });
 });

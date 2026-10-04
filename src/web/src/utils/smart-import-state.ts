@@ -23,6 +23,7 @@ import type {
   RecurringCandidateSuggestion,
   SmartImportAccountKind,
   SmartImportContext,
+  SmartImportSettings,
   SmartImportTxnKind,
 } from '@/types/api';
 
@@ -57,6 +58,17 @@ export interface AnalyzeOverrides {
   date_order?: string;
 }
 
+/** Server caps (src/api/smart_import.py, src/smart_import/settings_store.py). */
+const MAX_APPLY_STATEMENTS = 12;
+const MAX_APPLY_TRANSACTIONS = 10_000;
+const MAX_APPLY_RULES = 5_000;
+const MAX_APPLY_RECURRING = 500;
+const MAX_CSV_LAYOUTS = 50;
+const MAX_ACCOUNT_LABELS = 200;
+const MAX_ACCOUNT_LABEL_CHARS = 120;
+/** Settings accept `(acct|label):` plus 1 to 190 characters (settings_store.py). */
+const MAX_ACCOUNT_KEY_TAIL = 190;
+
 export interface WizardFile {
   id: string;
   file_name: string;
@@ -71,6 +83,8 @@ export interface WizardFile {
   /** From a needs_ai_layout answer; kept when the AI extract result replaces it. */
   file_hash: string | null;
   options: AnalyzeOverrides;
+  /** Signature of the headers the column mapping was chosen for (see setFileMapping). */
+  layout_signature: string | null;
 }
 
 export interface WizardStatement {
@@ -107,6 +121,10 @@ export interface WizardRow {
   statement_id: string;
   posted_date: string;
   amount: number;
+  /**
+   * As parsed. The parsers mask card, account and SSN-shaped numbers, e-mail
+   * addresses and URLs; other text (such as a name in a memo) is kept as is.
+   */
   description: string;
   merchant_key: string;
   kind: SmartImportTxnKind;
@@ -129,6 +147,8 @@ export interface RecurringChoice extends RecurringCandidateSuggestion {
 export interface RememberedChoice {
   category_id?: string | null;
   kind?: SmartImportTxnKind;
+  /** The user explicitly chose to forget this merchant: send an empty rule. */
+  forget?: boolean;
 }
 
 export interface WizardState {
@@ -140,6 +160,8 @@ export interface WizardState {
   rows: WizardRow[];
   /** merchant_key -> choice to remember (becomes a rule at Apply). */
   remembered: Record<string, RememberedChoice>;
+  /** Rules already stored (from the context); remembered choices merge over them. */
+  stored_rules: SmartImportContext['rules'];
   /** Recurring-detection history from the preview. */
   history: PreviewResponse['history'];
   recurring: RecurringChoice[];
@@ -192,7 +214,7 @@ export interface ReviewCounts {
 }
 
 export function createWizardState(
-  ctx: Pick<SmartImportContext, 'categories'>,
+  ctx: Pick<SmartImportContext, 'categories'> & Partial<Pick<SmartImportContext, 'rules'>>,
   batchId: string,
   entityId: string | null = null
 ): WizardState {
@@ -204,6 +226,7 @@ export function createWizardState(
     statements: [],
     rows: [],
     remembered: {},
+    stored_rules: ctx.rules ?? [],
     history: [],
     recurring: [],
     ai_provider: null,
@@ -219,7 +242,12 @@ export function accountKey(
   stmt: Pick<WizardStatement, 'account_key' | 'account_label'>
 ): string | null {
   if (stmt.account_key) return stmt.account_key;
-  const label = stmt.account_label?.trim().toLowerCase();
+  const label = [...(stmt.account_label ?? '')]
+    .filter((ch) => ch.charCodeAt(0) > 0x1f && ch.charCodeAt(0) !== 0x7f)
+    .join('')
+    .trim()
+    .toLowerCase()
+    .slice(0, MAX_ACCOUNT_KEY_TAIL);
   return label ? `label:${label}` : null;
 }
 
@@ -263,6 +291,7 @@ function newFile(id: string, fileName: string, origin: 'file' | 'sample'): Wizar
     line_count: 0,
     file_hash: null,
     options: {},
+    layout_signature: null,
   };
 }
 
@@ -291,16 +320,160 @@ export function markFileError(state: WizardState, fileId: string, errorType: str
   return mapFile(state, fileId, (f) => ({ ...f, status: 'error', error_type: errorType }));
 }
 
-/** The analyze `context`: remembered rules, categories and the file's overrides. */
+function rotr(x: number, n: number): number {
+  return (x >>> n) | (x << (32 - n));
+}
+
+const SHA_K = Array.from({ length: 64 }, (_, i) => {
+  let n = 0;
+  for (let c = 2, found = 0; found <= i; c++) {
+    let prime = true;
+    for (let d = 2; d * d <= c; d++) if (c % d === 0) prime = false;
+    if (prime) {
+      n = Math.floor((Math.cbrt(c) % 1) * 2 ** 32);
+      found++;
+    }
+  }
+  return n;
+});
+
+/** Synchronous SHA-256 of a string (UTF-8), as 64 lowercase hex characters. */
+function sha256Hex(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  const total = (((bytes.length + 8) >> 6) + 1) << 6;
+  const buf = new Uint8Array(total);
+  buf.set(bytes);
+  buf[bytes.length] = 0x80;
+  const view = new DataView(buf.buffer);
+  view.setUint32(total - 8, Math.floor((bytes.length * 8) / 2 ** 32));
+  view.setUint32(total - 4, (bytes.length * 8) >>> 0);
+  const h = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+  ];
+  const w = new Array<number>(64);
+  for (let off = 0; off < total; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = view.getUint32(off + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(w[i - 15]!, 7) ^ rotr(w[i - 15]!, 18) ^ (w[i - 15]! >>> 3);
+      const s1 = rotr(w[i - 2]!, 17) ^ rotr(w[i - 2]!, 19) ^ (w[i - 2]! >>> 10);
+      w[i] = (w[i - 16]! + s0 + w[i - 7]! + s1) | 0;
+    }
+    let [a, b, c, d, e, f, g, hh] = h as [
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+    ];
+    for (let i = 0; i < 64; i++) {
+      const t1 =
+        (hh + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + SHA_K[i]! + w[i]!) |
+        0;
+      const t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      hh = g;
+      g = f;
+      f = e;
+      e = (d + t1) | 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (t1 + t2) | 0;
+    }
+    [a, b, c, d, e, f, g, hh].forEach((v, i) => (h[i] = (h[i]! + v) | 0));
+  }
+  return h.map((v) => (v >>> 0).toString(16).padStart(8, '0')).join('');
+}
+
+/**
+ * Key for a remembered CSV layout: sha256 of the shown headers (trimmed,
+ * lowercased, newline-joined), 64 lowercase hex characters, which is the only
+ * rule the server enforces on `csv_layouts` keys.
+ */
+export function csvHeaderSignature(headers: string[]): string {
+  return sha256Hex(headers.map((h) => h.trim().toLowerCase()).join('\n'));
+}
+
+/** The remembered column mapping for these headers, or undefined. */
+export function layoutFor(
+  ctx: Pick<SmartImportContext, 'csv_layouts'>,
+  headers: string[]
+): Record<string, string> | undefined {
+  return ctx.csv_layouts?.[csvHeaderSignature(headers)];
+}
+
+/**
+ * The analyze `context`: remembered rules, categories and the file's overrides.
+ * Pass the headers of a needs_mapping answer as `headers` and a remembered layout
+ * for them is applied as the mapping (an explicit mapping wins). `headers` itself
+ * is never sent.
+ */
 export function buildAnalyzeContext(
-  ctx: Pick<SmartImportContext, 'rules' | 'categories'>,
-  overrides: AnalyzeOverrides
+  ctx: Pick<SmartImportContext, 'rules' | 'categories'> &
+    Partial<Pick<SmartImportContext, 'csv_layouts'>>,
+  overrides: AnalyzeOverrides & { headers?: string[] }
 ): Record<string, unknown> {
+  const { headers, ...rest } = overrides;
   const out: Record<string, unknown> = { rules: ctx.rules, categories: ctx.categories };
-  for (const [key, value] of Object.entries(overrides)) {
+  for (const [key, value] of Object.entries(rest)) {
     if (value !== undefined) out[key] = value;
   }
+  if (out.mapping === undefined && headers) {
+    const remembered = layoutFor({ csv_layouts: ctx.csv_layouts ?? {} }, headers);
+    if (remembered) out.mapping = remembered;
+  }
   return out;
+}
+
+/** Record the chosen mapping and the signature of the headers it was chosen for. */
+export function setFileMapping(
+  state: WizardState,
+  fileId: string,
+  mapping: Record<string, string>
+): WizardState {
+  return mapFile(state, fileId, (f) => ({
+    ...f,
+    options: { ...f.options, mapping },
+    layout_signature: f.headers.length ? csvHeaderSignature(f.headers) : f.layout_signature,
+  }));
+}
+
+function lastEntries<T>(entries: [string, T][], max: number): Record<string, T> {
+  return Object.fromEntries(entries.slice(-max));
+}
+
+/**
+ * The `PUT /api/smart-import/settings` body for Apply: the current layouts and
+ * account labels with this batch's added (new entries win and are kept when the
+ * server caps of 50 and 200 force the oldest out). Only applied statements count.
+ */
+export function buildSettingsPatch(
+  state: WizardState,
+  current: Pick<SmartImportSettings, 'csv_layouts' | 'accounts'>
+): Pick<SmartImportSettings, 'csv_layouts' | 'accounts'> {
+  const layouts = new Map(Object.entries(current.csv_layouts));
+  for (const f of state.files) {
+    const m = f.options.mapping;
+    if (f.status !== 'ok' || !f.layout_signature || !m) continue;
+    const clean = Object.entries(m).filter(([, v]) => v.length > 0 && v.length <= 200);
+    if (!clean.length) continue;
+    layouts.delete(f.layout_signature);
+    layouts.set(f.layout_signature, Object.fromEntries(clean));
+  }
+  const accounts = new Map(Object.entries(current.accounts));
+  for (const s of state.statements) {
+    const label = s.account_label?.trim().slice(0, MAX_ACCOUNT_LABEL_CHARS);
+    const key = accountKey(s);
+    if (isLeftOut(s) || !label || !key) continue;
+    accounts.delete(key);
+    accounts.set(key, label);
+  }
+  return {
+    csv_layouts: lastEntries([...layouts], MAX_CSV_LAYOUTS),
+    accounts: lastEntries([...accounts], MAX_ACCOUNT_LABELS),
+  };
 }
 
 /** Fold one analyze (or AI extract) answer into the state, replacing the file's earlier rows. */
@@ -603,7 +776,8 @@ export function buildCategorizeRequest(
   const names = aiCategoryNames(categories).map((c) => c.name);
   const request: CategorizeRequest = { categories: names, items };
   const chunks: CategorizeRequest[] = [];
-  for (let i = 0; i < items.length; i += AI_MAX_ITEMS) {
+  // The server needs at least one category; without any there is nothing to post.
+  for (let i = 0; names.length && i < items.length; i += AI_MAX_ITEMS) {
     chunks.push({ categories: names, items: items.slice(i, i + AI_MAX_ITEMS) });
   }
   return { request, chunks };
@@ -750,13 +924,37 @@ export function filterRows(state: WizardState, filter: RowFilter): WizardRow[] {
 
 // ---------------------------------------------------------------- apply
 
+/** The user's explicit "forget this merchant": an empty rule is sent on purpose. */
+export function forgetMerchant(state: WizardState, merchantKey: string): WizardState {
+  return { ...state, remembered: { ...state.remembered, [merchantKey]: { forget: true } } };
+}
+
+/**
+ * Rules for Apply: each remembered choice merged over the stored rule for that
+ * merchant (so a new category keeps the stored kind and the reverse). An entry
+ * that ends up empty is dropped unless the user chose to forget it.
+ */
 function applyRules(state: WizardState): ApplyRule[] {
-  return Object.entries(state.remembered).map(([merchant_key, choice]) => ({
-    merchant_key,
-    ...(choice.category_id !== undefined ? { category_id: choice.category_id } : {}),
-    ...(choice.kind !== undefined ? { kind: choice.kind } : {}),
-    source: 'user' as const,
-  }));
+  const stored = new Map(state.stored_rules.map((r) => [r.merchant_key, r]));
+  const out: ApplyRule[] = [];
+  for (const [merchant_key, choice] of Object.entries(state.remembered)) {
+    if (choice.forget) {
+      out.push({ merchant_key, category_id: null, source: 'user' });
+      continue;
+    }
+    const old = stored.get(merchant_key);
+    const category_id =
+      choice.category_id !== undefined ? choice.category_id : (old?.category_id ?? null);
+    const kind = choice.kind ?? (old?.kind as SmartImportTxnKind | null | undefined) ?? null;
+    if (category_id === null && kind === null) continue;
+    out.push({
+      merchant_key,
+      category_id,
+      ...(kind !== null ? { kind } : {}),
+      source: 'user',
+    });
+  }
+  return out;
 }
 
 function applyTxn(row: WizardRow, key: string): ApplyTxn {
@@ -778,10 +976,30 @@ function applyTxn(row: WizardRow, key: string): ApplyTxn {
   };
 }
 
+/** Thrown by buildApplyRequest when a batch is over a server cap, so the UI can say so. */
+export class ApplyTooLargeError extends Error {
+  constructor(
+    public readonly limit: 'statements' | 'transactions' | 'rules' | 'recurring',
+    public readonly max: number
+  ) {
+    super(`apply_too_large:${limit}`);
+    this.name = 'ApplyTooLargeError';
+  }
+}
+
+/** Remember the provider that read a PDF (extract) or categorized rows, for ai_provider. */
+export function setAiProvider(state: WizardState, provider: string | null): WizardState {
+  return { ...state, ai_provider: provider };
+}
+
 /**
  * The one POST /api/smart-import/apply body. Duplicates are left out; excluded
  * rows are sent as excluded. Skipped statements, files already imported and
- * statements with no account key or label are left out.
+ * statements with no account key or label are left out. ai_provider goes out
+ * whenever a statement used AI (categorized rows or a pdf:ai statement) and the
+ * provider is known; call setAiProvider after an extract so pdf:ai has one.
+ * @throws ApplyTooLargeError past 12 statements, 10,000 transactions in one
+ *   statement, 5,000 rules or 500 recurring decisions.
  */
 export function buildApplyRequest(state: WizardState): ApplyRequest {
   const statements: ApplyStatement[] = [];
@@ -812,12 +1030,22 @@ export function buildApplyRequest(state: WizardState): ApplyRequest {
       transactions: rows.map((r) => applyTxn(r, key)),
     });
   }
+  const rules = applyRules(state);
+  const recurring = recurringDecisions(state);
+  if (statements.length > MAX_APPLY_STATEMENTS)
+    throw new ApplyTooLargeError('statements', MAX_APPLY_STATEMENTS);
+  if (statements.some((s) => s.transactions.length > MAX_APPLY_TRANSACTIONS)) {
+    throw new ApplyTooLargeError('transactions', MAX_APPLY_TRANSACTIONS);
+  }
+  if (rules.length > MAX_APPLY_RULES) throw new ApplyTooLargeError('rules', MAX_APPLY_RULES);
+  if (recurring.length > MAX_APPLY_RECURRING)
+    throw new ApplyTooLargeError('recurring', MAX_APPLY_RECURRING);
   return {
     batch_id: state.batch_id,
     ...(state.entity_id ? { entity_id: state.entity_id } : {}),
     statements,
-    rules: applyRules(state),
-    recurring: recurringDecisions(state),
+    rules,
+    recurring,
   };
 }
 
@@ -840,7 +1068,7 @@ export function reviewCounts(state: WizardState): ReviewCounts {
     duplicates: rows.filter((r) => r.duplicate).length,
     excluded: rows.filter((r) => !r.duplicate && r.excluded).length,
     needs_review: rows.filter(needsReview).length,
-    merchants_to_remember: Object.keys(state.remembered).length,
+    merchants_to_remember: applyRules(state).length,
     files_skipped: state.statements.filter(isLeftOut).length,
     expenses_to_add: decisions.filter((d) => d.decision === 'create').length,
     expenses_to_link: decisions.filter((d) => d.decision === 'link').length,
