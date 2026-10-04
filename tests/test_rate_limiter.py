@@ -243,3 +243,159 @@ class TestRateLimiterSingleton:
 
         # Should be same instance
         assert limiter1 is limiter2
+
+
+class TestSmartImportRateLimitPatterns:
+    """Smart import AI paths share the AI window; analyze and recurring have their own."""
+
+    @staticmethod
+    def _matcher():
+        import re
+
+        from src.middleware.rate_limit import AI_ENDPOINT_PATTERNS
+
+        compiled = [re.compile(p) for p in AI_ENDPOINT_PATTERNS]
+        return lambda path: any(p.match(path) for p in compiled)
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/api/v2/smart-import/categorize",
+            "/api/v2/smart-import/extract",
+            "/api/smart-import/categorize",
+            "/api/smart-import/extract",
+        ],
+    )
+    def test_ai_paths_are_limited(self, path):
+        assert self._matcher()(path)
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/api/v2/smart-import/analyze",
+            "/api/v2/smart-import/status",
+            "/api/v2/smart-import/recurring",
+            "/api/smart-import/ai-status",
+            "/api/smart-import/context",
+            "/api/smart-import/apply",
+        ],
+    )
+    def test_other_paths_are_not_limited(self, path):
+        assert not self._matcher()(path)
+
+    def test_middleware_limits_per_forwarded_client_ip(self, monkeypatch):
+        """Behind Heroku's router the client IP arrives in X-Forwarded-For."""
+        from fastapi.testclient import TestClient
+
+        from src.main import app
+        from src.services.rate_limiter import reset_rate_limiter
+
+        monkeypatch.setenv("DYNO", "web.1")
+        monkeypatch.delenv("TRUSTED_PROXY_COUNT", raising=False)
+        monkeypatch.setenv("RATE_LIMIT_ENABLED", "true")
+        monkeypatch.setenv("RATE_LIMIT_SECRET_KEY", "k" * 40)
+        monkeypatch.setenv("RATE_LIMIT_MAX_REQUESTS", "3")
+        monkeypatch.setenv("RATE_LIMIT_WINDOW_SECONDS", "60")
+        reset_rate_limiter()
+        try:
+            client = TestClient(app)
+            path = "/api/v2/smart-import/categorize"
+            first = {"X-Forwarded-For": "198.51.100.1, 203.0.113.7"}
+            codes = [client.post(path, headers=first).status_code for _ in range(4)]
+            assert codes[:3] != [429, 429, 429]
+            assert 429 not in codes[:3]
+            assert codes[3] == 429
+            # a spoofed first entry cannot escape the bucket (Heroku appends the real IP)
+            spoof = {"X-Forwarded-For": "8.8.8.8, 203.0.113.7"}
+            assert client.post(path, headers=spoof).status_code == 429
+            # another client behind the same router has its own window
+            other = {"X-Forwarded-For": "198.51.100.1, 203.0.113.8"}
+            assert client.post(path, headers=other).status_code != 429
+            # analyze has its own window, so the exhausted AI window does not block it
+            for _ in range(5):
+                resp = client.post("/api/v2/smart-import/analyze", headers=first)
+                assert resp.status_code != 429
+        finally:
+            monkeypatch.undo()
+            reset_rate_limiter()
+
+
+class TestSmartImportBulkLimits:
+    """analyze and recurring are limited per client in windows of their own."""
+
+    def test_rules_cover_analyze_and_recurring_only(self):
+        from src.middleware.rate_limit import BULK_LIMITS
+
+        by_name = {rule.name: rule for rule in BULK_LIMITS}
+        assert set(by_name) == {"smart-import-analyze", "smart-import-recurring"}
+        for rule in BULK_LIMITS:
+            assert rule.max_requests == 30 and rule.window_seconds == 60
+
+        import re
+
+        def bucket(path):
+            return [r.name for r in BULK_LIMITS if re.match(r.path_pattern, path)]
+
+        assert bucket("/api/v2/smart-import/analyze") == ["smart-import-analyze"]
+        assert bucket("/api/v2/smart-import/recurring") == ["smart-import-recurring"]
+        for path in (
+            "/api/v2/smart-import/status",
+            "/api/v2/smart-import/categorize",
+            "/api/smart-import/ai-status",
+            "/api/smart-import/apply",
+        ):
+            assert bucket(path) == []
+
+    def test_buckets_are_counted_separately(self):
+        from src.services.rate_limiter import RateLimiter
+
+        with patch.dict(
+            os.environ,
+            {"RATE_LIMIT_ENABLED": "true", "RATE_LIMIT_SECRET_KEY": "k" * 40},
+            clear=True,
+        ):
+            limiter = RateLimiter()
+        ip = "192.0.2.10"
+        for _ in range(10):
+            assert limiter.check_rate_limit(ip, "/api/commentary/x")[0]
+        assert not limiter.check_rate_limit(ip, "/api/commentary/x")[0]
+        for _ in range(30):
+            assert limiter.check_rate_limit(
+                ip, "/a", bucket="b1", max_requests=30, window_seconds=60
+            )[0]
+        allowed, retry = limiter.check_rate_limit(
+            ip, "/a", bucket="b1", max_requests=30, window_seconds=60
+        )
+        assert not allowed and retry and retry <= 61
+        assert limiter.check_rate_limit(
+            ip, "/b", bucket="b2", max_requests=30, window_seconds=60
+        )[0]
+
+    def test_middleware_limits_recurring_at_30_per_minute(self, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        from src.main import app
+        from src.services.rate_limiter import reset_rate_limiter
+
+        monkeypatch.setenv("DYNO", "web.1")
+        monkeypatch.delenv("TRUSTED_PROXY_COUNT", raising=False)
+        monkeypatch.setenv("RATE_LIMIT_ENABLED", "true")
+        monkeypatch.setenv("RATE_LIMIT_SECRET_KEY", "k" * 40)
+        monkeypatch.setenv("RATE_LIMIT_MAX_REQUESTS", "3")
+        reset_rate_limiter()
+        try:
+            client = TestClient(app)
+            path = "/api/v2/smart-import/recurring"
+            who = {"X-Forwarded-For": "198.51.100.1, 203.0.113.9"}
+            codes = [client.post(path, json={}, headers=who).status_code for _ in range(31)]
+            assert codes[:30] == [200] * 30
+            assert codes[30] == 429
+            # status stays unlimited and the AI window is untouched
+            assert client.get("/api/v2/smart-import/status", headers=who).status_code == 200
+            assert (
+                client.post("/api/v2/smart-import/categorize", json={}, headers=who).status_code
+                != 429
+            )
+        finally:
+            monkeypatch.undo()
+            reset_rate_limiter()

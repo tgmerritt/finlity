@@ -1,0 +1,1511 @@
+[
+ {
+  "name": "three within 10 percent qualifies as monthly",
+  "rows": [
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-01-05",
+    "amount": -15.99,
+    "description": "STREAMCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-02-05",
+    "amount": -15.99,
+    "description": "STREAMCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-03-05",
+    "amount": -16.5,
+    "description": "STREAMCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "STREAMCO",
+    "amount": 15.99,
+    "frequency": "monthly",
+    "occurrences": 3,
+    "last_date": "2026-03-05",
+    "already_budgeted": false,
+    "matched_expense_id": null
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "two at 25 to 35 days qualifies",
+  "rows": [
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-01-10",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-02-09",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "GYMCO",
+    "frequency": "monthly",
+    "occurrences": 2
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "two at 25 days qualifies (lower bound)",
+  "rows": [
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-01-10",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-02-04",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "GYMCO",
+    "occurrences": 2
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "two at 35 days qualifies (upper bound)",
+  "rows": [
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-01-10",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-02-14",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "GYMCO",
+    "occurrences": 2
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "two at 24 days does not",
+  "rows": [
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-01-10",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-02-03",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "two at 36 days does not",
+  "rows": [
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-01-10",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-02-15",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "two at 50 days does not",
+  "rows": [
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-01-10",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-03-01",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "two monthly but amounts differ by more than 10 percent do not",
+  "rows": [
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-01-10",
+    "amount": -40.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "GYMCO",
+    "posted_date": "2026-02-09",
+    "amount": -50.0,
+    "description": "GYMCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "three with amounts outside 10 percent do not",
+  "rows": [
+   {
+    "merchant_key": "VARCO",
+    "posted_date": "2026-01-05",
+    "amount": -20.0,
+    "description": "VARCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "VARCO",
+    "posted_date": "2026-02-05",
+    "amount": -45.0,
+    "description": "VARCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "VARCO",
+    "posted_date": "2026-03-05",
+    "amount": -90.0,
+    "description": "VARCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "outlier is ignored when three others agree",
+  "rows": [
+   {
+    "merchant_key": "NETCO",
+    "posted_date": "2026-01-05",
+    "amount": -30.0,
+    "description": "NETCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "NETCO",
+    "posted_date": "2026-02-05",
+    "amount": -30.0,
+    "description": "NETCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "NETCO",
+    "posted_date": "2026-03-05",
+    "amount": -30.0,
+    "description": "NETCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "NETCO",
+    "posted_date": "2026-03-20",
+    "amount": -210.0,
+    "description": "NETCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "NETCO",
+    "amount": 30.0,
+    "occurrences": 3,
+    "last_date": "2026-03-05",
+    "frequency": "monthly"
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "history rows count with the batch",
+  "rows": [
+   {
+    "merchant_key": "PHONECO",
+    "posted_date": "2026-03-04",
+    "amount": -55.0,
+    "description": "PHONECO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "history": [
+   {
+    "merchant_key": "PHONECO",
+    "posted_date": "2026-01-04",
+    "amount": -55.0
+   },
+   {
+    "merchant_key": "PHONECO",
+    "posted_date": "2026-02-04",
+    "amount": -55.0
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "PHONECO",
+    "occurrences": 3,
+    "last_date": "2026-03-04",
+    "frequency": "monthly"
+   }
+  ],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "one row plus one history row a month apart qualifies",
+  "rows": [
+   {
+    "merchant_key": "PHONECO",
+    "posted_date": "2026-03-04",
+    "amount": -55.0,
+    "description": "PHONECO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "history": [
+   {
+    "merchant_key": "PHONECO",
+    "posted_date": "2026-02-02",
+    "amount": -55.0
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "PHONECO",
+    "occurrences": 2
+   }
+  ],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "history that duplicates a batch row is not double counted",
+  "rows": [
+   {
+    "merchant_key": "PHONECO",
+    "posted_date": "2026-03-04",
+    "amount": -55.0,
+    "description": "PHONECO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "history": [
+   {
+    "merchant_key": "PHONECO",
+    "posted_date": "2026-03-04",
+    "amount": -55.0
+   }
+  ],
+  "expect": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "weekly",
+  "rows": [
+   {
+    "merchant_key": "PAPERCO",
+    "posted_date": "2026-01-02",
+    "amount": -12.0,
+    "description": "PAPERCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "PAPERCO",
+    "posted_date": "2026-01-09",
+    "amount": -12.0,
+    "description": "PAPERCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "PAPERCO",
+    "posted_date": "2026-01-16",
+    "amount": -12.0,
+    "description": "PAPERCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "PAPERCO",
+    "posted_date": "2026-01-23",
+    "amount": -12.0,
+    "description": "PAPERCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "PAPERCO",
+    "frequency": "weekly",
+    "occurrences": 4
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "biweekly",
+  "rows": [
+   {
+    "merchant_key": "LAWNCO",
+    "posted_date": "2026-01-02",
+    "amount": -60.0,
+    "description": "LAWNCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "LAWNCO",
+    "posted_date": "2026-01-16",
+    "amount": -60.0,
+    "description": "LAWNCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "LAWNCO",
+    "posted_date": "2026-01-30",
+    "amount": -60.0,
+    "description": "LAWNCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "LAWNCO",
+    "frequency": "biweekly"
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "quarterly",
+  "rows": [
+   {
+    "merchant_key": "WATERCO",
+    "posted_date": "2025-10-15",
+    "amount": -120.0,
+    "description": "WATERCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "WATERCO",
+    "posted_date": "2026-01-15",
+    "amount": -120.0,
+    "description": "WATERCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "WATERCO",
+    "posted_date": "2026-04-15",
+    "amount": -120.0,
+    "description": "WATERCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "WATERCO",
+    "frequency": "quarterly"
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "annual",
+  "rows": [
+   {
+    "merchant_key": "CLUBCO",
+    "posted_date": "2023-03-01",
+    "amount": -99.0,
+    "description": "CLUBCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "CLUBCO",
+    "posted_date": "2024-03-01",
+    "amount": -99.0,
+    "description": "CLUBCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "CLUBCO",
+    "posted_date": "2025-03-01",
+    "amount": -99.0,
+    "description": "CLUBCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "CLUBCO",
+    "frequency": "annual"
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "inflows are ignored",
+  "rows": [
+   {
+    "merchant_key": "PAYROLL",
+    "posted_date": "2026-01-01",
+    "amount": 2500.0,
+    "description": "PAYROLL",
+    "kind": "income",
+    "category_id": null
+   },
+   {
+    "merchant_key": "PAYROLL",
+    "posted_date": "2026-02-01",
+    "amount": 2500.0,
+    "description": "PAYROLL",
+    "kind": "income",
+    "category_id": null
+   },
+   {
+    "merchant_key": "PAYROLL",
+    "posted_date": "2026-03-01",
+    "amount": 2500.0,
+    "description": "PAYROLL",
+    "kind": "income",
+    "category_id": null
+   },
+   {
+    "merchant_key": "REFUNDCO",
+    "posted_date": "2026-01-01",
+    "amount": 25.0,
+    "description": "REFUNDCO",
+    "kind": "refund",
+    "category_id": null
+   },
+   {
+    "merchant_key": "REFUNDCO",
+    "posted_date": "2026-02-01",
+    "amount": 25.0,
+    "description": "REFUNDCO",
+    "kind": "refund",
+    "category_id": null
+   },
+   {
+    "merchant_key": "REFUNDCO",
+    "posted_date": "2026-03-01",
+    "amount": 25.0,
+    "description": "REFUNDCO",
+    "kind": "refund",
+    "category_id": null
+   }
+  ],
+  "expect": [],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "card payments and transfers are not bills",
+  "rows": [
+   {
+    "merchant_key": "CARDPAY",
+    "posted_date": "2026-01-01",
+    "amount": -300.0,
+    "description": "CARDPAY",
+    "kind": "payment",
+    "category_id": null
+   },
+   {
+    "merchant_key": "CARDPAY",
+    "posted_date": "2026-02-01",
+    "amount": -300.0,
+    "description": "CARDPAY",
+    "kind": "payment",
+    "category_id": null
+   },
+   {
+    "merchant_key": "CARDPAY",
+    "posted_date": "2026-03-01",
+    "amount": -300.0,
+    "description": "CARDPAY",
+    "kind": "payment",
+    "category_id": null
+   },
+   {
+    "merchant_key": "MOVE",
+    "posted_date": "2026-01-01",
+    "amount": -300.0,
+    "description": "MOVE",
+    "kind": "transfer",
+    "category_id": null
+   },
+   {
+    "merchant_key": "MOVE",
+    "posted_date": "2026-02-01",
+    "amount": -300.0,
+    "description": "MOVE",
+    "kind": "transfer",
+    "category_id": null
+   },
+   {
+    "merchant_key": "MOVE",
+    "posted_date": "2026-03-01",
+    "amount": -300.0,
+    "description": "MOVE",
+    "kind": "transfer",
+    "category_id": null
+   }
+  ],
+  "expect": [],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "already budgeted by name, case-insensitive",
+  "rows": [
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-01-05",
+    "amount": -15.99,
+    "description": "Streamco Plus",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-02-05",
+    "amount": -15.99,
+    "description": "Streamco Plus",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-03-05",
+    "amount": -15.99,
+    "description": "Streamco Plus",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expenses": [
+   {
+    "id": "e1",
+    "name": "streamco plus",
+    "amount": 9.0,
+    "frequency": "monthly",
+    "category_id": null,
+    "is_active": true
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "STREAMCO",
+    "name": "Streamco Plus",
+    "already_budgeted": true,
+    "matched_expense_id": "e1"
+   }
+  ],
+  "history": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "already budgeted by category and amount",
+  "rows": [
+   {
+    "merchant_key": "POWERCO",
+    "posted_date": "2026-01-05",
+    "amount": -101.0,
+    "description": "POWERCO",
+    "kind": "expense",
+    "category_id": "c-util"
+   },
+   {
+    "merchant_key": "POWERCO",
+    "posted_date": "2026-02-05",
+    "amount": -101.0,
+    "description": "POWERCO",
+    "kind": "expense",
+    "category_id": "c-util"
+   },
+   {
+    "merchant_key": "POWERCO",
+    "posted_date": "2026-03-05",
+    "amount": -101.0,
+    "description": "POWERCO",
+    "kind": "expense",
+    "category_id": "c-util"
+   }
+  ],
+  "expenses": [
+   {
+    "id": "e2",
+    "name": "Electric",
+    "amount": 100.0,
+    "frequency": "monthly",
+    "category_id": "c-util",
+    "is_active": true
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "POWERCO",
+    "category_id": "c-util",
+    "already_budgeted": true,
+    "matched_expense_id": "e2"
+   }
+  ],
+  "history": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "same category but amount too far is not budgeted",
+  "rows": [
+   {
+    "merchant_key": "POWERCO",
+    "posted_date": "2026-01-05",
+    "amount": -140.0,
+    "description": "POWERCO",
+    "kind": "expense",
+    "category_id": "c-util"
+   },
+   {
+    "merchant_key": "POWERCO",
+    "posted_date": "2026-02-05",
+    "amount": -140.0,
+    "description": "POWERCO",
+    "kind": "expense",
+    "category_id": "c-util"
+   },
+   {
+    "merchant_key": "POWERCO",
+    "posted_date": "2026-03-05",
+    "amount": -140.0,
+    "description": "POWERCO",
+    "kind": "expense",
+    "category_id": "c-util"
+   }
+  ],
+  "expenses": [
+   {
+    "id": "e2",
+    "name": "Electric",
+    "amount": 100.0,
+    "frequency": "monthly",
+    "category_id": "c-util",
+    "is_active": true
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "POWERCO",
+    "already_budgeted": false,
+    "matched_expense_id": null
+   }
+  ],
+  "history": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "same amount but different category is not budgeted",
+  "rows": [
+   {
+    "merchant_key": "POWERCO",
+    "posted_date": "2026-01-05",
+    "amount": -100.0,
+    "description": "POWERCO",
+    "kind": "expense",
+    "category_id": "c-util"
+   },
+   {
+    "merchant_key": "POWERCO",
+    "posted_date": "2026-02-05",
+    "amount": -100.0,
+    "description": "POWERCO",
+    "kind": "expense",
+    "category_id": "c-util"
+   },
+   {
+    "merchant_key": "POWERCO",
+    "posted_date": "2026-03-05",
+    "amount": -100.0,
+    "description": "POWERCO",
+    "kind": "expense",
+    "category_id": "c-util"
+   }
+  ],
+  "expenses": [
+   {
+    "id": "e3",
+    "name": "Rent",
+    "amount": 100.0,
+    "frequency": "monthly",
+    "category_id": "c-house",
+    "is_active": true
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "POWERCO",
+    "already_budgeted": false
+   }
+  ],
+  "history": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "inactive expenses do not match",
+  "rows": [
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-01-05",
+    "amount": -15.0,
+    "description": "STREAMCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-02-05",
+    "amount": -15.0,
+    "description": "STREAMCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-03-05",
+    "amount": -15.0,
+    "description": "STREAMCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expenses": [
+   {
+    "id": "e4",
+    "name": "STREAMCO",
+    "amount": 15.0,
+    "frequency": "monthly",
+    "category_id": null,
+    "is_active": false
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "STREAMCO",
+    "already_budgeted": false,
+    "matched_expense_id": null
+   }
+  ],
+  "history": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "sorted by amount descending",
+  "rows": [
+   {
+    "merchant_key": "SMALLCO",
+    "posted_date": "2026-01-05",
+    "amount": -9.0,
+    "description": "SMALLCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "SMALLCO",
+    "posted_date": "2026-02-05",
+    "amount": -9.0,
+    "description": "SMALLCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "SMALLCO",
+    "posted_date": "2026-03-05",
+    "amount": -9.0,
+    "description": "SMALLCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "BIGCO",
+    "posted_date": "2026-01-01",
+    "amount": -1500.0,
+    "description": "BIGCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "BIGCO",
+    "posted_date": "2026-02-01",
+    "amount": -1500.0,
+    "description": "BIGCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "BIGCO",
+    "posted_date": "2026-03-01",
+    "amount": -1500.0,
+    "description": "BIGCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "MIDCO",
+    "posted_date": "2026-01-09",
+    "amount": -80.0,
+    "description": "MIDCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "MIDCO",
+    "posted_date": "2026-02-09",
+    "amount": -80.0,
+    "description": "MIDCO",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "MIDCO",
+    "posted_date": "2026-03-09",
+    "amount": -80.0,
+    "description": "MIDCO",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "BIGCO"
+   },
+   {
+    "merchant_key": "MIDCO"
+   },
+   {
+    "merchant_key": "SMALLCO"
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "name is the most common description and category the most common one",
+  "rows": [
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-01-05",
+    "amount": -15.0,
+    "description": "STREAMCO 800#",
+    "kind": "expense",
+    "category_id": "c-ent"
+   },
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-02-05",
+    "amount": -15.0,
+    "description": "STREAMCO MONTHLY",
+    "kind": "expense",
+    "category_id": "c-ent"
+   },
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-03-05",
+    "amount": -15.0,
+    "description": "STREAMCO MONTHLY",
+    "kind": "expense",
+    "category_id": "c-ent"
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "STREAMCO",
+    "name": "STREAMCO MONTHLY",
+    "category_id": "c-ent"
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "unknown category id is dropped",
+  "rows": [
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-01-05",
+    "amount": -15.0,
+    "description": "STREAMCO",
+    "kind": "expense",
+    "category_id": "gone"
+   },
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-02-05",
+    "amount": -15.0,
+    "description": "STREAMCO",
+    "kind": "expense",
+    "category_id": "gone"
+   },
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-03-05",
+    "amount": -15.0,
+    "description": "STREAMCO",
+    "kind": "expense",
+    "category_id": "gone"
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "STREAMCO",
+    "category_id": null
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "merchant key stands in for a blank description",
+  "rows": [
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-01-05",
+    "amount": -15.0,
+    "description": "  ",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-02-05",
+    "amount": -15.0,
+    "description": "  ",
+    "kind": "expense",
+    "category_id": null
+   },
+   {
+    "merchant_key": "STREAMCO",
+    "posted_date": "2026-03-05",
+    "amount": -15.0,
+    "description": "  ",
+    "kind": "expense",
+    "category_id": null
+   }
+  ],
+  "expect": [
+   {
+    "merchant_key": "STREAMCO",
+    "name": "STREAMCO"
+   }
+  ],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ },
+ {
+  "name": "empty input",
+  "rows": [],
+  "expect": [],
+  "history": [],
+  "expenses": [],
+  "categories": [
+   {
+    "id": "c-ent",
+    "name": "Entertainment"
+   },
+   {
+    "id": "c-util",
+    "name": "Utilities"
+   },
+   {
+    "id": "c-house",
+    "name": "Housing"
+   }
+  ]
+ }
+]

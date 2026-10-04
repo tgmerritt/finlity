@@ -21,6 +21,7 @@ from src.api.v2.imports import router as v2_imports_router
 from src.api.v2.prices import router as v2_prices_router
 from src.api.v2.fund import router as v2_fund_router
 from src.api.v2.commentary import router as v2_commentary_router
+from src.api.v2.smart_import import router as v2_smart_import_router
 
 v2_router = APIRouter()
 v2_router.include_router(v2_analysis_router)
@@ -32,5 +33,6 @@ v2_router.include_router(v2_imports_router)
 v2_router.include_router(v2_prices_router)
 v2_router.include_router(v2_fund_router)
 v2_router.include_router(v2_commentary_router)
+v2_router.include_router(v2_smart_import_router)
 
 __all__ = ["v2_router"]
