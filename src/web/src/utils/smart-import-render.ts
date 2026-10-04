@@ -272,7 +272,8 @@ export function categorizeErrorText(status: number, errorType?: string): string 
 export function whatGetsSentPanel(
   request: CategorizeRequest,
   provider: string,
-  model: string
+  model: string,
+  batches = 1
 ): HTMLElement {
   const panel = el('section', 'smart-import-sent');
   panel.setAttribute('data-si', 'ai-panel');
@@ -290,6 +291,15 @@ export function whatGetsSentPanel(
   to.querySelector('strong')!.setAttribute('data-si', 'ai-provider');
   to.querySelector('span')!.setAttribute('data-si', 'ai-model');
   panel.appendChild(to);
+  if (batches > 1) {
+    panel.appendChild(
+      el(
+        'p',
+        'smart-import-hint',
+        `Sent in ${batches} batches of up to 60 merchants, one request each.`
+      )
+    );
+  }
   panel.appendChild(
     el(
       'p',

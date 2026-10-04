@@ -111,6 +111,8 @@ const SAMPLE_CHECKING_LABEL = 'Sample checking';
 const ALLOWED_EXT = /\.(csv|ofx|qfx|pdf)$/i;
 /** Per categorize chunk: the provider call is bounded server side, well under this. */
 const AI_TIMEOUT_MS = 60_000;
+/** Columns of the categorize grid: select, date, description, amount, category, kind, source. */
+const GRID_COLS = 7;
 
 const FALLBACK_AI: SmartImportAiStatus = {
   ai_available: false,
@@ -1284,11 +1286,13 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   let viewIds: string[] = [];
   let shown = PAGE_ROWS;
   const selected = new Set<string>();
+  /** The grid's single tab stop (roving tabindex): this row, this column. */
   let activeRow: string | null = null;
+  let activeCol = 0;
   /**
    * The latest category or kind change. "Remember" is on by default; turning it
    * off replays the change on the state from before it, without remembering.
-   * Any other edit ends the offer.
+   * Another edit ends the offer; selection changes do not.
    */
   let lastEdit: {
     before: WizardState;
@@ -1303,7 +1307,8 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   let catFilters: HTMLElement | null = null;
   let catAi: HTMLElement | null = null;
   let catBody: HTMLTableSectionElement | null = null;
-  let catHeadBox: HTMLInputElement | null = null;
+  let catSelectAll: HTMLInputElement | null = null;
+  let catSelectAllText: HTMLElement | null = null;
   let catMore: HTMLElement | null = null;
   let catBulk: HTMLElement | null = null;
 
@@ -1315,6 +1320,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     shown = PAGE_ROWS;
     selected.clear();
     activeRow = null;
+    activeCol = 0;
   }
 
   function renderCategorize(): void {
@@ -1337,24 +1343,30 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     catFilters.setAttribute('role', 'group');
     catFilters.setAttribute('aria-label', 'Show');
 
-    const wrap = el('div', 'smart-import-table-wrap');
-    const table = el('table', 'smart-import-table');
-    const head = el('tr');
+    const tools = el('div', 'smart-import-grid-tools');
+    const allLabel = el('label', 'smart-import-select-all');
     const all = el('input');
     all.type = 'checkbox';
     all.setAttribute('data-si', 'select-all');
-    all.setAttribute('aria-label', 'Select every row in this list');
     all.addEventListener('change', () => {
       if (all.checked) for (const id of viewIds) selected.add(id);
-      else selected.clear();
-      lastEdit = null;
+      else for (const id of viewIds) selected.delete(id);
       renderCategorizeParts();
     });
-    catHeadBox = all;
-    const first = el('th', 'smart-import-col-check');
-    first.appendChild(all);
-    head.appendChild(first);
+    catSelectAll = all;
+    catSelectAllText = el('span');
+    allLabel.append(all, catSelectAllText);
+    tools.appendChild(allLabel);
+
+    const wrap = el('div', 'smart-import-table-wrap');
+    const table = el('table', 'smart-import-table');
+    // A real grid: explicit roles survive the phone card layout's display changes.
+    table.setAttribute('role', 'grid');
+    table.setAttribute('aria-label', 'Imported transactions');
+    const head = el('tr');
+    head.setAttribute('role', 'row');
     for (const [label, cls] of [
+      ['', 'check'],
       ['Date', 'date'],
       ['Description', 'desc'],
       ['Amount', 'amount'],
@@ -1364,6 +1376,8 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     ] as const) {
       const th = el('th', `smart-import-col-${cls}`, label);
       th.scope = 'col';
+      th.setAttribute('role', 'columnheader');
+      if (!label) th.setAttribute('aria-label', 'Selected');
       head.appendChild(th);
     }
     table.appendChild(el('thead')).appendChild(head);
@@ -1379,7 +1393,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     catBulk.setAttribute('role', 'region');
     catBulk.setAttribute('aria-label', 'Change selected rows');
 
-    body.append(catAi, catFilters, wrap, catMore, catBulk);
+    body.append(catAi, catFilters, tools, wrap, catMore, catBulk);
     renderCategorizeParts();
     h.focus();
   }
@@ -1388,12 +1402,10 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   function renderCategorizeParts(): void {
     if (!catBody || !state || step !== 3) return;
     const active = document.activeElement;
-    const focusRow = active instanceof HTMLElement ? active.closest('tr')?.dataset.row : undefined;
-    const focusSi =
-      active instanceof HTMLElement && active.closest('.smart-import-step')
-        ? active.getAttribute('data-si')
-        : null;
-    const onRow = active instanceof HTMLElement && active.classList.contains('smart-import-row');
+    const inBody = active instanceof HTMLElement && body.contains(active);
+    const inGrid = inBody && catBody.contains(active);
+    const focusSi = inBody ? active.getAttribute('data-si') : null;
+    const focusFilter = inBody ? active.getAttribute('data-filter') : null;
 
     renderCatFilters();
     renderCatAi();
@@ -1401,11 +1413,13 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     renderCatBulk();
     renderFooter();
 
+    if (inGrid) {
+      focusActiveCell();
+      return;
+    }
     let target: HTMLElement | null = null;
-    if (focusRow) {
-      const tr = Array.from(catBody.rows).find((r) => r.dataset.row === focusRow) ?? null;
-      target =
-        onRow || !focusSi ? tr : (tr?.querySelector<HTMLElement>(`[data-si="${focusSi}"]`) ?? tr);
+    if (focusFilter) {
+      target = catFilters?.querySelector<HTMLElement>(`[data-filter="${focusFilter}"]`) ?? null;
     } else if (focusSi) {
       target = body.querySelector<HTMLElement>(`[data-si="${focusSi}"]`);
     }
@@ -1445,24 +1459,33 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   }
 
   function renderCatRows(): void {
-    if (!catBody || !catMore || !catHeadBox) return;
+    if (!catBody || !catMore || !catSelectAll || !catSelectAllText) return;
     catBody.textContent = '';
     const rows = rowById();
     const view = viewIds.map((id) => rows.get(id)).filter((r): r is WizardRow => !!r);
     const page = view.slice(0, shown);
-    if (activeRow === null || !page.some((r) => r.id === activeRow))
+    if (activeRow === null || !page.some((r) => r.id === activeRow)) {
       activeRow = page[0]?.id ?? null;
+      activeCol = 0;
+    }
     const cats = categoryOptions();
     for (const r of page) catBody.appendChild(rowEl(r, cats));
     if (page.length === 0) {
       const tr = el('tr', 'smart-import-empty');
+      tr.setAttribute('role', 'row');
       const td = el('td', undefined, 'No transactions in this list.');
-      td.colSpan = 7;
+      td.setAttribute('role', 'gridcell');
+      td.colSpan = GRID_COLS;
       tr.appendChild(td);
       catBody.appendChild(tr);
     }
-    catHeadBox.checked = view.length > 0 && view.every((r) => selected.has(r.id));
-    catHeadBox.indeterminate = !catHeadBox.checked && view.some((r) => selected.has(r.id));
+    applyRoving();
+
+    const picked = view.filter((r) => selected.has(r.id)).length;
+    catSelectAll.checked = view.length > 0 && picked === view.length;
+    catSelectAll.indeterminate = picked > 0 && picked < view.length;
+    catSelectAll.disabled = view.length === 0;
+    catSelectAllText.textContent = `Select all ${countText(view.length, 'row')} in this list`;
 
     catMore.textContent = '';
     if (view.length > shown) {
@@ -1475,8 +1498,16 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       );
       const more = button('Show more', 'btn btn-secondary btn-sm', 'show-more');
       more.addEventListener('click', () => {
+        const firstNew = view[shown]?.id;
         shown += PAGE_ROWS;
+        // The button goes away with the last page: continue in the first new row.
+        const gone = view.length <= shown;
+        if (gone && firstNew) {
+          activeRow = firstNew;
+          activeCol = 0;
+        }
         renderCategorizeParts();
+        if (gone && firstNew) focusActiveCell();
       });
       catMore.appendChild(more);
     }
@@ -1488,12 +1519,11 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     if (r.duplicate) classes.push('is-duplicate');
     const tr = el('tr', classes.join(' '));
     tr.dataset.row = r.id;
-    tr.tabIndex = r.id === activeRow ? 0 : -1;
+    tr.setAttribute('role', 'row');
     tr.setAttribute('aria-selected', String(selected.has(r.id)));
 
     const check = el('input');
     check.type = 'checkbox';
-    check.tabIndex = -1;
     check.checked = selected.has(r.id);
     check.setAttribute('data-si', 'row-select');
     check.setAttribute('aria-label', `Select ${r.description}`);
@@ -1538,8 +1568,54 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       cSource.appendChild(c);
     }
 
-    tr.append(cCheck, cDate, cDesc, cAmount, cCat, cKind, cSource);
+    for (const td of [cCheck, cDate, cDesc, cAmount, cCat, cKind, cSource]) {
+      td.setAttribute('role', 'gridcell');
+      tr.appendChild(td);
+    }
     return tr;
+  }
+
+  // ---- grid keyboard model -------------------------------------------------
+
+  const gridRows = (): HTMLTableRowElement[] =>
+    catBody ? Array.from(catBody.rows).filter((r) => r.dataset.row) : [];
+
+  /** A cell's focus target: its enabled control, else the cell itself. */
+  function cellTarget(td: HTMLTableCellElement): HTMLElement {
+    const control = td.querySelector<HTMLInputElement | HTMLSelectElement>('input, select');
+    return control && !control.disabled ? control : td;
+  }
+
+  /** Every cell and control is out of the tab order except the active cell's target. */
+  function applyRoving(): void {
+    for (const tr of gridRows()) {
+      for (const td of Array.from(tr.cells)) {
+        td.tabIndex = -1;
+        for (const c of Array.from(td.querySelectorAll<HTMLElement>('input, select'))) {
+          c.tabIndex = -1;
+        }
+      }
+    }
+    const td = activeCell();
+    if (td) cellTarget(td).tabIndex = 0;
+  }
+
+  function activeCell(): HTMLTableCellElement | null {
+    const tr = gridRows().find((r) => r.dataset.row === activeRow);
+    return tr?.cells[Math.min(activeCol, tr.cells.length - 1)] ?? null;
+  }
+
+  function focusActiveCell(): void {
+    const td = activeCell();
+    if (td) cellTarget(td).focus();
+  }
+
+  function moveTo(tr: HTMLTableRowElement | undefined, col: number): void {
+    if (!tr?.dataset.row) return;
+    activeRow = tr.dataset.row;
+    activeCol = Math.max(0, Math.min(GRID_COLS - 1, col));
+    applyRoving();
+    focusActiveCell();
   }
 
   function toggleRow(id: string, on: boolean): void {
@@ -1556,7 +1632,6 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     const si = target.getAttribute('data-si');
     if (si === 'row-select' && target instanceof HTMLInputElement) {
       toggleRow(row.id, target.checked);
-      activeRow = row.id;
     } else if (si === 'category') {
       const value = target.value || null;
       edit((s, remember) => setCategory(s, [row.id], value, remember), row.merchant_key);
@@ -1581,38 +1656,61 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   }
 
   function onTableFocus(event: FocusEvent): void {
-    const tr = event.target instanceof Element ? event.target.closest('tr') : null;
-    const id = tr?.dataset.row;
-    if (!tr || !id || id === activeRow || !catBody) return;
-    for (const r of Array.from(catBody.rows)) r.tabIndex = r === tr ? 0 : -1;
+    const td = event.target instanceof Element ? event.target.closest('td') : null;
+    const id = td?.parentElement?.dataset.row;
+    if (!td || !id) return;
+    if (id === activeRow && td.cellIndex === activeCol) return;
     activeRow = id;
+    activeCol = td.cellIndex;
+    applyRoving();
   }
 
+  /**
+   * Arrow Up and Down, Home and End move between rows; Left and Right between
+   * cells. The arrows are taken from a focused select too, so the grid stays
+   * navigable (a select still opens with Space, Enter or Alt+Down). Space on a
+   * cell without a control toggles the row's selection.
+   */
   function onTableKey(event: KeyboardEvent): void {
-    const tr = event.target;
-    if (!(tr instanceof HTMLTableRowElement) || !tr.dataset.row || !catBody) return;
-    const rows = Array.from(catBody.rows).filter((r) => r.dataset.row);
+    const t = event.target;
+    if (!(t instanceof HTMLElement)) return;
+    const td = t.closest('td');
+    const tr = td?.parentElement;
+    if (!td || !(tr instanceof HTMLTableRowElement) || !tr.dataset.row) return;
+    const rows = gridRows();
     const i = rows.indexOf(tr);
-    let to: HTMLTableRowElement | undefined;
-    if (event.key === 'ArrowDown') to = rows[i + 1];
-    else if (event.key === 'ArrowUp') to = rows[i - 1];
-    else if (event.key === 'Home') to = rows[0];
-    else if (event.key === 'End') to = rows[rows.length - 1];
-    else if (event.key === ' ' || event.key === 'Spacebar') {
-      event.preventDefault();
-      const id = tr.dataset.row;
-      toggleRow(id, !selected.has(id));
-      lastEdit = null;
-      renderCategorizeParts();
-      return;
-    } else return;
-    event.preventDefault();
-    if (to) {
-      tr.tabIndex = -1;
-      to.tabIndex = 0;
-      activeRow = to.dataset.row ?? null;
-      to.focus();
+    const col = td.cellIndex;
+    switch (event.key) {
+      case 'ArrowDown':
+        moveTo(rows[i + 1], col);
+        break;
+      case 'ArrowUp':
+        moveTo(rows[i - 1], col);
+        break;
+      case 'Home':
+        moveTo(rows[0], col);
+        break;
+      case 'End':
+        moveTo(rows[rows.length - 1], col);
+        break;
+      case 'ArrowLeft':
+        moveTo(tr, col - 1);
+        break;
+      case 'ArrowRight':
+        moveTo(tr, col + 1);
+        break;
+      case ' ':
+      case 'Spacebar': {
+        if (t !== td) return; // a checkbox or select handles its own Space
+        const id = tr.dataset.row;
+        toggleRow(id, !selected.has(id));
+        renderCategorizeParts();
+        break;
+      }
+      default:
+        return;
     }
+    event.preventDefault();
   }
 
   function renderCatBulk(): void {
@@ -1775,7 +1873,8 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     const panel = whatGetsSentPanel(
       request,
       ai.provider ?? 'the AI provider',
-      ai.model ?? 'default'
+      ai.model ?? 'default',
+      chunks.length
     );
     const actions = el('div', 'smart-import-actions');
     const merchants = countText(request.items.length, 'merchant');

@@ -1342,7 +1342,21 @@ describe('smart import wizard', () => {
         'Kind',
         'Source',
       ]);
-      expect(q('.smart-import-table thead input[type="checkbox"]')).not.toBeNull();
+    });
+
+    it('is a grid with explicit row, cell and column header roles', async () => {
+      await toCategorize();
+      expect(q('.smart-import-table').getAttribute('role')).toBe('grid');
+      expect(
+        qa('.smart-import-table thead th').every((th) => th.getAttribute('role') === 'columnheader')
+      ).toBe(true);
+      for (const tr of rowEls()) {
+        expect(tr.getAttribute('role')).toBe('row');
+        expect(tr.getAttribute('aria-selected')).toBe('false');
+        expect(Array.from(tr.children).every((td) => td.getAttribute('role') === 'gridcell')).toBe(
+          true
+        );
+      }
     });
 
     it('defaults to "Needs review" when any row needs it, and counts each filter', async () => {
@@ -1497,11 +1511,39 @@ describe('smart import wizard', () => {
         );
       });
 
-      it('selects every row in the list from the header checkbox', async () => {
+      it('"Select all N rows in this list" selects the list and matches the selection', async () => {
         await toCategorize();
-        change(q<HTMLInputElement>('.smart-import-table thead input[type="checkbox"]'), true);
+        const all = q<HTMLInputElement>('[data-si="select-all"]');
+        expect(all.closest('label')!.textContent).toBe('Select all 2 rows in this list');
+        change(all, true);
         await flush();
         expect(q('.smart-import-bulk-count').textContent).toBe('2 selected');
+        expect(rowEls().every((r) => r.getAttribute('aria-selected') === 'true')).toBe(true);
+        change(rowEls()[0]!.querySelector<HTMLInputElement>('[data-si="row-select"]')!, false);
+        await flush();
+        const again = q<HTMLInputElement>('[data-si="select-all"]');
+        expect(again.checked).toBe(false);
+        expect(again.indeterminate).toBe(true);
+        expect(q('.smart-import-bulk-count').textContent).toBe('1 selected');
+      });
+
+      it('keeps the Remember offer through selection changes', async () => {
+        await toCategorize();
+        change(
+          rowFor('SAFEWAY #1').querySelector<HTMLSelectElement>('[data-si="category"]')!,
+          'c2'
+        );
+        await flush();
+        change(q<HTMLInputElement>('[data-si="select-all"]'), true);
+        await flush();
+        expect(modal().querySelector('[data-si="remember"]')).not.toBeNull();
+        const date = rowEls()[0]!.children[1] as HTMLElement;
+        date.focus();
+        date.dispatchEvent(
+          new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })
+        );
+        await flush();
+        expect(modal().querySelector('[data-si="remember"]')).not.toBeNull();
       });
 
       it('"Accept all suggestions" confirms low-confidence AI rows', async () => {
@@ -1604,6 +1646,7 @@ describe('smart import wizard', () => {
         });
         q<HTMLButtonElement>('[data-si="ai-suggest"]').click();
         await flush();
+        expect(q('[data-si="ai-panel"]').textContent).toContain('Sent in 2 batches');
         q<HTMLButtonElement>('[data-si="ai-send"]').click();
         await flush();
         const state0 = handle.getState();
@@ -1788,39 +1831,116 @@ describe('smart import wizard', () => {
       expect(modal().querySelector('[data-si="show-more"]')).toBeNull();
     });
 
-    it('moves between rows with the arrow keys and toggles selection with space', async () => {
-      await toCategorize();
-      const [first, second] = rowEls();
-      expect(first!.tabIndex).toBe(0);
-      expect(second!.tabIndex).toBe(-1);
-      first!.focus();
-      first!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
-      expect(document.activeElement).toBe(rowEls()[1]);
-      const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
-      rowEls()[1]!.dispatchEvent(space);
-      await flush();
-      expect(space.defaultPrevented).toBe(true);
-      expect(rowEls()[1]!.querySelector<HTMLInputElement>('[data-si="row-select"]')!.checked).toBe(
-        true
-      );
-      expect(rowEls()[1]!.getAttribute('aria-selected')).toBe('true');
-      expect(document.activeElement).toBe(rowEls()[1]);
-      rowEls()[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
-      expect(document.activeElement).toBe(rowEls()[0]);
+    describe('keyboard grid', () => {
+      const key = (target: Element, k: string): KeyboardEvent => {
+        const ev = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+        target.dispatchEvent(ev);
+        return ev;
+      };
+      const active = (): HTMLElement => document.activeElement as HTMLElement;
+      const cellOf = (node: Element): [number, number] => {
+        const td = node.closest('td')!;
+        return [rowEls().indexOf(td.parentElement as HTMLElement), td.cellIndex];
+      };
+      /** Elements a Tab press would visit, in DOM order (jsdom has no real Tab). */
+      const tabbables = (): HTMLElement[] =>
+        qa<HTMLElement>('button, input, select, [tabindex]').filter(
+          (n) => n.tabIndex >= 0 && !(n as HTMLButtonElement).disabled
+        );
+
+      it('is one tab stop: Tab enters on the active cell and the next Tab leaves the grid', async () => {
+        await toCategorize();
+        const table = q('.smart-import-table');
+        const order = tabbables();
+        const inGrid = order.filter((n) => table.contains(n));
+        expect(inGrid).toHaveLength(1);
+        expect(inGrid[0]!.getAttribute('data-si')).toBe('row-select');
+        expect(cellOf(inGrid[0]!)).toEqual([0, 0]);
+        const after = order[order.indexOf(inGrid[0]!) + 1];
+        expect(after).toBeDefined();
+        expect(table.contains(after!)).toBe(false);
+      });
+
+      it('moves between rows with Up and Down and between cells with Left and Right', async () => {
+        await toCategorize();
+        const start = rowEls()[0]!.querySelector<HTMLElement>('[data-si="row-select"]')!;
+        start.focus();
+        expect(key(start, 'ArrowDown').defaultPrevented).toBe(true);
+        expect(cellOf(active())).toEqual([1, 0]);
+        key(active(), 'ArrowRight');
+        expect(cellOf(active())).toEqual([1, 1]);
+        expect(active().tagName).toBe('TD');
+        key(active(), 'ArrowRight');
+        key(active(), 'ArrowRight');
+        key(active(), 'ArrowRight');
+        expect(active().getAttribute('data-si')).toBe('category');
+        // The arrows navigate from a select too.
+        key(active(), 'ArrowUp');
+        expect(cellOf(active())).toEqual([0, 4]);
+        expect(active().getAttribute('data-si')).toBe('category');
+        key(active(), 'ArrowLeft');
+        expect(cellOf(active())).toEqual([0, 3]);
+        // Only the active cell is tabbable.
+        const table = q('.smart-import-table');
+        expect(tabbables().filter((n) => table.contains(n))).toEqual([active()]);
+      });
+
+      it('jumps to the first and last row with Home and End', async () => {
+        const many = Array.from({ length: 5 }, (_, i) =>
+          txn(i, { description: `SHOP ${i}`, merchant_key: `shop number ${i}` })
+        );
+        await toCategorize(many);
+        const start = rowEls()[2]!.children[1] as HTMLElement;
+        start.focus();
+        key(start, 'End');
+        expect(cellOf(active())).toEqual([4, 1]);
+        key(active(), 'Home');
+        expect(cellOf(active())).toEqual([0, 1]);
+      });
+
+      it('toggles selection with Space on a cell and keeps focus there', async () => {
+        await toCategorize();
+        const date = rowEls()[1]!.children[1] as HTMLElement;
+        date.focus();
+        expect(key(date, ' ').defaultPrevented).toBe(true);
+        await flush();
+        expect(rowEls()[1]!.getAttribute('aria-selected')).toBe('true');
+        expect(
+          rowEls()[1]!.querySelector<HTMLInputElement>('[data-si="row-select"]')!.checked
+        ).toBe(true);
+        expect(cellOf(active())).toEqual([1, 1]);
+        expect(active().isConnected).toBe(true);
+      });
+
+      it('leaves Space to a select', async () => {
+        await toCategorize();
+        const sel = rowEls()[0]!.querySelector<HTMLSelectElement>('[data-si="category"]')!;
+        sel.focus();
+        expect(key(sel, ' ').defaultPrevented).toBe(false);
+      });
     });
 
-    it('leaves the arrow keys alone inside a select', async () => {
+    it('keeps focus on the filter that was clicked', async () => {
       await toCategorize();
-      const sel = rowEls()[0]!.querySelector<HTMLSelectElement>('[data-si="category"]')!;
-      sel.focus();
-      const ev = new KeyboardEvent('keydown', {
-        key: 'ArrowDown',
-        bubbles: true,
-        cancelable: true,
-      });
-      sel.dispatchEvent(ev);
-      expect(ev.defaultPrevented).toBe(false);
-      expect(document.activeElement).toBe(sel);
+      filterBtn('all').focus();
+      filterBtn('all').click();
+      await flush();
+      expect(document.activeElement).toBe(filterBtn('all'));
+      expect(filterBtn('all').getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('moves focus to the first new row when "Show more" goes away', async () => {
+      const many = Array.from({ length: 250 }, (_, i) =>
+        txn(i, { description: `SHOP ${i}`, merchant_key: `shop number ${i}` })
+      );
+      await toCategorize(many);
+      const more = q<HTMLButtonElement>('[data-si="show-more"]');
+      more.focus();
+      more.click();
+      await flush();
+      expect(modal().querySelector('[data-si="show-more"]')).toBeNull();
+      const tr = (document.activeElement as HTMLElement).closest('tr')!;
+      expect(rowEls().indexOf(tr)).toBe(200);
     });
 
     it('turns the table into a card list on phones', () => {

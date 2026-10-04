@@ -8786,8 +8786,11 @@ body.on-settings #tab-settings {
 .smart-import-bulk select:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-bg); }
 .smart-import-table select { width: 100%; max-width: 180px; }
 .smart-import-table select:disabled { opacity: 0.6; cursor: not-allowed; }
-.smart-import-row:focus { outline: none; }
-.smart-import-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.smart-import-grid-tools { display: flex; align-items: center; margin: 0 0 8px; }
+.smart-import-select-all { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-text-secondary); cursor: pointer; }
+.smart-import-select-all input { width: 18px; height: 18px; margin: 0; }
+.smart-import-row td:focus { outline: none; }
+.smart-import-row td:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 .smart-import-table tbody tr.smart-import-row[aria-selected="true"] td { background: var(--color-primary-bg); }
 .smart-import-row.is-excluded td,
 .smart-import-row.is-duplicate td { color: var(--color-text-secondary); }
@@ -8891,7 +8894,11 @@ body.on-settings #tab-settings {
     .smart-import-empty td { display: block; }
     .smart-import-bulk select { flex: 1 1 140px; max-width: none; min-height: 44px; font-size: 16px; }
     .smart-import-bulk .btn { min-height: 44px; font-size: 14px; }
+    .smart-import-bulk { max-height: 30vh; overflow-y: auto; padding: 8px 10px; gap: 6px; }
+    .smart-import-bulk-controls { gap: 6px; }
     .smart-import-bulk-count { flex-basis: 100%; }
+    .smart-import-bulk .btn { flex: 1 1 auto; padding: 6px 10px; white-space: normal; }
+    .smart-import-select-all { min-height: 44px; }
     .smart-import-bulk.is-empty select,
     .smart-import-bulk.is-empty .btn:disabled { display: none; }
     .smart-import-remember { min-height: 44px; }
