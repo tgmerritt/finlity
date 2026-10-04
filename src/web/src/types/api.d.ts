@@ -812,3 +812,44 @@ export interface MerchantRuleResponse {
 export interface SmartImportDeleted {
   deleted: true;
 }
+
+export interface ApplyResponse {
+  imports: {
+    import_id: string;
+    file_hash: string;
+    txn_new: number;
+    txn_duplicate: number;
+    txn_excluded: number;
+    balance: 'recorded' | 'skipped_existing' | 'skipped_future' | 'none';
+  }[];
+  skipped_files: string[];
+  rules_saved: number;
+  expenses_created: number;
+  expenses_linked: number;
+  pruned: number;
+}
+
+export interface SmartImportUndoResponse {
+  undone: true;
+  deleted: {
+    transactions: number;
+    recurring_candidates: number;
+    expenses: number;
+    snapshots: number;
+  };
+  reassigned: { transactions: number };
+  kept: { table: string; id: string; reason: string }[];
+}
+
+export interface SpendingSummary {
+  months_covered: number;
+  months: string[];
+  categories: {
+    category_id: string | null;
+    category_name: string;
+    actual_monthly: number;
+    planned_monthly: number;
+    difference: number;
+  }[];
+  totals: { actual_monthly: number; planned_monthly: number; difference: number };
+}

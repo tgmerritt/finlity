@@ -38,6 +38,9 @@ const LOCAL_ROUTES: [HttpMethod, string, unknown][] = [
   ['GET', '/api/smart-import/rules', undefined],
   ['GET', '/api/smart-import/settings', undefined],
   ['PUT', '/api/smart-import/settings', {}],
+  ['POST', '/api/smart-import/apply', { batch_id: 'b', statements: [] }],
+  ['DELETE', '/api/smart-import/transactions', undefined],
+  ['GET', '/api/budget/spending-summary', undefined],
 ];
 
 const AI_ROUTES: [HttpMethod, string, string][] = [
@@ -80,6 +83,51 @@ describe('smart import local routes', () => {
     );
     // GET /rules is the list, not a rule named "rules"
     expect(tryLocalRoute('/api/smart-import/rules', { method: 'GET' })).toEqual([]);
+  });
+
+  it('applies, undoes and summarizes through the dispatcher', () => {
+    const body = {
+      batch_id: 'b',
+      statements: [
+        {
+          file_hash: 'a'.repeat(64),
+          file_name: 'x.csv',
+          origin: 'file',
+          format: 'csv',
+          parser: 'csv',
+          account: { kind: 'checking', key: 'acct:one' },
+          transactions: [
+            {
+              posted_date: '2026-09-02',
+              amount: -5,
+              description: 'X',
+              merchant_key: 'X',
+              kind: 'expense',
+              category_source: 'none',
+              dedupe_key: 'k',
+            },
+          ],
+        },
+      ],
+    };
+    const out = tryLocalRoute('/api/smart-import/apply', { method: 'POST', body }) as {
+      imports: { import_id: string; txn_new: number }[];
+    };
+    expect(out.imports[0]!.txn_new).toBe(1);
+    const summary = tryLocalRoute('/api/budget/spending-summary?months=1&entity_id=', {
+      method: 'GET',
+    }) as { months: string[] };
+    expect(summary.months.length).toBeLessThanOrEqual(1);
+    expect(() =>
+      tryLocalRoute('/api/budget/spending-summary?months=0', { method: 'GET' })
+    ).toThrow();
+    const undone = tryLocalRoute(`/api/smart-import/imports/${out.imports[0]!.import_id}`, {
+      method: 'DELETE',
+    }) as { undone: boolean };
+    expect(undone.undone).toBe(true);
+    expect(tryLocalRoute('/api/smart-import/transactions', { method: 'DELETE' })).toEqual({
+      deleted: 0,
+    });
   });
 
   it('does not match a method the route does not serve', () => {
@@ -139,11 +187,16 @@ describe('hosted dispatch never sends smart import over the network', () => {
   const ALL: [HttpMethod, string][] = [
     ...LOCAL_ROUTES.map(([m, p]): [HttpMethod, string] => [m, p]),
     ['DELETE', '/api/smart-import/rules/r1'],
+    ['DELETE', '/api/smart-import/imports/i1'],
     ...AI_ROUTES.map(([m, p]): [HttpMethod, string] => [m, p]),
   ];
 
   it.each(ALL)('%s %s is handled locally or rewritten, never passed through', (method, path) => {
-    const body = method === 'POST' ? { statements: [] } : undefined;
+    const body = path.endsWith('/apply')
+      ? { batch_id: 'b', statements: [] }
+      : method === 'POST'
+        ? { statements: [] }
+        : undefined;
     let handled = false;
     try {
       handled = tryLocalRoute(path, { method, body }) !== NOT_HANDLED;
@@ -166,13 +219,11 @@ describe('hosted dispatch never sends smart import over the network', () => {
   });
 
   it.each([
-    ['POST', '/api/smart-import/apply'],
-    ['DELETE', '/api/smart-import/imports/i1'],
-    ['DELETE', '/api/smart-import/transactions'],
     ['GET', '/api/smart-import/anything-else'],
     ['PUT', '/api/smart-import/rules'],
+    ['POST', '/api/smart-import/imports/i1'],
   ] as [HttpMethod, string][])(
-    '%s %s (not a B4 route) is not on the passthrough allowlist',
+    '%s %s (no such route) is not on the passthrough allowlist',
     (method, path) => {
       expect(isPassthroughAllowed(path, method)).toBe(false);
     }

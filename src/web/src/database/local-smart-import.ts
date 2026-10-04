@@ -16,6 +16,7 @@ import type { ClientDatabase } from './client-database';
 import { LocalHttpError } from './local-error';
 import { today as clockToday } from '@/utils/clock';
 import type {
+  ApplyResponse,
   MerchantRuleResponse,
   PreviewRequest,
   PreviewResponse,
@@ -24,6 +25,8 @@ import type {
   SmartImportSettings,
   SmartImportSettingsUpdate,
   SmartImportSummary,
+  SmartImportUndoResponse,
+  SpendingSummary,
 } from '@/types/api';
 
 const HISTORY_DAYS = 400;
@@ -48,6 +51,11 @@ const MAX_PREVIEW_KEYS = 10_000;
 const CATALOG: Record<string, [number, string]> = {
   bad_request: [422, 'The request could not be read.'],
   rule_not_found: [404, 'Rule not found.'],
+  not_smart_import: [404, 'This is not a smart import.'],
+  import_not_found: [404, 'Import not found. It may have already been undone.'],
+  category_not_found: [404, 'Category not found.'],
+  liability_not_found: [404, 'Debt not found.'],
+  expense_not_found: [404, 'Expense not found.'],
   server_error: [500, 'Something went wrong.'],
   save_failed: [500, 'The change could not be saved.'],
 };
@@ -666,5 +674,1090 @@ export function deleteMerchantRule(db: ClientDatabase, ruleId: string): SmartImp
     }
     db.execute('DELETE FROM merchant_rules WHERE id = ?', [ruleId]);
     return { deleted: true };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Apply, undo, transactions delete, spending summary (mirror of service.py B3)
+// ---------------------------------------------------------------------------
+
+const SPEND_KINDS = ['expense', 'fee', 'interest', 'refund'];
+const ANNUAL_MULTIPLIER: Record<string, number> = {
+  weekly: 52,
+  biweekly: 26,
+  monthly: 12,
+  quarterly: 4,
+  annual: 1,
+  one_time: 0,
+};
+const TXN_KINDS = ['expense', 'income', 'transfer', 'payment', 'refund', 'fee', 'interest'];
+const CATEGORY_SOURCES = ['user', 'rule', 'seed', 'ai', 'none'];
+const ORIGINS = ['file', 'sample', 'connector'];
+const FORMATS = ['csv', 'ofx', 'pdf', 'connector'];
+const RULE_SOURCES = ['user', 'import', 'ai', 'connector'];
+const FREQUENCIES = ['weekly', 'biweekly', 'monthly', 'quarterly', 'annual'];
+const MAX_APPLY_TRANSACTIONS = 10_000;
+const MAX_APPLY_RULES = 5_000;
+const MAX_APPLY_RECURRING = 500;
+const MAX_MONEY = 1e10;
+const EXPENSE_FIELDS = [
+  'entity_id',
+  'category_id',
+  'name',
+  'amount',
+  'frequency',
+  'is_pretax',
+  'is_mortgage',
+  'principal_portion',
+  'interest_portion',
+  'is_active',
+  'start_date',
+  'end_date',
+  'updated_at',
+];
+const EXPENSE_BOOLS = ['is_pretax', 'is_mortgage', 'is_active'];
+const nowIso = (): string => new Date().toISOString();
+const uuid = (): string => crypto.randomUUID();
+
+interface ApplyTxn {
+  posted_date: string;
+  amount: number;
+  description: string;
+  merchant_key: string;
+  kind: string;
+  category_id: string | null;
+  category_source: string;
+  ai_confidence: number | null;
+  external_id: string | null;
+  dedupe_key: string;
+  excluded: boolean;
+}
+interface ApplyStatement {
+  file_hash: string;
+  file_name: string;
+  origin: string;
+  format: string;
+  parser: string;
+  account: {
+    kind: string;
+    key: string;
+    label: string | null;
+    last4: string | null;
+    institution: string | null;
+  };
+  period: { start: string | null; end: string | null } | null;
+  closing_balance: { amount: number; as_of: string } | null;
+  liability_id: string | null;
+  ai_used: boolean;
+  ai_provider: string | null;
+  transactions: ApplyTxn[];
+}
+interface ApplyRule {
+  merchant_key: string;
+  category_id: string | null;
+  kind: string | null;
+  source: string;
+}
+interface ApplyRecurring {
+  merchant_key: string;
+  name: string;
+  amount: number;
+  frequency: string;
+  category_id: string;
+  occurrences: number;
+  file_hash: string;
+  decision: 'create' | 'link' | 'reject';
+  expense_id: string | null;
+}
+interface ApplyRequest {
+  batch_id: string;
+  entity_id: string | null;
+  statements: ApplyStatement[];
+  rules: ApplyRule[];
+  recurring: ApplyRecurring[];
+}
+
+/** A real calendar day written exactly 'YYYY-MM-DD' (never a datetime). */
+function isDay(v: unknown): v is string {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [y, m, d] = v.split('-').map(Number) as [number, number, number];
+  if (y < 1 || m < 1 || m > 12 || d < 1) return false;
+  return d <= new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+const need = (ok: boolean): void => {
+  if (!ok) throw fail('bad_request');
+};
+
+/** An object whose keys are all known (extra keys are rejected) and whose required keys are present. */
+function shape(v: unknown, required: string[], optional: string[]): Raw {
+  need(isObj(v));
+  const o = v as Raw;
+  for (const k of Object.keys(o)) need(required.includes(k) || optional.includes(k));
+  for (const k of required) need(k in o);
+  return o;
+}
+
+const present = (v: unknown): boolean => v !== undefined && v !== null;
+const optText = (v: unknown, min: number, max: number): string | null => {
+  if (!present(v)) return null;
+  need(textBetween(v, min, max));
+  return v as string;
+};
+const money = (v: unknown): number => {
+  need(typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= MAX_MONEY);
+  return v as number;
+};
+const oneOf = (v: unknown, values: string[]): string => {
+  need(typeof v === 'string' && values.includes(v));
+  return v as string;
+};
+
+function parseTxn(raw: unknown): ApplyTxn {
+  const o = shape(
+    raw,
+    [
+      'posted_date',
+      'amount',
+      'description',
+      'merchant_key',
+      'kind',
+      'category_source',
+      'dedupe_key',
+    ],
+    ['category_id', 'ai_confidence', 'external_id', 'excluded']
+  );
+  need(isDay(o.posted_date));
+  need(textBetween(o.description, 0, 2000));
+  need(textBetween(o.merchant_key, 1, 400));
+  need(textBetween(o.dedupe_key, 1, 400));
+  let confidence: number | null = null;
+  if (present(o.ai_confidence)) {
+    need(typeof o.ai_confidence === 'number' && o.ai_confidence >= 0 && o.ai_confidence <= 1);
+    confidence = o.ai_confidence as number;
+  }
+  if (o.excluded !== undefined) need(typeof o.excluded === 'boolean');
+  return {
+    posted_date: o.posted_date as string,
+    amount: money(o.amount),
+    description: o.description as string,
+    merchant_key: o.merchant_key as string,
+    kind: oneOf(o.kind, TXN_KINDS),
+    category_id: optText(o.category_id, 0, 64),
+    category_source: oneOf(o.category_source, CATEGORY_SOURCES),
+    ai_confidence: confidence,
+    external_id: optText(o.external_id, 0, 200),
+    dedupe_key: o.dedupe_key as string,
+    excluded: o.excluded === true,
+  };
+}
+
+function parseStatement(raw: unknown): ApplyStatement {
+  const o = shape(
+    raw,
+    ['file_hash', 'file_name', 'origin', 'format', 'parser', 'account', 'transactions'],
+    ['period', 'closing_balance', 'liability_id', 'ai_used', 'ai_provider']
+  );
+  need(typeof o.file_hash === 'string' && HASH.test(o.file_hash));
+  need(textBetween(o.file_name, 0, 1000));
+  need(textBetween(o.parser, 1, 64));
+  const a = shape(o.account, ['kind', 'key'], ['label', 'last4', 'institution']);
+  need(textBetween(a.key, 1, 200));
+  let period: ApplyStatement['period'] = null;
+  if (present(o.period)) {
+    const p = shape(o.period, [], ['start', 'end']);
+    for (const k of ['start', 'end']) need(!present(p[k]) || isDay(p[k]));
+    period = {
+      start: (p.start as string | null | undefined) ?? null,
+      end: (p.end as string | null | undefined) ?? null,
+    };
+  }
+  let closing: ApplyStatement['closing_balance'] = null;
+  if (present(o.closing_balance)) {
+    const c = shape(o.closing_balance, ['amount', 'as_of'], []);
+    need(isDay(c.as_of));
+    closing = { amount: money(c.amount), as_of: c.as_of as string };
+  }
+  if (o.ai_used !== undefined) need(typeof o.ai_used === 'boolean');
+  need(Array.isArray(o.transactions) && o.transactions.length <= MAX_APPLY_TRANSACTIONS);
+  return {
+    file_hash: o.file_hash as string,
+    file_name: o.file_name as string,
+    origin: oneOf(o.origin, ORIGINS),
+    format: oneOf(o.format, FORMATS),
+    parser: o.parser as string,
+    account: {
+      kind: oneOf(a.kind, ACCOUNT_KINDS),
+      key: a.key as string,
+      label: optText(a.label, 0, 200),
+      last4: optText(a.last4, 0, 32),
+      institution: optText(a.institution, 0, 120),
+    },
+    period,
+    closing_balance: closing,
+    liability_id: optText(o.liability_id, 0, 64),
+    ai_used: o.ai_used === true,
+    ai_provider: optText(o.ai_provider, 0, 64),
+    transactions: (o.transactions as unknown[]).map(parseTxn),
+  };
+}
+
+function parseRule(raw: unknown): ApplyRule {
+  const o = shape(raw, ['merchant_key'], ['category_id', 'kind', 'source']);
+  need(textBetween(o.merchant_key, 1, 400));
+  return {
+    merchant_key: o.merchant_key as string,
+    category_id: optText(o.category_id, 0, 64),
+    kind: present(o.kind) ? oneOf(o.kind, TXN_KINDS) : null,
+    source: o.source === undefined ? 'user' : oneOf(o.source, RULE_SOURCES),
+  };
+}
+
+function parseRecurring(raw: unknown): ApplyRecurring {
+  const o = shape(
+    raw,
+    [
+      'merchant_key',
+      'name',
+      'amount',
+      'frequency',
+      'category_id',
+      'occurrences',
+      'file_hash',
+      'decision',
+    ],
+    ['expense_id']
+  );
+  need(textBetween(o.merchant_key, 1, 400));
+  need(textBetween(o.name, 1, 120));
+  need(
+    typeof o.amount === 'number' &&
+      Number.isFinite(o.amount) &&
+      o.amount > 0 &&
+      o.amount <= MAX_MONEY
+  );
+  need(textBetween(o.category_id, 1, 64));
+  need(
+    typeof o.occurrences === 'number' &&
+      Number.isInteger(o.occurrences) &&
+      o.occurrences >= 1 &&
+      o.occurrences <= 10_000
+  );
+  need(typeof o.file_hash === 'string' && HASH.test(o.file_hash));
+  const decision = oneOf(o.decision, ['create', 'link', 'reject']) as ApplyRecurring['decision'];
+  const expenseId = present(o.expense_id) ? o.expense_id : null;
+  if (expenseId !== null) need(textBetween(expenseId, 1, 64));
+  need((decision === 'link') === (expenseId !== null));
+  return {
+    merchant_key: o.merchant_key as string,
+    name: o.name as string,
+    amount: o.amount as number,
+    frequency: oneOf(o.frequency, FREQUENCIES),
+    category_id: o.category_id as string,
+    occurrences: o.occurrences as number,
+    file_hash: o.file_hash as string,
+    decision,
+    expense_id: expenseId as string | null,
+  };
+}
+
+function parseApply(body: unknown): ApplyRequest {
+  const o = shape(body, ['batch_id', 'statements'], ['entity_id', 'rules', 'recurring']);
+  need(textBetween(o.batch_id, 1, 100));
+  const entityId = present(o.entity_id) ? o.entity_id : null;
+  if (entityId !== null) need(textBetween(entityId, 1, 64));
+  need(Array.isArray(o.statements) && o.statements.length <= MAX_PREVIEW_STATEMENTS);
+  const rules = o.rules === undefined ? [] : o.rules;
+  const recurring = o.recurring === undefined ? [] : o.recurring;
+  need(Array.isArray(rules) && rules.length <= MAX_APPLY_RULES);
+  need(Array.isArray(recurring) && recurring.length <= MAX_APPLY_RECURRING);
+  return {
+    batch_id: o.batch_id as string,
+    entity_id: entityId as string | null,
+    statements: (o.statements as unknown[]).map(parseStatement),
+    rules: (rules as unknown[]).map(parseRule),
+    recurring: (recurring as unknown[]).map(parseRecurring),
+  };
+}
+
+/** Add `delta` calendar months to a 'YYYY-MM-DD' day, clamping the day to the target month. */
+function monthsAgo(day: string, months: number): string {
+  const [y, m, d] = day.split('-').map(Number) as [number, number, number];
+  const index = y * 12 + (m - 1) - months;
+  const year = Math.floor(index / 12);
+  const month = (index % 12) + 1;
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const pad = (n: number, w: number): string => String(n).padStart(w, '0');
+  return `${pad(year, 4)}-${pad(month, 2)}-${pad(Math.min(d, last), 2)}`;
+}
+
+function addLedger(
+  db: ClientDatabase,
+  importId: string,
+  action: string,
+  targetTable: string,
+  targetId: string,
+  before: Raw | null,
+  after: Raw | null,
+  now: string
+): void {
+  db.execute(
+    `INSERT INTO smart_import_ledger (id, import_id, action, target_table, target_id, before_json, after_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      uuid(),
+      importId,
+      action,
+      targetTable,
+      targetId,
+      before === null ? null : sortedJson(before),
+      after === null ? null : sortedJson(after),
+      now,
+    ]
+  );
+}
+
+/** Ledger order: created_at, then insertion order (rowid) so equal timestamps keep their sequence. */
+const LEDGER_ORDER = `${sortable('created_at')}, rowid`;
+
+function checkReferences(db: ClientDatabase, request: ApplyRequest): void {
+  const known = new Set(categories(db).map((c) => c.id));
+  for (const rule of request.rules) {
+    if (rule.category_id && !known.has(rule.category_id)) throw fail('category_not_found');
+  }
+  for (const rec of request.recurring) {
+    if (rec.decision === 'create' && !known.has(rec.category_id)) throw fail('category_not_found');
+    if (rec.decision === 'link') {
+      const expense = db.query<{ entity_id: string | null; is_active: number }>(
+        'SELECT entity_id, is_active FROM budget_expenses WHERE id = ?',
+        [rec.expense_id]
+      )[0];
+      const household = expense !== undefined && expense.entity_id === null;
+      if (
+        !expense ||
+        !expense.is_active ||
+        !(household || expense.entity_id === request.entity_id)
+      ) {
+        throw fail('expense_not_found');
+      }
+    }
+  }
+  for (const st of request.statements) {
+    if (
+      st.liability_id &&
+      !db.query('SELECT 1 FROM liabilities WHERE id = ?', [st.liability_id]).length
+    ) {
+      throw fail('liability_not_found');
+    }
+  }
+}
+
+interface Created {
+  import_id: string;
+  file_hash: string;
+  txn_new: number;
+  txn_duplicate: number;
+  txn_excluded: number;
+  balance: string;
+  statement: ApplyStatement;
+}
+
+function existingRows(db: ClientDatabase, keys: string[]): Map<string, [string, string]> {
+  const found = new Map<string, [string, string]>();
+  for (const chunk of chunks(keys)) {
+    for (const r of db.query<{ dedupe_key: string; id: string; import_id: string }>(
+      `SELECT dedupe_key, id, import_id FROM import_transactions WHERE dedupe_key IN (${placeholders(chunk.length)})`,
+      chunk
+    )) {
+      found.set(r.dedupe_key, [r.id, r.import_id]);
+    }
+  }
+  return found;
+}
+
+function insertStatement(
+  db: ClientDatabase,
+  st: ApplyStatement,
+  contentHash: string,
+  batch: { batch_id: string; entity_id: string | null },
+  seen: Map<string, [string, string]>,
+  now: string
+): Created {
+  const { account } = st;
+  const period = st.period ?? { start: null, end: null };
+  const closing = st.closing_balance;
+  const importId = uuid();
+  db.execute(
+    `INSERT INTO bank_statement_imports (id, entity_id, file_name, content_hash, row_count, status, uploaded_at, analyzed_at)
+     VALUES (?, ?, ?, ?, 0, 'applied', ?, ?)`,
+    [importId, batch.entity_id, truncate(st.file_name, 255), contentHash, now, now]
+  );
+  const excluded = st.transactions.filter((t) => t.excluded).length;
+  const candidates = st.transactions.filter((t) => !t.excluded);
+  const existing = existingRows(db, unique(candidates.map((t) => t.dedupe_key)));
+  let added = 0;
+  let duplicate = 0;
+  for (const t of candidates) {
+    const owner = existing.get(t.dedupe_key) ?? seen.get(t.dedupe_key);
+    if (owner) {
+      duplicate += 1;
+      if (owner[1] !== importId) {
+        // The row stays with its owner; this import claims it so Undo of the owner hands it over.
+        addLedger(
+          db,
+          importId,
+          'claimed',
+          'import_transactions',
+          owner[0],
+          null,
+          { dedupe_key: t.dedupe_key },
+          now
+        );
+      }
+      continue;
+    }
+    const rowId = uuid();
+    seen.set(t.dedupe_key, [rowId, importId]);
+    added += 1;
+    db.execute(
+      `INSERT INTO import_transactions (id, import_id, entity_id, account_key, posted_date, amount, description,
+         merchant_key, kind, category_id, category_source, ai_confidence, external_id, dedupe_key, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        rowId,
+        importId,
+        batch.entity_id,
+        account.key,
+        t.posted_date,
+        t.amount,
+        truncate(t.description, MAX_STORED_KEY_CHARS),
+        truncate(t.merchant_key, MAX_STORED_KEY_CHARS),
+        t.kind,
+        t.category_id,
+        t.category_source,
+        t.ai_confidence,
+        t.external_id,
+        t.dedupe_key,
+        now,
+      ]
+    );
+  }
+  db.execute('UPDATE bank_statement_imports SET row_count = ? WHERE id = ?', [added, importId]);
+  db.execute(
+    `INSERT INTO smart_import_meta (import_id, batch_id, origin, format, parser, account_kind, account_key,
+       account_label, account_last4, institution, period_start, period_end, closing_balance, closing_balance_date,
+       liability_id, txn_new, txn_duplicate, txn_excluded, ai_used, ai_provider, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      importId,
+      batch.batch_id,
+      st.origin,
+      st.format,
+      st.parser,
+      account.kind,
+      account.key,
+      account.label,
+      account.last4 === null ? null : Array.from(account.last4).slice(-4).join(''),
+      account.institution,
+      period.start,
+      period.end,
+      closing ? closing.amount : null,
+      closing ? closing.as_of : null,
+      st.liability_id,
+      added,
+      duplicate,
+      excluded,
+      st.ai_used ? 1 : 0,
+      st.ai_provider,
+      now,
+    ]
+  );
+  return {
+    import_id: importId,
+    file_hash: st.file_hash,
+    txn_new: added,
+    txn_duplicate: duplicate,
+    txn_excluded: excluded,
+    balance: 'none',
+    statement: st,
+  };
+}
+
+function upsertRules(
+  db: ClientDatabase,
+  rules: ApplyRule[],
+  importId: string,
+  now: string
+): number {
+  const byKey = new Map<string, ApplyRule>();
+  for (const rule of rules) byKey.set(truncate(rule.merchant_key, MAX_STORED_KEY_CHARS), rule); // the last choice wins
+  for (const [key, rule] of byKey) {
+    const row = db.query<{ id: string; hits: number | null }>(
+      'SELECT id, hits FROM merchant_rules WHERE merchant_key = ?',
+      [key]
+    )[0];
+    if (!row) {
+      db.execute(
+        `INSERT INTO merchant_rules (id, merchant_key, category_id, kind, hits, source, last_import_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+        [uuid(), key, rule.category_id, rule.kind, rule.source, importId, now, now]
+      );
+    } else {
+      db.execute(
+        `UPDATE merchant_rules SET category_id = ?, kind = ?, hits = ?, source = ?, last_import_id = ?, updated_at = ?
+          WHERE id = ?`,
+        [rule.category_id, rule.kind, (row.hits ?? 0) + 1, rule.source, importId, now, row.id]
+      );
+    }
+  }
+  return byKey.size;
+}
+
+/** Every user-editable expense column plus updated_at, as stored in the ledger. */
+function expenseState(db: ClientDatabase, id: string): Raw | null {
+  const row = db.query<Raw>('SELECT * FROM budget_expenses WHERE id = ?', [id])[0];
+  if (!row) return null;
+  const state: Raw = {};
+  for (const field of EXPENSE_FIELDS) {
+    const v = row[field] ?? null;
+    if (field === 'updated_at') state[field] = isoOut(v);
+    else state[field] = EXPENSE_BOOLS.includes(field) && v !== null ? Boolean(v) : v;
+  }
+  return state;
+}
+
+/** Any difference in a recorded field (updated_at included) means the user edited it. */
+function expenseUnchanged(now: Raw, after: Raw): boolean {
+  for (const [field, was] of Object.entries(after)) {
+    if (!(field in now)) continue;
+    const value = now[field];
+    if (typeof value === 'number' || typeof was === 'number') {
+      if (value === null || was === null || Math.abs(Number(value) - Number(was)) > 1e-9)
+        return false;
+    } else if (typeof value === 'boolean' || typeof was === 'boolean') {
+      if (Boolean(value) !== Boolean(was)) return false;
+    } else if (value !== was) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function applyRecurring(
+  db: ClientDatabase,
+  recurring: ApplyRecurring[],
+  imports: Created[],
+  entityId: string | null,
+  now: string
+): [number, number] {
+  const first = imports[0]!.import_id;
+  const byHash = new Map<string, string>();
+  for (const imp of imports)
+    if (!byHash.has(imp.file_hash)) byHash.set(imp.file_hash, imp.import_id);
+  let created = 0;
+  let linked = 0;
+  for (const rec of recurring) {
+    const importId = byHash.get(rec.file_hash) ?? first;
+    let expenseId: string | null = null;
+    if (rec.decision === 'create') {
+      expenseId = uuid();
+      db.execute(
+        `INSERT INTO budget_expenses (id, entity_id, category_id, name, amount, frequency, is_pretax, is_mortgage,
+           is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 1, ?, ?)`,
+        [expenseId, entityId, rec.category_id, rec.name, rec.amount, rec.frequency, now, now]
+      );
+      addLedger(
+        db,
+        importId,
+        'created',
+        'budget_expenses',
+        expenseId,
+        null,
+        expenseState(db, expenseId),
+        now
+      );
+      created += 1;
+    } else if (rec.decision === 'link') {
+      expenseId = rec.expense_id;
+      addLedger(db, importId, 'linked', 'budget_expenses', expenseId!, null, null, now);
+      linked += 1;
+    }
+    db.execute(
+      `INSERT INTO recurring_candidates (id, import_id, name, amount, frequency, occurrences, status, created_expense_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        uuid(),
+        importId,
+        rec.name,
+        rec.amount,
+        rec.frequency,
+        rec.occurrences,
+        rec.decision === 'reject' ? 'rejected' : 'accepted',
+        expenseId,
+        now,
+      ]
+    );
+  }
+  return [created, linked];
+}
+
+/** Snapshot a statement's closing balance for its liability; never overwrites a same-day snapshot. */
+function recordBalance(db: ClientDatabase, imp: Created, today: string, now: string): string {
+  const { closing_balance: closing, liability_id: liabilityId } = imp.statement;
+  if (!closing || !liabilityId || closing.amount < 0) return 'none'; // a credit balance never reaches a debt
+  const day = closing.as_of;
+  if (day > today) return 'skipped_future';
+  if (
+    db.query(
+      'SELECT 1 FROM liability_balance_snapshots WHERE liability_id = ? AND snapshot_date = ?',
+      [liabilityId, day]
+    ).length
+  ) {
+    return 'skipped_existing';
+  }
+  const snapId = uuid();
+  db.execute(
+    `INSERT INTO liability_balance_snapshots (id, liability_id, snapshot_date, balance, source, source_ref, created_at)
+     VALUES (?, ?, ?, ?, 'import', ?, ?)`,
+    [snapId, liabilityId, day, closing.amount, imp.import_id, now]
+  );
+  addLedger(
+    db,
+    imp.import_id,
+    'snapshot',
+    'liability_balance_snapshots',
+    snapId,
+    null,
+    { liability_id: liabilityId, snapshot_date: day, balance: closing.amount },
+    now
+  );
+  const newest = db.query<{ d: string }>(
+    'SELECT MAX(snapshot_date) AS d FROM liability_balance_snapshots WHERE liability_id = ?',
+    [liabilityId]
+  )[0]!.d;
+  if (day === newest) {
+    const row = db.query<Raw>(
+      'SELECT current_balance, balance_as_of, updated_at FROM liabilities WHERE id = ?',
+      [liabilityId]
+    )[0]!;
+    const before = {
+      current_balance: row.current_balance,
+      balance_as_of: row.balance_as_of,
+      updated_at: isoOut(row.updated_at),
+    };
+    db.execute(
+      'UPDATE liabilities SET current_balance = ?, balance_as_of = ?, updated_at = ? WHERE id = ?',
+      [closing.amount, day, now, liabilityId]
+    );
+    addLedger(
+      db,
+      imp.import_id,
+      'balance_moved',
+      'liabilities',
+      liabilityId,
+      before,
+      { current_balance: closing.amount, balance_as_of: day },
+      now
+    );
+  }
+  return 'recorded';
+}
+
+function prune(db: ClientDatabase, retentionMonths: number, today: string): number {
+  if (retentionMonths <= 0) return 0;
+  return db.execute(
+    `DELETE FROM import_transactions WHERE posted_date < ?
+       AND import_id NOT IN (SELECT import_id FROM smart_import_meta WHERE origin = 'sample')`,
+    [monthsAgo(today, retentionMonths)]
+  ).changes;
+}
+
+function applyInside(
+  db: ClientDatabase,
+  request: ApplyRequest,
+  today: string,
+  now: string
+): ApplyResponse {
+  checkReferences(db, request);
+  const batch = { batch_id: request.batch_id, entity_id: request.entity_id };
+  const indexes = new Map<string, number>();
+  const seen = new Map<string, [string, string]>();
+  const skipped: string[] = [];
+  const imports: Created[] = [];
+  for (const st of request.statements) {
+    const index = indexes.get(st.file_hash) ?? 0;
+    indexes.set(st.file_hash, index + 1);
+    const contentHash = index === 0 ? st.file_hash : `${st.file_hash}:${index}`;
+    if (
+      db.query('SELECT 1 FROM bank_statement_imports WHERE content_hash = ?', [contentHash]).length
+    ) {
+      if (!skipped.includes(st.file_hash)) skipped.push(st.file_hash);
+      continue;
+    }
+    imports.push(insertStatement(db, st, contentHash, batch, seen, now));
+  }
+  let rulesSaved = 0;
+  let created = 0;
+  let linked = 0;
+  let pruned = 0;
+  // Rules, recurring, balances and the prune only run when the batch created an import.
+  if (imports.length) {
+    if (request.rules.length)
+      rulesSaved = upsertRules(db, request.rules, imports[0]!.import_id, now);
+    [created, linked] = applyRecurring(db, request.recurring, imports, batch.entity_id, now);
+    for (const imp of imports) imp.balance = recordBalance(db, imp, today, now);
+    pruned = prune(db, readSettings(db).retention_months, today);
+  }
+  const appliedHashes = new Set(imports.map((i) => i.file_hash));
+  return {
+    imports: imports.map(({ statement: _s, ...rest }) => rest) as ApplyResponse['imports'],
+    skipped_files: skipped.filter((h) => !appliedHashes.has(h)),
+    rules_saved: rulesSaved,
+    expenses_created: created,
+    expenses_linked: linked,
+    pruned,
+  };
+}
+
+/** POST /api/smart-import/apply: one atomic apply, ledgering everything it changes. */
+export function applySmartImport(db: ClientDatabase, body: unknown): ApplyResponse {
+  const request = parseApply(body);
+  const today = clockToday();
+  const now = nowIso();
+  const result = write(db, 'apply', () => applyInside(db, request, today, now));
+  console.info(
+    `smart_import_applied imports=${result.imports.length} skipped=${result.skipped_files.length}`
+  );
+  return result;
+}
+
+// ------------------------------------------------------------------- undo
+
+function restoreLiabilityBalance(
+  db: ClientDatabase,
+  liabilityId: string,
+  before: Raw,
+  now: string
+): void {
+  const row = db.query<{ current_balance: number; balance_as_of: string }>(
+    'SELECT current_balance, balance_as_of FROM liabilities WHERE id = ?',
+    [liabilityId]
+  )[0];
+  if (!row) return;
+  const newest = db.query<{ balance: number; snapshot_date: string }>(
+    'SELECT balance, snapshot_date FROM liability_balance_snapshots WHERE liability_id = ? ORDER BY snapshot_date DESC LIMIT 1',
+    [liabilityId]
+  )[0];
+  const balance = newest ? newest.balance : (before.current_balance as number);
+  const day = newest ? newest.snapshot_date : (before.balance_as_of as string);
+  if (row.current_balance !== balance || row.balance_as_of !== day) {
+    db.execute(
+      'UPDATE liabilities SET current_balance = ?, balance_as_of = ?, updated_at = ? WHERE id = ?',
+      [balance, day, now, liabilityId]
+    );
+  }
+}
+
+/** Rows this import owns that a later import claimed move to the newest claimer instead of being deleted. */
+function handOverClaimedRows(db: ClientDatabase, importId: string): number {
+  const owned = db
+    .query<{ id: string }>('SELECT id FROM import_transactions WHERE import_id = ?', [importId])
+    .map((r) => r.id);
+  const claims = new Map<string, string>(); // row id -> newest surviving claimer
+  for (const chunk of chunks(owned)) {
+    const rows = db.query<{ target_id: string; import_id: string }>(
+      `SELECT target_id, import_id FROM smart_import_ledger
+        WHERE action = 'claimed' AND import_id != ? AND target_id IN (${placeholders(chunk.length)})
+        ORDER BY ${LEDGER_ORDER}`,
+      [importId, ...chunk]
+    );
+    for (const row of rows) claims.set(row.target_id, row.import_id); // ascending, so the newest wins
+  }
+  const byClaimer = new Map<string, string[]>();
+  for (const [rowId, claimer] of claims)
+    byClaimer.set(claimer, [...(byClaimer.get(claimer) ?? []), rowId]);
+  for (const [claimer, ids] of byClaimer) {
+    for (const chunk of chunks(ids)) {
+      const marks = placeholders(chunk.length);
+      db.execute(`UPDATE import_transactions SET import_id = ? WHERE id IN (${marks})`, [
+        claimer,
+        ...chunk,
+      ]);
+      db.execute(
+        `DELETE FROM smart_import_ledger WHERE action = 'claimed' AND import_id = ? AND target_id IN (${marks})`,
+        [claimer, ...chunk]
+      );
+    }
+    db.execute(
+      'UPDATE smart_import_meta SET txn_new = txn_new + ?, txn_duplicate = max(0, txn_duplicate - ?) WHERE import_id = ?',
+      [ids.length, ids.length, claimer]
+    );
+    db.execute(
+      'UPDATE bank_statement_imports SET row_count = coalesce(row_count, 0) + ? WHERE id = ?',
+      [ids.length, claimer]
+    );
+  }
+  return claims.size;
+}
+
+function undoInside(db: ClientDatabase, importId: string, now: string): SmartImportUndoResponse {
+  if (!db.query('SELECT 1 FROM smart_import_meta WHERE import_id = ?', [importId]).length) {
+    // A plain statement import row is a legacy import; no row at all is unknown or already undone.
+    throw fail(
+      db.query('SELECT 1 FROM bank_statement_imports WHERE id = ?', [importId]).length
+        ? 'not_smart_import'
+        : 'import_not_found'
+    );
+  }
+  const ledger = db.query<{
+    action: string;
+    target_table: string;
+    target_id: string;
+    before_json: string | null;
+    after_json: string | null;
+  }>(
+    `SELECT action, target_table, target_id, before_json, after_json FROM smart_import_ledger
+      WHERE import_id = ? ORDER BY ${LEDGER_ORDER}`,
+    [importId]
+  );
+  const kept: SmartImportUndoResponse['kept'] = [];
+  const deleted = { transactions: 0, recurring_candidates: 0, expenses: 0, snapshots: 0 };
+  const reassigned = handOverClaimedRows(db, importId);
+  deleted.transactions = db.execute('DELETE FROM import_transactions WHERE import_id = ?', [
+    importId,
+  ]).changes;
+  // Candidates go before any expense: created_expense_id references budget_expenses.
+  deleted.recurring_candidates = db.execute(
+    'DELETE FROM recurring_candidates WHERE import_id = ?',
+    [importId]
+  ).changes;
+  for (const row of ledger) {
+    if (row.action !== 'created' || row.target_table !== 'budget_expenses') continue;
+    const state = expenseState(db, row.target_id);
+    if (state === null) continue;
+    let reason: string | null = null;
+    if (!expenseUnchanged(state, JSON.parse(row.after_json ?? '{}') as Raw)) reason = 'edited';
+    else if (db.query('SELECT 1 FROM liabilities WHERE expense_id = ?', [row.target_id]).length)
+      reason = 'linked_to_debt';
+    else if (
+      db.query(
+        'SELECT 1 FROM recurring_candidates WHERE created_expense_id = ? AND import_id != ?',
+        [row.target_id, importId]
+      ).length
+    ) {
+      reason = 'used_by_other_import';
+    }
+    if (reason) {
+      kept.push({ table: 'budget_expenses', id: row.target_id, reason });
+    } else {
+      db.execute('DELETE FROM budget_expenses WHERE id = ?', [row.target_id]);
+      deleted.expenses += 1;
+    }
+  }
+  for (const row of ledger) {
+    if (row.action !== 'snapshot') continue;
+    const snap = db.query<{
+      source: string;
+      source_ref: string | null;
+      balance: number;
+      snapshot_date: string;
+    }>(
+      'SELECT source, source_ref, balance, snapshot_date FROM liability_balance_snapshots WHERE id = ?',
+      [row.target_id]
+    )[0];
+    if (!snap) continue;
+    const after = JSON.parse(row.after_json ?? '{}') as Raw;
+    const untouched =
+      snap.source === 'import' &&
+      snap.source_ref === importId &&
+      Math.abs(snap.balance - Number(after.balance ?? 0)) < 1e-9 &&
+      snap.snapshot_date === after.snapshot_date;
+    if (untouched) {
+      db.execute('DELETE FROM liability_balance_snapshots WHERE id = ?', [row.target_id]);
+      deleted.snapshots += 1;
+    } else {
+      kept.push({ table: 'liability_balance_snapshots', id: row.target_id, reason: 'edited' });
+    }
+  }
+  for (const row of ledger) {
+    if (row.action === 'balance_moved') {
+      restoreLiabilityBalance(db, row.target_id, JSON.parse(row.before_json ?? '{}') as Raw, now);
+    }
+  }
+  db.execute('DELETE FROM smart_import_ledger WHERE import_id = ?', [importId]);
+  db.execute('DELETE FROM smart_import_meta WHERE import_id = ?', [importId]);
+  db.execute('DELETE FROM bank_statement_imports WHERE id = ?', [importId]);
+  return { undone: true, deleted, reassigned: { transactions: reassigned }, kept };
+}
+
+/** DELETE /api/smart-import/imports/{id}: remove exactly what one import created, keep what the user changed. */
+export function undoSmartImport(db: ClientDatabase, importId: string): SmartImportUndoResponse {
+  const now = nowIso();
+  const result = write(db, 'undo', () => undoInside(db, importId, now));
+  console.info(`smart_import_undone id=${importId}`);
+  return result;
+}
+
+/** DELETE /api/smart-import/transactions: transaction detail only; everything else stays. */
+export function deleteSmartImportTransactions(db: ClientDatabase): { deleted: number } {
+  const result = write(db, 'delete_transactions', () => ({
+    deleted: db.execute('DELETE FROM import_transactions').changes,
+  }));
+  console.info(`smart_import_transactions_deleted count=${result.deleted}`);
+  return result;
+}
+
+// --------------------------------------------------------- spending summary
+
+function monthKeys(start: string, end: string): Set<string> {
+  let year = Number(start.slice(0, 4));
+  let month = Number(start.slice(5, 7));
+  const endYear = Number(end.slice(0, 4));
+  const endMonth = Number(end.slice(5, 7));
+  const out = new Set<string>();
+  for (let i = 0; i < 1200; i++) {
+    if (year > endYear || (year === endYear && month > endMonth)) break;
+    out.add(`${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`);
+    if (month < 12) month += 1;
+    else {
+      year += 1;
+      month = 1;
+    }
+  }
+  return out;
+}
+
+/** Months an import still has a stored transaction in; with a period, only months inside it count. */
+function coveredMonths(db: ClientDatabase, entityId: string | null): Set<string> {
+  const rows = db.query<{
+    import_id: string;
+    period_start: string | null;
+    period_end: string | null;
+  }>(
+    `SELECT m.import_id, m.period_start, m.period_end FROM smart_import_meta m
+       JOIN bank_statement_imports b ON b.id = m.import_id${entityId ? ' WHERE b.entity_id = ?' : ''}`,
+    entityId ? [entityId] : []
+  );
+  const periods = new Map<string, Set<string> | null>();
+  for (const r of rows) {
+    periods.set(
+      r.import_id,
+      r.period_start && r.period_end ? monthKeys(r.period_start, r.period_end) : null
+    );
+  }
+  const covered = new Set<string>();
+  for (const chunk of chunks([...periods.keys()])) {
+    for (const r of db.query<{ import_id: string; posted_date: string }>(
+      `SELECT DISTINCT import_id, posted_date FROM import_transactions WHERE import_id IN (${placeholders(chunk.length)})`,
+      chunk
+    )) {
+      const month = r.posted_date.slice(0, 7);
+      const allowed = periods.get(r.import_id);
+      if (allowed === null || allowed?.has(month)) covered.add(month);
+    }
+  }
+  return covered;
+}
+
+/** Python-style round(x, 2): exact ties go to the even neighbor, everything else to the nearest. */
+function round2(x: number): number {
+  const a = Math.abs(x);
+  const scaled = a * 100;
+  const floor = Math.floor(scaled);
+  const tie = scaled - floor === 0.5 && (floor + 0.5) / 100 === a;
+  const value = tie ? (floor % 2 === 0 ? floor : floor + 1) / 100 : Number(a.toFixed(2));
+  return x < 0 && value !== 0 ? -value : value;
+}
+
+function parseMonths(v: unknown): number {
+  if (v === undefined || v === null) return 3;
+  let n: number;
+  if (typeof v === 'number') n = v;
+  else if (typeof v === 'string' && /^\s*[+-]?\d+\s*$/.test(v)) n = Number(v);
+  else throw fail('bad_request');
+  need(Number.isInteger(n) && n >= 1 && n <= 24);
+  return n;
+}
+
+/** GET /api/budget/spending-summary: planned versus actual monthly spending by category. */
+export function getSpendingSummary(
+  db: ClientDatabase,
+  monthsParam?: unknown,
+  entityParam?: unknown
+): SpendingSummary {
+  const months = parseMonths(monthsParam);
+  if (present(entityParam)) need(typeof entityParam === 'string' && chars(entityParam) <= 64);
+  const entityId = typeof entityParam === 'string' && entityParam !== '' ? entityParam : null;
+  return guarded('spending_summary', 'server_error', () => {
+    const today = clockToday();
+    const current = today.slice(0, 7);
+    const covered = [...coveredMonths(db, entityId)]
+      .filter((m) => m < current)
+      .sort(cmp)
+      .reverse();
+    const selected = covered.slice(0, months).sort(cmp);
+    const names = new Map(categories(db).map((c) => [c.id, c.name]));
+    const actual = new Map<string | null, number>();
+    if (selected.length) {
+      const chosen = new Set(selected);
+      const rows = db.query<{ category_id: string | null; amount: number; posted_date: string }>(
+        `SELECT category_id, amount, posted_date FROM import_transactions
+          WHERE kind IN (${placeholders(SPEND_KINDS.length)}) AND posted_date >= ?${entityId ? ' AND entity_id = ?' : ''}`,
+        [...SPEND_KINDS, `${selected[0]}-01`, ...(entityId ? [entityId] : [])]
+      );
+      for (const r of rows) {
+        if (!chosen.has(r.posted_date.slice(0, 7))) continue;
+        const key = r.category_id !== null && names.has(r.category_id) ? r.category_id : null; // a deleted category is uncategorized
+        actual.set(key, (actual.get(key) ?? 0) - Number(r.amount));
+      }
+    }
+    const planned = new Map<string | null, number>();
+    const expenses = db.query<{
+      category_id: string | null;
+      amount: number;
+      frequency: string | null;
+    }>(
+      `SELECT category_id, amount, frequency FROM budget_expenses WHERE is_active = 1${entityId ? ' AND entity_id = ?' : ''}`,
+      entityId ? [entityId] : []
+    );
+    for (const e of expenses) {
+      const key = e.category_id !== null && names.has(e.category_id) ? e.category_id : null;
+      const yearly = Number(e.amount) * (ANNUAL_MULTIPLIER[e.frequency ?? ''] ?? 12);
+      planned.set(key, (planned.get(key) ?? 0) + yearly / 12);
+    }
+    const divisor = selected.length || 1;
+    const lines: SpendingSummary['categories'] = [];
+    for (const key of new Set<string | null>([...actual.keys(), ...planned.keys()])) {
+      const a = round2((actual.get(key) ?? 0) / divisor);
+      const p = round2(planned.get(key) ?? 0);
+      if (key === null && a === 0 && p === 0) continue;
+      lines.push({
+        category_id: key,
+        category_name: key === null ? 'Uncategorized' : (names.get(key) as string),
+        actual_monthly: a,
+        planned_monthly: p,
+        difference: round2(a - p),
+      });
+    }
+    lines.sort((x, y) => {
+      if ((x.category_id === null) !== (y.category_id === null))
+        return x.category_id === null ? 1 : -1;
+      return (
+        cmp(x.category_name.toLowerCase(), y.category_name.toLowerCase()) ||
+        cmp(x.category_id ?? '', y.category_id ?? '')
+      );
+    });
+    const totalA = round2(lines.reduce((sum, l) => sum + l.actual_monthly, 0));
+    const totalP = round2(lines.reduce((sum, l) => sum + l.planned_monthly, 0));
+    return {
+      months_covered: selected.length,
+      months: selected,
+      categories: lines,
+      totals: {
+        actual_monthly: totalA,
+        planned_monthly: totalP,
+        difference: round2(totalA - totalP),
+      },
+    };
   });
 }

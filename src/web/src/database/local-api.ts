@@ -16,6 +16,9 @@ import type { ClientDatabase } from './client-database';
 import * as liabilities from './local-liabilities';
 import * as smartImport from './local-smart-import';
 import type {
+  ApplyResponse,
+  SmartImportUndoResponse,
+  SpendingSummary,
   ConvertPositionInput,
   ConvertPositionResult,
   CreateLiabilityInput,
@@ -2302,6 +2305,26 @@ export class LocalAPI {
   /** DELETE /api/smart-import/rules/{id} */
   deleteMerchantRule(id: string): SmartImportDeleted {
     return smartImport.deleteMerchantRule(this.db, id);
+  }
+
+  /** POST /api/smart-import/apply */
+  applySmartImport(input: unknown): ApplyResponse {
+    return smartImport.applySmartImport(this.db, input);
+  }
+
+  /** DELETE /api/smart-import/imports/{id} */
+  undoSmartImport(id: string): SmartImportUndoResponse {
+    return smartImport.undoSmartImport(this.db, id);
+  }
+
+  /** DELETE /api/smart-import/transactions */
+  deleteSmartImportTransactions(): { deleted: number } {
+    return smartImport.deleteSmartImportTransactions(this.db);
+  }
+
+  /** GET /api/budget/spending-summary */
+  getSpendingSummary(months?: unknown, entityId?: unknown): SpendingSummary {
+    return smartImport.getSpendingSummary(this.db, months, entityId);
   }
 
   /** GET /api/smart-import/settings */

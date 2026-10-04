@@ -705,6 +705,16 @@ local('POST', '/api/liabilities/{id}/revert-conversion', (_req, m) =>
 local('GET', '/api/smart-import/context', () => getLocalAPI().getSmartImportContext());
 local('POST', '/api/smart-import/preview', (req) => getLocalAPI().previewSmartImport(req.body));
 local('GET', '/api/smart-import/imports', () => getLocalAPI().getSmartImports());
+local('POST', '/api/smart-import/apply', (req) => getLocalAPI().applySmartImport(req.body));
+local('DELETE', '/api/smart-import/transactions', () =>
+  getLocalAPI().deleteSmartImportTransactions()
+);
+local('DELETE', '/api/smart-import/imports/{id}', (_req, m) =>
+  getLocalAPI().undoSmartImport(m[1]!)
+);
+local('GET', '/api/budget/spending-summary', (req) =>
+  getLocalAPI().getSpendingSummary(req.query.get('months'), req.query.get('entity_id'))
+);
 local('GET', '/api/smart-import/rules', () => getLocalAPI().getMerchantRules());
 local('DELETE', '/api/smart-import/rules/{id}', (_req, m) =>
   getLocalAPI().deleteMerchantRule(m[1]!)
