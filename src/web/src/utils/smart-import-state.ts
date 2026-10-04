@@ -50,8 +50,10 @@ export type RowSource = 'rule' | 'seed' | 'ai' | 'user' | 'none';
 export type RowFilter = 'review' | 'all' | 'duplicates' | 'excluded';
 
 /** Per-file overrides sent as the analyze `context` (besides rules and categories). */
+export type FileOrigin = 'file' | 'sample' | 'connector';
+
 export interface AnalyzeOverrides {
-  origin?: 'file' | 'sample';
+  origin?: FileOrigin;
   mapping?: Record<string, string>;
   account_kind?: SmartImportAccountKind;
   flip_sign?: boolean;
@@ -72,7 +74,9 @@ const MAX_ACCOUNT_KEY_TAIL = 190;
 export interface WizardFile {
   id: string;
   file_name: string;
-  origin: 'file' | 'sample';
+  origin: FileOrigin;
+  /** The connection a connector file came from (Sync now); null for files. */
+  connection_id: string | null;
   status: 'pending' | 'ok' | 'needs_mapping' | 'needs_ai_layout' | 'error';
   /** Catalog code of a failed analyze (never message text). */
   error_type: string | null;
@@ -94,6 +98,8 @@ export interface WizardStatement {
   file_hash: string;
   file_name: string;
   origin: NormalizedStatement['origin'];
+  /** Sent with Apply for connector statements (and only for those). */
+  connection_id: string | null;
   format: NormalizedStatement['format'];
   parser: string;
   /** Starts as the parsed kind; the Accounts step may change it. */
@@ -212,6 +218,8 @@ export interface ReviewCounts {
     label: string;
     closing_balance: number;
     as_of: string;
+    /** From a connector, whose balance may be dated a day ahead (UTC). */
+    connector: boolean;
   }[];
 }
 
@@ -280,11 +288,17 @@ function mapFile(
   return { ...state, files: state.files.map((f) => (f.id === fileId ? fn(f) : f)) };
 }
 
-function newFile(id: string, fileName: string, origin: 'file' | 'sample'): WizardFile {
+function newFile(
+  id: string,
+  fileName: string,
+  origin: FileOrigin,
+  connectionId: string | null = null
+): WizardFile {
   return {
     id,
     file_name: fileName,
     origin,
+    connection_id: connectionId,
     status: 'pending',
     error_type: null,
     headers: [],
@@ -301,13 +315,41 @@ function newFile(id: string, fileName: string, origin: 'file' | 'sample'): Wizar
 
 export function addFile(
   state: WizardState,
-  file: { id: string; file_name: string; origin?: 'file' | 'sample' }
+  file: { id: string; file_name: string; origin?: FileOrigin; connection_id?: string | null }
 ): WizardState {
   if (state.files.some((f) => f.id === file.id)) return state;
   return {
     ...state,
-    files: [...state.files, newFile(file.id, file.file_name, file.origin ?? 'file')],
+    files: [
+      ...state.files,
+      newFile(file.id, file.file_name, file.origin ?? 'file', file.connection_id ?? null),
+    ],
   };
+}
+
+/**
+ * The statements of a Sync now (design 9.2, E11): one ready connector file per
+ * statement, merged like an analyze answer, so each can be left out on its own
+ * and nothing is uploaded or analyzed again.
+ */
+export function addConnectorStatements(
+  state: WizardState,
+  connectionId: string,
+  statements: NormalizedStatement[],
+  idPrefix = 'c'
+): WizardState {
+  let next = state;
+  statements.forEach((statement, i) => {
+    const id = `${idPrefix}${i + 1}`;
+    next = addFile(next, {
+      id,
+      file_name: statement.file_name,
+      origin: 'connector',
+      connection_id: connectionId,
+    });
+    next = mergeAnalyze(next, id, { status: 'ok', statements: [statement] });
+  });
+  return next;
 }
 
 export function setFileOptions(
@@ -530,6 +572,7 @@ export function mergeAnalyze(
       file_hash: file.file_hash ?? s.file_hash,
       file_name: s.file_name,
       origin: s.origin,
+      connection_id: s.origin === 'connector' ? file.connection_id : null,
       format: s.format,
       parser: s.parser,
       account_kind: s.account.kind,
@@ -957,6 +1000,14 @@ export function forgetMerchant(state: WizardState, merchantKey: string): WizardS
  */
 function applyRules(state: WizardState): ApplyRule[] {
   const stored = new Map(state.stored_rules.map((r) => [r.merchant_key, r]));
+  // A merchant seen only in connector statements is remembered as a connector rule.
+  const origin = new Map(state.statements.map((s) => [s.id, s.origin]));
+  const fromFiles = new Set(
+    state.rows.filter((r) => origin.get(r.statement_id) !== 'connector').map((r) => r.merchant_key)
+  );
+  const seen = new Set(state.rows.map((r) => r.merchant_key));
+  const sourceOf = (key: string): 'user' | 'connector' =>
+    seen.has(key) && !fromFiles.has(key) ? 'connector' : 'user';
   const out: ApplyRule[] = [];
   for (const [merchant_key, choice] of Object.entries(state.remembered)) {
     if (choice.forget) {
@@ -972,7 +1023,7 @@ function applyRules(state: WizardState): ApplyRule[] {
       merchant_key,
       category_id,
       ...(kind !== null ? { kind } : {}),
-      source: 'user',
+      source: sourceOf(merchant_key),
     });
   }
   return out;
@@ -1034,6 +1085,7 @@ export function buildApplyRequest(state: WizardState): ApplyRequest {
       file_hash: s.file_hash,
       file_name: s.file_name || file?.file_name || '',
       origin: s.origin,
+      ...(s.origin === 'connector' && s.connection_id ? { connection_id: s.connection_id } : {}),
       format: s.format,
       parser: s.parser,
       account: {
@@ -1082,6 +1134,7 @@ export function reviewCounts(state: WizardState): ReviewCounts {
       label: s.account_label || s.institution || s.file_name,
       closing_balance: s.closing_balance.amount,
       as_of: s.closing_balance.as_of,
+      connector: s.origin === 'connector',
     });
   }
   return {

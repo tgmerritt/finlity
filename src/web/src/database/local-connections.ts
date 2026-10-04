@@ -66,6 +66,7 @@ import {
   importedAccountKeys,
   instantOf,
   isConnectionId,
+  isLiabilityId,
   liabilityExists,
   newestImportEnds,
   newestPostedDates,
@@ -776,7 +777,7 @@ function mergeAccounts(db: ClientDatabase, connection: StoredConnection, listed:
     let liabilityId: string | null = null;
     if (role === 'debt') {
       const found = suggestLiability(db, institution, kind, accountKey);
-      liabilityId = isConnectionId(found) ? found : null;
+      liabilityId = isLiabilityId(found) ? found : null;
     }
     put(stored, pid, {
       name,

@@ -12,7 +12,22 @@ import { store } from '@/state/store';
 import { emit } from '@/state/events';
 import { formatCurrency, formatDate } from '@/utils/format';
 import { button, countText, el, keptLines, undoRefusedText } from '@/utils/smart-import-render';
-import type { SmartImportSummary, SmartImportUndoResponse, SpendingSummary } from '@/types/api';
+import {
+  dismissSyncDue,
+  historyLabel,
+  isSyncDue,
+  lastSyncedText,
+  providerLabel,
+  statusNote,
+  syncGate,
+} from '@/utils/connections-render';
+import { noteNode, whileBusy } from '@/utils/connections-note';
+import type {
+  ConnectionSummary,
+  SmartImportSummary,
+  SmartImportUndoResponse,
+  SpendingSummary,
+} from '@/types/api';
 
 export interface ImportCardDeps {
   /** Open the Add Expense dialog prefilled (the category id is the API's). */
@@ -95,12 +110,19 @@ function removedText(r: SmartImportUndoResponse): string[] {
   return lines;
 }
 
-function renderRow(i: SmartImportSummary, deps: ImportCardDeps): HTMLElement {
+function renderRow(
+  i: SmartImportSummary,
+  deps: ImportCardDeps,
+  connections: readonly ConnectionSummary[] | null
+): HTMLElement {
   const row = el('li', 'import-history-row');
   const info = el('div', 'import-history-info');
   const title = el('div', 'import-history-title');
-  title.appendChild(el('span', 'import-history-file', i.file_name));
+  const synced = historyLabel(i, connections);
+  const name = synced?.title ?? i.file_name;
+  title.appendChild(el('span', 'import-history-file', name));
   if (i.origin === 'sample') title.appendChild(el('span', 'import-history-chip', 'Sample'));
+  if (synced?.removed) title.appendChild(el('span', 'import-history-chip', 'Connection removed'));
   info.appendChild(title);
   info.appendChild(el('div', 'import-history-meta', accountText(i)));
   const period = periodLine(i);
@@ -112,7 +134,7 @@ function renderRow(i: SmartImportSummary, deps: ImportCardDeps): HTMLElement {
   const actions = el('div', 'import-history-actions');
   const undo = button('Undo', 'btn btn-secondary btn-sm', 'undo');
   undo.setAttribute('data-si-history', 'undo');
-  undo.setAttribute('aria-label', `Undo import of ${i.file_name}`);
+  undo.setAttribute('aria-label', `Undo import of ${name}`);
   actions.appendChild(undo);
   row.appendChild(actions);
 
@@ -173,7 +195,14 @@ async function runUndo(i: SmartImportSummary, deps: ImportCardDeps): Promise<boo
   return true;
 }
 
-export async function loadImportHistory(deps: ImportCardDeps): Promise<void> {
+/**
+ * `connectionList` lets a caller share one /api/connections request with the
+ * connections card; without it the list is fetched here.
+ */
+export async function loadImportHistory(
+  deps: ImportCardDeps,
+  connectionList?: Promise<ConnectionSummary[] | null>
+): Promise<void> {
   const list = host('smart-import-history-list');
   if (!list) return;
   let imports: SmartImportSummary[];
@@ -184,6 +213,8 @@ export async function loadImportHistory(deps: ImportCardDeps): Promise<void> {
     list.textContent = HISTORY_ERROR;
     return;
   }
+  // Provider names for synced imports; unknown (null) when the list cannot load.
+  const connections = await (connectionList ?? loadConnectionList());
   list.textContent = '';
   if (imports.length === 0) {
     list.appendChild(
@@ -209,10 +240,127 @@ export async function loadImportHistory(deps: ImportCardDeps): Promise<void> {
     );
     batch.appendChild(head);
     const rows = el('ul', 'import-history-rows');
-    for (const i of group) rows.appendChild(renderRow(i, deps));
+    for (const i of group) rows.appendChild(renderRow(i, deps, connections));
     batch.appendChild(rows);
     list.appendChild(batch);
   }
+}
+
+// -------------------------------------------------------------- connections
+
+async function loadConnectionList(): Promise<ConnectionSummary[] | null> {
+  try {
+    return (await apiCall<ConnectionSummary[]>('/api/connections')) ?? [];
+  } catch {
+    return null;
+  }
+}
+
+function daysAgoText(iso: string, now: Date): string {
+  const days = Math.floor((now.getTime() - new Date(iso).getTime()) / 86_400_000);
+  return days <= 1 ? 'Last synced 1 day ago.' : `Last synced ${days} days ago.`;
+}
+
+function connectionRow(c: ConnectionSummary, now: Date, reload: () => Promise<void>): HTMLElement {
+  const row = el('li', 'import-connection');
+  const info = el('div', 'import-connection-info');
+  const title = el('div', 'import-connection-title');
+  title.appendChild(el('strong', 'import-connection-label', c.label));
+  title.appendChild(el('span', 'import-connection-provider', providerLabel(c.provider)));
+  info.appendChild(title);
+  info.appendChild(el('p', 'import-connection-meta', lastSyncedText(c)));
+  const note = statusNote(c, now);
+  if (note) info.appendChild(noteNode(note));
+  if (isSyncDue(c, now) && c.last_synced_at) {
+    const due = el('div', 'import-connection-due');
+    due.appendChild(
+      el(
+        'span',
+        'import-connection-due-text',
+        `${daysAgoText(c.last_synced_at, now)} Sync now to check for new transactions.`
+      )
+    );
+    const dismiss = button('Dismiss', 'btn btn-secondary btn-sm', 'dismiss');
+    dismiss.setAttribute('data-si-conn', 'dismiss');
+    dismiss.setAttribute('aria-label', `Dismiss the sync reminder for ${c.label}`);
+    dismiss.addEventListener('click', () => {
+      dismissSyncDue(c.id);
+      // Keep focus in the card: the button is about to leave the DOM.
+      const sync = row.querySelector<HTMLButtonElement>('[data-si-conn="sync"]');
+      const box = host('import-connections');
+      if (sync && !sync.disabled) {
+        sync.focus();
+      } else if (box) {
+        if (!box.hasAttribute('tabindex')) box.setAttribute('tabindex', '-1');
+        box.focus();
+      }
+      due.remove();
+    });
+    due.appendChild(dismiss);
+    info.appendChild(due);
+  }
+  row.appendChild(info);
+
+  const actions = el('div', 'import-connection-actions');
+  const sync = button('Sync now', 'btn btn-primary btn-sm', 'sync');
+  sync.setAttribute('data-si-conn', 'sync');
+  sync.setAttribute('aria-label', `Sync ${c.label} now`);
+  sync.disabled = syncGate(c, now).blocked;
+  sync.addEventListener('click', () => {
+    void whileBusy(sync, !syncGate(c, now).blocked, () =>
+      import('@/features/connections')
+        .then(({ syncNow }) => syncNow(c.id, reload, 'import-connections-status'))
+        .catch(() => setConnectionStatus(['Could not start the sync. Try again in a moment.']))
+    );
+  });
+  actions.appendChild(sync);
+  if (c.status === 'reconnect_needed') {
+    const reconnect = button('Reconnect', 'btn btn-primary btn-sm', 'reconnect');
+    reconnect.setAttribute('data-si-conn', 'reconnect');
+    reconnect.setAttribute('aria-label', `Reconnect ${c.label}`);
+    reconnect.addEventListener('click', () => {
+      void import('@/features/connections')
+        .then(({ openConnectDialog }) => openConnectDialog({ reconnect: c, onChanged: reload }))
+        .catch(() => setConnectionStatus(['Could not open Reconnect. Try again in a moment.']));
+    });
+    actions.appendChild(reconnect);
+  }
+  row.appendChild(actions);
+  return row;
+}
+
+function setConnectionStatus(lines: string[]): void {
+  const box = host('import-connections-status');
+  if (!box) return;
+  box.textContent = '';
+  for (const line of lines) box.appendChild(el('span', 'import-history-status-line', line));
+}
+
+/**
+ * The connections with Sync now. Hidden when there are none or the list fails.
+ * `connectionList` shares one /api/connections request with the import history.
+ */
+export async function loadConnectionsCard(
+  deps: ImportCardDeps,
+  connectionList?: Promise<ConnectionSummary[] | null>
+): Promise<void> {
+  const box = host('import-connections');
+  const list = host('import-connections-list');
+  if (!box || !list) return;
+  const connections = await (connectionList ?? loadConnectionList());
+  list.textContent = '';
+  if (!connections || connections.length === 0) {
+    box.hidden = true;
+    return;
+  }
+  const now = new Date();
+  // A recorded sync changes last synced and quota, and may add history rows.
+  const reload = async (): Promise<void> => {
+    const shared = loadConnectionList();
+    await Promise.allSettled([loadConnectionsCard(deps, shared), loadImportHistory(deps, shared)]);
+  };
+  for (const c of connections) list.appendChild(connectionRow(c, now, reload));
+  box.hidden = false;
 }
 
 // ------------------------------------------------------------ planned vs actual
@@ -342,5 +490,11 @@ export async function loadPlannedVsActual(deps: ImportCardDeps): Promise<void> {
 
 /** Load both cards. Each shows its own fixed message when its request fails. */
 export async function loadImportCards(deps: ImportCardDeps): Promise<void> {
-  await Promise.allSettled([loadImportHistory(deps), loadPlannedVsActual(deps)]);
+  // One /api/connections request feeds both the card and the history labels.
+  const connections = loadConnectionList();
+  await Promise.allSettled([
+    loadConnectionsCard(deps, connections),
+    loadImportHistory(deps, connections),
+    loadPlannedVsActual(deps),
+  ]);
 }

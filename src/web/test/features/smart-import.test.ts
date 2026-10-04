@@ -3192,6 +3192,285 @@ describe('smart import wizard', () => {
     });
   });
 
+  describe('connector sync (connections C3)', () => {
+    type Txn = NormalizedStatement['transactions'][number];
+    const ctxn = (row: number, over: Partial<Txn> = {}): Txn => ({
+      row,
+      posted_date: '2026-10-01',
+      amount: -10,
+      description: `SHOP ${row}`,
+      merchant_key: `shop ${row}`,
+      kind: 'expense',
+      category_id: 'c2',
+      category_source: 'seed',
+      external_id: `demo:demo-card:2026-10-01:${row}`,
+      dedupe_base: `cd${row}`,
+      ...over,
+    });
+    const synced = (over: Partial<NormalizedStatement> = {}): NormalizedStatement =>
+      statement({
+        file_hash: 'hash-sync-card',
+        file_name: 'Demo bank sync 2026-10-04',
+        origin: 'connector',
+        format: 'connector',
+        parser: 'connector:demo',
+        account: { kind: 'credit_card', key: 'acct:card', last4: null, institution: 'Demo Bank' },
+        period: { start: '2026-09-30', end: '2026-10-04' },
+        closing_balance: { amount: 812.4, as_of: '2026-10-05' },
+        transactions: [ctxn(0), ctxn(1)],
+        ...over,
+      });
+    const everyday = (): NormalizedStatement =>
+      synced({
+        file_hash: 'hash-sync-chk',
+        account: { kind: 'checking', key: 'acct:chk', last4: null, institution: 'Demo Bank' },
+        closing_balance: { amount: 1500, as_of: '2026-10-04' },
+        transactions: [ctxn(5, { external_id: 'demo:demo-chk:2026-10-01:5', dedupe_base: 'ck5' })],
+      });
+    const connection = (
+      over: Partial<NonNullable<Parameters<typeof openSmartImportWizard>[0]>['connection']> = {}
+    ): NonNullable<Parameters<typeof openSmartImportWizard>[0]>['connection'] => ({
+      connection_id: 'conn-1',
+      provider_label: 'Demo bank',
+      statements: [synced(), everyday()],
+      accounts: {
+        'acct:card': { liability_id: 'l1', label: 'Rewards card', role: 'debt' },
+        'acct:chk': { liability_id: null, label: 'Everyday', role: 'cash_flow' },
+      },
+      ...over,
+    });
+    const writes = (): string[] =>
+      calls
+        .filter((c) => (c.options?.method ?? 'GET') !== 'GET')
+        .map((c) => `${c.options!.method} ${c.url}`);
+    const applyOk = (body: unknown): ApplyResponse => ({
+      imports: (body as ApplyRequest).statements.map((st, i) => ({
+        import_id: `imp-${i}`,
+        file_hash: st.file_hash,
+        txn_new: st.transactions.length,
+        txn_duplicate: 0,
+        txn_excluded: 0,
+        balance: st.liability_id ? 'recorded' : 'none',
+      })),
+      skipped_files: [],
+      rules_saved: 0,
+      expenses_created: 0,
+      expenses_linked: 0,
+      pruned: 0,
+    });
+    const nextUntilReview = async (): Promise<void> => {
+      for (let i = 0; i < 3; i++) {
+        next().click();
+        await flush();
+      }
+      expect(q('.smart-import-heading').textContent).toBe('Review and apply');
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(2026, 9, 4, 18, 0, 0));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('opens at Accounts, step 1 shown as a finished Sync, with no upload', async () => {
+      setup({ liabilities: [liability()], apply: applyOk });
+      await open({ connection: connection() });
+      expect(q('.smart-import-heading').textContent).toBe('Check the accounts');
+      expect(q('.smart-import-progress-short').textContent).toBe('2 of 5');
+      const steps = qa('.smart-import-steps li');
+      expect(steps[0]!.textContent).toBe('Sync');
+      expect(steps[0]!.classList.contains('is-done')).toBe(true);
+      expect(q('[data-si="dropzone"]')).toBeNull();
+      expect(uploads).toEqual([]);
+      expect(uploadMock).not.toHaveBeenCalled();
+      // The left button cancels: there is no Upload step to go back to.
+      expect(q('[data-si="cancel"]').textContent).toBe('Cancel');
+      expect(modal().querySelector('[data-si="back"]')).toBeNull();
+    });
+
+    it('prefills the kinds, names and the mapped debt link', async () => {
+      setup({ liabilities: [liability(), liability({ id: 'l2', name: 'Other card' })] });
+      await open({ connection: connection() });
+      const card = q('[data-statement="c1:0"]');
+      expect(card.querySelector('.smart-import-card-title')!.textContent).toBe('Rewards card');
+      expect(card.querySelector<HTMLSelectElement>('[data-si="kind"]')!.value).toBe('credit_card');
+      expect(card.querySelector<HTMLSelectElement>('[data-si="debt"]')!.value).toBe('l1');
+      expect(card.textContent).not.toContain('Suggested match');
+      expect(card.textContent).toContain('Demo bank sync 2026-10-04');
+      const chk = q('[data-statement="c2:0"]');
+      expect(chk.querySelector<HTMLSelectElement>('[data-si="kind"]')!.value).toBe('checking');
+      expect(chk.querySelector('[data-si="debt"]')).toBeNull();
+    });
+
+    it('changes a kind without reading anything again', async () => {
+      setup({ liabilities: [liability()] });
+      const handle = await open({ connection: connection() });
+      const kind = q<HTMLSelectElement>('[data-statement="c2:0"] [data-si="kind"]');
+      kind.value = 'savings';
+      kind.dispatchEvent(new Event('change', { bubbles: true }));
+      await flush();
+      expect(uploadMock).not.toHaveBeenCalled();
+      expect(handle.getState().statements[1]!.account_kind).toBe('savings');
+    });
+
+    it('marks the already-synced overlap as duplicates and leaves it out of Apply', async () => {
+      setup({
+        liabilities: [liability()],
+        preview: { ...emptyPreview, existing_dedupe_keys: ['acct:card|cd0'] },
+        apply: applyOk,
+      });
+      const handle = await open({ connection: connection() });
+      expect(handle.getState().rows.find((r) => r.dedupe_base === 'cd0')!.duplicate).toBe(true);
+      await nextUntilReview();
+      expect(q('[data-count="duplicates"]').textContent).toBe('1');
+      q<HTMLButtonElement>('[data-si="apply"]').click();
+      await flush();
+      const body = calls.find((c) => c.url === '/api/smart-import/apply')!.options!
+        .body as ApplyRequest;
+      const keys = body.statements.flatMap((st) => st.transactions.map((t) => t.dedupe_key));
+      expect(keys).not.toContain('acct:card|cd0');
+      expect(keys).toContain('acct:card|cd1');
+    });
+
+    it('applies with connection_id and origin connector, then calls back with the state', async () => {
+      const onApplied = vi.fn(async () => undefined);
+      setup({ liabilities: [liability()], apply: applyOk });
+      await open({ connection: connection({ onApplied }) });
+      await nextUntilReview();
+      expect(onApplied).not.toHaveBeenCalled();
+      q<HTMLButtonElement>('[data-si="apply"]').click();
+      await flush();
+      const body = calls.find((c) => c.url === '/api/smart-import/apply')!.options!
+        .body as ApplyRequest;
+      expect(body.statements.map((st) => [st.origin, st.connection_id, st.liability_id])).toEqual([
+        ['connector', 'conn-1', 'l1'],
+        ['connector', 'conn-1', null],
+      ]);
+      expect(onApplied).toHaveBeenCalledTimes(1);
+      const state = (onApplied.mock.calls[0] as unknown as [{ statements: unknown[] }])[0];
+      expect(state.statements).toHaveLength(2);
+    });
+
+    it('does not call back when Apply fails', async () => {
+      const onApplied = vi.fn(async () => undefined);
+      setup({
+        liabilities: [liability()],
+        apply: () => {
+          throw new ApiError(400, 'x', { error_type: 'bad_request' });
+        },
+      });
+      await open({ connection: connection({ onApplied }) });
+      await nextUntilReview();
+      q<HTMLButtonElement>('[data-si="apply"]').click();
+      await flush();
+      expect(onApplied).not.toHaveBeenCalled();
+    });
+
+    it('says so on Done when the mapping write-back fails', async () => {
+      setup({ liabilities: [liability()], apply: applyOk });
+      await open({
+        connection: connection({
+          onApplied: async () => {
+            throw new Error('put failed');
+          },
+        }),
+      });
+      await nextUntilReview();
+      q<HTMLButtonElement>('[data-si="apply"]').click();
+      await flush();
+      expect(q('[data-si="mapping-warning"]').textContent).toContain('The import is saved');
+    });
+
+    it('writes nothing before Apply', async () => {
+      setup({ liabilities: [liability()], apply: applyOk });
+      await open({ connection: connection() });
+      await nextUntilReview();
+      expect(
+        writes().every((w) =>
+          /^POST \/api\/(smart-import\/preview|v2\/smart-import\/recurring)$/.test(w)
+        )
+      ).toBe(true);
+    });
+
+    it('records a connector balance dated tomorrow as today on Review', async () => {
+      setup({ liabilities: [liability({ balance_as_of: '2026-09-01' })], apply: applyOk });
+      await open({ connection: connection() });
+      await nextUntilReview();
+      const line = q('[data-debt="l1"]');
+      expect(line.querySelector('[data-si="debt-after"]')!.textContent).toBe('$812.40');
+      expect(line.textContent).not.toContain('in the future');
+    });
+
+    it('shows client copy for every connector warning code', async () => {
+      const codes = [
+        'connector_sign_check',
+        'connector_partial',
+        'connector_balance_only',
+        'connector_balance_dropped',
+        'connector_account_error',
+        'rows_skipped',
+      ];
+      setup({ liabilities: [liability()] });
+      await open({ connection: connection({ statements: [synced({ warnings: codes })] }) });
+      const notes = qa('[data-statement="c1:0"] .smart-import-note').map((n) => n.textContent);
+      expect(notes).toHaveLength(codes.length);
+      expect(notes).toContain(
+        'Some transactions outside this sync’s dates, or sent twice, were left out.'
+      );
+    });
+
+    it('shows the notices and the turn it is on', async () => {
+      setup({ liabilities: [liability()] });
+      await open({
+        connection: connection({
+          notices: ['Sync stopped after part 1 of 2.'],
+          turn: { index: 1, total: 2 },
+        }),
+      });
+      expect(modal().textContent).toContain('Sync stopped after part 1 of 2.');
+      expect(modal().textContent).toContain('Part 1 of 2 of this sync.');
+    });
+
+    it('undoes a connector import from Done and reports it on close', async () => {
+      const onClose = vi.fn();
+      setup({
+        liabilities: [liability()],
+        apply: applyOk,
+        undo: () => ({
+          deleted: { transactions: 1, expenses: 0, snapshots: 0 },
+          reassigned: { transactions: 0 },
+          kept: [],
+        }),
+      });
+      await open({ connection: connection(), onClose });
+      await nextUntilReview();
+      q<HTMLButtonElement>('[data-si="apply"]').click();
+      await flush();
+      q<HTMLButtonElement>('[data-si="undo"]').click();
+      q<HTMLButtonElement>('[data-si="undo-confirm"]').click();
+      await flush();
+      expect(writes().filter((w) => w.startsWith('DELETE'))).toEqual([
+        'DELETE /api/smart-import/imports/imp-0',
+        'DELETE /api/smart-import/imports/imp-1',
+      ]);
+      expect(q('.smart-import-heading').textContent).toBe('Import undone');
+      q<HTMLButtonElement>('[data-si="close"]').click();
+      expect(onClose).toHaveBeenCalledWith({ applied: true, undone: true });
+    });
+
+    it('reports a discarded sync as not applied', async () => {
+      const onClose = vi.fn();
+      setup({ liabilities: [liability()] });
+      await open({ connection: connection(), onClose });
+      q('[data-si="cancel"]').click();
+      expect(modal().textContent).toContain('Discard this sync?');
+      q('[data-si="discard"]').click();
+      expect(onClose).toHaveBeenCalledWith({ applied: false, undone: false });
+    });
+  });
+
   it('has no em-dash in the module sources', () => {
     const dash = String.fromCharCode(0x2014);
     for (const f of [

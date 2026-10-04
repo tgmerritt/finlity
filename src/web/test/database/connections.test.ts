@@ -378,11 +378,11 @@ describe('mergeConnectionAccounts', () => {
     expect(out.quota_left).toBe(19);
   });
 
-  it('suggests only a debt with a canonical id, like the server', () => {
+  it('suggests a debt whatever its id looks like, like the server', () => {
     addLiability(env.db, 'L-card', { name: 'Visa', lender: 'Sample Bank', type: 'credit_card' });
     create();
     const out = merge([providerAccount('card', { kind_guess: 'credit_card' })]);
-    expect((out.accounts as Row[])[0]).toMatchObject({ role: 'debt', liability_id: null });
+    expect((out.accounts as Row[])[0]).toMatchObject({ role: 'debt', liability_id: 'L-card' });
   });
 
   it('suggests the debt an earlier import of the same key was linked to', () => {
@@ -536,10 +536,19 @@ describe('updateConnection', () => {
       'liability_not_found'
     );
     expectError(
-      () => api().updateConnection(ID, { accounts: { card: { liability_id: 'L-card' } } }),
+      () => api().updateConnection(ID, { accounts: { card: { liability_id: 'L-missing' } } }),
       404,
       'liability_not_found'
     );
+  });
+
+  it('accepts a debt whose id is not a UUID, such as the demo’s, and reads it back', () => {
+    addLiability(env.db, 'demo-card', { name: 'Credit card', type: 'credit_card' });
+    api().updateConnection(ID, { accounts: { card: { liability_id: 'demo-card' } } });
+    const detail = api().getConnection(ID) as Row;
+    expect(
+      (detail.accounts as Row[]).find((a) => a.provider_account_id === 'card')!.liability_id
+    ).toBe('demo-card');
   });
 
   it('accepts a known liability, and null clears it', () => {

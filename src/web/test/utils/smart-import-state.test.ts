@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
 import {
+  addConnectorStatements,
   addFile,
   applyCategorizeResponse,
   applyPreview,
@@ -945,6 +946,7 @@ describe('reviewCounts', () => {
           label: 'Card',
           closing_balance: 900,
           as_of: '2026-09-30',
+          connector: false,
         },
       ],
     });
@@ -1237,5 +1239,98 @@ describe('apply body contract', () => {
     expect(body.rules!.length).toBeGreaterThan(0);
     body.recurring!.forEach((r) => conforms('recurring', r));
     expect(body.recurring!.length).toBe(1);
+  });
+});
+
+describe('connector statements (connections C3)', () => {
+  const connector = (
+    txns: NormalizedTransaction[],
+    over: Partial<NormalizedStatement> = {}
+  ): NormalizedStatement =>
+    stmt(txns, {
+      origin: 'connector',
+      format: 'connector',
+      parser: 'connector:demo',
+      file_name: 'Demo bank sync 2026-10-04',
+      account: { kind: 'credit_card', key: 'acct:card', last4: null, institution: 'Demo' },
+      closing_balance: { amount: 812.4, as_of: '2026-10-05' },
+      ...over,
+    });
+
+  function synced(...statements: NormalizedStatement[]): WizardState {
+    rowNo = 0;
+    return addConnectorStatements(createWizardState(CTX, 'b'), 'conn-1', statements);
+  }
+
+  it('adds one connector file per statement, ready, with the connection id', () => {
+    const s = synced(
+      connector([txn()], { file_hash: 'h1' }),
+      connector([txn()], {
+        file_hash: 'h2',
+        account: { kind: 'checking', key: 'acct:chk', last4: null, institution: null },
+      })
+    );
+    expect(s.files.map((f) => [f.origin, f.status])).toEqual([
+      ['connector', 'ok'],
+      ['connector', 'ok'],
+    ]);
+    expect(s.statements.map((x) => [x.origin, x.connection_id, x.account_key])).toEqual([
+      ['connector', 'conn-1', 'acct:card'],
+      ['connector', 'conn-1', 'acct:chk'],
+    ]);
+    expect(s.rows).toHaveLength(2);
+  });
+
+  it('file statements carry no connection id', () => {
+    expect(loaded([txn()]).statements[0]!.connection_id).toBeNull();
+  });
+
+  it('Apply sends connection_id and origin connector, and no connection_id for files', () => {
+    let s = synced(connector([txn()], { file_hash: 'h1' }));
+    s = addFile(s, { id: 'f9', file_name: 'bank.csv' });
+    s = mergeAnalyze(s, 'f9', ok(stmt([txn()], { file_hash: 'h9' })));
+    const [a, b] = buildApplyRequest(s).statements;
+    expect(a).toMatchObject({ origin: 'connector', format: 'connector', connection_id: 'conn-1' });
+    expect(b!.origin).toBe('file');
+    expect('connection_id' in b!).toBe(false);
+  });
+
+  it('leaves overlap rows marked as duplicates out of Apply', () => {
+    let s = synced(connector([txn({ dedupe_base: 'old' }), txn({ dedupe_base: 'new' })]));
+    s = applyPreview(s, {
+      existing_dedupe_keys: ['acct:card|old'],
+      prior_files: [],
+      liability_suggestions: [],
+      history: [],
+    } as unknown as PreviewResponse);
+    expect(s.rows.map((r) => r.duplicate)).toEqual([true, false]);
+    const sent = buildApplyRequest(s).statements[0]!.transactions;
+    expect(sent.map((t) => t.dedupe_key)).toEqual(['acct:card|new']);
+  });
+
+  it('remembers a merchant with source connector when every row came from a sync', () => {
+    let s = synced(connector([txn({ merchant_key: 'SHELL' })]));
+    s = setCategory(s, [s.rows[0]!.id], 'c-food', true);
+    expect(buildApplyRequest(s).rules).toEqual([
+      { merchant_key: 'SHELL', category_id: 'c-food', source: 'connector' },
+    ]);
+  });
+
+  it('remembers a merchant with source user when a file row has it too', () => {
+    let s = synced(connector([txn({ merchant_key: 'SHELL' })], { file_hash: 'h1' }));
+    s = addFile(s, { id: 'f9', file_name: 'bank.csv' });
+    s = mergeAnalyze(s, 'f9', ok(stmt([txn({ merchant_key: 'SHELL' })], { file_hash: 'h9' })));
+    s = setCategory(s, [s.rows[0]!.id], 'c-food', true);
+    expect(buildApplyRequest(s).rules).toEqual([
+      { merchant_key: 'SHELL', category_id: 'c-food', source: 'user' },
+    ]);
+  });
+
+  it('marks connector debts in the review counts', () => {
+    let s = synced(connector([txn()]));
+    s = setStatement(s, s.statements[0]!.id, { liability_id: 'debt-1' });
+    expect(reviewCounts(s).debts).toEqual([
+      expect.objectContaining({ liability_id: 'debt-1', connector: true, as_of: '2026-10-05' }),
+    ]);
   });
 });

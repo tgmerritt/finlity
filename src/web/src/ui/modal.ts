@@ -21,6 +21,11 @@ export interface ModalConfig {
   cancelButtonText?: string;
   showFooter?: boolean;
   modalClass?: string;
+  /**
+   * Asked before X, backdrop, Cancel or Escape closes the dialog; return false
+   * to keep it open (for example while a request is in flight).
+   */
+  canClose?: () => boolean;
 }
 
 /**
@@ -199,6 +204,7 @@ export function createDynamicModal(config: ModalConfig): HTMLElement {
   const saveBtn = modal.querySelector('[data-action="save"]');
 
   const handleClose = () => {
+    if (config.canClose && !config.canClose()) return;
     closeDynamicModal();
     config.onClose?.();
   };

@@ -159,7 +159,27 @@ export const WARNING_COPY: Record<string, string> = {
   truncated_file: 'The file looks cut off, so some transactions may be missing.',
   year_assumed: 'The year was not printed, so it was assumed.',
   sign_assumed: 'The direction of the amounts was assumed.',
+  // Connected accounts (connections design 5.4).
+  connector_account_error:
+    'The provider reported a problem with this account, so some transactions may be missing. The other accounts synced.',
+  connector_partial: 'The provider sent only part of this period. The next sync picks up the rest.',
+  connector_balance_only: 'The provider sent a balance but no transactions for this period.',
+  connector_balance_dropped:
+    'The provider’s balance had no date or a future date, so it was left out.',
+  connector_sign_check:
+    'The balance reads as money owed to you while most transactions are charges. Check it before applying.',
+  currency_unsupported: 'This account’s currency is not supported, so it was skipped.',
 };
+
+/** Connector wording where a code means something else than in a file. */
+const CONNECTOR_WARNING_COPY: Record<string, string> = {
+  rows_skipped: 'Some transactions outside this sync’s dates, or sent twice, were left out.',
+};
+
+/** The note for a statement warning code, or null when it has none. */
+export function warningText(code: string, connector: boolean): string | null {
+  return (connector ? CONNECTOR_WARNING_COPY[code] : undefined) ?? WARNING_COPY[code] ?? null;
+}
 
 // ---------------------------------------------------------------- formatting
 
