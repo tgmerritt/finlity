@@ -51,7 +51,9 @@ def _fingerprint(path: Path) -> dict:
             if name in NEW_TABLES:
                 continue
             h = hashlib.sha256()
-            for row in con.execute(f'SELECT * FROM "{name}" ORDER BY rowid'):
+            # Table names come from sqlite_master of a temp test copy, not input.
+            query = f'SELECT * FROM "{name}" ORDER BY rowid'  # nosec B608
+            for row in con.execute(query):
                 h.update(repr(row).encode())
             out[name] = (sql, h.hexdigest())
         out["__user_version__"] = con.execute("PRAGMA user_version").fetchone()[0]
