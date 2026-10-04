@@ -323,7 +323,26 @@ export async function uploadFiles<T>(
   for (const file of files) {
     formData.append(fieldName, file);
   }
+  return postForm<T>(endpoint, formData, timeout);
+}
 
+/**
+ * Upload one file plus a JSON `context` string (multipart fields `file` and
+ * `context`), signed like uploadFiles. Used by POST /api/v2/smart-import/analyze.
+ */
+export function uploadFileWithContext<T>(
+  endpoint: string,
+  file: File,
+  context: unknown,
+  timeout = 30000
+): Promise<T> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('context', JSON.stringify(context));
+  return postForm<T>(endpoint, formData, timeout);
+}
+
+async function postForm<T>(endpoint: string, formData: FormData, timeout: number): Promise<T> {
   let signatureHeaders: Record<string, string> = {};
   if (isSigningRequired()) {
     signatureHeaders = await generateSignatureHeaders('POST', endpoint);
