@@ -1,0 +1,146 @@
+/**
+ * The Add and Edit Expense dialogs list the categories the API returns. Ids are
+ * integers on the server but UUIDs in the browser database, so a fixed list of
+ * '1' to '12' only ever worked in one of the two modes.
+ */
+
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+vi.mock('@/api/client', () => ({ apiCall: vi.fn() }));
+vi.mock('@/ui/toast', () => ({
+  showToast: vi.fn(),
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
+  showWarning: vi.fn(),
+  showInfo: vi.fn(),
+}));
+vi.mock('@/ui/tabs', () => ({ onTabChange: vi.fn(), showTab: vi.fn(), getCurrentTab: vi.fn() }));
+vi.mock('@/charts/budget', () => ({
+  loadPaycheckChart: vi.fn(async () => {}),
+  renderCashFlowWaterfall: vi.fn(async () => {}),
+  updateExpensesCategoryChart: vi.fn(async () => {}),
+  renderTransitionChart: vi.fn(async () => {}),
+  renderSSComparison: vi.fn(),
+  renderIncomeTransitionTable: vi.fn(),
+}));
+
+import { apiCall } from '@/api/client';
+import { showToast } from '@/ui/toast';
+import { closeDynamicModal } from '@/ui/modal';
+import { store } from '@/state/store';
+import { showAddExpenseModal, editExpense } from '@/pages/budget';
+
+const apiCallMock = vi.mocked(apiCall);
+
+const CATEGORIES = [
+  { id: 'c-house', name: 'Housing' },
+  { id: 'c-food', name: 'Food & Dining' },
+  { id: 'c-pets', name: '<b>Pets</b>' },
+];
+
+function options(): HTMLOptionElement[] {
+  const select = document.getElementById('expense-category') as HTMLSelectElement;
+  return Array.from(select.options);
+}
+
+function answer(categories: unknown = CATEGORIES): void {
+  apiCallMock.mockImplementation(async (url: string) => {
+    if (url === '/api/budget/expense-categories') {
+      if (categories === 'fail') throw new Error('boom');
+      return categories;
+    }
+    return {};
+  });
+}
+
+async function loaded(): Promise<void> {
+  await vi.waitFor(() => expect(options().length).toBeGreaterThan(0));
+  await vi.waitFor(() => expect(options()[0]!.textContent).not.toBe('Loading categories...'));
+}
+
+describe('Add Expense dialog categories', () => {
+  beforeEach(() => {
+    closeDynamicModal();
+    document.body.innerHTML = '<div id="expenses-list"></div>';
+    apiCallMock.mockReset();
+    vi.mocked(showToast).mockReset();
+  });
+
+  it('builds the options from the API, ids included, with names as text', async () => {
+    answer();
+    showAddExpenseModal();
+    await loaded();
+    expect(options().map((o) => o.value)).toEqual(['c-house', 'c-food', 'c-pets']);
+    expect(options()[2]!.textContent).toBe('<b>Pets</b>');
+    expect(options()[2]!.querySelector('b')).toBeNull();
+  });
+
+  it('prefills the name, the category id and the amount', async () => {
+    answer();
+    showAddExpenseModal({ category_id: 'c-food', amount: 412.5, name: 'Groceries' });
+    await loaded();
+    expect((document.getElementById('expense-category') as HTMLSelectElement).value).toBe('c-food');
+    expect((document.getElementById('expense-amount') as HTMLInputElement).value).toBe('412.5');
+    expect((document.getElementById('expense-name') as HTMLInputElement).value).toBe('Groceries');
+  });
+
+  it('ignores a click event passed as the first argument', async () => {
+    answer();
+    showAddExpenseModal(new MouseEvent('click') as never);
+    await loaded();
+    expect((document.getElementById('expense-amount') as HTMLInputElement).value).toBe('');
+  });
+
+  it('saves the API id of the chosen category', async () => {
+    answer();
+    showAddExpenseModal({ category_id: 'c-food', amount: 100 });
+    await loaded();
+    (document.getElementById('expense-name') as HTMLInputElement).value = 'Groceries';
+    document.querySelector<HTMLButtonElement>('[data-action="save"]')!.click();
+    await vi.waitFor(() =>
+      expect(apiCallMock).toHaveBeenCalledWith(
+        '/api/budget/expenses',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({ category_id: 'c-food', amount: 100 }),
+        })
+      )
+    );
+  });
+
+  it('refuses to save without a category when the list could not load', async () => {
+    answer('fail');
+    showAddExpenseModal();
+    await vi.waitFor(() => expect(options()[0]?.textContent).toBe('Categories unavailable'));
+    document.querySelector<HTMLButtonElement>('[data-action="save"]')!.click();
+    await vi.waitFor(() => expect(showToast).toHaveBeenCalledWith('Choose a category.', 'error'));
+    expect(apiCallMock.mock.calls.some(([url]) => url === '/api/budget/expenses')).toBe(false);
+  });
+});
+
+describe('Edit Expense dialog categories', () => {
+  beforeEach(() => {
+    closeDynamicModal();
+    document.body.innerHTML = '<div id="expenses-list"></div>';
+    apiCallMock.mockReset();
+    store.set('expenses', [
+      {
+        id: 'e1',
+        name: 'Dog food',
+        category_id: 'c-pets',
+        category_name: 'Pets',
+        amount: 40,
+        monthly_amount: 40,
+        frequency: 'monthly',
+      } as never,
+    ]);
+  });
+
+  it('selects the expense category among the API options, custom ones included', async () => {
+    answer();
+    editExpense('e1');
+    await loaded();
+    expect(options().map((o) => o.value)).toEqual(['c-house', 'c-food', 'c-pets']);
+    expect((document.getElementById('expense-category') as HTMLSelectElement).value).toBe('c-pets');
+  });
+});

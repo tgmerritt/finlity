@@ -905,7 +905,57 @@ export async function showAddIncomeModal(): Promise<void> {
 /**
  * Show add expense modal.
  */
-export function showAddExpenseModal(): void {
+export interface AddExpensePrefill {
+  name?: string;
+  category_id?: string | null;
+  amount?: number;
+}
+
+/**
+ * Fill the category select from the API. Ids are integers on the server and UUIDs
+ * in the browser database, so the dialog never carries a fixed list. `selected` is
+ * chosen when it exists; otherwise the first category stays selected.
+ */
+async function fillCategorySelect(selected?: string | null): Promise<void> {
+  const select = document.getElementById('expense-category') as HTMLSelectElement | null;
+  if (!select) return;
+  const fill = (items: { value: string; label: string }[]): void => {
+    select.textContent = '';
+    for (const item of items) {
+      const opt = document.createElement('option');
+      opt.value = item.value;
+      opt.textContent = item.label;
+      select.appendChild(opt);
+    }
+  };
+  try {
+    const categories = await apiCall<{ id: string; name: string }[]>(
+      '/api/budget/expense-categories'
+    );
+    if (!select.isConnected) return;
+    fill((categories || []).map((c) => ({ value: c.id, label: c.name })));
+    if (selected && (categories || []).some((c) => c.id === selected)) select.value = selected;
+  } catch {
+    if (!select.isConnected) return;
+    fill([{ value: '', label: 'Categories unavailable' }]);
+  }
+}
+
+const CATEGORY_LOADING = '<option value="">Loading categories...</option>';
+
+function categoryIsChosen(): boolean {
+  if ((document.getElementById('expense-category') as HTMLSelectElement).value) return true;
+  showToast('Choose a category.', 'error');
+  return false;
+}
+
+/**
+ * Show add expense modal. The optional prefill is what "Add to plan" on the
+ * planned vs actual card passes; a click event (a bare listener) is ignored.
+ */
+export function showAddExpenseModal(prefill?: AddExpensePrefill): void {
+  const pre: AddExpensePrefill =
+    prefill && typeof prefill === 'object' && !(prefill instanceof Event) ? prefill : {};
   createDynamicModal({
     title: 'Add Expense',
     content: `
@@ -915,20 +965,7 @@ export function showAddExpenseModal(): void {
       </div>
       <div class="form-group">
         <label for="expense-category">Category</label>
-        <select id="expense-category">
-          <option value="1">Housing</option>
-          <option value="2">Utilities</option>
-          <option value="3">Transportation</option>
-          <option value="4">Insurance</option>
-          <option value="5">Healthcare</option>
-          <option value="6">Debt Payments</option>
-          <option value="7">Food & Dining</option>
-          <option value="8">Entertainment</option>
-          <option value="9">Savings & Investments</option>
-          <option value="10">Personal</option>
-          <option value="11">Education</option>
-          <option value="12">Other</option>
-        </select>
+        <select id="expense-category">${CATEGORY_LOADING}</select>
       </div>
       <div class="form-group">
         <label for="expense-amount">Amount</label>
@@ -945,6 +982,7 @@ export function showAddExpenseModal(): void {
       </div>
     `,
     onSave: async () => {
+      if (!categoryIsChosen()) return;
       const data = {
         name: (document.getElementById('expense-name') as HTMLInputElement).value,
         category_id: (document.getElementById('expense-category') as HTMLSelectElement).value,
@@ -963,6 +1001,11 @@ export function showAddExpenseModal(): void {
       showToast('Expense added', 'success');
     },
   });
+  if (pre.name) (document.getElementById('expense-name') as HTMLInputElement).value = pre.name;
+  if (pre.amount !== undefined) {
+    (document.getElementById('expense-amount') as HTMLInputElement).value = String(pre.amount);
+  }
+  void fillCategorySelect(pre.category_id);
 }
 
 /**
@@ -1148,20 +1191,7 @@ export function editExpense(id: string): void {
       </div>
       <div class="form-group">
         <label for="expense-category">Category</label>
-        <select id="expense-category">
-          <option value="1"${expense.category_id === '1' ? ' selected' : ''}>Housing</option>
-          <option value="2"${expense.category_id === '2' ? ' selected' : ''}>Utilities</option>
-          <option value="3"${expense.category_id === '3' ? ' selected' : ''}>Transportation</option>
-          <option value="4"${expense.category_id === '4' ? ' selected' : ''}>Insurance</option>
-          <option value="5"${expense.category_id === '5' ? ' selected' : ''}>Healthcare</option>
-          <option value="6"${expense.category_id === '6' ? ' selected' : ''}>Debt Payments</option>
-          <option value="7"${expense.category_id === '7' ? ' selected' : ''}>Food & Dining</option>
-          <option value="8"${expense.category_id === '8' ? ' selected' : ''}>Entertainment</option>
-          <option value="9"${expense.category_id === '9' ? ' selected' : ''}>Savings & Investments</option>
-          <option value="10"${expense.category_id === '10' ? ' selected' : ''}>Personal</option>
-          <option value="11"${expense.category_id === '11' ? ' selected' : ''}>Education</option>
-          <option value="12"${expense.category_id === '12' ? ' selected' : ''}>Other</option>
-        </select>
+        <select id="expense-category">${CATEGORY_LOADING}</select>
       </div>
       <div class="form-group">
         <label for="expense-amount">Monthly Amount</label>
@@ -1180,6 +1210,7 @@ export function editExpense(id: string): void {
       </div>
     `,
     onSave: async () => {
+      if (!categoryIsChosen()) return;
       const data = {
         name: (document.getElementById('expense-name') as HTMLInputElement).value,
         category_id: (document.getElementById('expense-category') as HTMLSelectElement).value,
@@ -1198,6 +1229,7 @@ export function editExpense(id: string): void {
       showToast('Expense updated', 'success');
     },
   });
+  void fillCategorySelect(expense.category_id);
   if (linkedDebt) {
     const hint = document.createElement('p');
     hint.className = 'expense-debt-hint';
@@ -1294,7 +1326,7 @@ export function initBudget(): void {
 
   const addExpenseBtn = document.getElementById('add-expense-btn');
   if (addExpenseBtn) {
-    addExpenseBtn.addEventListener('click', showAddExpenseModal);
+    addExpenseBtn.addEventListener('click', () => showAddExpenseModal());
   }
 
   const addDeductionBtn = document.getElementById('add-deduction-btn');
