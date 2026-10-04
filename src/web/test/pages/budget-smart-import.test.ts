@@ -143,7 +143,7 @@ const deps: ImportCardDeps = {
 function html(): void {
   document.body.innerHTML = `
     <div id="smart-import-history-list"></div>
-    <p id="smart-import-history-status" role="status"></p>
+    <p id="smart-import-history-status" role="status" tabindex="-1"></p>
     <div id="planned-actual-body"></div>
     <div id="expenses-list"></div>`;
 }
@@ -194,6 +194,12 @@ describe('Expenses import card markup', () => {
     );
     expect(card.querySelector('#smart-import-history-list')).not.toBeNull();
     expect(card.textContent).toContain('Import history');
+  });
+
+  it('lets the undo result take focus without joining the tab order', () => {
+    const status = doc.getElementById('smart-import-history-status')!;
+    expect(status.getAttribute('tabindex')).toBe('-1');
+    expect(status.getAttribute('role')).toBe('status');
   });
 
   it('ships the planned vs actual card', () => {
@@ -272,7 +278,7 @@ describe('import history', () => {
     )!;
     row.querySelector<HTMLButtonElement>('[data-si-history="undo"]')!.click();
     expect(row.querySelector('.import-history-confirm')!.textContent).toContain(
-      'Undo this import? Removes up to 40 transactions, any expenses it added and any debt balance it recorded. Remembered merchants stay.'
+      'Undo this import? Removes 40 transactions, expenses it added unless you changed them, and debt balances it recorded. Remembered merchants stay.'
     );
     row.querySelector<HTMLButtonElement>('[data-si-history="keep"]')!.click();
     expect(row.querySelector('.import-history-confirm')).toBeNull();
@@ -287,7 +293,9 @@ describe('import history', () => {
     const row = document.querySelector('.import-history-row')!;
     row.querySelector<HTMLButtonElement>('[data-si-history="undo"]')!.click();
     const confirm = row.querySelector('.import-history-confirm')!.textContent!;
-    expect(confirm).toContain('Removes up to 52 transactions and any expenses it added.');
+    expect(confirm).toContain(
+      'Removes 52 transactions and expenses it added unless you changed them.'
+    );
     expect(confirm).not.toContain('debt balance');
   });
 
@@ -325,6 +333,8 @@ describe('import history', () => {
     expect(status).toContain('Kept 1 expense: it was changed after the import.');
     expect(status).toContain('2 transactions also in another import now belong to that import.');
     expect(status).toContain('Remembered merchants stay.');
+    // The row and its buttons are gone after the reload, so focus moves to the result.
+    expect(document.activeElement).toBe(document.getElementById('smart-import-history-status'));
     // the planned vs actual card was reloaded too
     expect(
       apiCallMock.mock.calls.some(([u]) => String(u).startsWith('/api/budget/spending-summary'))
@@ -353,6 +363,22 @@ describe('import history', () => {
       expect(text('#smart-import-history-status')).toContain('could not be undone')
     );
     expect(text('#smart-import-history-status')).not.toContain('secret');
+    expect(document.querySelectorAll('.import-history-row')).toHaveLength(3);
+    expect(document.activeElement).toBe(document.getElementById('smart-import-history-status'));
+  });
+
+  it('says saving is turned off when the site refuses the Undo', async () => {
+    route();
+    await loadImportCards(deps);
+    const row = document.querySelector('.import-history-row')!;
+    row.querySelector<HTMLButtonElement>('[data-si-history="undo"]')!.click();
+    route({ undo: new ApiError(403, 'Demo data is protected') });
+    row.querySelector<HTMLButtonElement>('[data-si-history="confirm"]')!.click();
+    await vi.waitFor(() =>
+      expect(text('#smart-import-history-status')).toBe(
+        'Saving is turned off on this site, so this import was not undone.'
+      )
+    );
     expect(document.querySelectorAll('.import-history-row')).toHaveLength(3);
   });
 });

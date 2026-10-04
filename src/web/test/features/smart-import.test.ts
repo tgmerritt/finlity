@@ -1144,10 +1144,7 @@ describe('smart import wizard', () => {
         const order = calls
           .map((c) => `${c.options?.method ?? 'GET'} ${c.url}`)
           .filter((c) => c.includes('/settings') || c.includes('/extract'));
-        expect(order).toEqual([
-          'PUT /api/smart-import/settings',
-          'POST /api/smart-import/extract',
-        ]);
+        expect(order).toEqual(['PUT /api/smart-import/settings', 'POST /api/smart-import/extract']);
         const put = calls.find((c) => c.url === '/api/smart-import/settings')!;
         expect(put.options!.body).toEqual({ pdf_ai_enabled: true });
       });
@@ -2807,6 +2804,22 @@ describe('smart import wizard', () => {
         expect(seen).toEqual(expect.arrayContaining(['liabilities:balance', 'budget:reload']));
       });
 
+      it('says saving is turned off when the site refuses the Undo', async () => {
+        await toDone({
+          undo: () => {
+            throw new ApiError(403, 'Demo data is protected');
+          },
+        });
+        q<HTMLButtonElement>('[data-si="undo"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="undo-confirm"]').click();
+        await flush();
+        expect(q('[data-si="undo-error"]').textContent).toBe(
+          'Saving is turned off on this site, so this import was not undone.'
+        );
+        expect(q('[data-si="undo"]')).toBeTruthy();
+      });
+
       it('reports a partial undo and offers the rest again', async () => {
         await toDone({
           undo: (id) => {
@@ -2957,6 +2970,10 @@ describe('smart import wizard', () => {
         q<HTMLButtonElement>('[data-si="undo"]').click();
         await flush();
         expect(q('.smart-import-confirm-text').textContent).toContain('Remembered merchants stay.');
+        // The same wording as the Import history confirm.
+        expect(q('.smart-import-confirm-text').textContent).toContain(
+          'transactions, expenses it added unless you changed them, and debt balances it recorded.'
+        );
         q<HTMLButtonElement>('[data-si="undo-confirm"]').click();
         await flush();
         expect(writes().filter((w) => w.startsWith('DELETE'))).toEqual([

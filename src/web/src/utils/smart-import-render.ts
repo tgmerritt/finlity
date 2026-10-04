@@ -387,6 +387,17 @@ export function applyErrorText(error: unknown): string {
   return 'The import could not be saved, so nothing was saved. Try again in a moment.';
 }
 
+/**
+ * Fixed copy for a failed Undo when the site refuses writes (403, protected demo
+ * data), led the same way as Apply's. Null for any other failure.
+ */
+export function undoRefusedText(error: unknown): string | null {
+  const status = error instanceof Error && 'status' in error ? Number(error.status) : 0;
+  return status === 403
+    ? 'Saving is turned off on this site, so this import was not undone.'
+    : null;
+}
+
 const KEPT_NOUN: Record<string, string> = {
   budget_expenses: 'expense',
   liability_balance_snapshots: 'debt balance',

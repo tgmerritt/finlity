@@ -58,6 +58,7 @@ import {
   periodText,
   select,
   sourceChipText,
+  undoRefusedText,
   whatGetsSentPanel,
 } from '@/utils/smart-import-render';
 import {
@@ -2613,6 +2614,8 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   const undoKept: SmartImportUndoResponse['kept'] = [];
   let undoing = false;
   let undoFailed = 0;
+  /** Fixed copy when the site refused the last Undo (403), else null. */
+  let undoRefused: string | null = null;
   /** Imports whose DELETE said 404: already undone elsewhere, items not counted. */
   let undoAlready = 0;
 
@@ -2740,7 +2743,8 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       const err = el(
         'p',
         'smart-import-error',
-        `Undid ${total - pendingUndo().length} of ${total} statements. The rest could not be undone; try again.`
+        undoRefused ??
+          `Undid ${total - pendingUndo().length} of ${total} statements. The rest could not be undone; try again.`
       );
       err.setAttribute('data-si', 'undo-error');
       err.setAttribute('role', 'alert');
@@ -2771,7 +2775,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       ? ' Older transactions removed under the keep-for setting are not restored.'
       : '';
     if (recovered) {
-      return `Undo this import? Removes everything ${countText(imports.length, 'statement')} added: transactions, expenses it added unless you changed them, and debt balances.${pruned} Remembered merchants stay.`;
+      return `Undo this import? Removes everything ${countText(imports.length, 'statement')} added: transactions, expenses it added unless you changed them, and debt balances it recorded.${pruned} Remembered merchants stay.`;
     }
     const parts = [
       countText(
@@ -2820,6 +2824,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     go.setAttribute('aria-busy', 'true');
     let changed = false;
     undoFailed = 0;
+    undoRefused = null;
     for (const id of pendingUndo()) {
       try {
         const r = await apiCall<SmartImportUndoResponse>(
@@ -2841,6 +2846,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
         }
         console.error('Import undo failed:', error instanceof Error ? error.name : 'error');
         undoFailed += 1;
+        undoRefused = undoRefusedText(error);
         break;
       }
     }

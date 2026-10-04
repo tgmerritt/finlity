@@ -11,7 +11,7 @@ import { apiCall, ApiError } from '@/api/client';
 import { store } from '@/state/store';
 import { emit } from '@/state/events';
 import { formatCurrency, formatDate } from '@/utils/format';
-import { button, countText, el, keptLines } from '@/utils/smart-import-render';
+import { button, countText, el, keptLines, undoRefusedText } from '@/utils/smart-import-render';
 import type { SmartImportSummary, SmartImportUndoResponse, SpendingSummary } from '@/types/api';
 
 export interface ImportCardDeps {
@@ -46,6 +46,8 @@ function setStatus(lines: string[]): void {
   if (!box) return;
   box.textContent = '';
   for (const line of lines) box.appendChild(el('span', 'import-history-status-line', line));
+  // The row that held the focus may be gone after a reload; the result takes it.
+  box.focus();
 }
 
 // ------------------------------------------------------------------ history
@@ -68,10 +70,14 @@ function countsLine(i: SmartImportSummary): string {
   return parts.join(', ');
 }
 
+/** Worded like the wizard's Done step confirm, which counts the same things. */
 function confirmText(i: SmartImportSummary): string {
-  const parts = [countText(i.txn_new, 'transaction'), 'any expenses it added'];
-  if (i.liability_id && i.closing_balance !== null) parts.push('any debt balance it recorded');
-  return `Undo this import? Removes up to ${joinParts(parts)}. Remembered merchants stay.`;
+  const txns = countText(i.txn_new, 'transaction');
+  const removes =
+    i.liability_id && i.closing_balance !== null
+      ? `${txns}, expenses it added unless you changed them, and debt balances it recorded`
+      : `${txns} and expenses it added unless you changed them`;
+  return `Undo this import? Removes ${removes}. Remembered merchants stay.`;
 }
 
 function removedText(r: SmartImportUndoResponse): string[] {
@@ -157,7 +163,7 @@ async function runUndo(i: SmartImportSummary, deps: ImportCardDeps): Promise<boo
       lines = ['That import was already undone.'];
     } else {
       console.error('Import undo failed:', error instanceof Error ? error.name : 'error');
-      setStatus([UNDO_ERROR]);
+      setStatus([undoRefusedText(error) ?? UNDO_ERROR]);
       return false;
     }
   }
