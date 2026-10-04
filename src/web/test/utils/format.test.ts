@@ -146,6 +146,17 @@ describe('formatDate', () => {
       for (const zone of ['America/Los_Angeles', 'Pacific/Auckland', 'UTC']) {
         process.env.TZ = zone;
         expect(formatDate('2026-07-01')).toBe('Jul 1, 2026');
+        // The debt wizard's exact options, and a caller timeZone, must not move the day.
+        const wizard = {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          timeZone: 'UTC',
+        } as const;
+        expect(formatDate('2026-07-01', wizard)).toBe('Jul 1, 2026');
+        expect(formatDate('2026-07-01', { ...wizard, timeZone: 'Pacific/Auckland' })).toBe(
+          'Jul 1, 2026'
+        );
         expect(formatDate('2026-01-01')).toBe('Jan 1, 2026');
         expect(formatDate('2026-12-31', { month: 'short', day: 'numeric' })).toBe('Dec 31');
       }

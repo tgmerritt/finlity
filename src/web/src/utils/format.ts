@@ -102,13 +102,16 @@ export function formatDate(
 ): string {
   if (!dateString) return '-';
   try {
-    // A bare 'YYYY-MM-DD' is a calendar day, not an instant: build it from its
-    // parts so it never shifts with the time zone (new Date() reads it as UTC).
+    // A bare 'YYYY-MM-DD' is a calendar day, not an instant. Build it at UTC
+    // midnight and format it in UTC, so the same day shows in every time zone
+    // (a caller's timeZone option is ignored for these). Anything else is an
+    // instant and is formatted as given.
     const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString);
-    const date = day
-      ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]))
-      : new Date(dateString);
-    return date.toLocaleDateString('en-US', options);
+    if (day) {
+      const utc = new Date(Date.UTC(Number(day[1]), Number(day[2]) - 1, Number(day[3])));
+      return utc.toLocaleDateString('en-US', { ...options, timeZone: 'UTC' });
+    }
+    return new Date(dateString).toLocaleDateString('en-US', options);
   } catch {
     return dateString;
   }
