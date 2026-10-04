@@ -660,3 +660,58 @@ export interface DeleteLiabilityResult {
   id: string;
   expense_deleted: boolean;
 }
+
+/**
+ * POST /api/liabilities/convert-position (design section 8). The mortgage's
+ * type, source and linked position are set by the conversion.
+ * - property_value: the position is untouched; the mortgage links to it.
+ * - equity: home_value is required; the position's current_price becomes
+ *   home_value / (shares * contract_multiplier), nothing else changes.
+ * - loan: the position is deleted; mortgage.current_balance defaults to the
+ *   absolute position value; add_home optionally creates a home to link.
+ */
+export interface ConvertPositionInput {
+  position_id: string;
+  mode: 'property_value' | 'equity' | 'loan';
+  /** Equity mode only, and required there. */
+  home_value?: number | null;
+  /** Loan mode only. */
+  add_home?: {
+    name: string;
+    value: number;
+    cost_basis?: number | null;
+    purchase_date?: string | null;
+  } | null;
+  mortgage: {
+    name?: string;
+    lender?: string | null;
+    /** Required except in loan mode. */
+    current_balance?: number | null;
+    balance_as_of?: string | null;
+    interest_rate?: number | null;
+    payment_amount?: number | null;
+    payment_frequency?: LiabilityFrequency;
+    next_payment_date?: string | null;
+    escrow_amount?: number | null;
+    original_principal?: number | null;
+    origination_date?: string | null;
+    term_months?: number | null;
+    maturity_date?: string | null;
+    entity_id?: string | null;
+    notes?: string | null;
+  };
+  cash_flow?: LiabilityCashFlowInstruction | null;
+}
+
+export interface ConvertPositionResult {
+  liability: LiabilityResponse;
+  /** The converted position after the change; null in loan mode (it was deleted). */
+  position: { id: string; name: string | null; value: number | null } | null;
+  /** Rows the conversion created (a reused property account is not listed). */
+  created: { account_id: string | null; position_id: string | null; expense_id: string | null };
+}
+
+/** POST /api/liabilities/{id}/revert-conversion */
+export interface RevertConversionResult {
+  reverted: boolean;
+}

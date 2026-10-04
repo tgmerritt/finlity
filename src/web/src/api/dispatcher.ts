@@ -672,6 +672,9 @@ local('GET', '/api/liabilities', (req) =>
 local('POST', '/api/liabilities', (req) =>
   getLocalAPI().createLiability(req.body as Parameters<LocalAPI['createLiability']>[0])
 );
+local('POST', '/api/liabilities/convert-position', (req) =>
+  getLocalAPI().convertPosition(req.body as Parameters<LocalAPI['convertPosition']>[0])
+);
 local('GET', '/api/liabilities/{id}', (_req, m) => getLocalAPI().getLiability(m[1]!));
 local('PUT', '/api/liabilities/{id}', (req, m) =>
   getLocalAPI().updateLiability(
@@ -691,6 +694,9 @@ local('POST', '/api/liabilities/{id}/balance', (req, m) =>
     m[1]!,
     req.body as Parameters<LocalAPI['recordLiabilityBalance']>[1]
   )
+);
+local('POST', '/api/liabilities/{id}/revert-conversion', (_req, m) =>
+  getLocalAPI().revertConversion(m[1]!)
 );
 
 // ---- Budget: income, expenses, deductions, tax-config, states, categories ----

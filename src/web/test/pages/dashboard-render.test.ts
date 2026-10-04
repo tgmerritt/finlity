@@ -20,7 +20,12 @@ vi.mock('@/ui/tabs', () => ({
   getCurrentTab: vi.fn(),
 }));
 
+vi.mock('@/utils/debt-wizard-launcher', () => ({ openDebtWizardLazy: vi.fn() }));
+vi.mock('@/utils/debt-convert-launcher', () => ({ openDebtConvertLazy: vi.fn() }));
+
 import { apiCall } from '@/api/client';
+import { openDebtWizardLazy } from '@/utils/debt-wizard-launcher';
+import { openDebtConvertLazy } from '@/utils/debt-convert-launcher';
 import { goToSection } from '@/ui/settings-sections';
 import { showToast } from '@/ui/toast';
 import { getCurrentTab, onTabChange, showTab } from '@/ui/tabs';
@@ -542,6 +547,18 @@ describe('net worth mode', () => {
     expect(foot.textContent).toBe('Net worth$6,800.00');
   });
 
+  it('opens the wizard from the Add a debt link under the Liabilities group', async () => {
+    stubApi();
+    vi.mocked(openDebtWizardLazy).mockClear();
+    await renderDashboard(withDebts());
+    const link = document.querySelector<HTMLButtonElement>(
+      '#account-groups [data-dashboard-action="add-debt"]'
+    )!;
+    expect(link.textContent).toBe('Add a debt');
+    link.click();
+    expect(vi.mocked(openDebtWizardLazy)).toHaveBeenCalledTimes(1);
+  });
+
   it('opens the Debts page on the clicked liability', async () => {
     stubApi();
     const seen: string[] = [];
@@ -575,7 +592,7 @@ describe('debt attention items', () => {
     });
   });
 
-  it('asks for debts, routes Add debts to the Debts page and persists I have none', async () => {
+  it('asks for debts, opens the wizard from Add debts and persists I have none', async () => {
     stubApi();
     await renderDashboard(noDebts());
     expect(items()).toEqual(['Add your debts to see your net worth']);
@@ -583,7 +600,7 @@ describe('debt attention items', () => {
     expect(buttons.map((b) => b.textContent)).toEqual(['Add debts', 'I have none']);
 
     buttons[0]!.click();
-    expect(showTabMock).toHaveBeenCalledWith('debts');
+    expect(vi.mocked(openDebtWizardLazy)).toHaveBeenCalledTimes(1);
 
     buttons[1]!.click();
     expect(document.getElementById('attention-list')!.textContent).toBe('All clear');
@@ -646,8 +663,11 @@ describe('debt attention items', () => {
     const off = on('debts:open', (e) => seen.push(e.id));
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('#attention-list button')];
     expect(buttons.map((b) => b.textContent)).toEqual(['Review', 'Not financed', 'Update']);
+    showTabMock.mockClear();
     buttons[0]!.click();
-    expect(showTabMock).toHaveBeenCalledWith('holdings');
+    // One unlinked home: the conversion dialog opens for it (no tab change).
+    expect(vi.mocked(openDebtConvertLazy)).toHaveBeenCalledWith('4');
+    expect(showTabMock).not.toHaveBeenCalledWith('holdings');
     buttons[2]!.click();
     expect(showTabMock).toHaveBeenCalledWith('debts');
     expect(seen).toEqual(['c1']);

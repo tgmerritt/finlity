@@ -21,10 +21,14 @@ interface Step {
   path?: string;
   body?: unknown;
   save?: string;
+  save_home?: string;
   probe?: string;
   db?: string;
   id?: string;
   to?: string;
+  table?: string;
+  row?: Record<string, unknown>;
+  price?: number;
 }
 interface Scenario {
   today: string;
@@ -56,15 +60,25 @@ const expected = JSON.parse(
   fs.readFileSync(path.join(FIXTURES, 'liabilities_scenario.expected.json'), 'utf8')
 ) as Result[];
 
-const ID_KEYS = new Set(['id', 'liability_id', 'linked_position_id', 'expense_id', 'position_id']);
+const ID_KEYS = new Set([
+  'id',
+  'liability_id',
+  'linked_position_id',
+  'expense_id',
+  'position_id',
+  'account_id',
+]);
 const TIMESTAMP_KEYS = new Set(['created_at', 'updated_at']);
 const EXACT_NUMBER_KEYS = new Set(['interest_rate', 'periods_remaining']);
 
 function makeNormalizer(): (value: unknown, key?: string) => unknown {
   const fixed = new Set<string>(
-    [...scenario.setup.accounts, ...scenario.setup.positions, ...scenario.setup.expenses].map((r) =>
-      String(r['id'])
-    )
+    [
+      ...scenario.setup.accounts,
+      ...scenario.setup.positions,
+      ...scenario.setup.expenses,
+      ...scenario.steps.filter((s) => s.db === 'insert').map((s) => s.row!),
+    ].map((r) => String(r['id']))
   );
   const seen = new Map<string, string>();
   const norm = (value: unknown, key = ''): unknown => {
@@ -200,9 +214,53 @@ function dbOp(step: Step): void {
     case 'delete_all_categories':
       clientDB.execute('DELETE FROM budget_expense_categories');
       break;
+    case 'insert': {
+      const tables = [
+        'accounts',
+        'positions',
+        'position_lots',
+        'budget_expenses',
+        'budget_expense_categories',
+      ];
+      if (!tables.includes(step.table!)) {
+        throw new Error(`unknown table ${String(step.table)}`);
+      }
+      const cols = Object.keys(step.row!);
+      clientDB.execute(
+        `INSERT INTO ${step.table!} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+        cols.map((c) => step.row![c])
+      );
+      break;
+    }
+    case 'delete_account':
+      clientDB.execute('DELETE FROM accounts WHERE id = ?', [step.id]);
+      break;
+    case 'retype_property_accounts':
+      clientDB.execute(
+        "UPDATE accounts SET account_type = 'taxable' WHERE account_type = 'property'"
+      );
+      break;
+    case 'set_price':
+      clientDB.execute('UPDATE positions SET current_price = ? WHERE id = ?', [
+        step.price,
+        step.id,
+      ]);
+      break;
     default:
       throw new Error(`unknown db op ${String(step.db)}`);
   }
+}
+
+/** Replace "{alias}" string values in a request body with saved ids. */
+function substitute(value: unknown, aliases: Record<string, string>): unknown {
+  if (Array.isArray(value)) return value.map((v) => substitute(v, aliases));
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, substitute(v, aliases)])
+    );
+  }
+  const match = typeof value === 'string' ? /^\{(\w+)\}$/.exec(value) : null;
+  return match ? aliases[match[1]!] : value;
 }
 
 function runScenario(): Result[] {
@@ -221,10 +279,16 @@ function runScenario(): Result[] {
     }
     const endpoint = step.path!.replace(/\{(\w+)\}/g, (_m, k: string) => aliases[k]!);
     try {
-      const body = tryLocalRoute(endpoint, { method: step.method, body: step.body }) as {
+      const body = tryLocalRoute(endpoint, {
+        method: step.method,
+        body: substitute(step.body, aliases),
+      }) as {
         id?: string;
+        liability?: { id: string };
+        created?: { position_id: string };
       };
-      if (step.save) aliases[step.save] = body.id!;
+      if (step.save) aliases[step.save] = body.id ?? body.liability!.id;
+      if (step.save_home) aliases[step.save_home] = body.created!.position_id;
       results.push({ name: step.name, ok: norm(JSON.parse(JSON.stringify(body))) });
     } catch (e) {
       if (!(e instanceof LocalHttpError)) throw e;

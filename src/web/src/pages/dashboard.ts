@@ -14,6 +14,8 @@ import { withSubmitGuard } from '@/ui/with-submit-guard';
 import { closeModal, showConfirmDialog, createDynamicModal } from '@/ui/modal';
 import { formatCurrency } from '@/utils/format';
 import { liabilityGroup } from '@/utils/liabilities';
+import { openDebtWizardLazy } from '@/utils/debt-wizard-launcher';
+import { openDebtConvertLazy } from '@/utils/debt-convert-launcher';
 import {
   allocationVsTarget,
   attentionItems,
@@ -644,10 +646,15 @@ const ATTENTION_ACTIONS: Record<
   'show-duplicates': { label: 'Review', run: () => showDuplicateDetails() },
   'open-holdings': { label: 'View holdings', run: () => showTab('holdings') },
   'open-analysis': { label: 'View alerts', run: () => showTab('analysis') },
-  // The wizard arrives with the Debts page work; until then this opens Debts.
-  'add-debts': { label: 'Add debts', run: () => openDebts() },
-  // The conversion dialog is a later task; Holdings is where real estate rows live.
-  'review-property': { label: 'Review', run: () => showTab('holdings') },
+  'add-debts': { label: 'Add debts', run: () => void openDebtWizardLazy() },
+  // One unlinked home opens the conversion dialog for it; several go to Holdings.
+  'review-property': {
+    label: 'Review',
+    run: (item) => {
+      if (item.targetId) void openDebtConvertLazy(item.targetId);
+      else showTab('holdings');
+    },
+  },
   'update-balance': { label: 'Update', run: (item) => openDebts(item.targetId) },
 };
 
@@ -840,6 +847,11 @@ function renderAccounts(data: DashboardData): void {
     foot.appendChild(h('span', undefined, debts.footer.label));
     foot.appendChild(h('span', undefined, formatCurrency(debts.footer.value)));
     section.appendChild(foot);
+    const add = h('button', 'account-group-link', 'Add a debt');
+    add.type = 'button';
+    add.setAttribute('data-dashboard-action', 'add-debt');
+    add.addEventListener('click', () => void openDebtWizardLazy());
+    section.appendChild(add);
     host.appendChild(section);
   }
 }

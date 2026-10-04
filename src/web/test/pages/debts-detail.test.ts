@@ -416,16 +416,45 @@ describe('Debts page actions', () => {
     expect(calls('DELETE')).toHaveLength(0);
   });
 
-  it('opens the plain add form from the Add button and from the empty state', async () => {
+  it('opens the wizard from the Add button and from the empty state', async () => {
     setup([debt({})]);
     await loadDebts();
     buttonIn(document.getElementById('debts-list')!, 'Add a debt').click();
-    expect(modal().querySelector('h2')?.textContent).toBe('Add a debt');
+    await vi.waitFor(() => expect(modal().classList.contains('debt-wizard-modal')).toBe(true));
+    expect(modal().querySelectorAll('[data-debt-type]')).toHaveLength(7);
     closeDynamicModal();
     setup([]);
     await loadDebts();
     buttonIn(document.getElementById('debts-list')!, 'Add a debt').click();
-    expect(modal().querySelector('h2')?.textContent).toBe('Add a debt');
+    await vi.waitFor(() => expect(modal().classList.contains('debt-wizard-modal')).toBe(true));
+  });
+
+  it('offers Undo conversion only on converted debts, on the card and in the detail', async () => {
+    setup([
+      debt({ id: 'd1' }),
+      debt({ id: 'd2', name: 'Home loan', source: 'converted_position', source_ref: 'pos1' }),
+    ]);
+    await loadDebts();
+    expect(buttonIn(card('d1'), 'Undo conversion')).toBeUndefined();
+    expect(buttonIn(card('d2'), 'Undo conversion')).toBeDefined();
+    buttonIn(card('d1'), 'Details').click();
+    await flush();
+    expect(buttonIn(modal(), 'Undo conversion')).toBeUndefined();
+    closeDynamicModal();
+    buttonIn(card('d2'), 'Details').click();
+    await flush();
+    expect(buttonIn(modal(), 'Undo conversion')).toBeDefined();
+  });
+
+  it('asks before undoing a conversion and only then calls revert', async () => {
+    setup([debt({ id: 'd2', name: 'Home loan', source: 'converted_position' })]);
+    await loadDebts();
+    buttonIn(card('d2'), 'Undo conversion').click();
+    await vi.waitFor(() => expect(modal().textContent).toContain('Undo this conversion?'));
+    expect(calls('POST')).toHaveLength(0);
+    modal().querySelector<HTMLButtonElement>('[data-action="save"]')!.click();
+    await flush();
+    expect(calls('POST').map((c) => c[0])).toEqual(['/api/liabilities/d2/revert-conversion']);
   });
 
   it('opens the edit form from a card', async () => {

@@ -37,6 +37,11 @@ export default defineConfig({
         // a change in one page does not invalidate the whole bundle.
         manualChunks(id) {
           if (!id.includes('/src/web/src/')) return undefined;
+          // The lazy debt dialogs (and the form fields they share with the Debts
+          // page) are left to automatic splitting. Forcing them into named groups
+          // made rolldown fold the shared code into a dialog chunk, which the Debts
+          // page then had to load at startup.
+          if (/\/src\/web\/src\/features\/debt-(form|convert|wizard)/.test(id)) return undefined;
           if (id.includes('/src/web/src/pages/')) {
             const match = id.match(/\/pages\/([^/]+)/);
             if (match) return `page-${match[1]}`;

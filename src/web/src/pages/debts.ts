@@ -15,6 +15,8 @@ import {
   submitOnEnter,
 } from '@/features/debt-form';
 import { store, subscribe } from '@/state/store';
+import { openDebtWizardLazy } from '@/utils/debt-wizard-launcher';
+import { openUndoConversionLazy } from '@/utils/debt-convert-launcher';
 import { on, emit } from '@/state/events';
 import { createDynamicModal, closeDynamicModal } from '@/ui/modal';
 import { onThemeChange } from '@/state/theme';
@@ -185,6 +187,7 @@ function renderCard(d: LiabilityResponse): HTMLElement {
   act('Update balance', () => openBalanceDialog(d));
   act('Edit', () => openEdit(d));
   act('Delete', () => openDeleteDialog(d));
+  if (d.source === 'converted_position') act('Undo conversion', () => openUndo(d));
   card.appendChild(actions);
   return card;
 }
@@ -291,9 +294,12 @@ function find(id: string): LiabilityResponse | undefined {
   return (all ?? []).find((d) => d.id === id);
 }
 
-/** PR C swaps the plain form for the wizard here. */
+/**
+ * Adding goes through the wizard; Edit keeps the plain form. The wizard emits
+ * liabilities:changed itself, which reloads this page and the dashboard.
+ */
 function openAdd(): void {
-  openDebtForm({ entities: store.get('entities'), onSaved: () => afterWrite('added') });
+  void openDebtWizardLazy();
 }
 
 function openEdit(d: LiabilityResponse, reopen = false): void {
@@ -376,6 +382,15 @@ function openBalanceDialog(d: LiabilityResponse, reopen = false): void {
   });
   submitOnEnter(form, balanceModal);
   balance.focus();
+}
+
+/**
+ * Ask before undoing a conversion. The undo emits liabilities:changed itself,
+ * which reloads this list (and the dashboard); the debt is gone afterwards, so
+ * focus goes to the list heading.
+ */
+function openUndo(d: LiabilityResponse): void {
+  void openUndoConversionLazy(d, () => restoreFocus(undefined));
 }
 
 function openDeleteDialog(d: LiabilityResponse): void {
@@ -748,6 +763,7 @@ function openDetail(id: string): void {
   act('Update balance', () => openBalanceDialog(d, true), 'btn btn-primary');
   act('Edit', () => openEdit(d, true));
   act('Delete', () => openDeleteDialog(d));
+  if (d.source === 'converted_position') act('Undo conversion', () => openUndo(d));
   body.appendChild(actions);
 
   createDynamicModal({
