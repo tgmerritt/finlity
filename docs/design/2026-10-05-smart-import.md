@@ -1,6 +1,6 @@
 # Project 3: Smart Import (design)
 
-Status: proposed, 2026-10-05. Third of four projects (dashboard, liabilities, **smart import**, connections). Builds on `plans/2026-10-04-liabilities-design.md`, which reserved the `source` / `source_ref` / `source_detail` provenance fields on liabilities and the `source_ref` column on `liability_balance_snapshots` "for statement import dedupe and undo".
+Status: implemented in PR A (#11, core), PR B (#12, data layer) and PR C (`feat/smart-import-ui`, wizard and pages); designed 2026-10-05. Third of four projects (dashboard, liabilities, **smart import**, connections). Builds on `plans/2026-10-04-liabilities-design.md`, which reserved the `source` / `source_ref` / `source_detail` provenance fields on liabilities and the `source_ref` column on `liability_balance_snapshots` "for statement import dedupe and undo".
 
 ## 0. Goal
 
@@ -10,7 +10,7 @@ Project 2 delivered the debt wizard. This project delivers the import: the user 
 
 Out of scope: account connections (project 4; the pipeline below accepts a connector's output without changes), scanned or image-only PDFs (no OCR dependency), Excel statements, investment or brokerage statements (the existing folder importer covers positions), budgeting envelopes, and editing transactions outside the import wizard.
 
-## 1. What exists today (verified at `b5f4e7e`, which is `origin/main` 88407e5 plus PR C)
+## 1. What existed before this project (verified at `origin/main` 88407e5)
 
 ### 1.1 Bank statements (works, narrow)
 
@@ -34,7 +34,7 @@ What it gets wrong or lacks:
 - **Dedupe is file-level only.** Overlapping exports (a 90-day CSV after a 30-day CSV) produce the same transactions again; there is no transaction-level key.
 - **Undo does not exist.** And it could not be built on the current rows: accept returns `deduped: true` but never stores it, so a created expense cannot be told apart from a linked pre-existing one.
 - **Privacy and safety gaps.** `logger.exception("Failed to parse bank statement CSV: %s", filename)` logs the file name (names and account digits are common in statement file names) plus a traceback that can carry row content; the 422 detail echoes `CSV parse error: {exc}` and the header list. The v1 write endpoints do not call `check_demo_data_protection()` (liabilities does). Starlette spools uploads above 1 MB to a temp file, which the handlers never close explicitly.
-- **Unrelated pre-existing bug, noted not fixed:** the Add / Edit Expense modals (`pages/budget.ts:908`, `:1133`) hardcode category ids `'1'..'12'`, while both paths seed categories with UUIDs, which is why `/api/budget/expense-categories/repair-orphaned` exists. The import must take categories from `GET /api/budget/expense-categories` by id, never from that list.
+- **Pre-existing bug, fixed in PR C:** the Add / Edit Expense modals hardcoded category ids `'1'..'12'`, while both paths seed categories with UUIDs, which is why `/api/budget/expense-categories/repair-orphaned` exists. Both dialogs now load `GET /api/budget/expense-categories` and use its ids, as the import does (section 13, Elsewhere).
 
 ### 1.2 Brokerage importers and plugins (not reusable here)
 
@@ -227,7 +227,7 @@ The only path that sends statement text. Per file, opt-in, and only when enabled
 
 ### 6.4 With no AI
 
-Everything except 6.1 step 3 and 6.3 works. The wizard shows "AI suggestions are off" with a link to Settings (server mode) or nothing (hosted), and the user categorizes with bulk tools. Each correction is remembered, so the second month needs little work.
+Everything except 6.1 step 3 and 6.3 works. In server mode the wizard shows the plain text "AI suggestions are off. An AI provider can be set up in Settings; until then, use the bulk tools below." (no link); hosted shows nothing, since there is nothing the person can turn on. The user categorizes with bulk tools. Each correction is remembered, so the second month needs little work.
 
 ### 6.5 Learning
 
@@ -391,26 +391,28 @@ Legacy `/api/budget/bank-statements/*` and `/api/v2/bank-statements/parse` keep 
 
 A project 4 connector implements `fetch(since) -> list[NormalizedStatement]` with `origin='connector'`, `format='connector'`, `external_id` set to the aggregator's transaction id (so `dedupe_base` uses it like a FITID) and `file_hash` = SHA-256 of the canonical JSON of that pull. Its output enters at preview; rules, categorization, review, apply, ledger, undo and spending totals are unchanged. A future plugin type `statement_parser` could register a PDF layout or CSV dialect into the parser registry; not built now.
 
-Deferred: opt-in retention of original files, OCR for scanned PDFs, Excel statements, split transactions, editing stored transactions outside the wizard, per-category budget alerts, the hardcoded category ids in the expense modals (1.1), and rate limiting the existing v2 advisor and commentary endpoints (1.3).
+Deferred: opt-in retention of original files, OCR for scanned PDFs, Excel statements, split transactions, editing stored transactions outside the wizard, per-category budget alerts, and rate limiting the existing v2 advisor and commentary endpoints (1.3).
 
 ## 13. UI
 
 **Entry points.** Budget > Expenses: the "Import Bank Statements" card becomes "Import statements" with the same drop zone and an "Import history" section; its button opens the wizard. Debts page toolbar: "Import statement" opens the wizard with the account kind preset to credit card and the debt link prominent. The dashboard is unchanged in this project.
 
-**Wizard** (`src/web/src/features/smart-import.ts` plus helpers in `src/web/src/utils/smart-import-*.ts`; a `feature-*` chunk; `createDynamicModal({showFooter:false})`, full-screen sheet on phones):
+**Wizard** (`src/web/src/features/smart-import.ts` plus helpers in `src/web/src/utils/smart-import-*.ts`; a lazy chunk loaded on first open, split automatically (see `vite.config.ts`); `createDynamicModal({showFooter:false})`, full-screen sheet on phones):
 
 1. **Upload.** Drop zone and file picker (`.csv,.ofx,.qfx,.pdf`, multiple), "Try a sample statement", and the line "Files are read once and never kept. Only masked transactions are saved, in your own database."
-2. **Accounts.** One card per statement: detected account (kind, last4, institution, period, transaction count, closing balance), "Which account is this?" when unknown, the column picker when `needs_mapping`, "Amounts look reversed? Flip", the date order switch when `date_order_assumed`, and for card or loan statements the debt link (7.3). A PDF without a readable layout shows the AI fallback card (6.3) or, when unavailable, "Try your bank's CSV or OFX download".
+2. **Accounts.** One card per statement: detected account (kind, last4, institution, period, transaction count, closing balance), "Which account is this?" when unknown, the column picker when `needs_mapping`, "Amounts look reversed? Flip", the date order switch when `date_order_assumed`, and for card or loan statements the debt link (7.3). "Add as a new debt" steps the wizard aside (its state kept) and opens the debt wizard prefilled with the type (credit card, or personal loan for a loan statement), the institution as lender and the closing balance; the import wizard comes back when the debt wizard closes, saved or not, with the new debt selected if one was saved. A PDF without a readable layout shows the AI fallback card (6.3) or, when unavailable, "Try your bank's CSV or OFX download". In server mode, while the profile's `pdf_ai_enabled` is off, the card says AI for unreadable PDFs is off and that sending turns it on (and that Settings can turn it off again), and the button reads "Turn on and send these N lines": it saves `pdf_ai_enabled` first and sends nothing if that save fails ("The setting could not be saved, so nothing was sent."), the same way "Suggest with AI" asks. A later 403 or `ai_not_enabled` asks again. Hosted never asks; the operator's flag decides.
 3. **Categorize.** A table: checkbox, date, description, amount, category select, kind, a source chip (Rule, Built-in, AI 92%, You), duplicate badge. Filters: Needs review (default when any), All, Duplicates, Excluded. Sticky bulk bar: set category, set kind, exclude, "Accept all suggestions". Changing a category offers "Remember for all <merchant>". "Suggest with AI" with the "What gets sent" disclosure (6.2); in server mode the first use asks for consent and saves `ai_enabled`. Rows render 200 at a time with "Show more". Keyboard: arrow keys move between rows, space toggles selection.
-4. **Recurring bills.** Candidates with tick, name, amount, frequency, category and an "already in your budget" note.
-5. **Review.** Counts (new, duplicates, excluded, merchants to remember, expenses to add or link, debt balances with before and after), then Apply.
-6. **Done.** Summary, "Undo this import", "See planned vs actual".
+4. **Recurring bills.** Candidates with tick, name, amount, frequency, category and an "already in your budget" note. A candidate in an everyday-spending category (food, dining, groceries, restaurants, shopping, gas, fuel, coffee) starts unticked with the note "Everyday spending, not usually a bill."; Transportation and Personal are left out of that list because they also hold car payments and memberships.
+5. **Review.** Counts (new, duplicates, excluded, merchants to remember, expenses to add or link, debt balances with before and after), then Apply. When Apply's reply is lost (a timeout, a dropped connection, 502, 503 or 504) the write may or may not have happened, so the step says "We could not confirm the import was saved. Applying again is safe: statements already saved are skipped." and keeps Apply enabled. If a fresh preview shows the files already saved, the wizard moves on to Done as "Your import was saved". A 403 reads "Saving is turned off on this site, so nothing was saved."
+6. **Done.** Summary, "Undo this import", "See planned vs actual". Undo asks inline in the footer, not in a browser dialog: "Undo this import? Removes 142 transactions, 1 debt balance and the 2 expenses it added, unless you changed them. Remembered merchants stay." (after a recovered save the counts are unknown, so it reads "Removes everything 2 statements added: transactions, expenses it added unless you changed them, and debt balances it recorded."), with "Keep it" (focused first, and sends nothing) and "Undo import". A 403 reads "Saving is turned off on this site, so this import was not undone."
 
 **Phone (768 px and below).** The table becomes a card list (description and amount on the first line, category select and chips on the second), the bulk bar sits above the bottom tab bar, and the step label reads "2 of 5".
 
 **Themes.** Existing CSS variables only (`--color-bg-elevated`, `--color-border`, `--color-text-primary`, `--color-text-secondary`, `--color-success`, `--color-error`, `--color-primary`); chips and confidence badges need contrast in both themes.
 
-**Elsewhere.** Budget > Expenses "Planned vs actual" card (7.4). Import history in the Expenses import card with per-upload Undo and its confirm ("Undo this import? Removes 142 transactions, 2 expenses it added and 1 debt balance. Remembered merchants stay."). Settings gets an "Imported transactions" section: retention select, AI suggestions on or off and AI for unreadable PDFs on or off (server mode only), remembered merchants with delete, "Delete all imported transactions".
+**Elsewhere.** Budget > Expenses "Planned vs actual" card (7.4). Import history in the Expenses import card with per-upload Undo. Its confirm is inline in the row, with the Done step's wording: "Undo this import? Removes 142 transactions, expenses it added unless you changed them, and debt balances it recorded. Remembered merchants stay." (the debt clause only when the import linked a debt; the history has no expense count, so expenses are not numbered), with "Keep it" (focused first) and "Undo import". The result line takes focus after an Undo, since the row it came from is reloaded away; a 403 shows the same "Saving is turned off on this site, so this import was not undone." as the Done step. The history and planned vs actual code loads when the Budget page first loads, not at startup. Settings gets an "Imported transactions" section: retention select, AI suggestions on or off and AI for unreadable PDFs on or off (server mode only), remembered merchants with delete, "Delete all imported transactions".
+
+The Add and Edit Expense dialogs (which "Add to plan" opens) list the categories from `GET /api/budget/expense-categories` by id. In Edit, the expense's own category always stays selectable, so saving other fields never changes it: an id the list lacks shows as "Current category (not in the list)"; an expense with no category gets a blank "No category" option, and a blank choice is left out of the save; when the list cannot load, the dialog offers only the current value ("Current category (list unavailable)" or "No category") and still saves. Add still requires a category.
 
 ## 14. Decisions for the operator
 
