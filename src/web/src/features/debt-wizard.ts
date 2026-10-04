@@ -96,6 +96,12 @@ export interface OpenDebtWizardOptions {
    * dialog.
    */
   onConvertHome?: (positionId: string) => void;
+  /**
+   * Start on the details step with these values filled in (the type step is
+   * skipped; Back still reaches it). Used by the statement import to add the
+   * debt a statement belongs to.
+   */
+  prefill?: Partial<Pick<DebtDraft, 'liabilityType' | 'lender' | 'currentBalance' | 'name'>>;
 }
 
 export interface DebtWizardHandle {
@@ -166,8 +172,19 @@ function homeErrors(home: WizardHome): Partial<Record<string, string>> {
 
 /** Open the wizard on step 1. Returns the modal element. */
 export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardHandle {
-  const state: WizardState = { step: 1, draft: defaultsFor('mortgage'), home: blankHome() };
-  let chosen: LiabilityType | null = null;
+  const prefill = options.prefill;
+  const prefillType: LiabilityType | null =
+    prefill?.liabilityType && DEBT_TYPES.includes(prefill.liabilityType)
+      ? prefill.liabilityType
+      : null;
+  const state: WizardState = {
+    step: 1,
+    draft: prefillType
+      ? { ...defaultsFor(prefillType), ...prefill, liabilityType: prefillType }
+      : defaultsFor('mortgage'),
+    home: blankHome(),
+  };
+  let chosen: LiabilityType | null = prefillType;
   let fields: DebtFieldsHandle | null = null;
   let homeTouched = false;
   let positions: PositionResponse[] | null = null;
@@ -203,7 +220,9 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
   const isDirty = (): boolean => {
     if (chosen === null || saved) return false;
     syncFromDom();
-    const base = defaultsFor(chosen);
+    // Prefilled values are not the person's edits.
+    const base: DebtDraft =
+      chosen === prefillType ? { ...defaultsFor(chosen), ...prefill } : defaultsFor(chosen);
     const changed = (Object.keys(base) as (keyof DebtDraft)[]).some(
       (k) => state.draft[k] !== base[k]
     );
@@ -971,7 +990,8 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
     h.focus();
   }
 
-  renderTypeStep();
+  if (prefillType) renderDetailsStep();
+  else renderTypeStep();
   return {
     modal,
     close: (): void => {

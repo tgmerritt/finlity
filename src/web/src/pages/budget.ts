@@ -802,11 +802,31 @@ export async function runTransitionProjection(): Promise<void> {
 }
 
 /**
+ * The import history and planned vs actual cards (Budget > Expenses) live in
+ * their own chunk, fetched the first time the Budget page loads, so startup does
+ * not carry them. Each card shows its own message when its request fails.
+ */
+async function loadImportCardsLazy(): Promise<void> {
+  try {
+    const { loadImportCards } = await import('@/pages/budget-smart-import');
+    await loadImportCards({ addToPlan: showAddExpenseModal, refresh: loadExpenses });
+  } catch (error) {
+    console.error('Import cards load failed:', error instanceof Error ? error.name : 'error');
+  }
+}
+
+/**
  * Load budget tab data.
  */
 export async function loadBudgetTab(): Promise<void> {
   try {
-    await Promise.all([loadTaxConfig(), loadIncomeSources(), loadDeductions(), loadExpenses()]);
+    await Promise.all([
+      loadTaxConfig(),
+      loadIncomeSources(),
+      loadDeductions(),
+      loadExpenses(),
+      loadImportCardsLazy(),
+    ]);
     updatePaycheckPreview();
   } catch (error) {
     console.error('Error loading budget tab:', error);
@@ -905,7 +925,84 @@ export async function showAddIncomeModal(): Promise<void> {
 /**
  * Show add expense modal.
  */
-export function showAddExpenseModal(): void {
+export interface AddExpensePrefill {
+  name?: string;
+  category_id?: string | null;
+  amount?: number;
+}
+
+/**
+ * Fill the category select from the API. Ids are integers on the server and UUIDs
+ * in the browser database, so the dialog never carries a fixed list. `selected` is
+ * chosen when it exists; otherwise the first category stays selected.
+ *
+ * With `keepUnknown` (the Edit dialog) the expense's own category always stays
+ * selectable: an id the list lacks gets a "Current category" option, no category
+ * gets a blank "No category" option, and a failed fetch offers just the current
+ * value. A blank value is left out of the save, so editing other fields never
+ * assigns or clears a category.
+ */
+async function fillCategorySelect(selected?: string | null, keepUnknown = false): Promise<void> {
+  const select = document.getElementById('expense-category') as HTMLSelectElement | null;
+  if (!select) return;
+  const fill = (items: { value: string; label: string }[]): void => {
+    select.textContent = '';
+    for (const item of items) {
+      const opt = document.createElement('option');
+      opt.value = item.value;
+      opt.textContent = item.label;
+      select.appendChild(opt);
+    }
+  };
+  const want =
+    selected !== null && selected !== undefined && selected !== '' ? String(selected) : null;
+  const prepend = (value: string, label: string): void => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    select.insertBefore(opt, select.firstChild);
+    select.value = value;
+  };
+  try {
+    const categories = await apiCall<{ id: string; name: string }[]>(
+      '/api/budget/expense-categories'
+    );
+    if (!select.isConnected) return;
+    fill((categories || []).map((c) => ({ value: c.id, label: c.name })));
+    if (want !== null) {
+      const match = (categories || []).find((c) => String(c.id) === want);
+      if (match) {
+        select.value = String(match.id);
+      } else if (keepUnknown) {
+        // An id the list does not have (legacy or orphaned): keep it unless changed on purpose.
+        prepend(want, 'Current category (not in the list)');
+      }
+    } else if (keepUnknown) {
+      prepend('', 'No category');
+    }
+  } catch {
+    if (!select.isConnected) return;
+    if (!keepUnknown) fill([{ value: '', label: 'Categories unavailable' }]);
+    else if (want !== null) fill([{ value: want, label: 'Current category (list unavailable)' }]);
+    else fill([{ value: '', label: 'No category' }]);
+  }
+}
+
+const CATEGORY_LOADING = '<option value="">Loading categories...</option>';
+
+function categoryIsChosen(): boolean {
+  if ((document.getElementById('expense-category') as HTMLSelectElement).value) return true;
+  showToast('Choose a category.', 'error');
+  return false;
+}
+
+/**
+ * Show add expense modal. The optional prefill is what "Add to plan" on the
+ * planned vs actual card passes; a click event (a bare listener) is ignored.
+ */
+export function showAddExpenseModal(prefill?: AddExpensePrefill): void {
+  const pre: AddExpensePrefill =
+    prefill && typeof prefill === 'object' && !(prefill instanceof Event) ? prefill : {};
   createDynamicModal({
     title: 'Add Expense',
     content: `
@@ -915,20 +1012,7 @@ export function showAddExpenseModal(): void {
       </div>
       <div class="form-group">
         <label for="expense-category">Category</label>
-        <select id="expense-category">
-          <option value="1">Housing</option>
-          <option value="2">Utilities</option>
-          <option value="3">Transportation</option>
-          <option value="4">Insurance</option>
-          <option value="5">Healthcare</option>
-          <option value="6">Debt Payments</option>
-          <option value="7">Food & Dining</option>
-          <option value="8">Entertainment</option>
-          <option value="9">Savings & Investments</option>
-          <option value="10">Personal</option>
-          <option value="11">Education</option>
-          <option value="12">Other</option>
-        </select>
+        <select id="expense-category">${CATEGORY_LOADING}</select>
       </div>
       <div class="form-group">
         <label for="expense-amount">Amount</label>
@@ -945,6 +1029,7 @@ export function showAddExpenseModal(): void {
       </div>
     `,
     onSave: async () => {
+      if (!categoryIsChosen()) return;
       const data = {
         name: (document.getElementById('expense-name') as HTMLInputElement).value,
         category_id: (document.getElementById('expense-category') as HTMLSelectElement).value,
@@ -963,6 +1048,11 @@ export function showAddExpenseModal(): void {
       showToast('Expense added', 'success');
     },
   });
+  if (pre.name) (document.getElementById('expense-name') as HTMLInputElement).value = pre.name;
+  if (pre.amount !== undefined) {
+    (document.getElementById('expense-amount') as HTMLInputElement).value = String(pre.amount);
+  }
+  void fillCategorySelect(pre.category_id);
 }
 
 /**
@@ -1148,20 +1238,7 @@ export function editExpense(id: string): void {
       </div>
       <div class="form-group">
         <label for="expense-category">Category</label>
-        <select id="expense-category">
-          <option value="1"${expense.category_id === '1' ? ' selected' : ''}>Housing</option>
-          <option value="2"${expense.category_id === '2' ? ' selected' : ''}>Utilities</option>
-          <option value="3"${expense.category_id === '3' ? ' selected' : ''}>Transportation</option>
-          <option value="4"${expense.category_id === '4' ? ' selected' : ''}>Insurance</option>
-          <option value="5"${expense.category_id === '5' ? ' selected' : ''}>Healthcare</option>
-          <option value="6"${expense.category_id === '6' ? ' selected' : ''}>Debt Payments</option>
-          <option value="7"${expense.category_id === '7' ? ' selected' : ''}>Food & Dining</option>
-          <option value="8"${expense.category_id === '8' ? ' selected' : ''}>Entertainment</option>
-          <option value="9"${expense.category_id === '9' ? ' selected' : ''}>Savings & Investments</option>
-          <option value="10"${expense.category_id === '10' ? ' selected' : ''}>Personal</option>
-          <option value="11"${expense.category_id === '11' ? ' selected' : ''}>Education</option>
-          <option value="12"${expense.category_id === '12' ? ' selected' : ''}>Other</option>
-        </select>
+        <select id="expense-category">${CATEGORY_LOADING}</select>
       </div>
       <div class="form-group">
         <label for="expense-amount">Monthly Amount</label>
@@ -1180,9 +1257,11 @@ export function editExpense(id: string): void {
       </div>
     `,
     onSave: async () => {
+      // A blank category ("No category", or still loading) is left out, so the saved one stays.
+      const categoryId = (document.getElementById('expense-category') as HTMLSelectElement).value;
       const data = {
         name: (document.getElementById('expense-name') as HTMLInputElement).value,
-        category_id: (document.getElementById('expense-category') as HTMLSelectElement).value,
+        ...(categoryId ? { category_id: categoryId } : {}),
         amount:
           parseFloat((document.getElementById('expense-amount') as HTMLInputElement).value) || 0,
         frequency: (document.getElementById('expense-frequency') as HTMLSelectElement).value,
@@ -1198,6 +1277,7 @@ export function editExpense(id: string): void {
       showToast('Expense updated', 'success');
     },
   });
+  void fillCategorySelect(expense.category_id, true);
   if (linkedDebt) {
     const hint = document.createElement('p');
     hint.className = 'expense-debt-hint';
@@ -1294,7 +1374,7 @@ export function initBudget(): void {
 
   const addExpenseBtn = document.getElementById('add-expense-btn');
   if (addExpenseBtn) {
-    addExpenseBtn.addEventListener('click', showAddExpenseModal);
+    addExpenseBtn.addEventListener('click', () => showAddExpenseModal());
   }
 
   const addDeductionBtn = document.getElementById('add-deduction-btn');

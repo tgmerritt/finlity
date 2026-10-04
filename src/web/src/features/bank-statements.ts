@@ -1,28 +1,44 @@
 import { apiCall } from '@/api/client';
 import { showToast } from '@/ui/toast';
+import { onTabChange } from '@/ui/tabs';
 import { formatCurrency } from '@/utils/format';
 import { loadExpenses } from '@/pages/budget';
-import { store } from '@/state/store';
-import type { BankStatementBatchResponse, RecurringCandidateResponse } from '@/types/api';
+import { openSmartImportLazy } from '@/utils/smart-import-launcher';
+import { on } from '@/state/events';
+import type { BankStatementImportResponse, RecurringCandidateResponse } from '@/types/api';
 
-const ALLOWED_EXTENSIONS = ['.csv', '.pdf'];
-
+/**
+ * Entry points of the Expenses import card. Uploading is the wizard's job now
+ * (features/smart-import.ts, loaded on demand); this module only opens it, and
+ * keeps accept and reject for candidates the old flow left pending.
+ */
 export function initBankStatementUpload(): void {
   const fileInput = document.querySelector<HTMLInputElement>('#bank-statement-file');
   const uploadBtn = document.querySelector<HTMLButtonElement>('#bank-statement-upload-btn');
   const dropZone = document.querySelector<HTMLElement>('#bank-statement-drop-zone');
 
-  if (uploadBtn && fileInput) {
-    uploadBtn.addEventListener('click', () => fileInput.click());
+  uploadBtn?.addEventListener('click', () => {
+    void openSmartImportLazy();
+  });
+
+  if (fileInput) {
     fileInput.addEventListener('change', () => {
       if (fileInput.files && fileInput.files.length > 0) {
-        handleBankStatementFiles(Array.from(fileInput.files));
+        void openSmartImportLazy({ files: Array.from(fileInput.files) });
       }
       fileInput.value = '';
     });
   }
 
   if (dropZone) {
+    dropZone.addEventListener('click', () => fileInput?.click());
+    dropZone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fileInput?.click();
+      }
+    });
+
     dropZone.addEventListener('dragover', (e) => {
       e.preventDefault();
       dropZone.classList.add('drag-active');
@@ -36,104 +52,50 @@ export function initBankStatementUpload(): void {
       e.preventDefault();
       dropZone.classList.remove('drag-active');
       if (e.dataTransfer && e.dataTransfer.files.length > 0) {
-        handleBankStatementFiles(Array.from(e.dataTransfer.files));
+        void openSmartImportLazy({ files: Array.from(e.dataTransfer.files) });
       }
     });
   }
+
+  onTabChange((tab) => {
+    if (tab === 'budget') void loadLegacyCandidates();
+  });
+  on('profile:switched', () => void loadLegacyCandidates());
+  on('demo:toggled', () => void loadLegacyCandidates());
+  void loadLegacyCandidates();
 }
 
-async function handleBankStatementFiles(files: File[]): Promise<void> {
-  const valid = files.filter((f) =>
-    ALLOWED_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
-  );
-  if (valid.length === 0) {
-    showToast('Please upload CSV or PDF bank statement files.', 'error');
-    return;
-  }
-  if (valid.length < files.length) {
-    showToast(`${files.length - valid.length} unsupported file(s) ignored.`, 'warning');
-  }
-
-  const uploadBtn = document.querySelector<HTMLButtonElement>('#bank-statement-upload-btn');
-  const uploadStatus = document.querySelector<HTMLElement>('#bank-statement-status');
-
-  if (uploadBtn) uploadBtn.setAttribute('disabled', 'true');
-  if (uploadStatus) {
-    uploadStatus.style.display = 'block';
-    uploadStatus.textContent =
-      valid.length === 1 ? 'Analyzing statement…' : `Analyzing ${valid.length} statements…`;
-    uploadStatus.className = 'bank-statement-status loading';
-  }
-
+/**
+ * Pending candidates from the old upload flow, if any. The wizard resolves its
+ * own candidates before Apply, so for most people this panel never shows.
+ */
+export async function loadLegacyCandidates(): Promise<void> {
   try {
-    // Pass entity_id as a form field alongside file upload
-    const formData = new FormData();
-    for (const file of valid) {
-      formData.append('files', file);
-    }
-    const currentEntityId = store.get('currentEntityId');
-    if (currentEntityId) {
-      formData.append('entity_id', currentEntityId);
-    }
-
-    const result = await apiCall<BankStatementBatchResponse>('/api/budget/bank-statements/upload', {
-      method: 'POST',
-      body: formData,
-    });
-
-    const allDuplicate = result.files_imported === 0 && result.files_skipped > 0;
-    if (uploadStatus) {
-      const skippedNote =
-        result.files_skipped > 0
-          ? ` (${result.files_skipped} duplicate${result.files_skipped > 1 ? 's' : ''} skipped)`
-          : '';
-      if (allDuplicate) {
-        uploadStatus.textContent =
-          result.candidates.length > 0
-            ? `Showing ${result.candidates.length} pending transaction(s) from previously-imported file(s).`
-            : 'All transactions from these files were already reviewed.';
-      } else if (result.candidates.length > 0) {
-        uploadStatus.textContent = `Found ${result.candidates.length} recurring transaction(s) across ${result.files_imported} statement(s)${skippedNote}.`;
-      } else {
-        uploadStatus.textContent = `No recurring transactions detected across ${result.files_imported} statement(s)${skippedNote}.`;
-      }
-      uploadStatus.className = 'bank-statement-status success';
-    }
-
-    renderCandidates(result.candidates);
-    if (allDuplicate) {
-      if (result.candidates.length > 0) {
-        showToast('These files were already imported — showing pending transactions.', 'info');
-      } else {
-        showToast('Files already imported and fully reviewed.', 'info');
-      }
-    } else {
-      const count = result.files_imported;
-      showToast(`${count} statement${count !== 1 ? 's' : ''} imported`, 'success');
-    }
-  } catch (error: any) {
-    const errorMessage = error?.message || 'An error occurred during upload.';
-    if (uploadStatus) {
-      uploadStatus.textContent = errorMessage;
-      uploadStatus.className = 'bank-statement-status error';
-    }
-    showToast(errorMessage, 'error');
-  } finally {
-    if (uploadBtn) uploadBtn.removeAttribute('disabled');
+    const imports = await apiCall<BankStatementImportResponse[]>(
+      '/api/budget/bank-statements/imports'
+    );
+    const pending = (imports || []).flatMap((i) => i.candidates || []);
+    renderCandidates(pending.filter((c) => c.status === 'pending'));
+  } catch (error) {
+    console.error('Legacy candidates load failed:', error instanceof Error ? error.name : 'error');
+    renderCandidates([]);
   }
 }
+
+/** A newer render makes a slower categories fetch from an older one drop its rows. */
+let renderGeneration = 0;
 
 function renderCandidates(candidates: RecurringCandidateResponse[]): void {
+  renderGeneration += 1;
+  const generation = renderGeneration;
   const container = document.querySelector<HTMLElement>('#recurring-candidates-list');
   const reviewPanel = document.querySelector<HTMLElement>('#recurring-candidates-panel');
-  const importPanel = document.querySelector<HTMLElement>('#bank-statement-import-panel');
   const cancelBtn = document.querySelector<HTMLButtonElement>('#recurring-candidates-cancel');
 
   const pendingCandidates = candidates.filter((c) => c.status === 'pending');
   const hasPending = pendingCandidates.length > 0;
 
   if (reviewPanel) reviewPanel.style.display = hasPending ? 'block' : 'none';
-  if (importPanel) importPanel.style.display = hasPending ? 'none' : '';
 
   if (cancelBtn && !cancelBtn.dataset.bound) {
     cancelBtn.addEventListener('click', () => {
@@ -148,6 +110,7 @@ function renderCandidates(candidates: RecurringCandidateResponse[]): void {
   if (!hasPending) return;
 
   const renderItems = (categories: { id: string; name: string }[] | null) => {
+    if (generation !== renderGeneration) return;
     for (const c of pendingCandidates) {
       const item = document.createElement('div');
       item.className = 'recurring-candidate-item';
@@ -174,7 +137,7 @@ function renderCandidates(candidates: RecurringCandidateResponse[]): void {
 
         const defaultOpt = document.createElement('option');
         defaultOpt.value = '';
-        defaultOpt.textContent = '— Select category —';
+        defaultOpt.textContent = 'Select category';
         catSelect.appendChild(defaultOpt);
 
         for (const cat of categories) {
@@ -304,17 +267,9 @@ async function cancelAllCandidates(): Promise<void> {
 
 function closeReviewPanel(): void {
   const reviewPanel = document.querySelector<HTMLElement>('#recurring-candidates-panel');
-  const importPanel = document.querySelector<HTMLElement>('#bank-statement-import-panel');
-  const uploadStatus = document.querySelector<HTMLElement>('#bank-statement-status');
   const container = document.querySelector<HTMLElement>('#recurring-candidates-list');
 
   if (reviewPanel) reviewPanel.style.display = 'none';
-  if (importPanel) importPanel.style.display = '';
-  if (uploadStatus) {
-    uploadStatus.style.display = 'none';
-    uploadStatus.textContent = '';
-    uploadStatus.className = 'bank-statement-status';
-  }
   if (container) container.textContent = '';
 }
 

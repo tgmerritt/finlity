@@ -16,6 +16,7 @@ import {
 } from '@/features/debt-form';
 import { store, subscribe } from '@/state/store';
 import { openDebtWizardLazy } from '@/utils/debt-wizard-launcher';
+import { openSmartImportLazy } from '@/utils/smart-import-launcher';
 import { openUndoConversionLazy } from '@/utils/debt-convert-launcher';
 import { on, emit } from '@/state/events';
 import { createDynamicModal, closeDynamicModal } from '@/ui/modal';
@@ -222,6 +223,13 @@ function renderList(list: readonly LiabilityResponse[]): void {
   addButton.setAttribute('data-debts-action', 'add');
   addButton.addEventListener('click', openAdd);
   toolbar.appendChild(addButton);
+  const importButton = h('button', 'btn btn-secondary', 'Import statement');
+  importButton.type = 'button';
+  importButton.setAttribute('data-debts-action', 'import');
+  importButton.addEventListener('click', () => {
+    void openSmartImportLazy({ preset: 'credit_card' });
+  });
+  toolbar.appendChild(importButton);
   host.appendChild(toolbar);
 
   // One grid across all types, ordered by type; each card carries its type.
