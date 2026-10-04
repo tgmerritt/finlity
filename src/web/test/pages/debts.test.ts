@@ -153,8 +153,10 @@ describe('Debts page', () => {
     const s = summarize([MORTGAGE, AUTO, CARD, OLD]);
     expect(s.totalOwed).toBe(299000 + 10000 + 1500);
     expect(s.monthlyPayments).toBe(2450);
-    expect(s.debtFreeBy).toBeNull(); // the credit card has no payoff date
-    expect(summarize([MORTGAGE, AUTO]).debtFreeBy).toBe('2050-01-01');
+    expect(s.debtFreeBy).toBe('2050-01-01'); // latest among debts that have one
+    expect(s.withoutPayoff).toBe(1); // the credit card
+    expect(summarize([MORTGAGE, AUTO]).withoutPayoff).toBe(0);
+    expect(summarize([CARD]).debtFreeBy).toBeNull();
   });
 
   it('renders the summary strip and one card per active debt, grouped by type', async () => {
@@ -165,9 +167,9 @@ describe('Debts page', () => {
     expect(document.querySelectorAll('#debts-list .debt-card:not(.debt-card--paid)')).toHaveLength(
       3
     );
-    const heads = Array.from(document.querySelectorAll('.debt-group-head')).map(
-      (e) => e.textContent
-    );
+    const heads = Array.from(
+      document.querySelectorAll('.debt-card:not(.debt-card--paid) .debt-card-type')
+    ).map((e) => e.textContent);
     expect(heads).toEqual(['Mortgage', 'Auto loan', 'Credit card']);
     const card = document.querySelector('[data-debt-id="d1"]')!;
     expect(card.textContent).toContain('Home mortgage');
@@ -180,6 +182,23 @@ describe('Debts page', () => {
     expect(document.querySelector('[data-debt-id="d3"] [role="progressbar"]')).toBeNull();
   });
 
+  it('shows the latest payoff and a note when some debts have no payoff plan', async () => {
+    mockList([MORTGAGE, CARD]);
+    await loadDebts();
+    expect(text('#debts-summary')).toContain('Jan 2050');
+    expect(text('#debts-summary')).toContain('Excludes 1 debt without a payoff plan');
+    mockList([MORTGAGE, CARD, debt({ id: 'd5', name: 'Other', payoff_date: null })]);
+    await loadDebts();
+    expect(text('#debts-summary')).toContain('Excludes 2 debts without a payoff plan');
+  });
+
+  it('shows Not projected only when no debt has a payoff date', async () => {
+    mockList([CARD]);
+    await loadDebts();
+    expect(text('#debts-summary')).toContain('Not projected');
+    expect(text('#debts-summary')).not.toContain('Excludes');
+  });
+
   it('puts archived debts in a collapsed Paid off section', async () => {
     mockList([MORTGAGE, OLD]);
     await loadDebts();
@@ -187,7 +206,7 @@ describe('Debts page', () => {
     expect(section.open).toBe(false);
     expect(section.querySelector('summary')?.textContent).toBe('Paid off (1)');
     expect(section.querySelector('[data-debt-id="d4"]')).not.toBeNull();
-    expect(document.querySelectorAll('.debt-group-head')).toHaveLength(1);
+    expect(document.querySelectorAll('.debt-card:not(.debt-card--paid)')).toHaveLength(1);
   });
 
   it('narrows by the Person filter on entity_id', async () => {

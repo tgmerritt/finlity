@@ -7993,9 +7993,7 @@ body.on-settings #tab-settings {
     color: var(--color-text-primary);
     overflow-wrap: anywhere;
 }
-.debt-group { margin-bottom: 24px; }
-.debt-group-head {
-    margin: 0 0 8px;
+.debt-card-type {
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 1px;
@@ -8062,7 +8060,8 @@ body.on-settings #tab-settings {
 .debt-progress-label { font-size: 12px; color: var(--color-text-secondary); }
 .debt-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .debt-card-actions:empty { display: none; }
-.debts-paid-off { margin-top: 8px; }
+.debts-paid-off { margin-top: 24px; }
+.debts-stat-note { font-size: 12px; color: var(--color-text-secondary); }
 .debts-paid-off summary {
     cursor: pointer;
     margin-bottom: 12px;
@@ -8085,7 +8084,8 @@ body.on-settings #tab-settings {
 
 @media (max-width: 768px) {
     .debts-summary { grid-template-columns: 1fr; gap: 8px; }
-    .debts-stat { flex-direction: row; justify-content: space-between; align-items: baseline; }
+    .debts-stat { flex-direction: row; flex-wrap: wrap; justify-content: space-between; align-items: baseline; }
+    .debts-stat-note { flex-basis: 100%; }
     .debt-cards { grid-template-columns: 1fr; }
     .debt-card-actions .btn { min-height: 44px; }
 }

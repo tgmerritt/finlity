@@ -26,17 +26,19 @@ const FREQUENCY_WORD: Record<LiabilityFrequency, string> = {
 export interface DebtsSummary {
   totalOwed: number;
   monthlyPayments: number;
-  /** Latest payoff date (ISO), or null unless every active debt has one. */
+  /** Latest payoff date (ISO) among active debts that have one, else null. */
   debtFreeBy: string | null;
+  /** Active debts with no payoff date, left out of debtFreeBy. */
+  withoutPayoff: number;
 }
 
 export function summarize(list: readonly LiabilityResponse[]): DebtsSummary {
   const active = list.filter((d) => d.is_active);
   let latest: string | null = null;
-  let complete = active.length > 0;
+  let withoutPayoff = 0;
   for (const d of active) {
     if (!d.payoff_date) {
-      complete = false;
+      withoutPayoff += 1;
     } else if (!latest || d.payoff_date > latest) {
       latest = d.payoff_date;
     }
@@ -44,7 +46,8 @@ export function summarize(list: readonly LiabilityResponse[]): DebtsSummary {
   return {
     totalOwed: active.reduce((sum, d) => sum + d.estimated_balance, 0),
     monthlyPayments: active.reduce((sum, d) => sum + d.monthly_cash_flow, 0),
-    debtFreeBy: complete ? latest : null,
+    debtFreeBy: latest,
+    withoutPayoff,
   };
 }
 
@@ -59,10 +62,11 @@ function h<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
-function stat(label: string, value: string): HTMLElement {
+function stat(label: string, value: string, note?: string): HTMLElement {
   const box = h('div', 'debts-stat');
   box.appendChild(h('span', 'debts-stat-label', label));
   box.appendChild(h('span', 'debts-stat-value', value));
+  if (note) box.appendChild(h('span', 'debts-stat-note', note));
   return box;
 }
 
@@ -74,8 +78,12 @@ function renderSummary(list: readonly LiabilityResponse[]): void {
   const s = summarize(list);
   host.appendChild(stat('Total owed', formatCurrency(s.totalOwed)));
   host.appendChild(stat('Monthly payments', formatCurrency(s.monthlyPayments)));
+  const note =
+    s.debtFreeBy && s.withoutPayoff > 0
+      ? `Excludes ${s.withoutPayoff} ${s.withoutPayoff === 1 ? 'debt' : 'debts'} without a payoff plan`
+      : undefined;
   host.appendChild(
-    stat('Debt-free by', s.debtFreeBy ? formatMonthYear(s.debtFreeBy) : 'Not projected')
+    stat('Debt-free by', s.debtFreeBy ? formatMonthYear(s.debtFreeBy) : 'Not projected', note)
   );
 }
 
@@ -97,6 +105,7 @@ function renderCard(d: LiabilityResponse): HTMLElement {
   card.setAttribute('data-debt-id', d.id);
   card.tabIndex = -1;
 
+  card.appendChild(h('span', 'debt-card-type', LIABILITY_TYPE_LABELS[d.liability_type]));
   const top = h('div', 'debt-card-top');
   const title = h('div', 'debt-card-title');
   title.appendChild(h('h4', 'debt-card-name', d.name));
@@ -165,17 +174,15 @@ function renderList(list: readonly LiabilityResponse[]): void {
     return;
   }
 
+  // One grid across all types, ordered by type; each card carries its type.
   const active = list.filter((d) => d.is_active);
+  const grid = h('div', 'debt-cards');
   for (const type of TYPE_ORDER) {
     const group = active.filter((d) => d.liability_type === type);
     if (group.length === 0) continue;
-    const section = h('section', 'debt-group');
-    section.appendChild(h('h3', 'debt-group-head', LIABILITY_TYPE_LABELS[type]));
-    const cards = h('div', 'debt-cards');
-    for (const d of group) cards.appendChild(renderCard(d));
-    section.appendChild(cards);
-    host.appendChild(section);
+    for (const d of group) grid.appendChild(renderCard(d));
   }
+  if (grid.childElementCount > 0) host.appendChild(grid);
 
   const paid = list.filter((d) => !d.is_active);
   if (paid.length > 0) {
