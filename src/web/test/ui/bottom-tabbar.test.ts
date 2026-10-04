@@ -19,11 +19,13 @@ describe('bottom tab bar', () => {
       <aside class="sidebar" id="app-sidebar">
         <button class="nav-item" data-tab="dashboard"></button>
         <button class="nav-item" data-tab="holdings"></button>
+        <button class="nav-item" data-tab="debts"></button>
         <button class="nav-item" data-tab="settings"></button>
       </aside>
       <div class="tab-content" id="tab-dashboard"></div>
       <div class="tab-content" id="tab-holdings"></div>
       <div class="tab-content" id="tab-settings"></div>
+      <div class="tab-content" id="tab-debts"></div>
       <div class="install-tab" data-tab="git"></div>
       <nav class="bottom-tabbar">
         <button class="bottom-tab" data-tab="dashboard"></button>
@@ -42,6 +44,13 @@ describe('bottom tab bar', () => {
     expect(bottom('dashboard').classList.contains('active')).toBe(false);
     expect(bottom('dashboard').hasAttribute('aria-current')).toBe(false);
     expect(more().classList.contains('active')).toBe(false);
+  });
+
+  it('marks More active on the Debts page and keeps its sidebar item active', () => {
+    showTab('debts');
+    expect(more().classList.contains('active')).toBe(true);
+    expect(sidebarItem('debts').classList.contains('active')).toBe(true);
+    expect(document.querySelector('.bottom-tab[data-tab="debts"]')).toBeNull();
   });
 
   it('does not touch non-navigation data-tab elements', () => {

@@ -95,6 +95,13 @@
                     </svg>
                     <span>Holdings</span>
                 </button>
+                <button class="nav-item" onclick="showTab('debts')" data-tab="debts">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                        <line x1="2" y1="10" x2="22" y2="10"></line>
+                    </svg>
+                    <span>Debts</span>
+                </button>
                 <button class="nav-item" onclick="showTab('analysis')" data-tab="analysis">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="20" x2="18" y2="10"></line>
@@ -254,6 +261,7 @@
                         <div class="dash-hero-figures">
                             <div class="dash-hero-label">Portfolio value</div>
                             <div class="dash-hero-value" id="total-value">$0</div>
+                            <div class="dash-hero-breakdown" id="hero-breakdown" hidden></div>
                             <div class="dash-hero-changes">
                                 <span class="dash-change" id="day-change" aria-label="Change today"></span>
                                 <span class="dash-change" id="range-change" aria-label="Change over the selected range"></span>
@@ -417,6 +425,12 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Debts Tab -->
+            <div id="tab-debts" class="tab-content">
+                <div class="debts-summary" id="debts-summary" role="group" aria-label="Debt summary"></div>
+                <div id="debts-list"></div>
             </div>
 
             <!-- Analysis Tab -->
@@ -910,6 +924,7 @@
                     </div>
                     <div class="card-body">
                         <div id="chart-projection"></div>
+                        <div class="debt-payoff-card" id="debt-payoff-card" hidden></div>
                         <div class="projection-stats-row">
                             <div class="projection-stat">
                                 <span class="stat-label">Success Rate</span>
@@ -1562,6 +1577,11 @@
                         <div class="stat-card">
                             <div class="stat-label">Monthly Expenses</div>
                             <div class="stat-value negative" id="stat-monthly-expenses">$0</div>
+                        </div>
+                        <div class="stat-card" id="stat-monthly-debt-card" hidden>
+                            <div class="stat-label">Debt Payments</div>
+                            <div class="stat-value negative" id="stat-monthly-debt">$0</div>
+                            <div class="stat-sublabel">Included in expenses</div>
                         </div>
                         <div class="stat-card highlight">
                             <div class="stat-label">Monthly Savings</div>

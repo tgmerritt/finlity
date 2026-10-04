@@ -32,7 +32,19 @@ export type MutationEvent =
   | { type: 'demo:toggled'; demoMode: boolean }
   | { type: 'plugin:changed'; reason: 'installed' | 'uninstalled' | 'enabled' | 'disabled' }
   | { type: 'prices:refreshed'; updated: number; failed: number }
-  | { type: 'commentary:invalidated'; tab?: string };
+  | { type: 'commentary:invalidated'; tab?: string }
+  /**
+   * Open a liability on the Debts page. Fired synchronously right after
+   * showTab('debts'), so the page may not have loaded yet; a subscriber that
+   * registers later must also check for a pending id when it first renders.
+   */
+  | { type: 'debts:open'; id: string }
+  /**
+   * A liability was added, edited, deleted or had a balance recorded. The
+   * dashboard refetches its net worth; the Debts page reloads its list when
+   * the change came from somewhere else.
+   */
+  | { type: 'liabilities:changed'; reason: 'added' | 'updated' | 'deleted' | 'balance' };
 
 /**
  * Convenience alias: every event type in the union.

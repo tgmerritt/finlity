@@ -28,6 +28,25 @@ export interface ModalConfig {
  */
 let activeDynamicModal: HTMLElement | null = null;
 
+/** Removes the active dynamic modal's document listeners; set while one is open. */
+let releaseDynamicModal: (() => void) | null = null;
+/** Element that had focus when the active dynamic modal opened. */
+let dynamicModalInvoker: HTMLElement | null = null;
+
+let titleCounter = 0;
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+
+function focusableIn(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
+    if (el.hasAttribute('hidden')) return false;
+    // Content of a closed <details> cannot take focus; its summary can.
+    const details = el.closest('details');
+    return !(details && !details.open && el.parentElement !== details);
+  });
+}
+
 // =====================
 // Generic Modal (static HTML element)
 // =====================
@@ -104,8 +123,13 @@ function buildModalElement(config: ModalConfig): HTMLElement {
   header.className = 'modal-header';
 
   const titleEl = document.createElement('h2');
+  titleEl.id = `dynamic-modal-title-${++titleCounter}`;
   titleEl.textContent = title; // Safe: uses textContent
   header.appendChild(titleEl);
+  modalContent.setAttribute('role', 'dialog');
+  modalContent.setAttribute('aria-modal', 'true');
+  modalContent.setAttribute('aria-labelledby', titleEl.id);
+  modalContent.tabIndex = -1;
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'modal-close';
@@ -189,17 +213,42 @@ export function createDynamicModal(config: ModalConfig): HTMLElement {
     });
   }
 
-  // Add escape key handler
-  const handleEscape = (event: KeyboardEvent) => {
+  // Escape closes; Tab stays inside the dialog. Both listeners are removed on
+  // every close path (see closeDynamicModal), not just on Escape.
+  const handleKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape') {
       handleClose();
-      document.removeEventListener('keydown', handleEscape);
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const items = focusableIn(modal);
+    if (items.length === 0) {
+      event.preventDefault();
+      return;
+    }
+    const first = items[0]!;
+    const last = items[items.length - 1]!;
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !modal.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !modal.contains(active))) {
+      event.preventDefault();
+      first.focus();
     }
   };
-  document.addEventListener('keydown', handleEscape);
+  document.addEventListener('keydown', handleKeydown);
 
+  dynamicModalInvoker =
+    document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+      ? document.activeElement
+      : null;
   document.body.appendChild(modal);
   activeDynamicModal = modal;
+  releaseDynamicModal = (): void => document.removeEventListener('keydown', handleKeydown);
+
+  // Callers may move focus to a field right after; this is the fallback.
+  modal.querySelector<HTMLElement>('.modal-content')?.focus();
 
   return modal;
 }
@@ -208,6 +257,11 @@ export function createDynamicModal(config: ModalConfig): HTMLElement {
  * Close and remove the dynamic modal.
  */
 export function closeDynamicModal(): void {
+  releaseDynamicModal?.();
+  releaseDynamicModal = null;
+  const invoker = dynamicModalInvoker;
+  dynamicModalInvoker = null;
+  const hadModal = activeDynamicModal !== null || document.getElementById('dynamic-modal') !== null;
   if (activeDynamicModal) {
     activeDynamicModal.remove();
     activeDynamicModal = null;
@@ -222,6 +276,8 @@ export function closeDynamicModal(): void {
   if (budgetModal) {
     budgetModal.remove();
   }
+  // Give focus back to what opened the dialog, if it is still on the page.
+  if (hadModal && invoker?.isConnected) invoker.focus();
 }
 
 // =====================

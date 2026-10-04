@@ -5,7 +5,7 @@
 
 import { apiCall } from '@/api/client';
 import { showToast } from '@/ui/toast';
-import { createDynamicModal, closeModal } from '@/ui/modal';
+import { createDynamicModal, closeDynamicModal } from '@/ui/modal';
 import { onTabChange } from '@/ui/tabs';
 import { formatCurrency } from '@/utils/format';
 import { escapeHtml } from '@/utils/html';
@@ -21,7 +21,19 @@ import {
   type TransitionYear,
   type SSComparisonRow,
 } from '@/charts/budget';
-import type { IncomeSource, Expense, Deduction } from '@/types/api';
+import type { IncomeSource, Expense, Deduction, LiabilityResponse } from '@/types/api';
+
+/** Active debts by the id of the expense they are linked to (set by loadExpenses). */
+let debtByExpense = new Map<string, LiabilityResponse>();
+
+async function fetchLiabilities(): Promise<LiabilityResponse[]> {
+  try {
+    return (await apiCall<LiabilityResponse[]>('/api/liabilities')) ?? [];
+  } catch (error) {
+    console.error('Error loading debts:', (error as Error).name);
+    return [];
+  }
+}
 
 /**
  * Paycheck breakdown from API.
@@ -381,8 +393,15 @@ export async function loadDeductions(): Promise<void> {
  */
 export async function loadExpenses(): Promise<void> {
   try {
-    const data = await apiCall<Expense[]>('/api/budget/expenses');
+    const [data, liabilities] = await Promise.all([
+      apiCall<Expense[]>('/api/budget/expenses'),
+      fetchLiabilities(),
+    ]);
     store.set('expenses', data || []);
+    debtByExpense = new Map();
+    for (const d of liabilities) {
+      if (d.is_active && d.expense_id && !d.expense_missing) debtByExpense.set(d.expense_id, d);
+    }
     const container = document.getElementById('expenses-list');
     if (!container) return;
 
@@ -411,6 +430,14 @@ export async function loadExpenses(): Promise<void> {
       const details = document.createElement('div');
       details.className = 'expense-item-details';
       details.textContent = `${exp.category_name || 'Uncategorized'} • ${formatExpenseFrequency(exp.frequency)}`;
+
+      const linked = debtByExpense.get(exp.id);
+      if (linked) {
+        const chip = document.createElement('span');
+        chip.className = 'expense-debt-chip';
+        chip.textContent = `Linked to ${linked.name}`;
+        name.appendChild(chip);
+      }
 
       info.appendChild(name);
       info.appendChild(details);
@@ -680,6 +707,8 @@ export async function loadCashFlowData(): Promise<void> {
       (document.getElementById('filing-status') as HTMLSelectElement | null)?.value || 'single';
     const state = (document.getElementById('tax-state') as HTMLSelectElement | null)?.value || 'CA';
 
+    // Started now so it runs alongside the cash flow request.
+    const debtsRequest = fetchLiabilities();
     const summary = await apiCall<
       CashFlowSummary & {
         monthly_gross?: number;
@@ -720,6 +749,15 @@ export async function loadCashFlowData(): Promise<void> {
     updateStat('stat-monthly-expenses', formatCurrency(monthlyExpenses));
     updateStat('stat-monthly-savings', formatCurrency(monthlySavings));
     updateStat('stat-savings-rate', `${savingsRate.toFixed(1)}%`);
+
+    const debts = (await debtsRequest).filter((d) => d.is_active);
+    const debtCard = document.getElementById('stat-monthly-debt-card');
+    const linked = debts.filter((d) => d.expense_id && !d.expense_missing);
+    if (debtCard) debtCard.hidden = linked.length === 0;
+    updateStat(
+      'stat-monthly-debt',
+      formatCurrency(linked.reduce((sum, d) => sum + d.monthly_cash_flow, 0))
+    );
 
     // Load charts
     await loadPaycheckChart();
@@ -856,7 +894,7 @@ export async function showAddIncomeModal(): Promise<void> {
         body: data,
       });
 
-      closeModal();
+      closeDynamicModal();
       loadIncomeSources();
       updatePaycheckPreview();
       showToast('Income source added', 'success');
@@ -920,7 +958,7 @@ export function showAddExpenseModal(): void {
         body: data,
       });
 
-      closeModal();
+      closeDynamicModal();
       loadExpenses();
       showToast('Expense added', 'success');
     },
@@ -974,7 +1012,7 @@ export function showAddDeductionModal(): void {
         body: data,
       });
 
-      closeModal();
+      closeDynamicModal();
       loadDeductions();
       updatePaycheckPreview();
       showToast('Deduction added', 'success');
@@ -1081,7 +1119,7 @@ export function editIncome(id: string): void {
         body: data,
       });
 
-      closeModal();
+      closeDynamicModal();
       loadIncomeSources();
       updatePaycheckPreview();
       showToast('Income source updated', 'success');
@@ -1100,7 +1138,8 @@ export function editExpense(id: string): void {
     return;
   }
 
-  createDynamicModal({
+  const linkedDebt = debtByExpense.get(id);
+  const modal = createDynamicModal({
     title: 'Edit Expense',
     content: `
       <div class="form-group">
@@ -1154,11 +1193,17 @@ export function editExpense(id: string): void {
         body: data,
       });
 
-      closeModal();
+      closeDynamicModal();
       loadExpenses();
       showToast('Expense updated', 'success');
     },
   });
+  if (linkedDebt) {
+    const hint = document.createElement('p');
+    hint.className = 'expense-debt-hint';
+    hint.textContent = `This expense follows the debt ${linkedDebt.name}. Change the payment on the Debts page and this amount updates with it.`;
+    modal.querySelector('.modal-body')?.prepend(hint);
+  }
 }
 
 /**
@@ -1209,7 +1254,7 @@ export function editDeduction(id: string): void {
         body: data,
       });
 
-      closeModal();
+      closeDynamicModal();
       loadDeductions();
       updatePaycheckPreview();
       showToast('Deduction updated', 'success');

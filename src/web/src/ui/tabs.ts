@@ -8,7 +8,7 @@ import { querySelectorAll, querySelector, toggleClass } from '@/utils/html';
  * Available tab names.
  */
 export type TabName =
-  'dashboard' | 'holdings' | 'analysis' | 'projections' | 'budget' | 'taxes' | 'settings';
+  'dashboard' | 'holdings' | 'debts' | 'analysis' | 'projections' | 'budget' | 'taxes' | 'settings';
 
 /**
  * Valid tab names for runtime validation.
@@ -16,6 +16,7 @@ export type TabName =
 const VALID_TABS: readonly TabName[] = [
   'dashboard',
   'holdings',
+  'debts',
   'analysis',
   'projections',
   'budget',

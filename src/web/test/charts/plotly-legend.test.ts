@@ -65,8 +65,18 @@ describe('phoneLegendLayout', () => {
   it('scales the bottom margin with the estimated legend rows', () => {
     const layout = { showlegend: true, margin: { l: 10, r: 10, t: 40, b: 40 } };
     const few = phoneLegendLayout(layout, 390, [{ name: 'A' }, { name: 'B' }]);
-    const names = ['Checking account', 'Brokerage account', 'Retirement account', 'Savings account', 'Crypto wallet'];
-    const many = phoneLegendLayout(layout, 390, names.map((name) => ({ name })));
+    const names = [
+      'Checking account',
+      'Brokerage account',
+      'Retirement account',
+      'Savings account',
+      'Crypto wallet',
+    ];
+    const many = phoneLegendLayout(
+      layout,
+      390,
+      names.map((name) => ({ name }))
+    );
     expect(few.margin?.b).toBe(40 + 28 + 24);
     expect(many.margin!.b!).toBeGreaterThanOrEqual(40 + 28 + 24 * 3);
     expect(many.margin!.b!).toBeGreaterThan(few.margin!.b!);
@@ -103,11 +113,40 @@ describe('updateChartLayout on a phone', () => {
     const relayout = vi.fn().mockResolvedValue(undefined);
     (globalThis as unknown as { Plotly: unknown }).Plotly = { relayout };
     document.body.innerHTML = '<div id="c"></div>';
+    (document.getElementById('c') as unknown as { layout: unknown }).layout = {};
     window.innerWidth = 390;
     await updateChartLayout('c');
     const update = relayout.mock.calls[0]![1];
     expect('margin' in update).toBe(false);
     expect('legend' in update).toBe(false);
     expect(update.paper_bgcolor).toBeDefined();
+  });
+});
+
+describe('updateChartLayout on an element that was never plotted', () => {
+  it('does nothing', async () => {
+    const relayout = vi.fn().mockResolvedValue(undefined);
+    (globalThis as unknown as { Plotly: unknown }).Plotly = { relayout };
+    document.body.innerHTML = '<div id="c"></div>';
+    await updateChartLayout('c');
+    expect(relayout).not.toHaveBeenCalled();
+  });
+});
+
+describe('updateChartLayout axes', () => {
+  it('recolors every axis the chart has', async () => {
+    const relayout = vi.fn().mockResolvedValue(undefined);
+    (globalThis as unknown as { Plotly: unknown }).Plotly = { relayout };
+    document.body.innerHTML = '<div id="c"></div>';
+    (document.getElementById('c') as unknown as { layout: unknown }).layout = {
+      xaxis: {},
+      yaxis2: {},
+      title: 'x',
+    };
+    await updateChartLayout('c');
+    const update = relayout.mock.calls[0]![1];
+    expect(update['xaxis.gridcolor']).toBeDefined();
+    expect(update['yaxis2.color']).toBeDefined();
+    expect('title.gridcolor' in update).toBe(false);
   });
 });

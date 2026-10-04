@@ -196,6 +196,21 @@ export function dueDatesBetween(
   }
 }
 
+/**
+ * The next due date strictly after `today` (the anchor plus whole periods), or
+ * one period on when there is no anchor. Mirrors the server's _first_due_after.
+ */
+export function firstDueAfter(
+  anchor: string | null | undefined,
+  frequency: string,
+  today: string
+): string {
+  const base = (anchor ?? '').slice(0, 10) || today;
+  const end = shift(today, 'weekly', 58); // 406 days: covers a yearly period
+  const found = dueDatesBetween(base, frequency, today, end)[0];
+  return found ?? shift(today, frequency, 1);
+}
+
 /** Payment rows until the balance clears or 600 periods; the last payment is the remainder. */
 export function schedule(
   balance: number,

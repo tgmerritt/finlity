@@ -3,6 +3,7 @@
  */
 
 import {
+  ensureThemeUpdates,
   renderChart,
   getBaseLayout,
   getAxisConfig,
@@ -146,6 +147,8 @@ export async function loadPaycheckChart(): Promise<void> {
 
     const ssTax = chartData.social_security || chartData.fica || [];
 
+    ensureThemeUpdates('paycheck-chart');
+
     await renderChart(
       'paycheck-chart',
       [
@@ -256,6 +259,8 @@ export async function loadPaycheckChart(): Promise<void> {
 export async function renderCashFlowWaterfall(summary: CashFlowSummary): Promise<void> {
   const colors = getChartColors();
 
+  ensureThemeUpdates('cashflow-waterfall-chart');
+
   await renderChart(
     'cashflow-waterfall-chart',
     [
@@ -343,6 +348,8 @@ export async function updateExpensesCategoryChart(
   const values = Object.values(byCategory);
   const colors = getChartColors();
 
+  ensureThemeUpdates('expenses-category-chart');
+
   await renderChart(
     'expenses-category-chart',
     [
@@ -378,6 +385,8 @@ export async function updateExpensesCategoryChart(
 export async function renderTransitionChart(years: TransitionYear[]): Promise<void> {
   const ages = years.map((y) => y.age);
   const colors = getChartColors();
+
+  ensureThemeUpdates('transition-chart');
 
   await renderChart(
     'transition-chart',
