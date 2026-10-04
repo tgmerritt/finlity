@@ -715,3 +715,217 @@ export interface ConvertPositionResult {
 export interface RevertConversionResult {
   reverted: boolean;
 }
+
+// Smart import (src/api/smart_import.py). Dates are 'YYYY-MM-DD'; datetimes are
+// ISO text without a timezone.
+export interface SmartImportSettings {
+  retention_months: 0 | 12 | 24 | 36;
+  ai_enabled: boolean;
+  pdf_ai_enabled: boolean;
+  /** CSV layout signature (sha256 hex) -> { field: header name }. */
+  csv_layouts: Record<string, Record<string, string>>;
+  /** 'acct:...' or 'label:...' -> label. */
+  accounts: Record<string, string>;
+}
+
+export type SmartImportSettingsUpdate = Partial<SmartImportSettings>;
+
+export interface SmartImportContext {
+  rules: { id: string; merchant_key: string; category_id: string | null; kind: string | null }[];
+  categories: { id: string; name: string }[];
+  accounts: {
+    account_key: string;
+    label: string | null;
+    last4: string | null;
+    kind: string;
+    institution: string | null;
+    liability_id: string | null;
+  }[];
+  csv_layouts: SmartImportSettings['csv_layouts'];
+  settings: SmartImportSettings;
+}
+
+export type SmartImportAccountKind = 'checking' | 'savings' | 'credit_card' | 'loan' | 'unknown';
+
+export interface PreviewStatement {
+  file_hash: string;
+  account_key?: string | null;
+  account_kind: SmartImportAccountKind;
+  institution?: string | null;
+  dedupe_keys: string[];
+  merchant_keys: string[];
+}
+
+export interface PreviewRequest {
+  statements: PreviewStatement[];
+}
+
+export interface PreviewResponse {
+  existing_dedupe_keys: string[];
+  prior_files: { file_hash: string; import_id: string; imported_at: string | null }[];
+  liability_suggestions: {
+    file_hash: string;
+    account_key: string | null;
+    liability_id: string;
+    reason: 'previous_import' | 'lender_match';
+  }[];
+  history: { merchant_key: string; posted_date: string; amount: number }[];
+}
+
+export interface SmartImportSummary {
+  import_id: string;
+  batch_id: string;
+  file_name: string;
+  origin: string;
+  format: string;
+  parser: string;
+  account_kind: string;
+  account_key: string | null;
+  account_label: string | null;
+  account_last4: string | null;
+  institution: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  closing_balance: number | null;
+  closing_balance_date: string | null;
+  liability_id: string | null;
+  txn_new: number;
+  txn_duplicate: number;
+  txn_excluded: number;
+  ai_used: number;
+  ai_provider: string | null;
+  imported_at: string | null;
+}
+
+export interface MerchantRuleResponse {
+  id: string;
+  merchant_key: string;
+  category_id: string | null;
+  category_name: string | null;
+  category_deleted: boolean;
+  kind: string | null;
+  hits: number;
+  source: string;
+  updated_at: string | null;
+}
+
+export interface SmartImportDeleted {
+  deleted: true;
+}
+
+export interface SmartImportTransactionsDeleted {
+  deleted: number;
+}
+
+export type SmartImportTxnKind =
+  'expense' | 'income' | 'transfer' | 'payment' | 'refund' | 'fee' | 'interest';
+
+export type SmartImportFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annual';
+
+/** One reviewed transaction of POST /api/smart-import/apply (server ApplyTransaction). */
+export interface ApplyTxn {
+  posted_date: string;
+  amount: number;
+  description: string;
+  merchant_key: string;
+  kind: SmartImportTxnKind;
+  category_id?: string | null;
+  category_source: 'user' | 'rule' | 'seed' | 'ai' | 'none';
+  ai_confidence?: number | null;
+  external_id?: string | null;
+  dedupe_key: string;
+  excluded?: boolean;
+}
+
+/** One statement of an apply batch (server ApplyStatement). */
+export interface ApplyStatement {
+  file_hash: string;
+  file_name: string;
+  origin: 'file' | 'sample' | 'connector';
+  format: 'csv' | 'ofx' | 'pdf' | 'connector';
+  parser: string;
+  account: {
+    kind: SmartImportAccountKind;
+    key: string;
+    label?: string | null;
+    last4?: string | null;
+    institution?: string | null;
+  };
+  period?: { start?: string | null; end?: string | null } | null;
+  closing_balance?: { amount: number; as_of: string } | null;
+  liability_id?: string | null;
+  ai_used?: boolean;
+  ai_provider?: string | null;
+  transactions: ApplyTxn[];
+}
+
+/** A remembered merchant choice (server ApplyRule). */
+export interface ApplyRule {
+  merchant_key: string;
+  category_id?: string | null;
+  kind?: SmartImportTxnKind | null;
+  source?: 'user' | 'import' | 'ai' | 'connector';
+}
+
+/** A recurring candidate decision (server ApplyRecurring); expense_id only with 'link'. */
+export interface ApplyRecurring {
+  merchant_key: string;
+  name: string;
+  amount: number;
+  frequency: SmartImportFrequency;
+  category_id: string;
+  occurrences: number;
+  file_hash: string;
+  decision: 'create' | 'link' | 'reject';
+  expense_id?: string | null;
+}
+
+/** Body of POST /api/smart-import/apply (server ApplyRequest). */
+export interface ApplyRequest {
+  batch_id: string;
+  entity_id?: string | null;
+  statements: ApplyStatement[];
+  rules?: ApplyRule[];
+  recurring?: ApplyRecurring[];
+}
+
+export interface ApplyResponse {
+  imports: {
+    import_id: string;
+    file_hash: string;
+    txn_new: number;
+    txn_duplicate: number;
+    txn_excluded: number;
+    balance: 'recorded' | 'skipped_existing' | 'skipped_future' | 'none';
+  }[];
+  skipped_files: string[];
+  rules_saved: number;
+  expenses_created: number;
+  expenses_linked: number;
+  pruned: number;
+}
+
+export interface SmartImportUndoResponse {
+  undone: true;
+  deleted: {
+    transactions: number;
+    recurring_candidates: number;
+    expenses: number;
+    snapshots: number;
+  };
+  reassigned: { transactions: number };
+  kept: { table: string; id: string; reason: string }[];
+}
+
+export interface SpendingSummary {
+  months_covered: number;
+  months: string[];
+  categories: {
+    category_id: string | null;
+    category_name: string;
+    actual_monthly: number;
+    planned_monthly: number;
+    difference: number;
+  }[];
+  totals: { actual_monthly: number; planned_monthly: number; difference: number };
+}

@@ -41,6 +41,7 @@ from src.api.tasks import router as tasks_router
 from src.api.session import router as session_router
 from src.api.entities import router as entities_router
 from src.api.liabilities import router as liabilities_router
+from src.api.smart_import import budget_router as smart_import_budget_router
 from src.api.smart_import import router as smart_import_router
 from src.api.dependencies import get_db
 from src.liabilities.service import dashboard_block
@@ -359,6 +360,7 @@ app.include_router(session_router)
 app.include_router(entities_router)
 app.include_router(liabilities_router)
 app.include_router(smart_import_router)
+app.include_router(smart_import_budget_router)
 app.include_router(v2_router)
 
 # Serve static files (web dashboard)
