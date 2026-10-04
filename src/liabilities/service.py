@@ -412,9 +412,12 @@ def create_liability(db: Database, data: dict[str, Any]) -> dict[str, Any]:
         if prop:
             data["linked_position_id"] = _apply_property(session, prop)
         row = _insert_liability(session, data, cash_flow, today)
+        session.flush()
+        # Build the response before committing, so a failure here still rolls everything back.
+        result = _serialize(session, row, today)
         session.commit()
         logger.info("Liability created id=%s", row.id)
-        return _serialize(session, row, today)
+        return result
 
 
 def update_liability(db: Database, liability_id: str, changes: dict[str, Any], sync_expense: bool = True) -> dict[str, Any]:
@@ -457,9 +460,16 @@ def update_liability(db: Database, liability_id: str, changes: dict[str, Any], s
                     if not row.payment_amount or row.payment_amount <= 0:
                         raise LiabilityError(422, "A payment amount is required to sync the linked expense")
                     apply_expense_values(session, expense, row, today, set_amount=True)
+            session.flush()
+            # Build the response before committing, so a failure here still rolls everything back.
+            result = _serialize(session, row, today)
             session.commit()
             logger.info("Liability updated id=%s", liability_id)
-            return _serialize(session, row, today)
+            return result
+
+
+def _delete_result(liability_id: str, expense_deleted: bool) -> dict[str, Any]:
+    return {"deleted": True, "id": liability_id, "expense_deleted": expense_deleted}
 
 
 def delete_liability(db: Database, liability_id: str, delete_expense: bool = False) -> dict[str, Any]:
@@ -476,9 +486,12 @@ def delete_liability(db: Database, liability_id: str, delete_expense: bool = Fal
                     expense_deleted = True
             session.query(LiabilityBalanceSnapshot).filter_by(liability_id=liability_id).delete()
             session.delete(row)
+            session.flush()
+            # Build the response before committing, so a failure here still rolls everything back.
+            result = _delete_result(liability_id, expense_deleted)
             session.commit()
             logger.info("Liability deleted id=%s", liability_id)
-            return {"deleted": True, "id": liability_id, "expense_deleted": expense_deleted}
+            return result
 
 
 def record_balance(
@@ -504,9 +517,12 @@ def record_balance(
                 row.current_balance = balance
                 row.balance_as_of = day
                 row.updated_at = datetime.utcnow()
+            session.flush()
+            # Build the response before committing, so a failure here still rolls everything back.
+            result = _serialize(session, row, today)
             session.commit()
             logger.info("Liability balance recorded id=%s", liability_id)
-            return _serialize(session, row, today)
+            return result
 
 
 def get_history(db: Database, liability_id: str) -> dict[str, Any]:
