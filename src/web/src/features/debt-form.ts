@@ -11,6 +11,9 @@ import { apiCall, ApiError } from '@/api/client';
 import { createDynamicModal, closeDynamicModal } from '@/ui/modal';
 import { showToast } from '@/ui/toast';
 import { withSubmitGuard } from '@/ui/with-submit-guard';
+import { annuityPayment, firstDueAfter, periodsPerYear } from '@/utils/amortization';
+import { today } from '@/utils/clock';
+import { formatCurrency } from '@/utils/format';
 import {
   DEBT_TYPES,
   FREQUENCIES,
@@ -26,6 +29,14 @@ import {
 } from '@/utils/debt-fields';
 import { LIABILITY_TYPE_LABELS } from '@/utils/liabilities';
 import type { Entity, LiabilityFrequency, LiabilityResponse } from '@/types/api';
+
+const FREQUENCY_WORD: Record<LiabilityFrequency, string> = {
+  weekly: 'week',
+  biweekly: '2 weeks',
+  monthly: 'month',
+  quarterly: 'quarter',
+  annual: 'year',
+};
 
 const FREQUENCY_LABELS: Record<LiabilityFrequency, string> = {
   weekly: 'Weekly',
@@ -49,6 +60,48 @@ export function debtErrorMessage(error: unknown): string {
 const day = (value: string | null | undefined): string => (value ?? '').slice(0, 10);
 const str = (value: number | null | undefined): string => (value == null ? '' : String(value));
 
+const MONTH_BASED = new Set(['monthly', 'quarterly', 'annual']);
+
+/**
+ * The stored next payment date can be long past. Show the first due date after
+ * today instead, unless that changes the day of the month (a 31st clamped to a
+ * 30th): then keep the stored anchor so saving does not shift later due dates.
+ */
+function nextDueForForm(d: LiabilityResponse): string {
+  const anchor = day(d.next_payment_date);
+  if (!anchor) return '';
+  const freq = d.payment_frequency || 'monthly';
+  const rolled = firstDueAfter(anchor, freq, today());
+  if (MONTH_BASED.has(freq) && rolled.slice(8, 10) !== anchor.slice(8, 10)) return anchor;
+  return rolled;
+}
+
+/**
+ * Payment calculated from balance, APR and term, when the payment field is
+ * blank and those are all usable. Rounded to cents; null otherwise.
+ */
+export function computedPayment(draft: DebtDraft): number | null {
+  if (draft.paymentAmount.trim() !== '') return null;
+  if (!fieldsFor(draft.liabilityType).some((f) => f.key === 'termMonths')) return null;
+  const { values } = validateDraft(draft);
+  if (!values || values.termMonths === null || values.currentBalance <= 0) return null;
+  const perYear = periodsPerYear(draft.paymentFrequency);
+  const periods = Math.max(1, Math.round((values.termMonths / 12) * perYear));
+  const payment = annuityPayment(
+    values.currentBalance,
+    values.interestRate ?? 0,
+    periods,
+    draft.paymentFrequency
+  );
+  return Number.isFinite(payment) ? Math.round(payment * 100) / 100 : null;
+}
+
+/** The draft with a blank payment filled from `computedPayment`, when there is one. */
+export function withComputedPayment(draft: DebtDraft): DebtDraft {
+  const payment = computedPayment(draft);
+  return payment === null ? draft : { ...draft, paymentAmount: String(payment) };
+}
+
 /** Prefill a draft from a debt. Owner and linked home are kept: blanks would unlink. */
 export function draftFromDebt(d: LiabilityResponse): DebtDraft {
   return {
@@ -58,7 +111,7 @@ export function draftFromDebt(d: LiabilityResponse): DebtDraft {
     aprPercent: d.interest_rate == null ? '' : String(Number((d.interest_rate * 100).toFixed(4))),
     paymentAmount: str(d.payment_amount),
     paymentFrequency: (d.payment_frequency as LiabilityFrequency) || 'monthly',
-    nextPaymentDate: day(d.next_payment_date),
+    nextPaymentDate: nextDueForForm(d),
     escrowAmount: str(d.escrow_amount),
     creditLimit: str(d.credit_limit),
     termMonths: str(d.term_months),
@@ -137,13 +190,26 @@ function inputFor(field: DebtField, draft: DebtDraft, opts: DebtFieldsOptions): 
   return input;
 }
 
+/** Keep the ids of aria-describedby that pass `keep`, then add `extra`. */
+function setDescribedBy(node: Element, keep: (id: string) => boolean, extra?: string): void {
+  const ids = (node.getAttribute('aria-describedby') ?? '')
+    .split(/\s+/)
+    .filter((i) => i && keep(i));
+  if (extra && !ids.includes(extra)) ids.push(extra);
+  if (ids.length > 0) node.setAttribute('aria-describedby', ids.join(' '));
+  else node.removeAttribute('aria-describedby');
+}
+
 /**
  * Show a message under each named field (matched by data-debt-field), clearing
  * earlier ones, and focus the first. Also used by the Update balance dialog.
  */
 export function applyFieldErrors(root: HTMLElement, errors: Partial<Record<string, string>>): void {
   root.querySelectorAll('.debt-field-error').forEach((n) => n.remove());
-  root.querySelectorAll('[aria-invalid]').forEach((n) => n.removeAttribute('aria-invalid'));
+  root.querySelectorAll('[aria-invalid]').forEach((n) => {
+    n.removeAttribute('aria-invalid');
+    setDescribedBy(n, (id) => !id.startsWith('debt-error-'));
+  });
   let first: HTMLElement | null = null;
   for (const [key, message] of Object.entries(errors)) {
     const input = root.querySelector<HTMLElement>(`[data-debt-field="${key}"]`);
@@ -152,7 +218,7 @@ export function applyFieldErrors(root: HTMLElement, errors: Partial<Record<strin
     const msg = el('span', 'debt-field-error', message);
     msg.id = `debt-error-${key}`;
     msg.setAttribute('role', 'alert');
-    input.setAttribute('aria-describedby', msg.id);
+    setDescribedBy(input, () => true, msg.id);
     input.parentElement?.appendChild(msg);
     const details = input.closest('details');
     if (details) details.open = true;
@@ -192,11 +258,31 @@ export function buildDebtFields(
     if (field.hint) {
       const hint = el('span', 'debt-field-hint', field.hint);
       hint.id = `debt-hint-${field.key}`;
-      input.setAttribute('aria-describedby', hint.id);
+      setDescribedBy(input, () => true, hint.id);
       wrap.appendChild(hint);
+    }
+    if (field.key === 'paymentAmount') {
+      const note = el('span', 'debt-field-hint debt-computed');
+      note.id = 'debt-computed-paymentAmount';
+      note.setAttribute('aria-live', 'polite');
+      setDescribedBy(input, () => true, note.id);
+      wrap.appendChild(note);
     }
     return wrap;
   };
+
+  /** Show the calculated payment under the payment field while it is blank. */
+  const updateNote = (): void => {
+    const note = root.querySelector<HTMLElement>('.debt-computed');
+    if (!note) return;
+    const payment = computedPayment(read());
+    note.textContent =
+      payment === null
+        ? ''
+        : `Calculated from the balance, rate and term: ${formatCurrency(payment)} per ${FREQUENCY_WORD[read().paymentFrequency]}. It is used when the payment is left blank.`;
+  };
+  root.addEventListener('input', updateNote);
+  root.addEventListener('change', updateNote);
 
   const render = (): void => {
     root.textContent = '';
@@ -232,6 +318,7 @@ export function buildDebtFields(
       more.appendChild(moreGrid);
       root.appendChild(more);
     }
+    updateNote();
   };
   render();
 
@@ -240,6 +327,17 @@ export function buildDebtFields(
   };
 
   return { element: root, read, showErrors };
+}
+
+/** Pressing Enter in a text field saves the dialog, like clicking its save button. */
+export function submitOnEnter(form: HTMLElement, modal: HTMLElement): void {
+  form.addEventListener('keydown', (event) => {
+    const target = event.target;
+    if (event.key !== 'Enter' || !(target instanceof HTMLInputElement)) return;
+    if (target.type === 'checkbox' || target.type === 'button') return;
+    event.preventDefault();
+    modal.querySelector<HTMLButtonElement>('[data-action="save"]')?.click();
+  });
 }
 
 /** A banner under the form fields for a failed request. */
@@ -279,8 +377,13 @@ export function openDebtForm(options: OpenDebtFormOptions = {}): void {
     saveButtonText: debt ? 'Save changes' : 'Add debt',
     modalClass: 'debt-form-modal',
     onSave: async (event) => {
-      const current = fields.read();
+      const current = withComputedPayment(fields.read());
       const { errors } = validateDraft(current);
+      // A linked budget expense is synced from the payment, which the server
+      // refuses to do without one (422): ask for it here instead.
+      if (debt?.expense_id && current.paymentAmount.trim() === '' && !errors.paymentAmount) {
+        errors.paymentAmount = 'Enter a payment: your linked budget expense follows it';
+      }
       fields.showErrors(errors);
       if (Object.keys(errors).length > 0) return;
       const button = event.currentTarget as HTMLButtonElement | null;
@@ -306,5 +409,6 @@ export function openDebtForm(options: OpenDebtFormOptions = {}): void {
       }
     },
   });
+  submitOnEnter(content, modal);
   modal.querySelector<HTMLElement>('[data-debt-field]')?.focus();
 }

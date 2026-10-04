@@ -12,10 +12,12 @@ import {
   debtErrorMessage,
   applyFieldErrors,
   showFormError,
+  submitOnEnter,
 } from '@/features/debt-form';
 import { store, subscribe } from '@/state/store';
 import { on, emit } from '@/state/events';
 import { createDynamicModal, closeDynamicModal } from '@/ui/modal';
+import { onThemeChange } from '@/state/theme';
 import { withSubmitGuard } from '@/ui/with-submit-guard';
 import { onTabChange, getCurrentTab } from '@/ui/tabs';
 import { setStateView } from '@/ui/state-view';
@@ -24,7 +26,7 @@ import { formatCurrency } from '@/utils/format';
 import {
   schedule,
   summarize as amortizationSummary,
-  shift,
+  firstDueAfter,
   type ScheduleRow,
 } from '@/utils/amortization';
 import { today } from '@/utils/clock';
@@ -248,14 +250,22 @@ function renderList(list: readonly LiabilityResponse[]): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Refresh the list after any write and tell the dashboard so its net worth
- * updates. The dashboard refetches on accounts:changed 'added'; there is no
- * liabilities event on the bus yet.
+ * Refresh the list after any write and tell the rest of the app (the
+ * dashboard refetches its net worth). The page's own listener ignores this
+ * emit, because the list is reloaded here.
  */
-async function afterWrite(): Promise<void> {
+let emittingOwnChange = false;
+type ChangeReason = 'added' | 'updated' | 'deleted' | 'balance';
+
+async function afterWrite(reason: ChangeReason): Promise<void> {
   generation += 1;
   inflight = null;
-  emit({ type: 'accounts:changed', reason: 'added' });
+  emittingOwnChange = true;
+  try {
+    emit({ type: 'liabilities:changed', reason });
+  } finally {
+    emittingOwnChange = false;
+  }
   await loadDebts().catch(console.error);
 }
 
@@ -265,7 +275,7 @@ function find(id: string): LiabilityResponse | undefined {
 
 /** PR C swaps the plain form for the wizard here. */
 function openAdd(): void {
-  openDebtForm({ entities: store.get('entities'), onSaved: afterWrite });
+  openDebtForm({ entities: store.get('entities'), onSaved: () => afterWrite('added') });
 }
 
 function openEdit(d: LiabilityResponse, reopen = false): void {
@@ -273,7 +283,7 @@ function openEdit(d: LiabilityResponse, reopen = false): void {
     debt: d,
     entities: store.get('entities'),
     onSaved: async () => {
-      await afterWrite();
+      await afterWrite('updated');
       if (reopen) openDetail(d.id);
     },
   });
@@ -311,7 +321,7 @@ function openBalanceDialog(d: LiabilityResponse, reopen = false): void {
   form.appendChild(formGroup('Balance', 'balance', balance));
   form.appendChild(formGroup('As of', 'asOf', asOf));
 
-  createDynamicModal({
+  const balanceModal = createDynamicModal({
     title: 'Update balance',
     content: form,
     saveButtonText: 'Save balance',
@@ -338,7 +348,7 @@ function openBalanceDialog(d: LiabilityResponse, reopen = false): void {
         );
         closeDynamicModal();
         showToast('Balance updated', 'success');
-        await afterWrite();
+        await afterWrite('balance');
         if (reopen) openDetail(d.id);
       } catch (error) {
         console.error('Balance update failed:', error instanceof Error ? error.name : 'error');
@@ -346,6 +356,7 @@ function openBalanceDialog(d: LiabilityResponse, reopen = false): void {
       }
     },
   });
+  submitOnEnter(form, balanceModal);
   balance.focus();
 }
 
@@ -373,7 +384,7 @@ function openDeleteDialog(d: LiabilityResponse): void {
     title: 'Delete debt',
     content: body,
     saveButtonText: 'Delete',
-    modalClass: 'modal-danger',
+    modalClass: 'modal-danger debt-form-modal',
     onSave: async (event) => {
       const button = event.currentTarget as HTMLButtonElement | null;
       const withExpense = alsoExpense?.checked === true;
@@ -385,7 +396,7 @@ function openDeleteDialog(d: LiabilityResponse): void {
         );
         closeDynamicModal();
         showToast('Debt deleted', 'success');
-        await afterWrite();
+        await afterWrite('deleted');
       } catch (error) {
         console.error('Debt delete failed:', error instanceof Error ? error.name : 'error');
         showFormError(body, debtErrorMessage(error));
@@ -407,18 +418,9 @@ interface YearGroup {
   rows: ScheduleRow[];
 }
 
-/** First payment date on or after today, rolled forward from the stored one. */
+/** First payment date strictly after today, like the server's _first_due_after. */
 function firstDue(d: LiabilityResponse): string {
-  const now = today();
-  const freq = d.payment_frequency || 'monthly';
-  const anchor = d.next_payment_date?.slice(0, 10) || now;
-  let k = 0;
-  let due = anchor;
-  while (due < now && k < 1000) {
-    k += 1;
-    due = shift(anchor, freq, k);
-  }
-  return due;
+  return firstDueAfter(d.next_payment_date, d.payment_frequency || 'monthly', today());
 }
 
 /** Payments left, grouped by calendar year; null when there is no payoff plan. */
@@ -485,6 +487,38 @@ function cssVar(name: string, fallback: string): string {
   return value || fallback;
 }
 
+async function plotHistory(history: LiabilityHistoryResponse): Promise<void> {
+  // Read at render time, so a re-render after a theme change picks up the new color.
+  const color = cssVar('--color-primary', '#4f8cff');
+  const traces = [
+    {
+      x: history.series.map((p) => p.date),
+      y: history.series.map((p) => p.balance),
+      type: 'scatter',
+      mode: 'lines',
+      name: 'Estimated balance',
+      line: { color, width: 2 },
+      hovertemplate: '%{x|%b %-d, %Y}: $%{y:,.2f}<extra></extra>',
+    },
+    {
+      x: history.reported.map((p) => p.date),
+      y: history.reported.map((p) => p.balance),
+      type: 'scatter',
+      mode: 'markers',
+      name: 'Reported',
+      marker: { color, size: 8 },
+      hovertemplate: '%{x|%b %-d, %Y}: $%{y:,.2f} (reported)<extra></extra>',
+    },
+  ] as unknown as Parameters<typeof renderChart>[1];
+  await renderChart(CHART_ID, traces, {
+    height: 220,
+    showlegend: false,
+    margin: { t: 8, r: 12, b: 32, l: 64 },
+    xaxis: { ...getAxisConfig(), type: 'date', nticks: 4, tickangle: 0, tickformat: '%b %Y' },
+    yaxis: { ...getAxisConfig(), tickprefix: '$', tickformat: ',.0f' },
+  });
+}
+
 async function drawHistory(id: string, host: HTMLElement): Promise<void> {
   try {
     const history = await apiCall<LiabilityHistoryResponse>(
@@ -496,35 +530,16 @@ async function drawHistory(id: string, host: HTMLElement): Promise<void> {
       return;
     }
     host.textContent = '';
-    const color = cssVar('--color-primary', '#4f8cff');
-    const traces = [
-      {
-        x: history.series.map((p) => p.date),
-        y: history.series.map((p) => p.balance),
-        type: 'scatter',
-        mode: 'lines',
-        name: 'Estimated balance',
-        line: { color, width: 2 },
-        hovertemplate: '%{x|%b %-d, %Y}: $%{y:,.2f}<extra></extra>',
-      },
-      {
-        x: history.reported.map((p) => p.date),
-        y: history.reported.map((p) => p.balance),
-        type: 'scatter',
-        mode: 'markers',
-        name: 'Reported',
-        marker: { color, size: 8 },
-        hovertemplate: '%{x|%b %-d, %Y}: $%{y:,.2f} (reported)<extra></extra>',
-      },
-    ] as unknown as Parameters<typeof renderChart>[1];
-    await renderChart(CHART_ID, traces, {
-      height: 220,
-      showlegend: false,
-      margin: { t: 8, r: 12, b: 32, l: 64 },
-      xaxis: { ...getAxisConfig(), type: 'date', nticks: 4, tickangle: 0, tickformat: '%b %Y' },
-      yaxis: { ...getAxisConfig(), tickprefix: '$', tickformat: ',.0f' },
-    });
+    await plotHistory(history);
     ensureThemeUpdates(CHART_ID);
+    // The relayout above recolors axes; the line color is a trace property, so redraw.
+    const stop = onThemeChange(() => {
+      if (!host.isConnected) {
+        stop();
+        return;
+      }
+      plotHistory(history).catch(console.error);
+    });
   } catch (error) {
     console.error('Debt history failed:', error instanceof Error ? error.name : 'error');
     if (host.isConnected) host.textContent = 'Balance history is not available right now.';
@@ -565,19 +580,22 @@ async function relink(
   d: LiabilityResponse,
   kind: RelinkKind,
   value: string | null,
-  host: HTMLElement
+  host: HTMLElement,
+  button: HTMLButtonElement
 ): Promise<void> {
-  try {
-    await apiCall(`/api/liabilities/${encodeURIComponent(d.id)}`, {
-      method: 'PUT',
-      body: { [kind.field]: value },
-    });
-    await afterWrite();
-    openDetail(d.id);
-  } catch (error) {
-    console.error('Relink failed:', error instanceof Error ? error.name : 'error');
-    showFormError(host, debtErrorMessage(error));
-  }
+  await withSubmitGuard(button, '', async () => {
+    try {
+      await apiCall(`/api/liabilities/${encodeURIComponent(d.id)}`, {
+        method: 'PUT',
+        body: { [kind.field]: value },
+      });
+      await afterWrite('updated');
+      openDetail(d.id);
+    } catch (error) {
+      console.error('Relink failed:', error instanceof Error ? error.name : 'error');
+      showFormError(host, debtErrorMessage(error));
+    }
+  });
 }
 
 function renderWarning(d: LiabilityResponse, which: 'home' | 'expense'): HTMLElement {
@@ -591,7 +609,7 @@ function renderWarning(d: LiabilityResponse, which: 'home' | 'expense'): HTMLEle
   const remove = h('button', 'btn btn-default btn-sm', 'Remove link');
   remove.type = 'button';
   remove.addEventListener('click', () => {
-    relink(d, kind, null, box).catch(console.error);
+    relink(d, kind, null, box, remove).catch(console.error);
   });
   choose.addEventListener('click', () => {
     kind
@@ -610,7 +628,7 @@ function renderWarning(d: LiabilityResponse, which: 'home' | 'expense'): HTMLEle
         link.type = 'button';
         link.disabled = options.length === 0;
         link.addEventListener('click', () => {
-          relink(d, kind, select.value, box).catch(console.error);
+          relink(d, kind, select.value, box, link).catch(console.error);
         });
         row.appendChild(
           options.length > 0
@@ -833,6 +851,14 @@ export function initDebts(): void {
 
   subscribe('currentEntityId', () => {
     if (all) render();
+  });
+
+  // A debt changed somewhere else (not through this page): reload when visible.
+  on('liabilities:changed', () => {
+    if (emittingOwnChange) return;
+    generation += 1;
+    inflight = null;
+    if (getCurrentTab() === 'debts') loadDebts().catch(console.error);
   });
 
   const invalidate = (): void => {

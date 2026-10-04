@@ -94,8 +94,13 @@ describe('debt form', () => {
     document.body.innerHTML = '';
     apiCallMock.mockReset();
     apiCallMock.mockResolvedValue(debt());
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 4, 12, 0, 0));
   });
-  afterEach(() => closeDynamicModal());
+  afterEach(() => {
+    closeDynamicModal();
+    vi.useRealTimers();
+  });
 
   it('creates a debt, converting the APR percent to a decimal', async () => {
     const onSaved = vi.fn();
@@ -230,5 +235,89 @@ describe('debt form', () => {
         String.fromCharCode(0x2014)
       );
     }
+  });
+
+  it('prefills the first due date after today instead of a stale one', () => {
+    expect(draftFromDebt(debt({ next_payment_date: '2022-08-01' })).nextPaymentDate).toBe(
+      '2026-11-01'
+    );
+    // Due today counts as already due: the form shows the next one.
+    expect(draftFromDebt(debt({ next_payment_date: '2026-10-04' })).nextPaymentDate).toBe(
+      '2026-11-04'
+    );
+    expect(
+      draftFromDebt(debt({ next_payment_date: '2026-09-01', payment_frequency: 'weekly' }))
+        .nextPaymentDate
+    ).toBe('2026-10-06');
+  });
+
+  it('keeps the stored anchor when rolling would change the day of the month', () => {
+    // The next 31st-anchored due date after Nov 4 is Nov 30: a different day.
+    vi.setSystemTime(new Date(2026, 10, 4, 12, 0, 0));
+    expect(draftFromDebt(debt({ next_payment_date: '2022-01-31' })).nextPaymentDate).toBe(
+      '2022-01-31'
+    );
+    expect(draftFromDebt(debt({ next_payment_date: null })).nextPaymentDate).toBe('');
+  });
+
+  it('calculates a blank payment from balance, rate and term and shows it first', async () => {
+    openDebtForm({});
+    type('liabilityType', 'personal_loan');
+    type('name', 'Loan');
+    type('currentBalance', '12000');
+    type('aprPercent', '0');
+    type('termMonths', '12');
+    expect(modal().querySelector('.debt-computed')?.textContent).toContain('$1,000.00');
+    save().click();
+    await flush();
+    expect(apiCallMock.mock.calls[0]![1]?.body).toMatchObject({ payment_amount: 1000 });
+  });
+
+  it('says nothing about a calculated payment when it cannot be calculated', () => {
+    openDebtForm({});
+    type('liabilityType', 'personal_loan');
+    type('currentBalance', '12000');
+    type('termMonths', '');
+    expect(modal().querySelector('.debt-computed')?.textContent).toBe('');
+    expect(modal().textContent).not.toContain('Leave blank');
+  });
+
+  it('calculates the payment on edit too', async () => {
+    openDebtForm({ debt: debt({ expense_id: null }) });
+    type('paymentAmount', '');
+    save().click();
+    await flush();
+    const body = apiCallMock.mock.calls[0]![1]?.body as { payment_amount: number };
+    expect(body.payment_amount).toBeCloseTo(1847.15, 1);
+  });
+
+  it('does not send a blank payment for a debt with a linked expense (no 422)', async () => {
+    openDebtForm({ debt: debt() });
+    type('paymentAmount', '');
+    type('termMonths', '');
+    save().click();
+    await flush();
+    expect(apiCallMock).not.toHaveBeenCalled();
+    const err = modal().querySelector('.debt-field-error')!;
+    expect(err.textContent).toContain('linked budget expense');
+    const ids = field('paymentAmount').getAttribute('aria-describedby')!.split(' ');
+    expect(ids).toEqual(expect.arrayContaining(['debt-computed-paymentAmount', err.id]));
+    // Fixing it removes the error id but keeps the note, even if another field fails.
+    type('paymentAmount', '1500');
+    type('name', '');
+    save().click();
+    await flush();
+    const after = field('paymentAmount').getAttribute('aria-describedby') ?? '';
+    expect(after).not.toContain('debt-error-');
+    expect(after).toContain('debt-computed-paymentAmount');
+  });
+
+  it('saves when Enter is pressed in a text field', async () => {
+    openDebtForm({});
+    type('name', 'Car');
+    type('currentBalance', '100');
+    field('name').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flush();
+    expect(apiCallMock).toHaveBeenCalledTimes(1);
   });
 });

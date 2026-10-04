@@ -8288,7 +8288,11 @@ body.on-settings #tab-settings {
     .debt-form .form-group select { font-size: 16px; min-height: 44px; }
     .debt-detail-actions .btn,
     .debt-link-actions .btn,
+    .debt-card-actions .btn,
+    .debt-card-actions .btn-sm,
     .debt-form-modal .modal-footer .btn { min-height: 44px; }
+    .debt-link-actions select { font-size: 16px; min-height: 44px; }
+    .debt-delete-option { min-height: 44px; }
     .debt-detail-actions .btn { flex: 1 1 auto; }
     .debt-year summary { padding: 12px; }
 }

@@ -8,7 +8,7 @@ import { store } from '@/state/store';
 import { emit, on } from '@/state/events';
 import { showLoading, hideLoading } from '@/ui/loading';
 import { showToast } from '@/ui/toast';
-import { onTabChange, showTab } from '@/ui/tabs';
+import { getCurrentTab, onTabChange, showTab } from '@/ui/tabs';
 import { goToSection } from '@/ui/settings-sections';
 import { withSubmitGuard } from '@/ui/with-submit-guard';
 import { closeModal, showConfirmDialog, createDynamicModal } from '@/ui/modal';
@@ -131,9 +131,13 @@ function createDeleteIcon(): SVGSVGElement {
 /**
  * Refresh all dashboard data.
  * Main data loading function for the application.
+ *
+ * `quiet` is for background refreshes (a debt changed): no loading overlay,
+ * no widget reload, no commentary invalidation and no error toast.
  */
-export async function refreshData(): Promise<void> {
-  showLoading('Loading data...');
+export async function refreshData(options: { quiet?: boolean } = {}): Promise<void> {
+  const quiet = (options as { quiet?: boolean } | null)?.quiet === true;
+  if (!quiet) showLoading('Loading data...');
   try {
     // Build URL with view filter
     const currentViewId = store.get('currentViewId');
@@ -162,6 +166,8 @@ export async function refreshData(): Promise<void> {
       updateDemoModeUI(data.demo_mode);
     }
 
+    if (quiet) return;
+
     // Auto-load dashboard widgets
     await loadWidgets();
 
@@ -175,9 +181,9 @@ export async function refreshData(): Promise<void> {
     emit({ type: 'commentary:invalidated' });
   } catch (error) {
     console.error('Error loading data:', error);
-    showToast('Failed to load portfolio data', 'error');
+    if (!quiet) showToast('Failed to load portfolio data', 'error');
   } finally {
-    hideLoading();
+    if (!quiet) hideLoading();
   }
 }
 
@@ -1206,10 +1212,20 @@ export function initDashboard(): void {
 
   // Re-render the self-fetching cards from the positions already in the store
   // when the Dashboard tab becomes visible (no dashboard refetch, no chart).
+  // A debt changed while another tab was showing: refetch quietly on return.
+  let liabilitiesStale = false;
   onTabChange((tab) => {
-    if (tab === 'dashboard' && dashboardRendered) {
+    if (tab !== 'dashboard') return;
+    if (liabilitiesStale) {
+      liabilitiesStale = false;
+      refreshData({ quiet: true }).catch(console.error);
+    } else if (dashboardRendered) {
       renderCards(store.get('currentPositions')).catch(console.error);
     }
+  });
+  on('liabilities:changed', () => {
+    if (getCurrentTab() === 'dashboard') refreshData({ quiet: true }).catch(console.error);
+    else liabilitiesStale = true;
   });
 
   // Initial price status update

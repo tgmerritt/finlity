@@ -38,7 +38,13 @@ export type MutationEvent =
    * showTab('debts'), so the page may not have loaded yet; a subscriber that
    * registers later must also check for a pending id when it first renders.
    */
-  | { type: 'debts:open'; id: string };
+  | { type: 'debts:open'; id: string }
+  /**
+   * A liability was added, edited, deleted or had a balance recorded. The
+   * dashboard refetches its net worth; the Debts page reloads its list when
+   * the change came from somewhere else.
+   */
+  | { type: 'liabilities:changed'; reason: 'added' | 'updated' | 'deleted' | 'balance' };
 
 /**
  * Convenience alias: every event type in the union.

@@ -23,10 +23,10 @@ vi.mock('@/ui/tabs', () => ({
 import { apiCall } from '@/api/client';
 import { goToSection } from '@/ui/settings-sections';
 import { showToast } from '@/ui/toast';
-import { onTabChange, showTab } from '@/ui/tabs';
+import { getCurrentTab, onTabChange, showTab } from '@/ui/tabs';
 import { store } from '@/state/store';
 import { initDashboard, renderDashboard, resetDashboardRenderState } from '@/pages/dashboard';
-import { on } from '@/state/events';
+import { on, emit, _resetEventBus } from '@/state/events';
 import type {
   AccountResponse,
   DashboardData,
@@ -652,5 +652,57 @@ describe('debt attention items', () => {
     expect(showTabMock).toHaveBeenCalledWith('debts');
     expect(seen).toEqual(['c1']);
     off();
+  });
+});
+
+describe('liabilities:changed', () => {
+  const dataCalls = (): number =>
+    apiCallMock.mock.calls.filter((c) => String(c[0]).startsWith('/api/dashboard/data')).length;
+  const stubWithData = (): void => {
+    stubApi({ '/api/dashboard/data': fixture() });
+  };
+
+  it('refetches quietly: no overlay, no widget reload, no commentary invalidation', async () => {
+    _resetEventBus();
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div id="loading-overlay" class="hidden"><span class="loading-text"></span></div>'
+    );
+    stubWithData();
+    initDashboard();
+    vi.mocked(getCurrentTab).mockReturnValue('dashboard');
+    const invalidated = vi.fn();
+    on('commentary:invalidated', invalidated);
+    const overlay = document.getElementById('loading-overlay')!;
+    const seen: boolean[] = [];
+    new MutationObserver(() => seen.push(overlay.classList.contains('visible'))).observe(overlay, {
+      attributes: true,
+    });
+    apiCallMock.mockClear();
+    emit({ type: 'liabilities:changed', reason: 'added' });
+    await vi.waitFor(() => expect(dataCalls()).toBe(1));
+    await vi.waitFor(() => expect(text('total-value')).toBe('$8,800.00'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(seen).not.toContain(true);
+    expect(invalidated).not.toHaveBeenCalled();
+    expect(apiCallMock.mock.calls.map((c) => String(c[0]))).not.toContain('/api/plugins/widgets');
+  });
+
+  it('waits for the next dashboard show when another tab is current', async () => {
+    _resetEventBus();
+    stubWithData();
+    initDashboard();
+    const callback = onTabChangeMock.mock.calls[onTabChangeMock.mock.calls.length - 1]![0];
+    vi.mocked(getCurrentTab).mockReturnValue('debts');
+    apiCallMock.mockClear();
+    emit({ type: 'liabilities:changed', reason: 'balance' });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(dataCalls()).toBe(0);
+    callback('dashboard');
+    await vi.waitFor(() => expect(dataCalls()).toBe(1));
+    // Only once: the next show is the ordinary cheap re-render.
+    callback('dashboard');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(dataCalls()).toBe(1);
   });
 });

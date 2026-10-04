@@ -84,12 +84,7 @@ export function fieldsFor(type: LiabilityType): DebtField[] {
     f('name', 'Name', 'text', { required: true }),
     f('currentBalance', 'Current balance', 'money', { required: true }),
     f('aprPercent', 'Interest rate (APR, %)', 'percent'),
-    f(
-      'paymentAmount',
-      revolving ? 'Planned payment' : 'Payment',
-      'money',
-      revolving ? {} : { hint: 'Leave blank to calculate it from the term' }
-    ),
+    f('paymentAmount', revolving ? 'Planned payment' : 'Payment', 'money'),
     f('paymentFrequency', 'Payment frequency', 'select'),
     f('nextPaymentDate', 'Next payment date', 'date'),
   ];

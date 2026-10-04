@@ -39,8 +39,8 @@ import { apiCall, ApiError } from '@/api/client';
 import { renderChart, ensureThemeUpdates } from '@/charts/plotly-utils';
 import { closeDynamicModal } from '@/ui/modal';
 import { store } from '@/state/store';
-import { on, _resetEventBus } from '@/state/events';
-import { loadDebts } from '@/pages/debts';
+import { on, emit, _resetEventBus } from '@/state/events';
+import { initDebts, loadDebts } from '@/pages/debts';
 import type { LiabilityResponse } from '@/types/api';
 
 const apiCallMock = vi.mocked(apiCall);
@@ -245,7 +245,9 @@ describe('Debts page actions', () => {
     setup([debt({})]);
     await loadDebts();
     const seen = vi.fn();
-    on('accounts:changed', seen);
+    on('liabilities:changed', seen);
+    const legacy = vi.fn();
+    on('accounts:changed', legacy);
     buttonIn(card(), 'Update balance').click();
     const asOf = modal().querySelector<HTMLInputElement>('[data-debt-field="asOf"]')!;
     expect(asOf.value).toBe('2026-10-04');
@@ -257,13 +259,16 @@ describe('Debts page actions', () => {
     const post = calls('POST')[0]!;
     expect(post[0]).toBe('/api/liabilities/d1/balance');
     expect(post[1]?.body).toEqual({ balance: 1100.5, as_of: '2026-10-04' });
-    expect(seen).toHaveBeenCalled();
+    expect(seen).toHaveBeenCalledTimes(1);
+    expect(seen).toHaveBeenCalledWith({ type: 'liabilities:changed', reason: 'balance' });
+    expect(legacy).not.toHaveBeenCalled();
     expect(document.getElementById('dynamic-modal')).toBeNull();
     // The list was fetched again after the write.
     const listFetches = apiCallMock.mock.calls.filter(
       (c) => c[0] === '/api/liabilities?include_archived=true'
     );
-    expect(listFetches.length).toBeGreaterThanOrEqual(2);
+    // One initial load plus exactly one reload (the page ignores its own event).
+    expect(listFetches).toHaveLength(2);
   });
 
   it('refuses a future as-of date using the local clock', async () => {
@@ -355,5 +360,90 @@ describe('Debts page actions', () => {
     await loadDebts();
     buttonIn(card(), 'Edit').click();
     expect(modal().querySelector('h2')?.textContent).toBe('Edit debt');
+  });
+
+  it('reloads the list when a debt changes somewhere else', async () => {
+    initDebts();
+    setup([debt({})]);
+    await loadDebts();
+    const fetches = (): number =>
+      apiCallMock.mock.calls.filter((c) => c[0] === '/api/liabilities?include_archived=true')
+        .length;
+    const before = fetches();
+    emit({ type: 'liabilities:changed', reason: 'updated' });
+    await flush();
+    expect(fetches()).toBe(before + 1);
+  });
+
+  it('schedules from the first due date after today, matching the card payoff', async () => {
+    // Due today: today's payment is not part of the schedule (server rule).
+    setup([
+      debt({
+        current_balance: 300,
+        estimated_balance: 300,
+        payment_amount: 100,
+        interest_rate: 0,
+        next_payment_date: '2026-10-04',
+        payoff_date: '2027-01-04',
+      }),
+    ]);
+    await loadDebts();
+    buttonIn(card(), 'Details').click();
+    await flush();
+    const rows = Array.from(modal().querySelectorAll('.debt-year-row')).map(
+      (r) => r.firstElementChild!.textContent
+    );
+    expect(rows).toEqual(['Nov 4', 'Dec 4', 'Jan 4']);
+    expect(card().textContent).toContain('Jan 2027');
+  });
+
+  it('redraws the chart when the theme changes', async () => {
+    setup([debt({})]);
+    await loadDebts();
+    buttonIn(card(), 'Details').click();
+    await flush();
+    const before = vi.mocked(renderChart).mock.calls.length;
+    window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: 'dark' } }));
+    await flush();
+    expect(vi.mocked(renderChart).mock.calls.length).toBe(before + 1);
+  });
+
+  it('shows a friendly 409 from the relink flow and guards the button while in flight', async () => {
+    setup([debt({ expense_id: 'gone', expense_missing: true })]);
+    await loadDebts();
+    buttonIn(card(), 'Details').click();
+    await flush();
+    const base = apiCallMock.getMockImplementation()!;
+    let release: () => void = () => {};
+    apiCallMock.mockImplementation(async (url: string, opts?: { method?: string }) => {
+      if (opts?.method === 'PUT') {
+        await new Promise<void>((r) => (release = r));
+        throw new ApiError(409, 'raw server words');
+      }
+      return base(url, opts as never);
+    });
+    buttonIn(modal(), 'Choose another').click();
+    await flush();
+    const link = buttonIn(modal(), 'Link');
+    link.click();
+    await flush();
+    expect(link.disabled).toBe(true);
+    release();
+    await flush();
+    expect(link.disabled).toBe(false);
+    const msg = modal().querySelector('.debt-link-warning .debt-form-error')!.textContent!;
+    expect(msg).toContain('already linked');
+    expect(msg).not.toContain('raw server');
+  });
+
+  it('saves the balance dialog when Enter is pressed in a field', async () => {
+    setup([debt({})]);
+    await loadDebts();
+    buttonIn(card(), 'Update balance').click();
+    const bal = modal().querySelector<HTMLInputElement>('[data-debt-field="balance"]')!;
+    bal.value = '500';
+    bal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flush();
+    expect(calls('POST')[0]![0]).toBe('/api/liabilities/d1/balance');
   });
 });
