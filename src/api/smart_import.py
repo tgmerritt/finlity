@@ -26,10 +26,11 @@ import logging
 from typing import Annotated, Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 from starlette.concurrency import run_in_threadpool
 
 from src.api.dependencies import get_db
+from src.api.liabilities import CalendarDay
 from src.api.v2.smart_import import (
     CategorizeRequest,
     ExtractRequest,
@@ -67,6 +68,13 @@ router = APIRouter(
     route_class=SmartImportRoute,
 )
 
+# One route (design D9), so src/api/budget.py stays untouched.
+budget_router = APIRouter(
+    prefix="/api/budget",
+    tags=["smart-import"],
+    route_class=SmartImportRoute,
+)
+
 
 ACCOUNT_KINDS = Literal["checking", "savings", "credit_card", "loan", "unknown"]
 MAX_PREVIEW_STATEMENTS = 12
@@ -96,6 +104,94 @@ class PreviewStatement(_Strict):
 
 class PreviewRequest(_Strict):
     statements: list[PreviewStatement] = Field(max_length=MAX_PREVIEW_STATEMENTS)
+
+
+MAX_APPLY_STATEMENTS = 12
+MAX_APPLY_TRANSACTIONS = 10_000
+MAX_APPLY_RULES = 5_000
+MAX_APPLY_RECURRING = 500
+Money = Annotated[float, Field(strict=True, ge=-1e10, le=1e10, allow_inf_nan=False)]
+Frequency = Literal["weekly", "biweekly", "monthly", "quarterly", "annual"]
+
+
+class ApplyAccount(_Strict):
+    kind: ACCOUNT_KINDS
+    key: str = Field(min_length=1, max_length=200)
+    label: Optional[str] = Field(default=None, max_length=200)
+    last4: Optional[str] = Field(default=None, max_length=32)
+    institution: Optional[str] = Field(default=None, max_length=120)
+
+
+class ApplyPeriod(_Strict):
+    start: Optional[CalendarDay] = None
+    end: Optional[CalendarDay] = None
+
+
+class ApplyClosingBalance(_Strict):
+    amount: Money
+    as_of: CalendarDay
+
+
+class ApplyTransaction(_Strict):
+    posted_date: CalendarDay
+    amount: Money
+    description: str = Field(max_length=2000)
+    merchant_key: str = Field(min_length=1, max_length=400)
+    kind: Literal["expense", "income", "transfer", "payment", "refund", "fee", "interest"]
+    category_id: Optional[str] = Field(default=None, max_length=64)
+    category_source: Literal["user", "rule", "seed", "ai", "none"]
+    ai_confidence: Optional[float] = Field(default=None, ge=0, le=1, allow_inf_nan=False)
+    external_id: Optional[str] = Field(default=None, max_length=200)
+    dedupe_key: str = Field(min_length=1, max_length=400)
+    excluded: StrictBool = False
+
+
+class ApplyStatement(_Strict):
+    file_hash: str = Field(pattern=_HASH)
+    file_name: str = Field(max_length=1000)
+    origin: Literal["file", "sample", "connector"]
+    format: Literal["csv", "ofx", "pdf", "connector"]
+    parser: str = Field(min_length=1, max_length=64)
+    account: ApplyAccount
+    period: Optional[ApplyPeriod] = None
+    closing_balance: Optional[ApplyClosingBalance] = None
+    liability_id: Optional[str] = Field(default=None, max_length=64)
+    ai_used: StrictBool = False
+    ai_provider: Optional[str] = Field(default=None, max_length=64)
+    transactions: list[ApplyTransaction] = Field(max_length=MAX_APPLY_TRANSACTIONS)
+
+
+class ApplyRule(_Strict):
+    merchant_key: str = Field(min_length=1, max_length=400)
+    category_id: Optional[str] = Field(default=None, max_length=64)
+    kind: Optional[Literal["expense", "income", "transfer", "payment", "refund", "fee", "interest"]] = None
+    source: Literal["user", "import", "ai", "connector"] = "user"
+
+
+class ApplyRecurring(_Strict):
+    merchant_key: str = Field(min_length=1, max_length=400)
+    name: str = Field(min_length=1, max_length=120)
+    amount: float = Field(gt=0, le=1e10, allow_inf_nan=False)
+    frequency: Frequency
+    category_id: str = Field(min_length=1, max_length=64)
+    occurrences: int = Field(ge=1, le=10_000)
+    file_hash: str = Field(pattern=_HASH)
+    decision: Literal["create", "link", "reject"]
+    expense_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def _link_needs_an_expense(self) -> "ApplyRecurring":
+        if (self.decision == "link") != (self.expense_id is not None):
+            raise ValueError("expense_id goes with decision 'link' and only there")
+        return self
+
+
+class ApplyRequest(_Strict):
+    batch_id: str = Field(min_length=1, max_length=100)
+    entity_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    statements: list[ApplyStatement] = Field(max_length=MAX_APPLY_STATEMENTS)
+    rules: list[ApplyRule] = Field(default_factory=list, max_length=MAX_APPLY_RULES)
+    recurring: list[ApplyRecurring] = Field(default_factory=list, max_length=MAX_APPLY_RECURRING)
 
 
 # Built-in provider classes whose constructors take a client timeout.
@@ -224,9 +320,29 @@ def preview(body: PreviewRequest, db: Database = Depends(get_db)) -> dict[str, A
     return service.preview(db, [s.model_dump() for s in body.statements])
 
 
+@router.post("/apply")
+def apply_import(body: ApplyRequest, db: Database = Depends(get_db)) -> dict[str, Any]:
+    """Apply a reviewed batch in one transaction, ledgering everything it changes."""
+    check_demo_mode_write()
+    return service.apply_import(db, body.model_dump())
+
+
 @router.get("/imports")
 def list_imports(db: Database = Depends(get_db)) -> list[dict[str, Any]]:
     return service.list_imports(db)
+
+
+@router.delete("/imports/{import_id}")
+def undo_import(import_id: str, db: Database = Depends(get_db)) -> dict[str, Any]:
+    check_demo_mode_write()
+    return service.undo_import(db, import_id)
+
+
+@router.delete("/transactions")
+def delete_transactions(db: Database = Depends(get_db)) -> dict[str, Any]:
+    """Delete every stored transaction detail (imports, expenses, rules, snapshots stay)."""
+    check_demo_mode_write()
+    return service.delete_transactions(db)
 
 
 @router.get("/rules")
@@ -249,3 +365,13 @@ def get_settings(db: Database = Depends(get_db)) -> dict[str, Any]:
 def put_settings(body: SettingsUpdate, db: Database = Depends(get_db)) -> dict[str, Any]:
     check_demo_mode_write()
     return service.put_settings(db, body)
+
+
+@budget_router.get("/spending-summary")
+def spending_summary(
+    months: int = Query(default=3, ge=1, le=24),
+    entity_id: Optional[str] = Query(default=None, max_length=64),
+    db: Database = Depends(get_db),
+) -> dict[str, Any]:
+    """Planned versus actual monthly spending by category."""
+    return service.spending_summary(db, months, entity_id or None)
