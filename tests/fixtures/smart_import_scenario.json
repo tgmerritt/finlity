@@ -1653,6 +1653,143 @@
    }
   },
   {
+   "name": "apply with a string ai_confidence",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-6",
+    "statements": [
+     {
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-09-29",
+        "amount": -1,
+        "description": "X SYNTHETIC",
+        "merchant_key": "X",
+        "kind": "expense",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|X|2026-09-29|-1",
+        "excluded": false,
+        "ai_confidence": "0.5"
+       }
+      ]
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "apply with a string recurring amount",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-6",
+    "statements": [
+     {
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": []
+     }
+    ],
+    "rules": [],
+    "recurring": [
+     {
+      "merchant_key": "GYMCLUB",
+      "name": "Gym",
+      "amount": "45",
+      "frequency": "monthly",
+      "category_id": "cat-other",
+      "occurrences": 2,
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "decision": "create"
+     }
+    ]
+   }
+  },
+  {
+   "name": "apply with string occurrences",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-6",
+    "statements": [
+     {
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": []
+     }
+    ],
+    "rules": [],
+    "recurring": [
+     {
+      "merchant_key": "GYMCLUB",
+      "name": "Gym",
+      "amount": 45,
+      "frequency": "monthly",
+      "category_id": "cat-other",
+      "occurrences": "2",
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "decision": "create"
+     }
+    ]
+   }
+  },
+  {
    "name": "preview with a bad hash",
    "method": "POST",
    "path": "/api/smart-import/preview",

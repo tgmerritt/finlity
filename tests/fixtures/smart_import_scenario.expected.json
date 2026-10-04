@@ -1485,6 +1485,24 @@
     "detail": "The request could not be read.",
     "error": 422,
     "error_type": "bad_request",
+    "name": "apply with a string ai_confidence"
+  },
+  {
+    "detail": "The request could not be read.",
+    "error": 422,
+    "error_type": "bad_request",
+    "name": "apply with a string recurring amount"
+  },
+  {
+    "detail": "The request could not be read.",
+    "error": 422,
+    "error_type": "bad_request",
+    "name": "apply with string occurrences"
+  },
+  {
+    "detail": "The request could not be read.",
+    "error": 422,
+    "error_type": "bad_request",
     "name": "preview with a bad hash"
   },
   {

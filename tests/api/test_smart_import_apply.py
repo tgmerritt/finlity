@@ -564,6 +564,13 @@ def test_delete_transactions_only_removes_transactions(client, db):
     lambda b: b.update(rules=[{"merchant_key": "X", "source": "bogus"}]),
     lambda b: b.update(rules=[{"merchant_key": ""}]),
     lambda b: b["statements"][0].update(closing_balance={"amount": 1e12, "as_of": "2026-09-30"}),
+    # Strict like the browser parser: numbers must be JSON numbers, never strings or booleans.
+    lambda b: b["statements"][0]["transactions"][0].update(ai_confidence="0.5"),
+    lambda b: b["statements"][0]["transactions"][0].update(ai_confidence=True),
+    lambda b: b.update(recurring=[candidate("create", amount="15.49")]),
+    lambda b: b.update(recurring=[candidate("create", amount=True)]),
+    lambda b: b.update(recurring=[dict(candidate("create"), occurrences="3")]),
+    lambda b: b.update(recurring=[dict(candidate("create"), occurrences=2.5)]),
 ])
 def test_apply_rejects_bad_requests_with_a_fixed_body(client, db, mutate):
     body = apply_body([basic()])

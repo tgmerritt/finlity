@@ -140,7 +140,7 @@ class ApplyTransaction(_Strict):
     kind: Literal["expense", "income", "transfer", "payment", "refund", "fee", "interest"]
     category_id: Optional[str] = Field(default=None, max_length=64)
     category_source: Literal["user", "rule", "seed", "ai", "none"]
-    ai_confidence: Optional[float] = Field(default=None, ge=0, le=1, allow_inf_nan=False)
+    ai_confidence: Optional[float] = Field(default=None, strict=True, ge=0, le=1, allow_inf_nan=False)
     external_id: Optional[str] = Field(default=None, max_length=200)
     dedupe_key: str = Field(min_length=1, max_length=400)
     excluded: StrictBool = False
@@ -171,10 +171,10 @@ class ApplyRule(_Strict):
 class ApplyRecurring(_Strict):
     merchant_key: str = Field(min_length=1, max_length=400)
     name: str = Field(min_length=1, max_length=120)
-    amount: float = Field(gt=0, le=1e10, allow_inf_nan=False)
+    amount: float = Field(strict=True, gt=0, le=1e10, allow_inf_nan=False)
     frequency: Frequency
     category_id: str = Field(min_length=1, max_length=64)
-    occurrences: int = Field(ge=1, le=10_000)
+    occurrences: int = Field(strict=True, ge=1, le=10_000)
     file_hash: str = Field(pattern=_HASH)
     decision: Literal["create", "link", "reject"]
     expense_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
