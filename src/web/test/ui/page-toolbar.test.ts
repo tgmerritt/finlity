@@ -10,6 +10,7 @@ describe('toolbarStateFor', () => {
   const cases: [TabName, string, boolean, boolean][] = [
     ['dashboard', 'Dashboard', true, true],
     ['holdings', 'Holdings', true, true],
+    ['debts', 'Debts', false, true],
     ['analysis', 'Analysis', true, true],
     ['projections', 'Projections', true, true],
     ['budget', 'Expenses & Income', false, true],
@@ -36,6 +37,7 @@ describe('initPageToolbar', () => {
       <div class="tab-content" id="tab-budget"></div>
       <div class="tab-content" id="tab-holdings"></div>
       <div class="tab-content" id="tab-taxes"></div>
+      <div class="tab-content" id="tab-debts"></div>
     `;
     initPageToolbar();
   });
@@ -51,6 +53,13 @@ describe('initPageToolbar', () => {
     showTab('holdings');
     expect(document.getElementById('page-title')?.textContent).toBe('Holdings');
     expect(document.getElementById('page-toolbar')?.classList.contains('page-toolbar--no-filters')).toBe(false);
+  });
+
+  it('shows only the Person filter on the Debts tab', () => {
+    showTab('debts');
+    expect(document.getElementById('page-title')?.textContent).toBe('Debts');
+    expect(document.getElementById('view-block')?.classList.contains('filter--hidden')).toBe(true);
+    expect(document.getElementById('person-block')?.classList.contains('filter--hidden')).toBe(false);
   });
 
   it('shows only the Person filter on the cash flow tab', () => {

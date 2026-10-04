@@ -20,7 +20,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 WIDTHS = (1440, 900, 390, 360)
 THEMES = ("light", "dark")
-EXTRA_TABS = ("holdings", "projections", "settings", "taxes", "analysis", "budget")
+EXTRA_TABS = ("holdings", "debts", "projections", "settings", "taxes", "analysis", "budget")
 
 CHECKS_JS = """
 () => {
@@ -291,7 +291,7 @@ def main() -> int:
     parser.add_argument(
         "--tabs",
         default="dashboard",
-        help="Comma-separated tabs to check (dashboard, holdings, projections, "
+        help="Comma-separated tabs to check (dashboard, holdings, debts, projections, "
         "settings, taxes, analysis, budget). The dashboard checks always run; each extra tab is opened "
         "through its nav button and checked for overflow. Default: dashboard.",
     )

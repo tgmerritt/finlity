@@ -30,6 +30,7 @@ import { apiCall } from '@/api/client';
 import { updateHistoryChart, setHistoryRange } from '@/charts/allocation';
 
 // Pages
+import { initDebts } from '@/pages/debts';
 import {
   initDashboard,
   refreshData as refreshDashboardData,
@@ -510,6 +511,7 @@ async function init(): Promise<void> {
 
   // Initialize pages
   initDashboard();
+  initDebts();
   initHoldings();
   initAnalysis();
   initProjections();

@@ -95,6 +95,13 @@
                     </svg>
                     <span>Holdings</span>
                 </button>
+                <button class="nav-item" onclick="showTab('debts')" data-tab="debts">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                        <line x1="2" y1="10" x2="22" y2="10"></line>
+                    </svg>
+                    <span>Debts</span>
+                </button>
                 <button class="nav-item" onclick="showTab('analysis')" data-tab="analysis">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="20" x2="18" y2="10"></line>
@@ -418,6 +425,12 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Debts Tab -->
+            <div id="tab-debts" class="tab-content">
+                <div class="debts-summary" id="debts-summary"></div>
+                <div id="debts-list"></div>
             </div>
 
             <!-- Analysis Tab -->

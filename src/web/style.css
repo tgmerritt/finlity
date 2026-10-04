@@ -7961,3 +7961,137 @@ body.on-settings #tab-settings {
     overflow-x: hidden;
     overflow-x: clip;
 }
+
+/* Debts page */
+.debts-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.debts-summary:empty { display: none; }
+.debts-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px 20px;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+}
+.debts-stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+.debts-stat-value {
+    font-size: 22px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-primary);
+    overflow-wrap: anywhere;
+}
+.debt-group { margin-bottom: 24px; }
+.debt-group-head {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+}
+.debt-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+.debt-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    padding: 16px 20px;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-primary);
+}
+.debt-card:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.debt-card--highlight {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px var(--color-primary);
+}
+.debt-card--paid { opacity: 0.8; }
+.debt-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+}
+.debt-card-title { display: flex; flex-direction: column; min-width: 0; }
+.debt-card-name { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.debt-card-lender { font-size: 13px; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+.debt-card-balance {
+    font-size: 18px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.debt-card-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    margin: 0;
+}
+.debt-card-fact { display: flex; flex-direction: column; gap: 2px; }
+.debt-card-fact dt { font-size: 12px; color: var(--color-text-secondary); }
+.debt-card-fact dd { margin: 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.debt-progress {
+    height: 6px;
+    background: var(--color-border);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.debt-progress-fill {
+    display: block;
+    height: 100%;
+    background: var(--color-success);
+}
+.debt-progress-label { font-size: 12px; color: var(--color-text-secondary); }
+.debt-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.debt-card-actions:empty { display: none; }
+.debts-paid-off { margin-top: 8px; }
+.debts-paid-off summary {
+    cursor: pointer;
+    margin-bottom: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+.debts-empty {
+    max-width: 640px;
+    margin: 32px auto;
+    text-align: center;
+}
+.debts-empty .card-body { padding: 32px 24px; }
+.debts-empty h2 { margin: 0 0 8px; font-size: 22px; color: var(--color-text-primary); }
+.debts-empty p { margin: 0 0 24px; color: var(--color-text-secondary); line-height: 1.5; }
+
+@media (max-width: 1024px) {
+    .debt-cards { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+}
+
+@media (max-width: 768px) {
+    .debts-summary { grid-template-columns: 1fr; gap: 8px; }
+    .debts-stat { flex-direction: row; justify-content: space-between; align-items: baseline; }
+    .debt-cards { grid-template-columns: 1fr; }
+    .debt-card-actions .btn { min-height: 44px; }
+}
+
+@media (max-width: 480px) {
+    .debts-empty { margin: 16px auto; }
+    .debts-empty .btn { width: 100%; min-height: 44px; }
+    .debt-card { padding: 14px 16px; }
+}
