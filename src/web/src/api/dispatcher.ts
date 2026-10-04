@@ -375,7 +375,12 @@ export function matchPayloadRoute(
     if (route.method !== '*' && route.method !== method) continue;
     const match = req.path.match(route.pattern);
     if (!match) continue;
-    return route.handler(req, match);
+    const rewrite = route.handler(req, match);
+    // A caller's timeout (a long AI call, say) survives the rewrite unless the route set its own.
+    if (options.timeout !== undefined && rewrite.options.timeout === undefined) {
+      return { ...rewrite, options: { ...rewrite.options, timeout: options.timeout } };
+    }
+    return rewrite;
   }
 
   return NOT_HANDLED;

@@ -1042,7 +1042,12 @@ describe('smart import wizard', () => {
       line_count: 2,
       lines: ['07/01 RENT ***', '07/03 NETFLIX 15.49'],
     };
-    const aiOn = { pdf_ai_available: true, provider: 'Anthropic Claude', model: 'm' };
+    const aiOn = {
+      pdf_ai_available: true,
+      pdf_ai_enabled: true,
+      provider: 'Anthropic Claude',
+      model: 'm',
+    };
 
     it('shows the masked lines and "Send these 2 lines" when PDF AI is available', async () => {
       setup({ analyze: () => layout, ai: aiOn });
@@ -1109,6 +1114,97 @@ describe('smart import wizard', () => {
       q('[data-si="send-lines"]').click();
       await flush();
       expect(modal().textContent).toContain('turned off');
+    });
+
+    it('gives the extract call the AI timeout', async () => {
+      setup({ analyze: () => layout, ai: aiOn });
+      await open();
+      await toAccounts([csvFile('a.pdf')]);
+      q('[data-si="send-lines"]').click();
+      await flush();
+      const extract = calls.find((c) => c.url === '/api/smart-import/extract')!;
+      expect(extract.options).toMatchObject({ method: 'POST', timeout: 60_000 });
+    });
+
+    describe('server-mode consent', () => {
+      const aiAsk = { ...aiOn, pdf_ai_enabled: false };
+      afterEach(() => {
+        store.set('dataMode', 'server');
+      });
+
+      it('asks to turn PDF AI on, saves the setting, then sends', async () => {
+        setup({ analyze: () => layout, ai: aiAsk });
+        await open();
+        await toAccounts([csvFile('a.pdf')]);
+        const send = q<HTMLButtonElement>('[data-si="send-lines"]');
+        expect(send.textContent).toBe('Turn on and send these 2 lines');
+        expect(q('.smart-import-ai-card').textContent).toContain('turned off again in Settings');
+        send.click();
+        await flush();
+        const order = calls
+          .map((c) => `${c.options?.method ?? 'GET'} ${c.url}`)
+          .filter((c) => c.includes('/settings') || c.includes('/extract'));
+        expect(order).toEqual([
+          'PUT /api/smart-import/settings',
+          'POST /api/smart-import/extract',
+        ]);
+        const put = calls.find((c) => c.url === '/api/smart-import/settings')!;
+        expect(put.options!.body).toEqual({ pdf_ai_enabled: true });
+      });
+
+      it('sends nothing when the setting cannot be saved', async () => {
+        setup({
+          analyze: () => layout,
+          ai: aiAsk,
+          settingsPut: () => {
+            throw new ApiError(500, 'x');
+          },
+        });
+        await open();
+        await toAccounts([csvFile('a.pdf')]);
+        q('[data-si="send-lines"]').click();
+        await flush();
+        expect(calls.some((c) => c.url === '/api/smart-import/extract')).toBe(false);
+        expect(q('.smart-import-ai-card').textContent).toContain(
+          'The setting could not be saved, so nothing was sent.'
+        );
+        expect(q('[data-si="send-lines"]').textContent).toBe('Turn on and send these 2 lines');
+      });
+
+      it('does not ask again once the setting is saved', async () => {
+        setup({ analyze: () => layout, ai: aiAsk });
+        await open();
+        await toAccounts([csvFile('a.pdf')]);
+        q('[data-si="send-lines"]').click();
+        await flush();
+        // The default extract mock fails, so the card stays and can be sent again.
+        expect(q('[data-si="send-lines"]').textContent).toBe('Send these 2 lines');
+      });
+
+      it('asks again when the server says consent is off', async () => {
+        setup({ analyze: () => layout, ai: aiOn });
+        await open();
+        await toAccounts([csvFile('a.pdf')]);
+        apiCallMock.mockImplementation(async (url: string) => {
+          if (url === '/api/smart-import/extract')
+            throw new ApiError(403, 'x', { error_type: 'ai_not_enabled' });
+          return {};
+        });
+        q('[data-si="send-lines"]').click();
+        await flush();
+        expect(q('[data-si="send-lines"]').textContent).toBe('Turn on and send these 2 lines');
+      });
+
+      it('never asks in hosted mode, where the operator decides', async () => {
+        store.set('dataMode', 'local');
+        setup({ analyze: () => layout, ai: aiAsk });
+        await open();
+        await toAccounts([csvFile('a.pdf')]);
+        expect(q('[data-si="send-lines"]').textContent).toBe('Send these 2 lines');
+        q('[data-si="send-lines"]').click();
+        await flush();
+        expect(calls.some((c) => c.url === '/api/smart-import/settings')).toBe(false);
+      });
     });
 
     it('hides the send button and shows the CSV or OFX hint when PDF AI is off', async () => {
@@ -1203,7 +1299,7 @@ describe('smart import wizard', () => {
           line_count: 1,
           lines: ['07/01 RENT ***'],
         }),
-        ai: { pdf_ai_available: true, provider: 'P', model: 'm' },
+        ai: { pdf_ai_available: true, pdf_ai_enabled: true, provider: 'P', model: 'm' },
       });
       await open();
       await toAccounts([csvFile('a.pdf')]);

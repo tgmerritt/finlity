@@ -1258,6 +1258,11 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     return card;
   }
 
+  /** Server mode keeps a per-profile AI consent; hosted mode has none to ask for. */
+  const isHosted = (): boolean => store.get('dataMode') === 'local';
+  /** Server mode asks once for PDF AI; the answer is the profile's `pdf_ai_enabled`. */
+  const needsPdfConsent = (): boolean => !isHosted() && !ai.pdf_ai_enabled;
+
   function aiCard(f: WizardFile): HTMLElement {
     const card = el('section', 'smart-import-card smart-import-ai-card');
     card.dataset.file = f.id;
@@ -1290,8 +1295,23 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
         alert.setAttribute('role', 'alert');
         card.appendChild(alert);
       }
+      const ask = needsPdfConsent();
+      if (ask) {
+        card.appendChild(
+          el(
+            'p',
+            'smart-import-hint',
+            'AI for unreadable PDFs is off. Sending turns it on for this profile; it can be turned off again in Settings.'
+          )
+        );
+      }
+      const lineCount = `${f.lines.length} lines`;
       const send = button(
-        sending.has(f.id) ? 'Sending...' : `Send these ${f.lines.length} lines`,
+        sending.has(f.id)
+          ? 'Sending...'
+          : ask
+            ? `Turn on and send these ${lineCount}`
+            : `Send these ${lineCount}`,
         'btn btn-primary btn-sm',
         'send-lines'
       );
@@ -1314,6 +1334,34 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     sending.add(fileId);
     sendFailed.delete(fileId);
     renderAccountCards();
+    if (await savePdfConsent(fileId)) await extractLines(fileId);
+    sending.delete(fileId);
+    if (step === 2 && modal?.isConnected) {
+      renderAccountCards();
+      restoreFocus(focus);
+    }
+  }
+
+  /** Consent is saved first when asked; if that fails, nothing is sent. */
+  async function savePdfConsent(fileId: string): Promise<boolean> {
+    if (!needsPdfConsent()) return true;
+    try {
+      await apiCall('/api/smart-import/settings', {
+        method: 'PUT',
+        body: { pdf_ai_enabled: true },
+      });
+      ai = { ...ai, pdf_ai_enabled: true };
+      return true;
+    } catch (error) {
+      console.error('PDF AI consent save failed:', error instanceof Error ? error.name : 'error');
+      sendFailed.set(fileId, 'The setting could not be saved, so nothing was sent.');
+      return false;
+    }
+  }
+
+  async function extractLines(fileId: string): Promise<void> {
+    const f = fileOf(fileId);
+    if (!f || !ctx) return;
     try {
       const answer = await apiCall<AnalyzeResponse>('/api/smart-import/extract', {
         method: 'POST',
@@ -1327,6 +1375,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
           })),
           ...(f.options.account_kind ? { account_kind: f.options.account_kind } : {}),
         },
+        timeout: AI_TIMEOUT_MS,
       });
       if (!fileOf(fileId)) return;
       if (answer.status !== 'ok' || answer.statements.length === 0) {
@@ -1337,27 +1386,18 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
         await refreshPreview();
       }
     } catch (error) {
+      const status = error instanceof ApiError ? error.status : 0;
+      const type = error instanceof ApiError ? errorTypeOf(error.data) : undefined;
       console.error('PDF AI failed:', error instanceof Error ? error.name : 'error');
-      sendFailed.set(
-        fileId,
-        extractErrorText(
-          error instanceof ApiError ? error.status : 0,
-          error instanceof ApiError ? errorTypeOf(error.data) : undefined
-        )
-      );
-    } finally {
-      sending.delete(fileId);
-    }
-    if (step === 2 && modal?.isConnected) {
-      renderAccountCards();
-      restoreFocus(focus);
+      if (!isHosted() && (status === 403 || type === 'ai_not_enabled')) {
+        // Consent was withdrawn elsewhere: ask again next time.
+        ai = { ...ai, pdf_ai_enabled: false };
+      }
+      sendFailed.set(fileId, extractErrorText(status, type));
     }
   }
 
   // ---- step 3: categorize ------------------------------------------------
-
-  /** Server mode keeps a per-profile AI consent; hosted mode has none to ask for. */
-  const isHosted = (): boolean => store.get('dataMode') === 'local';
 
   let filter: RowFilter = 'all';
   /** The rows in view, fixed when the filter is chosen so an edit never makes a row jump away. */
