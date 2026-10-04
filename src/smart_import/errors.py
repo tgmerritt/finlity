@@ -38,6 +38,7 @@ ERROR_CATALOG: dict[str, tuple[int, str]] = {
     ),
     "rule_not_found": (404, "Rule not found."),
     "not_smart_import": (404, "This is not a smart import."),
+    "import_not_found": (404, "Import not found. It may have already been undone."),
     "category_not_found": (404, "Category not found."),
     "liability_not_found": (404, "Debt not found."),
     "expense_not_found": (404, "Expense not found."),

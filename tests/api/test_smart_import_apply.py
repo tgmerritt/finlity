@@ -215,9 +215,13 @@ def test_recurring_create_link_reject(client, db):
         key = ("created", "budget_expenses", created.id)
         assert key in ledger and ("linked", "budget_expenses", "E-exist") in ledger
         import json
-        assert json.loads(ledger[key].after_json) == {
-            "name": "Netflix", "amount": 15.49, "frequency": "monthly", "category_id": "cat-Dining",
-            "is_active": True}
+        after = json.loads(ledger[key].after_json)
+        assert set(after) == {"entity_id", "category_id", "name", "amount", "frequency", "is_pretax",
+                              "is_mortgage", "principal_portion", "interest_portion", "is_active",
+                              "start_date", "end_date", "updated_at"}
+        assert after["name"] == "Netflix" and after["amount"] == 15.49 and after["entity_id"] == "ent-1"
+        assert after["frequency"] == "monthly" and after["category_id"] == "cat-Dining"
+        assert after["is_active"] is True and after["updated_at"] == created.updated_at.isoformat()
         assert ledger[key].before_json is None and ledger[key].import_id == import_id
 
 
@@ -334,6 +338,44 @@ def test_no_balance_without_a_liability_or_a_closing_balance(client, db):
     assert count(db, LiabilityBalanceSnapshot) == 1
 
 
+def test_negative_closing_balance_never_reaches_a_liability(client, db):
+    add_liability(db, "L1", balance=500.0, as_of=date(2026, 9, 1))
+    out = do_apply(client, balance_body({"amount": -25.0, "as_of": "2026-09-30"})).json()
+    assert out["imports"][0]["balance"] == "none"
+    with db.get_session() as s:
+        assert s.query(LiabilityBalanceSnapshot).count() == 1
+        assert s.get(Liability, "L1").current_balance == 500.0
+        assert s.query(SmartImportMeta).one().closing_balance == -25.0
+        assert s.query(SmartImportLedger).count() == 0
+
+
+def test_link_needs_an_active_expense_in_the_same_entity_or_household(client, db):
+    add_expense(db, "E-inactive", "Old", 5.0, active=False)
+    add_expense(db, "E-other", "Theirs", 5.0, entity_id="ent-2")
+    add_expense(db, "E-mine", "Mine", 5.0, entity_id="ent-1")
+    add_expense(db, "E-house", "House", 5.0)
+    before = table_hashes(db)
+    for eid in ("E-inactive", "E-other"):
+        rec = candidate("link", expense_id=eid)
+        assert do_apply(client, apply_body([basic()], recurring=[rec], entity_id="ent-1")).status_code == 404
+    assert table_hashes(db) == before
+    rec = [candidate("link", "A", expense_id="E-mine"), candidate("link", "B", expense_id="E-house")]
+    assert do_apply(client, apply_body([basic()], recurring=rec, entity_id="ent-1")).json()["expenses_linked"] == 2
+
+
+def test_a_hash_with_a_new_later_statement_is_reported_only_in_imports(client, db):
+    two = [statement(HASH_A, [txn(D1, -1.0, dedupe="p1")]),
+           statement(HASH_A, [txn(D2, -2.0, dedupe="p2")], key="acct:two")]
+    assert len(do_apply(client, apply_body(two)).json()["imports"]) == 2
+    three = two + [statement(HASH_A, [txn(D3, -3.0, dedupe="p3")], key="acct:three")]
+    out = do_apply(client, apply_body(three, batch="b2")).json()
+    assert [i["file_hash"] for i in out["imports"]] == [HASH_A]
+    assert out["skipped_files"] == []
+    with db.get_session() as s:
+        assert sorted(r.content_hash for r in s.query(BankStatementImport)) == [
+            HASH_A, HASH_A + ":1", HASH_A + ":2"]
+
+
 def test_unknown_liability_is_refused(client, db):
     before = table_hashes(db)
     r = do_apply(client, balance_body({"amount": 1.0, "as_of": "2026-09-30"}))
@@ -355,7 +397,8 @@ def full_body():
         rules=[{"merchant_key": "NETFLIX", "kind": "expense"}], recurring=FULL_RECURRING)
 
 
-def test_failure_mid_apply_leaves_every_table_unchanged(client, db, monkeypatch):
+def test_failure_mid_apply_leaves_every_table_unchanged(client, db, monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG)
     add_liability(db, "L1")
     add_expense(db, "E1")
     before = table_hashes(db)
@@ -368,7 +411,30 @@ def test_failure_mid_apply_leaves_every_table_unchanged(client, db, monkeypatch)
     assert r.status_code == 500
     assert r.json() == {"error_type": "save_failed", "detail": "The change could not be saved."}
     assert "ZQXSECRET" not in r.text
+    assert "ZQXSECRET" not in "\n".join(x.getMessage() for x in caplog.records)
     assert table_hashes(db) == before
+
+
+def test_failure_after_the_balance_move_rolls_back_liability_and_snapshots(client, db, monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG)
+    add_liability(db, "L1", balance=500.0, as_of=date(2026, 9, 1))
+    before = table_hashes(db)
+    from src.smart_import import service
+    real = service._add_ledger
+
+    def boom_on_move(session, import_id, action, *a, **k):
+        if action == "balance_moved":
+            raise RuntimeError("leak ZQXSECRET")
+        return real(session, import_id, action, *a, **k)
+
+    monkeypatch.setattr(service, "_add_ledger", boom_on_move)
+    r = do_apply(client, balance_body({"amount": 321.5, "as_of": "2026-09-30"}))
+    assert r.status_code == 500 and "ZQXSECRET" not in r.text
+    assert "ZQXSECRET" not in "\n".join(x.getMessage() for x in caplog.records)
+    assert table_hashes(db) == before
+    with db.get_session() as s:
+        assert s.get(Liability, "L1").current_balance == 500.0
+        assert s.query(LiabilityBalanceSnapshot).count() == 1
 
 
 def test_failure_in_prune_leaves_every_table_unchanged(client, db, monkeypatch):
@@ -393,12 +459,12 @@ def set_retention(client, months):
     assert client.put("/api/smart-import/settings", json={"retention_months": months}).status_code == 200
 
 
-def seed_old(db, origin="file", import_id="old-imp"):
+def seed_old(db, origin="file", import_id="old-imp", days=(date(2022, 1, 5), date(2024, 10, 3), date(2024, 10, 4))):
     with db.get_session() as s:
         s.add(BankStatementImport(id=import_id, file_name="o.csv", content_hash=import_id, status="applied"))
         s.add(SmartImportMeta(import_id=import_id, batch_id="b0", origin=origin, format="csv", parser="csv",
                               account_kind="checking", account_key="acct:one"))
-        for n, day in enumerate([date(2022, 1, 5), date(2024, 10, 3), date(2024, 10, 4)]):
+        for n, day in enumerate(days):
             s.add(ImportTransaction(import_id=import_id, account_key="acct:one", posted_date=day, amount=-1.0,
                                     description="OLD", merchant_key="OLD", kind="expense",
                                     category_source="none", dedupe_key=f"{import_id}|{n}"))
@@ -438,11 +504,21 @@ def test_retention_zero_keeps_everything(client, db):
 
 def test_retention_cutoff_clamps_the_month_end(client, db, monkeypatch):
     monkeypatch.setattr("src.liabilities.clock.today", lambda: date(2026, 5, 31))
-    seed_old(db)
+    seed_old(db, days=(date(2025, 5, 30), date(2025, 5, 31)))
     set_retention(client, 12)
-    # one year back from 2026-05-31 is 2025-05-31; old rows are all earlier
-    assert do_apply(client, apply_body([statement(HASH_A, [txn(date(2026, 5, 1), -1.0)])])).json()["pruned"] == 3
-    set_retention(client, 36)
+    # one year back from 2026-05-31 is 2025-05-31: the 30th goes, the 31st stays
+    out = do_apply(client, apply_body([statement(HASH_A, [txn(date(2026, 5, 1), -1.0)])])).json()
+    assert out["pruned"] == 1
+    with db.get_session() as s:
+        assert [t.posted_date for t in s.query(ImportTransaction).filter_by(import_id="old-imp")] == [
+            date(2025, 5, 31)]
+
+
+def test_a_sample_statement_with_old_rows_is_not_pruned_by_its_own_apply(client, db):
+    st = statement(HASH_A, [txn(date(2020, 1, 5), -1.0, dedupe="o1"), txn(D1, -2.0, dedupe="o2")], origin="sample")
+    out = do_apply(client, apply_body([st])).json()
+    assert out["pruned"] == 0 and out["imports"][0]["txn_new"] == 2
+    assert count(db, ImportTransaction) == 2
 
 
 def test_delete_transactions_only_removes_transactions(client, db):
@@ -635,6 +711,29 @@ def test_spending_summary_coverage_from_transactions_when_period_unknown(client,
     body = client.get("/api/budget/spending-summary?months=3").json()
     assert body["months"] == ["2026-03", "2026-05"]
     assert lines(body)["Dining"]["actual_monthly"] == pytest.approx(15.0, abs=0.01)
+
+
+def test_coverage_needs_a_stored_transaction_in_the_month(client, db):
+    seed_spending(db)
+    assert client.get("/api/budget/spending-summary").json()["months"] == ["2026-07", "2026-08", "2026-09"]
+    with db.get_session() as s:  # a prune of the oldest rows
+        s.query(ImportTransaction).filter(ImportTransaction.posted_date < date(2026, 8, 1)).delete()
+        s.commit()
+    assert client.get("/api/budget/spending-summary").json()["months"] == ["2026-08", "2026-09"]
+    client.delete("/api/smart-import/transactions")
+    empty = client.get("/api/budget/spending-summary").json()
+    assert empty["months"] == [] and empty["months_covered"] == 0
+
+
+def test_coverage_after_a_real_prune(client, db):
+    seed_old(db, days=(date(2024, 1, 5), date(2026, 8, 5)))
+    with db.get_session() as s:
+        m = s.get(SmartImportMeta, "old-imp")
+        m.period_start, m.period_end = date(2024, 1, 1), date(2026, 8, 31)
+        s.commit()
+    assert "2024-01" in client.get("/api/budget/spending-summary?months=24").json()["months"]
+    do_apply(client, apply_body([basic()]))  # retention 24 months prunes January 2024
+    assert "2024-01" not in client.get("/api/budget/spending-summary?months=24").json()["months"]
 
 
 def test_spending_summary_empty(client):

@@ -18,10 +18,11 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Iterable, Optional, TypeVar
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, or_, select, update
 
 from src.database import Database
 from src.database.models import (
+    AppSettings,
     BankStatementImport,
     BudgetExpense,
     BudgetExpenseCategory,
@@ -32,12 +33,13 @@ from src.database.models import (
     RecurringCandidate,
     SmartImportLedger,
     SmartImportMeta,
+    generate_uuid,
 )
 from src.liabilities import clock
 from src.liabilities.service import _as_date
 
 from .errors import SmartImportError
-from .settings_store import SettingsUpdate, read_settings, write_settings
+from .settings_store import SETTINGS_KEY, SettingsUpdate, read_settings, sanitize, write_settings
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +154,19 @@ def _existing_dedupe_keys(session: Any, keys: list[str]) -> list[str]:
             ).scalars()
         )
     return sorted(found)
+
+
+def _existing_rows(session: Any, keys: list[str]) -> dict[str, tuple[str, str]]:
+    """dedupe_key -> (row id, owning import id) for stored rows with these keys."""
+    found: dict[str, tuple[str, str]] = {}
+    for chunk in _chunks(keys):
+        for key, row_id, import_id in session.execute(
+            select(ImportTransaction.dedupe_key, ImportTransaction.id, ImportTransaction.import_id).where(
+                ImportTransaction.dedupe_key.in_(chunk)
+            )
+        ):
+            found[key] = (row_id, import_id)
+    return found
 
 
 def _prior_files(session: Any, hashes: list[str]) -> list[dict[str, Any]]:
@@ -454,8 +469,15 @@ def _check_references(session: Any, request: dict[str, Any]) -> None:
     for rec in request["recurring"]:
         if rec["decision"] == "create" and rec["category_id"] not in categories:
             raise SmartImportError("category_not_found")
-        if rec["decision"] == "link" and session.get(BudgetExpense, rec["expense_id"]) is None:
-            raise SmartImportError("expense_not_found")
+        if rec["decision"] == "link":
+            expense = session.get(BudgetExpense, rec["expense_id"])
+            household = expense is not None and expense.entity_id is None
+            if (
+                expense is None
+                or not expense.is_active
+                or not (household or expense.entity_id == request.get("entity_id"))
+            ):
+                raise SmartImportError("expense_not_found")
     for st in request["statements"]:
         liability_id = st.get("liability_id")
         if liability_id and session.get(Liability, liability_id) is None:
@@ -463,7 +485,7 @@ def _check_references(session: Any, request: dict[str, Any]) -> None:
 
 
 def _insert_statement(
-    session: Any, st: dict[str, Any], content_hash: str, batch: dict[str, Any], seen_keys: set[str], now: datetime
+    session: Any, st: dict[str, Any], content_hash: str, batch: dict[str, Any], seen_keys: dict[str, tuple[str, str]], now: datetime
 ) -> dict[str, Any]:
     account = st["account"]
     period = st["period"] or {}
@@ -482,17 +504,25 @@ def _insert_statement(
     txs = st["transactions"]
     excluded = sum(1 for t in txs if t["excluded"])
     candidates = [t for t in txs if not t["excluded"]]
-    existing = set(_existing_dedupe_keys(session, list({t["dedupe_key"] for t in candidates})))
+    existing = _existing_rows(session, list({t["dedupe_key"] for t in candidates}))
     new = duplicate = 0
     for t in candidates:
         key = t["dedupe_key"]
-        if key in existing or key in seen_keys:
+        owner = existing.get(key) or seen_keys.get(key)
+        if owner is not None:
             duplicate += 1
+            if owner[1] != import_id:
+                # The row stays with its owner, but this import claims it, so Undo of
+                # the owner hands the row over instead of deleting it.
+                _add_ledger(session, import_id, "claimed", "import_transactions", owner[0], None,
+                            {"dedupe_key": key})
             continue
-        seen_keys.add(key)
+        row_id = generate_uuid()
+        seen_keys[key] = (row_id, import_id)
         new += 1
         session.add(
             ImportTransaction(
+                id=row_id,
                 import_id=import_id,
                 entity_id=batch["entity_id"],
                 account_key=account["key"],
@@ -591,16 +621,8 @@ def _apply_recurring(
             session.add(expense)
             session.flush()
             expense_id = expense.id
-            _add_ledger(
-                session, import_id, "created", "budget_expenses", expense_id, None,
-                {
-                    "name": rec["name"],
-                    "amount": rec["amount"],
-                    "frequency": rec["frequency"],
-                    "category_id": rec["category_id"],
-                    "is_active": True,
-                },
-            )
+            _add_ledger(session, import_id, "created", "budget_expenses", expense_id, None,
+                        _expense_state(expense))
             created += 1
         elif decision == "link":
             expense_id = rec["expense_id"]
@@ -630,8 +652,8 @@ def _record_balance(session: Any, imp: dict[str, Any], today: date, now: datetim
     st = imp["_statement"]
     closing = st["closing_balance"]
     liability_id = st["liability_id"]
-    if closing is None or not liability_id:
-        return "none"
+    if closing is None or not liability_id or closing["amount"] < 0:
+        return "none"  # a credit balance never reaches a debt (liabilities require balance >= 0)
     day = _as_date(closing["as_of"])
     if day > today:
         return "skipped_future"
@@ -671,13 +693,23 @@ def _record_balance(session: Any, imp: dict[str, Any], today: date, now: datetim
     return "recorded"
 
 
-def _apply(
-    session: Any, request: dict[str, Any], retention_months: int, today: date, now: datetime
-) -> dict[str, Any]:
+def _retention_months(session: Any) -> int:
+    """The profile's retention setting, read inside the apply transaction."""
+    row = session.query(AppSettings).filter_by(key=SETTINGS_KEY).first()
+    try:
+        stored = json.loads(row.value) if row is not None and row.value else None
+    except (TypeError, ValueError):
+        stored = None
+    return int(sanitize(stored)["retention_months"])
+
+
+def _apply(session: Any, request: dict[str, Any], today: date, now: datetime) -> dict[str, Any]:
+    """Rules, recurring candidates, balances and the prune only run when the batch
+    created at least one import; with none, every one of them is dropped (rules_saved 0)."""
     _check_references(session, request)
     batch = {"batch_id": request["batch_id"], "entity_id": request.get("entity_id")}
     indexes: dict[str, int] = {}
-    seen_keys: set[str] = set()
+    seen_keys: dict[str, tuple[str, str]] = {}
     skipped: list[str] = []
     imports: list[dict[str, Any]] = []
     for st in request["statements"]:
@@ -698,11 +730,13 @@ def _apply(
         created, linked = _apply_recurring(session, request["recurring"], imports, batch["entity_id"])
         for imp in imports:
             imp["balance"] = _record_balance(session, imp, today, now)
-        pruned = _prune(session, retention_months, today)
-    # Built before the commit, so a failure here still rolls everything back.
+        pruned = _prune(session, _retention_months(session), today)
+    # A hash whose later statement was new (its earlier statement already stored) is
+    # reported in imports only. Built before the commit, so a failure rolls everything back.
+    applied_hashes = {imp["file_hash"] for imp in imports}
     return {
         "imports": [{k: v for k, v in imp.items() if k != "_statement"} for imp in imports],
-        "skipped_files": skipped,
+        "skipped_files": [h for h in skipped if h not in applied_hashes],
         "rules_saved": rules_saved,
         "expenses_created": created,
         "expenses_linked": linked,
@@ -714,11 +748,10 @@ def _apply(
 def apply_import(db: Database, request: dict[str, Any]) -> dict[str, Any]:
     """Apply a reviewed batch in one transaction (design 9). Writes nothing on any failure."""
     today = clock.today()
-    retention = read_settings(db)["retention_months"]
     now = datetime.utcnow()
     with db.get_session() as session:
         try:
-            result = _apply(session, request, retention, today, now)
+            result = _apply(session, request, today, now)
             session.commit()
         except BaseException:
             session.rollback()
@@ -735,19 +768,35 @@ def apply_import(db: Database, request: dict[str, Any]) -> dict[str, Any]:
 
 # -------------------------------------------------------------------- undo
 
-_EXPENSE_FIELDS = ("name", "amount", "frequency", "category_id", "is_active")
+_EXPENSE_FIELDS = (
+    "entity_id", "category_id", "name", "amount", "frequency", "is_pretax", "is_mortgage",
+    "principal_portion", "interest_portion", "is_active", "start_date", "end_date", "updated_at",
+)
+
+
+def _expense_state(expense: BudgetExpense) -> dict[str, Any]:
+    """Every user-editable column plus updated_at, as stored in the ledger (dates as ISO text)."""
+    state: dict[str, Any] = {}
+    for field in _EXPENSE_FIELDS:
+        value = getattr(expense, field)
+        state[field] = value.isoformat() if isinstance(value, (date, datetime)) else value
+    return state
 
 
 def _expense_unchanged(expense: BudgetExpense, after: dict[str, Any]) -> bool:
-    for field in _EXPENSE_FIELDS:
-        now, was = getattr(expense, field), after.get(field)
-        if field == "amount":
-            if was is None or abs(float(now) - float(was)) > 1e-9:
+    """Any difference in a recorded field (updated_at included) means the user edited it."""
+    now = _expense_state(expense)
+    for field, was in after.items():
+        if field not in now:
+            continue
+        value = now[field]
+        if isinstance(value, float) or isinstance(was, float):
+            if value is None or was is None or abs(float(value) - float(was)) > 1e-9:
                 return False
-        elif field == "is_active":
-            if bool(now) != bool(was):
+        elif isinstance(value, bool) or isinstance(was, bool):
+            if bool(value) != bool(was):
                 return False
-        elif now != was:
+        elif value != was:
             return False
     return True
 
@@ -772,9 +821,55 @@ def _restore_liability_balance(
         row.updated_at = now
 
 
+def _hand_over_claimed_rows(session: Any, import_id: str) -> int:
+    """Rows this import owns that a later import claimed as duplicates move to the
+    newest claimer (and its counts move with them) instead of being deleted."""
+    owned = [row_id for (row_id,) in session.query(ImportTransaction.id).filter_by(import_id=import_id)]
+    claims: dict[str, str] = {}  # row id -> newest surviving claimer
+    for chunk in _chunks(owned):
+        rows = (
+            session.query(SmartImportLedger)
+            .filter(
+                SmartImportLedger.action == "claimed",
+                SmartImportLedger.target_id.in_(chunk),
+                SmartImportLedger.import_id != import_id,
+            )
+            .order_by(SmartImportLedger.created_at, SmartImportLedger.id)
+            .all()
+        )
+        for row in rows:
+            claims[row.target_id] = row.import_id  # ascending order, so the newest wins
+    by_claimer: dict[str, list[str]] = {}
+    for row_id, claimer in claims.items():
+        by_claimer.setdefault(claimer, []).append(row_id)
+    for claimer, ids in by_claimer.items():
+        for chunk in _chunks(ids):
+            session.execute(update(ImportTransaction).where(ImportTransaction.id.in_(chunk)).values(import_id=claimer))
+            session.execute(
+                delete(SmartImportLedger).where(
+                    SmartImportLedger.action == "claimed",
+                    SmartImportLedger.import_id == claimer,
+                    SmartImportLedger.target_id.in_(chunk),
+                )
+            )
+        meta = session.get(SmartImportMeta, claimer)
+        bsi = session.get(BankStatementImport, claimer)
+        if meta is not None:
+            meta.txn_new += len(ids)
+            meta.txn_duplicate = max(0, meta.txn_duplicate - len(ids))
+        if bsi is not None:
+            bsi.row_count = (bsi.row_count or 0) + len(ids)
+    session.flush()
+    return len(claims)
+
+
 def _undo(session: Any, import_id: str, now: datetime) -> dict[str, Any]:
     if session.get(SmartImportMeta, import_id) is None:
-        raise SmartImportError("not_smart_import")
+        # A plain statement import row is a legacy import; no row at all means unknown
+        # or already undone (Undo deletes the import row; nothing else records it).
+        if session.get(BankStatementImport, import_id) is not None:
+            raise SmartImportError("not_smart_import")
+        raise SmartImportError("import_not_found")
     ledger = (
         session.query(SmartImportLedger)
         .filter_by(import_id=import_id)
@@ -783,6 +878,7 @@ def _undo(session: Any, import_id: str, now: datetime) -> dict[str, Any]:
     )
     kept: list[dict[str, str]] = []
     deleted = {"transactions": 0, "recurring_candidates": 0, "expenses": 0, "snapshots": 0}
+    reassigned = _hand_over_claimed_rows(session, import_id)
     deleted["transactions"] = int(
         session.execute(delete(ImportTransaction).where(ImportTransaction.import_id == import_id)).rowcount or 0
     )
@@ -839,7 +935,7 @@ def _undo(session: Any, import_id: str, now: datetime) -> dict[str, Any]:
     session.execute(delete(SmartImportLedger).where(SmartImportLedger.import_id == import_id))
     session.execute(delete(SmartImportMeta).where(SmartImportMeta.import_id == import_id))
     session.execute(delete(BankStatementImport).where(BankStatementImport.id == import_id))
-    return {"undone": True, "deleted": deleted, "kept": kept}
+    return {"undone": True, "deleted": deleted, "reassigned": {"transactions": reassigned}, "kept": kept}
 
 
 @_guarded("undo", "save_failed")
@@ -864,9 +960,13 @@ def undo_import(db: Database, import_id: str) -> dict[str, Any]:
 def delete_transactions(db: Database) -> dict[str, Any]:
     """Delete every stored transaction detail. Imports, expenses, rules and snapshots stay."""
     with db.get_session() as session:
-        count = int(session.execute(delete(ImportTransaction)).rowcount or 0)
-        result = {"deleted": count}
-        session.commit()
+        try:
+            count = int(session.execute(delete(ImportTransaction)).rowcount or 0)
+            result = {"deleted": count}
+            session.commit()
+        except BaseException:
+            session.rollback()
+            raise
     logger.info("smart_import_transactions_deleted count=%d", count)
     return result
 
@@ -884,30 +984,35 @@ def _month_keys(start: date, end: date) -> Iterable[str]:
 
 
 def _covered_months(session: Any, entity_id: Optional[str]) -> set[str]:
-    """Months with statement coverage: a meta period overlaps them, or, for an
-    import without a period, it has a stored transaction in them."""
+    """Months with statement coverage. An import covers a month only while it still
+    stores a transaction in it (so a delete-all or a prune removes the coverage); with
+    a period, only months the period overlaps count."""
     query = session.query(SmartImportMeta).join(
         BankStatementImport, BankStatementImport.id == SmartImportMeta.import_id
     )
     if entity_id:
         query = query.filter(BankStatementImport.entity_id == entity_id)
-    covered: set[str] = set()
-    open_ended: list[str] = []
+    periods: dict[str, Optional[set[str]]] = {}
     for meta in query.all():
         start, end = _as_date(meta.period_start), _as_date(meta.period_end)
-        if start and end:
-            covered.update(_month_keys(start, end))
-        else:
-            open_ended.append(meta.import_id)
-    for chunk in _chunks(open_ended):
-        days = session.execute(
-            select(ImportTransaction.posted_date).where(ImportTransaction.import_id.in_(chunk)).distinct()
-        ).scalars()
-        covered.update(f"{d.year:04d}-{d.month:02d}" for d in days)
+        periods[meta.import_id] = set(_month_keys(start, end)) if start and end else None
+    covered: set[str] = set()
+    for chunk in _chunks(list(periods)):
+        for import_id, day in session.execute(
+            select(ImportTransaction.import_id, ImportTransaction.posted_date)
+            .where(ImportTransaction.import_id.in_(chunk))
+            .distinct()
+        ):
+            month = f"{day.year:04d}-{day.month:02d}"
+            allowed = periods[import_id]
+            if allowed is None or month in allowed:
+                covered.add(month)
     return covered
 
 
 def _planned_monthly(session: Any, entity_id: Optional[str]) -> dict[Optional[str], float]:
+    # Same as the Budget expenses list: every active expense counts (its start and end
+    # dates are not applied there either), one_time is 0 and an unknown frequency is monthly.
     query = session.query(BudgetExpense).filter(BudgetExpense.is_active.is_(True))
     if entity_id:
         query = query.filter(BudgetExpense.entity_id == entity_id)
