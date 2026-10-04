@@ -102,7 +102,12 @@ export function formatDate(
 ): string {
   if (!dateString) return '-';
   try {
-    const date = new Date(dateString);
+    // A bare 'YYYY-MM-DD' is a calendar day, not an instant: build it from its
+    // parts so it never shifts with the time zone (new Date() reads it as UTC).
+    const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString);
+    const date = day
+      ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]))
+      : new Date(dateString);
     return date.toLocaleDateString('en-US', options);
   } catch {
     return dateString;

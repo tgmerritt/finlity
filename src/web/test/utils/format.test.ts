@@ -140,6 +140,25 @@ describe('formatDate', () => {
     expect(result).toMatch(/1[45]/);
   });
 
+  it('shows a date-only value on its own day, in any time zone', () => {
+    const tz = process.env.TZ;
+    try {
+      for (const zone of ['America/Los_Angeles', 'Pacific/Auckland', 'UTC']) {
+        process.env.TZ = zone;
+        expect(formatDate('2026-07-01')).toBe('Jul 1, 2026');
+        expect(formatDate('2026-01-01')).toBe('Jan 1, 2026');
+        expect(formatDate('2026-12-31', { month: 'short', day: 'numeric' })).toBe('Dec 31');
+      }
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
+  });
+
+  it('keeps full timestamps as instants', () => {
+    expect(formatDate('2026-07-01T12:00:00Z', { timeZone: 'UTC', day: 'numeric' })).toBe('1');
+  });
+
   it('returns dash for null', () => {
     expect(formatDate(null)).toBe('-');
   });
