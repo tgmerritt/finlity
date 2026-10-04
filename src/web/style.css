@@ -8301,3 +8301,89 @@ body.on-settings #tab-settings {
     .debt-form-modal .modal-content,
     .debt-detail-modal .modal-content { width: 100%; margin: 0; }
 }
+
+/* Debt wizard: type step and detail steps */
+.debt-wizard-modal .modal-content {
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.debt-wizard-modal .modal-body { min-height: 0; overflow-y: auto; }
+.debt-wizard-progress { margin: 0 0 4px; font-size: 13px; color: var(--color-text-secondary); }
+.debt-wizard-heading { margin: 0 0 16px; font-size: 18px; color: var(--color-text-primary); }
+.debt-wizard-heading:focus { outline: none; }
+.debt-wizard-types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.debt-wizard-type {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 60px;
+    padding: 10px 14px;
+    text-align: left;
+    font: inherit;
+    color: var(--color-text-primary);
+    background: var(--color-bg-container);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    cursor: pointer;
+}
+.debt-wizard-type:hover { border-color: var(--color-primary); }
+.debt-wizard-type[aria-checked='true'] {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
+}
+.debt-wizard-type-icon { font-size: 24px; flex: none; }
+.debt-wizard-type-text { display: flex; flex-direction: column; min-width: 0; }
+.debt-wizard-type-name { font-weight: 600; }
+.debt-wizard-type-hint { font-size: 12px; color: var(--color-text-secondary); }
+.debt-wizard-home { margin: 0 0 16px; padding: 0; border: 0; min-width: 0; }
+.debt-wizard-legend { padding: 0; margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--color-text-primary); }
+.debt-wizard-choice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 40px;
+    color: var(--color-text-primary);
+    cursor: pointer;
+}
+.debt-wizard-choice input { width: 18px; height: 18px; flex: none; margin: 0; }
+.debt-wizard-home .debt-form-grid,
+.debt-wizard-home > .form-group { margin-top: 12px; }
+.debt-wizard-footer {
+    flex: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 24px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-bg-elevated);
+}
+.debt-wizard-confirm-text { margin: 0; flex: 1 1 auto; font-size: 14px; color: var(--color-text-primary); }
+.debt-wizard-footer .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+@media (max-width: 768px) {
+    .debt-wizard-modal.modal-sheet { padding: 0; align-items: stretch; }
+    .debt-wizard-modal.modal-sheet .modal-content {
+        width: 100%;
+        max-width: none;
+        height: 100%;
+        max-height: 100dvh;
+        margin: 0;
+        border-radius: 0;
+        padding: 0;
+    }
+    .debt-wizard-modal.modal-sheet .modal-header { padding: 12px 16px; }
+    .debt-wizard-modal.modal-sheet .modal-body { flex: 1 1 auto; padding: 16px; }
+    .debt-wizard-footer { padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+    .debt-wizard-footer .btn { min-height: 44px; flex: 1 1 0; }
+    .debt-wizard-footer.debt-wizard-confirm { flex-wrap: wrap; }
+    .debt-wizard-confirm-text { flex-basis: 100%; }
+    .debt-wizard-choice { min-height: 44px; }
+    .debt-wizard-modal .modal-close { min-width: 44px; min-height: 44px; }
+}
+
+@media (max-width: 480px) {
+    .debt-wizard-types { grid-template-columns: 1fr; }
+}

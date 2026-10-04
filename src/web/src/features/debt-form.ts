@@ -83,7 +83,8 @@ function nextDueForForm(d: LiabilityResponse): string {
 export function computedPayment(draft: DebtDraft): number | null {
   if (draft.paymentAmount.trim() !== '') return null;
   if (!fieldsFor(draft.liabilityType).some((f) => f.key === 'termMonths')) return null;
-  const { values } = validateDraft(draft);
+  // The name does not affect the payment: show the figure before it is typed.
+  const { values } = validateDraft(draft.name.trim() ? draft : { ...draft, name: 'x' });
   if (!values || values.termMonths === null || values.currentBalance <= 0) return null;
   const perYear = periodsPerYear(draft.paymentFrequency);
   const periods = Math.max(1, Math.round((values.termMonths / 12) * perYear));
