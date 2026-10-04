@@ -57,7 +57,7 @@ export class SmartImportHttpError extends LocalHttpError {
   readonly errorType: string;
   constructor(errorType: string) {
     const [status, detail] = CATALOG[errorType] ?? [500, 'Something went wrong.'];
-    super(status, detail);
+    super(status, detail, { error_type: errorType, detail });
     this.errorType = errorType;
   }
   body(): { error_type: string; detail: string } {

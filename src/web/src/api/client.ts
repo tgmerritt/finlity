@@ -121,7 +121,7 @@ export async function apiCall<T>(endpoint: string, options: ApiCallOptions = {})
         throw new ApiError(400, error.message);
       }
       if (error instanceof LocalHttpError) {
-        throw new ApiError(error.status, error.message);
+        throw new ApiError(error.status, error.message, error.data);
       }
       throw error;
     }

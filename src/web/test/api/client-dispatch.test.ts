@@ -130,4 +130,34 @@ describe('apiCall dataMode dispatch', () => {
       expect(global.fetch).not.toHaveBeenCalled();
     });
   });
+  describe('local mode: smart import errors', () => {
+    it('keeps error_type in ApiError.data, like the server body', async () => {
+      store.set('dataMode', 'local');
+      const err = await apiCall('/api/smart-import/rules/nope', { method: 'DELETE' }).catch(
+        (e: unknown) => e
+      );
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).status).toBe(404);
+      expect((err as ApiError).message).toBe('Rule not found.');
+      expect((err as ApiError).data).toEqual({
+        error_type: 'rule_not_found',
+        detail: 'Rule not found.',
+      });
+      const bad = await apiCall('/api/smart-import/settings', {
+        method: 'PUT',
+        body: { retention_months: 13 },
+      }).catch((e: unknown) => e);
+      expect((bad as ApiError).data).toEqual({
+        error_type: 'bad_request',
+        detail: 'The request could not be read.',
+      });
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('leaves data undefined for other local errors', async () => {
+      store.set('dataMode', 'local');
+      const err = await apiCall('/api/liabilities/nope').catch((e: unknown) => e);
+      expect((err as ApiError).data).toBeUndefined();
+    });
+  });
 });
