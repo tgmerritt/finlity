@@ -1735,6 +1735,10 @@ export function initSettings(): void {
       loadMarketAssumptions();
       loadMonteCarloSettings();
       void loadSmartImportSettings();
+      void import('@/features/connections').then(
+        (m) => m.loadConnectionsSettings(),
+        () => undefined
+      );
       loadPlugins();
       loadInstalledPlugins();
       loadPluginSecurity();

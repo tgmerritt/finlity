@@ -123,6 +123,14 @@ export function own<T>(target: Record<string, T>, key: string): T | undefined {
 
 /** A canonical lowercase UUID, the only id form the store keeps. */
 export const isConnectionId = (v: unknown): v is string => typeof v === 'string' && UUID.test(v);
+export const MAX_LIABILITY_ID_CHARS = 64;
+/**
+ * store._is_liability_id: 1 to 64 characters, no control characters. Not only
+ * UUIDs: smart import Apply links any existing debt, and the demo's debts have
+ * ids such as `demo-card`.
+ */
+export const isLiabilityId = (v: unknown): v is string =>
+  typeof v === 'string' && v !== '' && chars(v) <= MAX_LIABILITY_ID_CHARS && !CONTROL.test(v);
 
 /** Code point order, which is Python's str order. */
 export function cmp(a: string, b: string): number {
@@ -237,7 +245,7 @@ function cleanAccount(raw: unknown): StoredAccount | null {
     !member(role, ROLES) ||
     label === null ||
     !(typeof accountKey === 'string' && CONNECTOR_ACCOUNT_KEY.test(accountKey)) ||
-    !(liabilityId === null || isConnectionId(liabilityId)) ||
+    !(liabilityId === null || isLiabilityId(liabilityId)) ||
     !(sameAsKey === null || (typeof sameAsKey === 'string' && ANY_ACCOUNT_KEY.test(sameAsKey)))
   ) {
     return null;
@@ -431,8 +439,8 @@ export function importedAccountKeys(db: ClientDatabase): Set<string> {
   );
 }
 
-/** store.liability_exists: the store keeps UUIDs only, so any other id is missing. */
+/** store.liability_exists: an id the store could not keep (isLiabilityId) is missing. */
 export function liabilityExists(db: ClientDatabase, liabilityId: string): boolean {
-  if (!isConnectionId(liabilityId)) return false;
+  if (!isLiabilityId(liabilityId)) return false;
   return db.query('SELECT 1 FROM liabilities WHERE id = ?', [liabilityId]).length > 0;
 }

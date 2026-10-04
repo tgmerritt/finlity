@@ -46,7 +46,7 @@ export default defineConfig({
           // which share the import render helpers: grouped, the helpers landed in the
           // wizard chunk and opening Budget loaded the whole wizard.
           if (
-            /\/src\/web\/src\/(features\/smart-import|pages\/budget-smart-import|utils\/smart-import-(render|state))/.test(
+            /\/src\/web\/src\/(features\/smart-import|pages\/budget-smart-import|utils\/smart-import-(render|state)|utils\/connections-)/.test(
               id
             )
           ) {
