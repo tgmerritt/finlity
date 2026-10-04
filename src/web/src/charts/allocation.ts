@@ -43,6 +43,15 @@ function showEmptyState(container: HTMLElement, message: string): void {
   });
 }
 
+let netWorthMode = false;
+
+/** Net-worth mode plots Net worth, Assets and Debts instead of Total, Retirement and Taxable. */
+export function setHistoryMode(netWorth: boolean): void {
+  netWorthMode = netWorth;
+}
+
+type Trace = Parameters<typeof renderChart>[1][number];
+
 /** Called with the filtered history and range key the chart is rendered for. */
 export type RangeListener = (filtered: SnapshotHistory[], key: RangeKey) => void;
 
@@ -88,40 +97,53 @@ export async function updateHistoryChart(
 
   const dates = filteredHistory.map((h) => h.date);
   const totals = filteredHistory.map((h) => h.total);
-  const retirement = filteredHistory.map((h) => h.retirement);
-  const taxable = filteredHistory.map((h) => h.taxable);
 
   // Scrub any prior state-view before Plotly renders.
   if (container) clearStateView(container);
 
+  const line = (name: string, y: number[], color: string, width: number): Trace => ({
+    x: dates,
+    y,
+    type: 'scatter',
+    mode: 'lines',
+    name,
+    line: { color, width },
+  });
+  const traces: Trace[] = netWorthMode
+    ? [
+        line(
+          'Net worth',
+          filteredHistory.map((h) => h.net_worth ?? h.total - (h.liabilities ?? 0)),
+          chartPalette.blue,
+          2
+        ),
+        line('Assets', totals, chartPalette.green, 1),
+        line(
+          'Debts',
+          filteredHistory.map((h) => h.liabilities ?? 0),
+          chartPalette.red,
+          1
+        ),
+      ]
+    : [
+        line('Total', totals, chartPalette.blue, 2),
+        line(
+          'Retirement',
+          filteredHistory.map((h) => h.retirement),
+          chartPalette.green,
+          1
+        ),
+        line(
+          'Taxable',
+          filteredHistory.map((h) => h.taxable),
+          chartPalette.orange,
+          1
+        ),
+      ];
+
   await renderChart(
     'chart-history',
-    [
-      {
-        x: dates,
-        y: totals,
-        type: 'scatter',
-        mode: 'lines',
-        name: 'Total',
-        line: { color: chartPalette.blue, width: 2 },
-      },
-      {
-        x: dates,
-        y: retirement,
-        type: 'scatter',
-        mode: 'lines',
-        name: 'Retirement',
-        line: { color: chartPalette.green, width: 1 },
-      },
-      {
-        x: dates,
-        y: taxable,
-        type: 'scatter',
-        mode: 'lines',
-        name: 'Taxable',
-        line: { color: chartPalette.orange, width: 1 },
-      },
-    ],
+    traces,
     {
       ...getBaseLayout(),
       margin: { t: 20, b: 40, l: 70, r: 20 },

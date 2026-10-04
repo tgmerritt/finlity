@@ -139,9 +139,9 @@ export function switchType(draft: DebtDraft, type: LiabilityType): DebtDraft {
   const shown = new Set<string>(fieldsFor(type).map((x) => x.key));
   const blank = defaultsFor(type);
   const next: DebtDraft = { ...draft, liabilityType: type };
-  for (const key of Object.keys(blank) as (keyof DebtDraft)[]) {
-    if (key !== 'liabilityType' && !shown.has(key) && key !== 'linkedPositionId') {
-      (next[key] as string) = blank[key] as string;
+  for (const key of Object.keys(blank)) {
+    if (key !== 'liabilityType' && key !== 'linkedPositionId' && !shown.has(key)) {
+      Object.assign(next, { [key]: blank[key as DebtFieldKey] });
     }
   }
   if (shown.has('termMonths') && draft.termMonths === (DEFAULT_TERM[draft.liabilityType] ?? '')) {

@@ -25,7 +25,13 @@ import { goToSection } from '@/ui/settings-sections';
 import { onTabChange, showTab } from '@/ui/tabs';
 import { store } from '@/state/store';
 import { initDashboard, renderDashboard, resetDashboardRenderState } from '@/pages/dashboard';
-import type { AccountResponse, DashboardData, DashboardPosition } from '@/types/api';
+import { on } from '@/state/events';
+import type {
+  AccountResponse,
+  DashboardData,
+  DashboardLiability,
+  DashboardPosition,
+} from '@/types/api';
 
 const apiCallMock = vi.mocked(apiCall);
 const showTabMock = vi.mocked(showTab);
@@ -33,7 +39,9 @@ const onTabChangeMock = vi.mocked(onTabChange);
 
 const MARKUP = `
   <section id="dash-hero">
+    <div class="dash-hero-label">Portfolio value</div>
     <div id="total-value"></div>
+    <div id="hero-breakdown" hidden></div>
     <span id="day-change"></span>
     <span id="range-change"></span>
     <span id="total-gain"></span>
@@ -51,6 +59,7 @@ const MARKUP = `
     <input type="checkbox" value="Brokerage" checked />
   </div>
   <form id="projection-form"></form>
+  <div id="tab-debts"></div>
 `;
 
 function account(id: string, name: string, value: number, retirement: boolean): AccountResponse {
@@ -390,5 +399,211 @@ describe('renderDashboard', () => {
     expect(document.getElementById('account-groups')!.textContent).toBe(
       'No accounts match this view.'
     );
+  });
+});
+
+function withDebts(): DashboardData {
+  const data = fixture();
+  const mortgage: DashboardLiability = {
+    id: 'l1',
+    name: 'Mortgage',
+    liability_type: 'mortgage',
+    balance: 2000,
+    interest_rate: 0.0625,
+    payment_amount: 100,
+    payment_frequency: 'monthly',
+    payoff_date: '2052-07-01',
+    linked_position_id: null,
+    entity_id: null,
+    is_amortizing: true,
+    last_reported_date: '2026-09-30',
+  };
+  data.summary = {
+    ...data.summary,
+    liabilities_included: true,
+    liabilities_total: 2000,
+    net_worth: 6800,
+    liabilities: [mortgage],
+  };
+  data.history = data.history.map((h) => ({ ...h, liabilities: 2000, net_worth: h.total - 2000 }));
+  return data;
+}
+
+describe('net worth mode', () => {
+  it('shows Net worth, the assets and debts breakdown and today as an assets move', async () => {
+    stubApi();
+    await renderDashboard(withDebts());
+
+    expect(document.querySelector('.dash-hero-label')!.textContent).toBe('Net worth');
+    expect(text('total-value')).toBe('$6,800.00');
+    const breakdown = document.getElementById('hero-breakdown')!;
+    expect(breakdown.hidden).toBe(false);
+    expect(breakdown.textContent).toBe('Assets $8,800.00 \u00b7 Debts $2,000.00');
+    expect(text('day-change')).toContain('today');
+    expect(text('range-change')).toContain('over 1Y');
+    expect(text('total-gain')).toBe('Total gain +$800.00');
+  });
+
+  it('shows a negative net worth with an ASCII minus and the negative color', async () => {
+    stubApi();
+    const data = withDebts();
+    data.summary.net_worth = -1200;
+    data.summary.liabilities_total = 10_000;
+    await renderDashboard(data);
+    expect(text('total-value')).toBe('-$1,200.00');
+    expect(document.getElementById('total-value')!.classList.contains('negative')).toBe(true);
+  });
+
+  it('is identical to the portfolio hero without liabilities, and in a filtered view', async () => {
+    stubApi();
+    await renderDashboard(fixture());
+    expect(document.querySelector('.dash-hero-label')!.textContent).toBe('Portfolio value');
+    expect(document.getElementById('hero-breakdown')!.hidden).toBe(true);
+    expect(document.getElementById('hero-breakdown')!.textContent).toBe('');
+    expect(text('total-value')).toBe('$8,800.00');
+
+    const filtered = withDebts();
+    filtered.summary.liabilities_included = false;
+    await renderDashboard(filtered);
+    expect(document.querySelector('.dash-hero-label')!.textContent).toBe('Portfolio value');
+    expect(document.getElementById('hero-breakdown')!.hidden).toBe(true);
+    expect(document.getElementById('account-groups')!.textContent).not.toContain('Liabilities');
+  });
+
+  it('puts the property group and then a Liabilities group with a Net worth row in Accounts', async () => {
+    stubApi();
+    const data = withDebts();
+    data.summary.accounts = [
+      ...data.summary.accounts!,
+      { ...account('a3', 'Home', 5000, false), account_type: 'property' } as AccountResponse,
+    ];
+    data.positions = [
+      ...data.positions,
+      {
+        ...position('4', 'HOME', 'My Home', 'Home', 1, 5000, null),
+        account_type: 'property',
+        position_type: 'real_estate',
+      },
+    ];
+    await renderDashboard(data);
+
+    const heads = [...document.querySelectorAll('#account-groups .account-group-head')].map(
+      (el) => el.textContent
+    );
+    expect(heads.map((t) => t!.replace(/-?\$.*/, '').trim())).toEqual([
+      'Retirement',
+      'Taxable',
+      'Property',
+      'Liabilities',
+    ]);
+    const groups = document.querySelectorAll('#account-groups .account-group');
+    const liab = groups[groups.length - 1]!;
+    expect(liab.querySelector('.account-group-head')!.textContent).toContain('-$2,000.00');
+    const row = liab.querySelector('.account-row')!;
+    expect(row.textContent).toContain('Mortgage');
+    expect(row.textContent).toContain('-$2,000.00');
+    expect(row.textContent).toContain('6.25% \u00b7 paid off Jul 2052');
+    const foot = liab.querySelector('.account-group-foot')!;
+    expect(foot.textContent).toBe('Net worth$6,800.00');
+  });
+
+  it('opens the Debts page on the clicked liability', async () => {
+    stubApi();
+    const seen: string[] = [];
+    const off = on('debts:open', (e) => seen.push(e.id));
+    await renderDashboard(withDebts());
+    const rows = document.querySelectorAll<HTMLButtonElement>('#account-groups .account-row');
+    rows[rows.length - 1]!.click();
+    expect(showTabMock).toHaveBeenCalledWith('debts');
+    expect(seen).toEqual(['l1']);
+    off();
+  });
+});
+
+describe('debt attention items', () => {
+  const noDebts = (): DashboardData => {
+    const data = fixture();
+    data.summary = { ...data.summary, liabilities_included: true, liabilities: [] };
+    return data;
+  };
+  const items = (): string[] =>
+    [...document.querySelectorAll('#attention-list .attention-message')].map(
+      (el) => el.textContent ?? ''
+    );
+
+  const saved = new Map<string, string>();
+  beforeEach(() => {
+    saved.clear();
+    vi.mocked(localStorage.getItem).mockImplementation((k: string) => saved.get(k) ?? null);
+    vi.mocked(localStorage.setItem).mockImplementation((k: string, v: string) => {
+      saved.set(k, v);
+    });
+  });
+
+  it('asks for debts, routes Add debts to the Debts page and persists I have none', async () => {
+    stubApi();
+    await renderDashboard(noDebts());
+    expect(items()).toEqual(['Add your debts to see your net worth']);
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('#attention-list button')];
+    expect(buttons.map((b) => b.textContent)).toEqual(['Add debts', 'I have none']);
+
+    buttons[0]!.click();
+    expect(showTabMock).toHaveBeenCalledWith('debts');
+
+    buttons[1]!.click();
+    expect(document.getElementById('attention-list')!.textContent).toBe('All clear');
+    expect(saved.get('finlity:attention-dismissed')).toContain('add-debts');
+
+    await renderDashboard(noDebts());
+    expect(items()).toEqual([]);
+    expect(document.getElementById('attention-list')!.textContent).toBe('All clear');
+  });
+
+  it('still dismisses for the session when localStorage throws', async () => {
+    stubApi();
+    vi.mocked(localStorage.getItem).mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    vi.mocked(localStorage.setItem).mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    await renderDashboard(noDebts());
+    document.querySelectorAll<HTMLButtonElement>('#attention-list button')[1]!.click();
+    await renderDashboard(noDebts());
+    expect(items()).toEqual([]);
+  });
+
+  it('offers the property and stale balance actions', async () => {
+    stubApi();
+    const data = withDebts();
+    data.positions = [
+      ...data.positions,
+      {
+        ...position('4', 'HOME', 'Cabin', 'Brokerage', 1, 5000, null),
+        position_type: 'real_estate',
+      },
+    ];
+    data.summary.liabilities = [
+      {
+        ...data.summary.liabilities![0]!,
+        id: 'c1',
+        name: 'Chase Sapphire',
+        liability_type: 'credit_card',
+        is_amortizing: false,
+        last_reported_date: '2020-01-01',
+      },
+    ];
+    await renderDashboard(data);
+    expect(items()).toEqual(['Is Cabin financed?', 'Update the Chase Sapphire balance']);
+    const seen: string[] = [];
+    const off = on('debts:open', (e) => seen.push(e.id));
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('#attention-list button')];
+    expect(buttons.map((b) => b.textContent)).toEqual(['Review', 'Not financed', 'Update']);
+    buttons[0]!.click();
+    expect(showTabMock).toHaveBeenCalledWith('holdings');
+    buttons[2]!.click();
+    expect(showTabMock).toHaveBeenCalledWith('debts');
+    expect(seen).toEqual(['c1']);
+    off();
   });
 });

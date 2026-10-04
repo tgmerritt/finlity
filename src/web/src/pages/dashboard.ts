@@ -13,20 +13,25 @@ import { goToSection } from '@/ui/settings-sections';
 import { withSubmitGuard } from '@/ui/with-submit-guard';
 import { closeModal, showConfirmDialog, createDynamicModal } from '@/ui/modal';
 import { formatCurrency } from '@/utils/format';
+import { liabilityGroup } from '@/utils/liabilities';
 import {
   allocationVsTarget,
   attentionItems,
   defaultRange,
   groupAccounts,
   hasTargets,
-  historyChange,
-  portfolioDayChange,
+  heroModel,
   type AttentionItem,
   type Change,
   type RangeKey,
   type TriggeredAlert,
 } from '@/utils/portfolio-metrics';
-import { applyHistoryRange, setHistoryRange, updateHistoryChart } from '@/charts/allocation';
+import {
+  applyHistoryRange,
+  setHistoryMode,
+  setHistoryRange,
+  updateHistoryChart,
+} from '@/charts/allocation';
 import { loadWidgets } from '@/features/plugins';
 import {
   showAddPositionModal,
@@ -39,7 +44,12 @@ import {
   startTour,
   updateDemoModeUI,
 } from '@/features/onboarding';
-import type { DashboardData, DashboardPosition, SnapshotHistory } from '@/types/api';
+import type {
+  DashboardData,
+  DashboardPosition,
+  PortfolioSummary,
+  SnapshotHistory,
+} from '@/types/api';
 
 /**
  * Duplicate position data.
@@ -323,6 +333,8 @@ export function resetDashboardRenderState(): void {
   historyRangeInitialized = false;
   renderGeneration = 0;
   dashboardRendered = false;
+  lastData = null;
+  dismissedInSession.clear();
 }
 
 /** Subset of GET /api/portfolio/dashboard-metrics the On track card reads. */
@@ -377,16 +389,33 @@ function rangeSuffix(key: RangeKey): string {
   return `over ${key}`;
 }
 
+/** The payload the dashboard last rendered; range buttons re-derive the range change from it. */
+let lastData: DashboardData | null = null;
+
 /** Update #range-change for a filtered history and the range it was filtered for. */
 function renderRangeChange(filtered: SnapshotHistory[], key: RangeKey): void {
-  setChange('range-change', historyChange(filtered), rangeSuffix(key));
+  const change = lastData ? heroModel({ ...lastData, history: filtered }).rangeChange : null;
+  setChange('range-change', change, rangeSuffix(key));
 }
 
 function renderHero(data: DashboardData): void {
-  const totalEl = document.getElementById('total-value');
-  if (totalEl) totalEl.textContent = formatCurrency(data.summary.total_value);
+  const hero = heroModel(data);
+  setHistoryMode(hero.mode === 'net-worth');
 
-  setChange('day-change', portfolioDayChange(data.positions, data.summary.total_value), 'today');
+  const labelEl = document.querySelector('#dash-hero .dash-hero-label');
+  if (labelEl) labelEl.textContent = hero.label;
+  const totalEl = document.getElementById('total-value');
+  if (totalEl) {
+    totalEl.textContent = formatCurrency(hero.value);
+    totalEl.classList.toggle('negative', hero.value < 0);
+  }
+  const breakdownEl = document.getElementById('hero-breakdown');
+  if (breakdownEl) {
+    breakdownEl.textContent = hero.breakdown ?? '';
+    breakdownEl.hidden = hero.breakdown === null;
+  }
+
+  setChange('day-change', hero.dayChange, 'today');
 
   const gainEl = document.getElementById('total-gain');
   if (gainEl) {
@@ -567,9 +596,22 @@ async function renderOnTrack(gen: number): Promise<void> {
   host.appendChild(link);
 }
 
-// The debt actions (add-debts, review-property, update-balance) are wired in the dashboard UI task.
-const ATTENTION_ACTIONS: Partial<
-  Record<AttentionItem['action'], { label: string; run: () => void }>
+/**
+ * Open the Debts page, on one liability when an id is given. Until the page
+ * exists (#tab-debts), say so instead of blanking the app.
+ */
+function openDebts(id?: string): void {
+  if (!document.getElementById('tab-debts')) {
+    showToast('The Debts page is not available yet.', 'info');
+    return;
+  }
+  showTab('debts');
+  if (id) emit({ type: 'debts:open', id });
+}
+
+const ATTENTION_ACTIONS: Record<
+  AttentionItem['action'],
+  { label: string; run: (item: AttentionItem) => void }
 > = {
   'refresh-prices': {
     label: 'Refresh',
@@ -580,7 +622,44 @@ const ATTENTION_ACTIONS: Partial<
   'show-duplicates': { label: 'Review', run: () => showDuplicateDetails() },
   'open-holdings': { label: 'View holdings', run: () => showTab('holdings') },
   'open-analysis': { label: 'View alerts', run: () => showTab('analysis') },
+  // The wizard arrives with the Debts page work; until then this opens Debts.
+  'add-debts': { label: 'Add debts', run: () => openDebts() },
+  // The conversion dialog is a later task; Holdings is where real estate rows live.
+  'review-property': { label: 'Review', run: () => showTab('holdings') },
+  'update-balance': { label: 'Update', run: (item) => openDebts(item.targetId) },
 };
+
+const DISMISS_LABELS: Partial<Record<AttentionItem['kind'], string>> = {
+  'add-debts': 'I have none',
+  'property-unlinked': 'Not financed',
+};
+
+const DISMISS_STORAGE_KEY = 'finlity:attention-dismissed';
+
+/** Kept in memory too, so a dismissal holds for the session when storage is blocked. */
+const dismissedInSession = new Set<string>();
+
+function dismissedKeys(): Set<string> {
+  const keys = new Set(dismissedInSession);
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(DISMISS_STORAGE_KEY) ?? '[]');
+    if (Array.isArray(raw)) {
+      for (const key of raw) if (typeof key === 'string') keys.add(key);
+    }
+  } catch {
+    // Storage unavailable or corrupt: fall back to the in-memory set.
+  }
+  return keys;
+}
+
+function dismissAttention(key: string): void {
+  dismissedInSession.add(key);
+  try {
+    localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify([...dismissedKeys()]));
+  } catch {
+    // The in-memory copy still applies this session.
+  }
+}
 
 async function renderAttention(positions: DashboardPosition[], gen: number): Promise<void> {
   const list = document.getElementById('attention-list');
@@ -603,29 +682,49 @@ async function renderAttention(positions: DashboardPosition[], gen: number): Pro
   // The server already scopes stale_tickers to the market clock: when closed it
   // counts only prices cached before the last close (see updatePriceStatus).
   const staleTickers = status ? status.stale_tickers : 0;
+  const summary: Partial<PortfolioSummary> = lastData?.summary ?? {};
   const items = attentionItems({
     staleTickers,
     positions,
     duplicateCount,
     triggeredAlerts: Array.isArray(alerts) ? alerts : [],
     today: new Date(),
+    accountCount: (summary.accounts ?? []).length,
+    liabilitiesIncluded: summary.liabilities_included === true,
+    liabilities: summary.liabilities ?? [],
+    dismissed: dismissedKeys(),
   });
 
   list.textContent = '';
-  let shown = 0;
+  const showClear = (): void => {
+    if (list.querySelector('li') === null)
+      list.appendChild(h('li', 'attention-clear', 'All clear'));
+  };
   for (const item of items) {
     const action = ATTENTION_ACTIONS[item.action];
-    if (!action) continue;
     const li = h('li');
     li.appendChild(h('span', 'attention-message', item.message));
+    const actions = h('span', 'attention-actions');
     const btn = h('button', 'btn btn-secondary btn-sm', action.label);
     btn.type = 'button';
-    btn.addEventListener('click', action.run);
-    li.appendChild(btn);
+    btn.addEventListener('click', () => action.run(item));
+    actions.appendChild(btn);
+    const dismissLabel = item.dismissKey ? DISMISS_LABELS[item.kind] : undefined;
+    if (item.dismissKey && dismissLabel) {
+      const key = item.dismissKey;
+      const skip = h('button', 'btn btn-secondary btn-sm', dismissLabel);
+      skip.type = 'button';
+      skip.addEventListener('click', () => {
+        dismissAttention(key);
+        li.remove();
+        showClear();
+      });
+      actions.appendChild(skip);
+    }
+    li.appendChild(actions);
     list.appendChild(li);
-    shown += 1;
   }
-  if (shown === 0) list.appendChild(h('li', 'attention-clear', 'All clear'));
+  showClear();
 }
 
 /** Show Holdings filtered to a single account. */
@@ -690,6 +789,29 @@ function renderAccounts(data: DashboardData): void {
     }
     host.appendChild(section);
   }
+
+  const debts = liabilityGroup(data.summary);
+  if (debts) {
+    const section = h('div', 'account-group');
+    const head = h('div', 'account-group-head');
+    head.appendChild(h('span', undefined, debts.label));
+    head.appendChild(h('span', undefined, formatCurrency(debts.subtotal)));
+    section.appendChild(head);
+    for (const row of debts.rows) {
+      const btn = h('button', 'account-row');
+      btn.type = 'button';
+      btn.appendChild(h('span', 'account-row-name', row.name));
+      btn.appendChild(h('span', 'account-row-value', formatCurrency(row.balance)));
+      btn.appendChild(h('span', 'account-row-meta', row.meta));
+      btn.addEventListener('click', () => openDebts(row.id));
+      section.appendChild(btn);
+    }
+    const foot = h('div', 'account-group-foot');
+    foot.appendChild(h('span', undefined, debts.footer.label));
+    foot.appendChild(h('span', undefined, formatCurrency(debts.footer.value)));
+    section.appendChild(foot);
+    host.appendChild(section);
+  }
 }
 
 /**
@@ -715,6 +837,7 @@ export async function renderDashboard(data: DashboardData): Promise<void> {
     return;
   }
 
+  lastData = data;
   renderHero(data);
   renderAccounts(data);
   await updateHistoryChart(history, true, renderRangeChange);

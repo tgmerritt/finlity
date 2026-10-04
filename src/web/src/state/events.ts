@@ -32,7 +32,8 @@ export type MutationEvent =
   | { type: 'demo:toggled'; demoMode: boolean }
   | { type: 'plugin:changed'; reason: 'installed' | 'uninstalled' | 'enabled' | 'disabled' }
   | { type: 'prices:refreshed'; updated: number; failed: number }
-  | { type: 'commentary:invalidated'; tab?: string };
+  | { type: 'commentary:invalidated'; tab?: string }
+  | { type: 'debts:open'; id: string };
 
 /**
  * Convenience alias: every event type in the union.

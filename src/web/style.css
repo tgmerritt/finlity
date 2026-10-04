@@ -6853,6 +6853,15 @@ th.sortable.sort-desc .sort-icon::after {
     overflow-wrap: anywhere;
 }
 
+.dash-hero-value.negative { color: var(--color-error); }
+
+.dash-hero-breakdown {
+    margin-top: 2px;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-secondary);
+}
+
 .dash-hero-changes {
     display: flex;
     flex-wrap: wrap;
@@ -6960,6 +6969,15 @@ th.sortable.sort-desc .sort-icon::after {
     text-align: left;
     cursor: pointer;
 }
+.account-group-foot {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 10px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-primary);
+}
+.attention-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .account-row:hover { background: var(--color-bg-spotlight); }
 .account-row-name { overflow-wrap: anywhere; }
 .account-row-value { font-variant-numeric: tabular-nums; }
