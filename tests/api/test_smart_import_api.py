@@ -51,7 +51,7 @@ def client(db, monkeypatch):
 
 def add_import(db, import_id, *, content_hash, key, kind="checking", label="Main",
                last4="1234", institution="Sample Bank", liability_id=None,
-               created=None, origin="file", batch="batch-1", uploaded=None):
+               created=None, origin="file", batch="batch-1", uploaded=None, connection_id=None):
     with db.get_session() as s:
         s.add(BankStatementImport(
             id=import_id, file_name=f"{import_id}.csv", content_hash=content_hash,
@@ -60,7 +60,7 @@ def add_import(db, import_id, *, content_hash, key, kind="checking", label="Main
         s.add(SmartImportMeta(
             import_id=import_id, batch_id=batch, origin=origin, format="csv", parser="csv",
             account_kind=kind, account_key=key, account_label=label, account_last4=last4,
-            institution=institution, liability_id=liability_id,
+            institution=institution, liability_id=liability_id, connection_id=connection_id,
             created_at=created or datetime(2026, 9, 1, 12, 0),
         ))
         s.commit()
@@ -325,9 +325,18 @@ def test_list_imports_newest_first(client, db):
         "account_label": "Main", "account_last4": "1234", "institution": "Sample Bank",
         "period_start": None, "period_end": None, "closing_balance": None,
         "closing_balance_date": None, "liability_id": None, "txn_new": 0, "txn_duplicate": 0,
-        "txn_excluded": 0, "ai_used": 0, "ai_provider": None,
+        "txn_excluded": 0, "ai_used": 0, "ai_provider": None, "connection_id": None,
         "imported_at": "2026-09-01T00:00:00",
     }
+
+
+def test_list_imports_returns_the_connection_of_a_synced_import(client, db):
+    cid = "0f0e0d0c-0b0a-4908-8706-050403020100"
+    add_import(db, "i1", content_hash="h1", key="acct:one", origin="connector", connection_id=cid)
+    add_import(db, "i2", content_hash="h2", key="acct:one", created=datetime(2026, 9, 2))
+    rows = {r["import_id"]: r for r in client.get("/api/smart-import/imports").json()}
+    assert rows["i1"]["connection_id"] == cid
+    assert rows["i2"]["connection_id"] is None
 
 
 def test_list_imports_skips_legacy_imports(client, db):

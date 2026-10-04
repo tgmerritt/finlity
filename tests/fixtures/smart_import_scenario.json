@@ -2131,6 +2131,944 @@
   {
    "name": "probe counts at the end",
    "probe": "counts"
+  },
+  {
+   "name": "apply a synced statement before any connection exists",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "sync-0",
+    "statements": [
+     {
+      "file_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "file_name": "synthetic-conn-chk.connector",
+      "origin": "connector",
+      "format": "connector",
+      "parser": "connector:demo",
+      "account": {
+       "kind": "checking",
+       "key": "acct:conn-chk",
+       "label": "Main",
+       "last4": null,
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [],
+      "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100"
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "store a connection",
+   "db": "store_connections",
+   "value": {
+    "version": 1,
+    "items": {
+     "0f0e0d0c-0b0a-4908-8706-050403020100": {
+      "provider": "demo",
+      "label": "Demo",
+      "created_at": "2026-10-01T09:00:00Z",
+      "status": "ok",
+      "status_at": "2026-10-01T09:00:00Z",
+      "last_synced_at": "2026-10-04T08:00:00Z",
+      "first_sync_days": 30,
+      "requests": [],
+      "accounts": {}
+     }
+    }
+   }
+  },
+  {
+   "name": "apply a synced statement without connection_id",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "sync-0",
+    "statements": [
+     {
+      "file_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "file_name": "synthetic-conn-chk.connector",
+      "origin": "connector",
+      "format": "connector",
+      "parser": "connector:demo",
+      "account": {
+       "kind": "checking",
+       "key": "acct:conn-chk",
+       "label": "Main",
+       "last4": null,
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": []
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "apply a file statement with connection_id",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "sync-0",
+    "statements": [
+     {
+      "file_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [],
+      "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100"
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "apply a sample statement with connection_id",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "sync-0",
+    "statements": [
+     {
+      "file_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "file_name": "synthetic-chk.csv",
+      "origin": "sample",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [],
+      "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100"
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "apply a synced statement with an unknown connection",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "sync-0",
+    "statements": [
+     {
+      "file_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "file_name": "synthetic-conn-chk.connector",
+      "origin": "connector",
+      "format": "connector",
+      "parser": "connector:demo",
+      "account": {
+       "kind": "checking",
+       "key": "acct:conn-chk",
+       "label": "Main",
+       "last4": null,
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [],
+      "connection_id": "11111111-2222-4333-8444-555555555555"
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "probe counts after refused syncs",
+   "probe": "counts"
+  },
+  {
+   "name": "apply a sync: balance dated tomorrow, two days ahead, checking",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "save": {
+    "SY1": "imports.0.import_id",
+    "SY2": "imports.1.import_id",
+    "SY3": "imports.2.import_id"
+   },
+   "body": {
+    "batch_id": "sync-1",
+    "statements": [
+     {
+      "file_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "file_name": "synthetic-conn-card.connector",
+      "origin": "connector",
+      "format": "connector",
+      "parser": "connector:demo",
+      "account": {
+       "kind": "credit_card",
+       "key": "acct:conn-card",
+       "label": "Main",
+       "last4": null,
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2026-09-05",
+       "end": "2026-10-04"
+      },
+      "closing_balance": {
+       "amount": 410,
+       "as_of": "2026-10-05"
+      },
+      "liability_id": "L-card",
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-10-01",
+        "amount": -18.5,
+        "description": "CAFE SYNTHETIC",
+        "merchant_key": "CAFE",
+        "kind": "expense",
+        "category_id": "cat-dining",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn-card|CAFE|2026-10-01|-18.5",
+        "excluded": false
+       }
+      ],
+      "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100"
+     },
+     {
+      "file_hash": "7777777777777777777777777777777777777777777777777777777777777777",
+      "file_name": "synthetic-conn-card2.connector",
+      "origin": "connector",
+      "format": "connector",
+      "parser": "connector:demo",
+      "account": {
+       "kind": "credit_card",
+       "key": "acct:conn-card2",
+       "label": "Main",
+       "last4": null,
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2026-09-05",
+       "end": "2026-10-04"
+      },
+      "closing_balance": {
+       "amount": 90,
+       "as_of": "2026-10-06"
+      },
+      "liability_id": "L-card",
+      "ai_used": false,
+      "transactions": [],
+      "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100"
+     },
+     {
+      "file_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+      "file_name": "synthetic-conn-chk.connector",
+      "origin": "connector",
+      "format": "connector",
+      "parser": "connector:demo",
+      "account": {
+       "kind": "checking",
+       "key": "acct:conn-chk",
+       "label": "Main",
+       "last4": null,
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2026-09-05",
+       "end": "2026-10-04"
+      },
+      "closing_balance": {
+       "amount": 2500,
+       "as_of": "2026-10-05"
+      },
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-09-30",
+        "amount": 3000,
+        "description": "PAYROLL SYNTHETIC",
+        "merchant_key": "PAYROLL",
+        "kind": "income",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:conn-chk|PAYROLL|2026-09-30|3000",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-10-02",
+        "amount": -64.2,
+        "description": "GROCER SYNTHETIC",
+        "merchant_key": "GROCER",
+        "kind": "expense",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn-chk|GROCER|2026-10-02|-64.2",
+        "excluded": false
+       }
+      ],
+      "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100"
+     }
+    ],
+    "rules": [
+     {
+      "merchant_key": "CAFE",
+      "category_id": "cat-dining",
+      "kind": "expense",
+      "source": "connector"
+     }
+    ],
+    "recurring": []
+   }
+  },
+  {
+   "name": "probe counts after sync",
+   "probe": "counts"
+  },
+  {
+   "name": "probe transactions after sync",
+   "probe": "transactions"
+  },
+  {
+   "name": "probe rules after sync",
+   "probe": "rules"
+  },
+  {
+   "name": "probe liabilities after sync",
+   "probe": "liabilities"
+  },
+  {
+   "name": "probe ledger after sync",
+   "probe": "ledger"
+  },
+  {
+   "name": "imports after sync",
+   "method": "GET",
+   "path": "/api/smart-import/imports"
+  },
+  {
+   "name": "re-apply the same sync is skipped by file hash",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "sync-2",
+    "statements": [
+     {
+      "file_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+      "file_name": "synthetic-conn-chk.connector",
+      "origin": "connector",
+      "format": "connector",
+      "parser": "connector:demo",
+      "account": {
+       "kind": "checking",
+       "key": "acct:conn-chk",
+       "label": "Main",
+       "last4": null,
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-09-30",
+        "amount": 3000,
+        "description": "PAYROLL SYNTHETIC",
+        "merchant_key": "PAYROLL",
+        "kind": "income",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:conn-chk|PAYROLL|2026-09-30|3000",
+        "excluded": false
+       }
+      ],
+      "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100"
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "undo the synced card statement",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/{SY1}"
+  },
+  {
+   "name": "probe counts after undo synced card",
+   "probe": "counts"
+  },
+  {
+   "name": "probe liabilities after undo synced card",
+   "probe": "liabilities"
+  },
+  {
+   "name": "probe ledger after undo synced card",
+   "probe": "ledger"
+  },
+  {
+   "name": "undo the synced card statement dated two days ahead",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/{SY2}"
+  },
+  {
+   "name": "undo the synced checking statement",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/{SY3}"
+  },
+  {
+   "name": "probe counts after undo sync",
+   "probe": "counts"
+  },
+  {
+   "name": "probe transactions after undo sync",
+   "probe": "transactions"
+  },
+  {
+   "name": "probe rules after undo sync",
+   "probe": "rules"
+  },
+  {
+   "name": "imports after undo sync",
+   "method": "GET",
+   "path": "/api/smart-import/imports"
+  },
+  {
+   "name": "store a secret for the connection",
+   "db": "store_connection_secret",
+   "id": "0f0e0d0c-0b0a-4908-8706-050403020100"
+  },
+  {
+   "name": "probe connections before disconnect",
+   "probe": "connections"
+  },
+  {
+   "name": "apply a sync before disconnect",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "save": {
+    "P1": "imports.0.import_id"
+   },
+   "body": {
+    "batch_id": "sync-3",
+    "statements": [
+     {
+      "file_hash": "9999999999999999999999999999999999999999999999999999999999999999",
+      "file_name": "synthetic-conn-chk.connector",
+      "origin": "connector",
+      "format": "connector",
+      "parser": "connector:demo",
+      "account": {
+       "kind": "checking",
+       "key": "acct:conn-chk",
+       "label": "Main",
+       "last4": null,
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2026-09-05",
+       "end": "2026-10-04"
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-09-30",
+        "amount": 3000,
+        "description": "PAYROLL SYNTHETIC",
+        "merchant_key": "PAYROLL",
+        "kind": "income",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:conn-chk|PAYROLL|2026-09-30|3000",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-10-02",
+        "amount": -64.2,
+        "description": "GROCER SYNTHETIC",
+        "merchant_key": "GROCER",
+        "kind": "expense",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn-chk|GROCER|2026-10-02|-64.2",
+        "excluded": false
+       }
+      ],
+      "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100"
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "apply an overlapping sync before disconnect",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "save": {
+    "P2": "imports.0.import_id"
+   },
+   "body": {
+    "batch_id": "sync-4",
+    "statements": [
+     {
+      "file_hash": "abababababababababababababababababababababababababababababababab",
+      "file_name": "synthetic-conn-chk.connector",
+      "origin": "connector",
+      "format": "connector",
+      "parser": "connector:demo",
+      "account": {
+       "kind": "checking",
+       "key": "acct:conn-chk",
+       "label": "Main",
+       "last4": null,
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2026-09-28",
+       "end": "2026-10-04"
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-10-02",
+        "amount": -64.2,
+        "description": "GROCER SYNTHETIC",
+        "merchant_key": "GROCER",
+        "kind": "expense",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn-chk|GROCER|2026-10-02|-64.2",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-10-03",
+        "amount": -12.5,
+        "description": "CAFE SYNTHETIC",
+        "merchant_key": "CAFE",
+        "kind": "expense",
+        "category_id": "cat-dining",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn-chk|CAFE|2026-10-03|-12.5",
+        "excluded": false
+       }
+      ],
+      "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100"
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "disconnect with an unrecognised remove_data",
+   "method": "DELETE",
+   "path": "/api/connections/0f0e0d0c-0b0a-4908-8706-050403020100?remove_data=maybe"
+  },
+  {
+   "name": "disconnect an unknown connection",
+   "method": "DELETE",
+   "path": "/api/connections/11111111-2222-4333-8444-555555555555"
+  },
+  {
+   "name": "disconnect keeping the imported data",
+   "method": "DELETE",
+   "path": "/api/connections/0f0e0d0c-0b0a-4908-8706-050403020100"
+  },
+  {
+   "name": "probe counts after disconnect",
+   "probe": "counts"
+  },
+  {
+   "name": "probe connections after disconnect",
+   "probe": "connections"
+  },
+  {
+   "name": "imports after disconnect",
+   "method": "GET",
+   "path": "/api/smart-import/imports"
+  },
+  {
+   "name": "disconnect the removed connection again",
+   "method": "DELETE",
+   "path": "/api/connections/0f0e0d0c-0b0a-4908-8706-050403020100?remove_data=true"
+  },
+  {
+   "name": "a sync for the removed connection is refused",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "sync-5",
+    "statements": [
+     {
+      "file_hash": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "file_name": "synthetic-conn-chk.connector",
+      "origin": "connector",
+      "format": "connector",
+      "parser": "connector:demo",
+      "account": {
+       "kind": "checking",
+       "key": "acct:conn-chk",
+       "label": "Main",
+       "last4": null,
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [],
+      "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100"
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "undo a sync of the removed connection",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/{P2}"
+  },
+  {
+   "name": "probe counts after undo of a removed connection's sync",
+   "probe": "counts"
+  },
+  {
+   "name": "store a second connection",
+   "db": "store_connections",
+   "value": {
+    "version": 1,
+    "items": {
+     "11111111-2222-4333-8444-555555555555": {
+      "provider": "simplefin",
+      "label": "Second",
+      "created_at": "2026-10-02T09:00:00Z",
+      "status": "ok",
+      "status_at": "2026-10-02T09:00:00Z",
+      "last_synced_at": null,
+      "first_sync_days": 30,
+      "requests": [],
+      "accounts": {}
+     }
+    }
+   }
+  },
+  {
+   "name": "store a secret for the second connection",
+   "db": "store_connection_secret",
+   "id": "11111111-2222-4333-8444-555555555555"
+  },
+  {
+   "name": "probe connections with the second connection",
+   "probe": "connections"
+  },
+  {
+   "name": "apply a card sync of the second connection",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "save": {
+    "Q1": "imports.0.import_id"
+   },
+   "body": {
+    "batch_id": "sync-6",
+    "statements": [
+     {
+      "file_hash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "file_name": "synthetic-conn2-card.connector",
+      "origin": "connector",
+      "format": "connector",
+      "parser": "connector:demo",
+      "account": {
+       "kind": "credit_card",
+       "key": "acct:conn2-card",
+       "label": "Main",
+       "last4": null,
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2026-09-05",
+       "end": "2026-10-03"
+      },
+      "closing_balance": {
+       "amount": 450,
+       "as_of": "2026-10-03"
+      },
+      "liability_id": "L-card",
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-09-12",
+        "amount": -9.99,
+        "description": "STREAMCO SYNTHETIC",
+        "merchant_key": "STREAMCO",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn2-card|STREAMCO|2026-09-12|-9.99",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-20",
+        "amount": -31,
+        "description": "BOOKSHOP SYNTHETIC",
+        "merchant_key": "BOOKSHOP",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn2-card|BOOKSHOP|2026-09-20|-31",
+        "excluded": false
+       }
+      ],
+      "connection_id": "11111111-2222-4333-8444-555555555555"
+     }
+    ],
+    "rules": [
+     {
+      "merchant_key": "STREAMCO",
+      "category_id": "cat-other",
+      "kind": "expense",
+      "source": "connector"
+     }
+    ],
+    "recurring": [
+     {
+      "merchant_key": "STREAMCO",
+      "name": "Streamco",
+      "amount": 9.99,
+      "frequency": "monthly",
+      "category_id": "cat-other",
+      "occurrences": 2,
+      "file_hash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+      "decision": "create"
+     }
+    ]
+   }
+  },
+  {
+   "name": "apply a checking sync of the second connection",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "save": {
+    "Q2": "imports.0.import_id"
+   },
+   "body": {
+    "batch_id": "sync-7",
+    "statements": [
+     {
+      "file_hash": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+      "file_name": "synthetic-conn2-chk.connector",
+      "origin": "connector",
+      "format": "connector",
+      "parser": "connector:demo",
+      "account": {
+       "kind": "checking",
+       "key": "acct:conn2-chk",
+       "label": "Main",
+       "last4": null,
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2026-09-05",
+       "end": "2026-10-03"
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-09-15",
+        "amount": -40,
+        "description": "PHARMACY SYNTHETIC",
+        "merchant_key": "PHARMACY",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn2-chk|PHARMACY|2026-09-15|-40",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-16",
+        "amount": -22,
+        "description": "BAKERY SYNTHETIC",
+        "merchant_key": "BAKERY",
+        "kind": "expense",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn2-chk|BAKERY|2026-09-16|-22",
+        "excluded": false
+       }
+      ],
+      "connection_id": "11111111-2222-4333-8444-555555555555"
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "a file import overlaps the second connection's sync",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "file-9",
+    "statements": [
+     {
+      "file_hash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "file_name": "synthetic-conn2-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:conn2-chk",
+       "label": "Second",
+       "last4": "2468",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-09-15",
+        "amount": -40,
+        "description": "PHARMACY SYNTHETIC",
+        "merchant_key": "PHARMACY",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn2-chk|PHARMACY|2026-09-15|-40",
+        "excluded": false
+       }
+      ]
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "edit the expense the second connection created",
+   "db": "edit_expense",
+   "expense_name": "Streamco",
+   "amount": 10.99
+  },
+  {
+   "name": "probe counts before disconnect with remove_data",
+   "probe": "counts"
+  },
+  {
+   "name": "probe liabilities before disconnect with remove_data",
+   "probe": "liabilities"
+  },
+  {
+   "name": "probe ledger before disconnect with remove_data",
+   "probe": "ledger"
+  },
+  {
+   "name": "disconnect and remove imported data",
+   "method": "DELETE",
+   "path": "/api/connections/11111111-2222-4333-8444-555555555555?remove_data=true"
+  },
+  {
+   "name": "probe counts after disconnect with remove_data",
+   "probe": "counts"
+  },
+  {
+   "name": "probe transactions after disconnect with remove_data",
+   "probe": "transactions"
+  },
+  {
+   "name": "probe rules after disconnect with remove_data",
+   "probe": "rules"
+  },
+  {
+   "name": "probe expenses after disconnect with remove_data",
+   "probe": "expenses"
+  },
+  {
+   "name": "probe liabilities after disconnect with remove_data",
+   "probe": "liabilities"
+  },
+  {
+   "name": "probe ledger after disconnect with remove_data",
+   "probe": "ledger"
+  },
+  {
+   "name": "probe connections after disconnect with remove_data",
+   "probe": "connections"
+  },
+  {
+   "name": "imports after disconnect with remove_data",
+   "method": "GET",
+   "path": "/api/smart-import/imports"
+  },
+  {
+   "name": "disconnect and remove data again",
+   "method": "DELETE",
+   "path": "/api/connections/11111111-2222-4333-8444-555555555555?remove_data=true"
   }
  ]
 }

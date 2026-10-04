@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Any, Literal, Optional, TypeVar, Union
 
 import httpx
@@ -73,6 +73,14 @@ router = APIRouter(
 
 # Per-process backstop (design 8.4). Tests replace it with a fresh instance.
 _QUOTA = quota.ProcessQuota()
+
+
+
+def utcnow() -> datetime:
+    """The route's clock for the core's future-balance check (the core never
+    reads the wall clock); tests replace it."""
+    return datetime.now(timezone.utc)
+
 
 # A client east of the server may ask for its own today, one day ahead of the
 # server's; providers simply have nothing newer (same slack as SimpleFIN).
@@ -431,7 +439,7 @@ async def sync(
         p: ConnectorProvider, c: SafeClient
     ) -> tuple[FetchResult, list[NormalizedStatement]]:
         fetched = p.fetch(c, creds, requests, body.start, body.end)
-        return fetched, to_statements(provider_id, fetched, requests, window, context)
+        return fetched, to_statements(provider_id, fetched, requests, window, context, now=utcnow())
 
     _QUOTA.check_and_record(provider_id, quota.fingerprint(creds))
     started = time.monotonic()

@@ -394,10 +394,23 @@ class ApiKeyRequest(BaseModel):
     value: str = Field(..., description="API key value")
 
 
+def _refuse_reserved_key_name(name: str) -> None:
+    """The connection store's rows are not API keys: never read, written or
+    reported here (src/connectors/store.py owns them)."""
+    from src.services.secrets import is_reserved_secret_name
+
+    if is_reserved_secret_name(name):
+        raise HTTPException(status_code=400, detail="This key name is reserved.")
+
+
 @router.post("/api-key")
 def set_api_key(request: ApiKeyRequest) -> dict:
     """Store an API key securely in the database."""
     from src.services import SecretsManager
+    from src.services.demo_mode import check_demo_data_protection
+
+    _refuse_reserved_key_name(request.key)
+    check_demo_data_protection()
 
     db = get_database()
     secrets = SecretsManager(db)
@@ -410,6 +423,7 @@ def get_api_key_status(key_name: str) -> dict:
     """Check if an API key is set (without revealing the value)."""
     from src.services import SecretsManager
 
+    _refuse_reserved_key_name(key_name)
     db = get_database()
     secrets = SecretsManager(db)
     has_key = secrets.has_api_key(key_name)
@@ -422,6 +436,8 @@ def delete_api_key(key_name: str) -> dict:
     """Delete an API key from the database."""
     from src.services import SecretsManager
     from src.services.demo_mode import check_demo_data_protection
+
+    _refuse_reserved_key_name(key_name)
     check_demo_data_protection()
 
     db = get_database()

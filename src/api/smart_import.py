@@ -159,6 +159,15 @@ class ApplyStatement(_Strict):
     ai_used: StrictBool = False
     ai_provider: Optional[str] = Field(default=None, max_length=64)
     transactions: list[ApplyTransaction] = Field(max_length=MAX_APPLY_TRANSACTIONS)
+    # The connection a synced statement came from (plan B3). Its existence is
+    # checked inside the apply transaction (404 connection_not_found).
+    connection_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def _connection_goes_with_connector_origin(self) -> "ApplyStatement":
+        if (self.origin == "connector") != (self.connection_id is not None):
+            raise ValueError("connection_id goes with origin 'connector' and only there")
+        return self
 
 
 class ApplyRule(_Strict):

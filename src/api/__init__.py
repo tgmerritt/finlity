@@ -7,6 +7,7 @@ from .projections import router as projections_router
 from .settings import router as settings_router
 from .profiles import router as profiles_router
 from .plugins import router as plugins_router
+from .connections import router as connections_router
 
 __all__ = [
     "portfolio_router",
@@ -17,4 +18,5 @@ __all__ = [
     "settings_router",
     "profiles_router",
     "plugins_router",
+    "connections_router",
 ]

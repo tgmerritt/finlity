@@ -1,0 +1,1253 @@
+{
+ "_comment": "Built by tests/fixtures/build_connections_scenario.py; run by tests/api/test_connections_parity.py and src/web/test/api/connections-parity.test.ts.",
+ "today": "2026-10-04",
+ "setup": {
+  "categories": [
+   {
+    "id": "cat-groceries",
+    "name": "Groceries",
+    "sort_order": 0
+   },
+   {
+    "id": "cat-dining",
+    "name": "Dining",
+    "sort_order": 1
+   },
+   {
+    "id": "cat-transport",
+    "name": "Transportation",
+    "sort_order": 2
+   },
+   {
+    "id": "cat-other",
+    "name": "Other",
+    "sort_order": 3
+   }
+  ],
+  "liabilities": [
+   {
+    "id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+    "name": "Rewards Card",
+    "liability_type": "credit_card",
+    "lender": "Demo Bank",
+    "current_balance": 1000,
+    "balance_as_of": "2026-09-01",
+    "is_active": true
+   }
+  ],
+  "snapshots": [
+   {
+    "id": "S-manual",
+    "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+    "snapshot_date": "2026-09-01",
+    "balance": 1000,
+    "source": "manual"
+   }
+  ],
+  "expenses": []
+ },
+ "steps": [
+  {
+   "name": "list before any connection",
+   "method": "GET",
+   "path": "/api/connections"
+  },
+  {
+   "name": "create with an unknown provider",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "plaid"
+   }
+  },
+  {
+   "name": "create with an extra field",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "region": "us"
+   }
+  },
+  {
+   "name": "create the demo with a setup token",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "setup_token": "abc"
+   }
+  },
+  {
+   "name": "create with a first sync range that is not offered",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "first_sync_days": 45
+   }
+  },
+  {
+   "name": "create with a label over 120 characters",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   }
+  },
+  {
+   "name": "create with a control character in the label",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "label": "Demo\u0007"
+   }
+  },
+  {
+   "name": "create simplefin with two credentials",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "simplefin",
+    "setup_token": "abc",
+    "access_url": "https://u:p@bridge.simplefin.org/simplefin"
+   }
+  },
+  {
+   "name": "create simplefin with an access url off the allowlist",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "simplefin",
+    "access_url": "https://synthetic:secret@bridge.example.invalid/simplefin"
+   }
+  },
+  {
+   "name": "create simplefin with a malformed setup token",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "simplefin",
+    "setup_token": "not-a-setup-token"
+   }
+  },
+  {
+   "name": "probe connections after the refused creates",
+   "probe": "connections"
+  },
+  {
+   "name": "create the demo connection",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "label": "Demo checking and card",
+    "first_sync_days": 30
+   },
+   "save": {
+    "C1": "id"
+   }
+  },
+  {
+   "name": "list after the create",
+   "method": "GET",
+   "path": "/api/connections"
+  },
+  {
+   "name": "detail before the first sync",
+   "method": "GET",
+   "path": "/api/connections/{C1}"
+  },
+  {
+   "name": "probe requests after the create",
+   "probe": "requests"
+  },
+  {
+   "name": "detail of an unknown connection",
+   "method": "GET",
+   "path": "/api/connections/11111111-2222-4333-8444-555555555555"
+  },
+  {
+   "name": "detail with an uppercase id",
+   "method": "GET",
+   "path": "/api/connections/5F5F5F5F-0000-4000-8000-000000000001"
+  },
+  {
+   "name": "update an unknown connection",
+   "method": "PUT",
+   "path": "/api/connections/11111111-2222-4333-8444-555555555555",
+   "body": {
+    "label": "Other"
+   }
+  },
+  {
+   "name": "update an unknown account",
+   "method": "PUT",
+   "path": "/api/connections/{C1}",
+   "body": {
+    "accounts": {
+     "nope": {
+      "role": "ignore"
+     }
+    }
+   }
+  },
+  {
+   "name": "update with a null kind",
+   "method": "PUT",
+   "path": "/api/connections/{C1}",
+   "body": {
+    "accounts": {
+     "demo-chk": {
+      "kind": null
+     }
+    }
+   }
+  },
+  {
+   "name": "update with a role that does not exist",
+   "method": "PUT",
+   "path": "/api/connections/{C1}",
+   "body": {
+    "accounts": {
+     "demo-chk": {
+      "role": "savings"
+     }
+    }
+   }
+  },
+  {
+   "name": "update with an empty label",
+   "method": "PUT",
+   "path": "/api/connections/{C1}",
+   "body": {
+    "label": ""
+   }
+  },
+  {
+   "name": "update with an extra field",
+   "method": "PUT",
+   "path": "/api/connections/{C1}",
+   "body": {
+    "status": "ok"
+   }
+  },
+  {
+   "name": "update with an unknown liability",
+   "method": "PUT",
+   "path": "/api/connections/{C1}",
+   "body": {
+    "accounts": {
+     "demo-card": {
+      "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-000000000000"
+     }
+    }
+   }
+  },
+  {
+   "name": "update with the account's own key as same_as",
+   "method": "PUT",
+   "path": "/api/connections/{C1}",
+   "body": {
+    "accounts": {
+     "demo-chk": {
+      "same_as_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0"
+     }
+    }
+   }
+  },
+  {
+   "name": "update the label and the account mapping",
+   "method": "PUT",
+   "path": "/api/connections/{C1}",
+   "body": {
+    "label": "Demo bank",
+    "accounts": {
+     "demo-chk": {
+      "label": "Everyday"
+     },
+     "demo-card": {
+      "label": "Rewards",
+      "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+      "flip_balance": false
+     }
+    }
+   }
+  },
+  {
+   "name": "probe requests after the mapping update",
+   "probe": "requests"
+  },
+  {
+   "name": "sync with window index 4",
+   "method": "POST",
+   "path": "/api/connections/{C1}/sync",
+   "body": {
+    "window_index": 4
+   }
+  },
+  {
+   "name": "sync with a window index outside the plan",
+   "method": "POST",
+   "path": "/api/connections/{C1}/sync",
+   "body": {
+    "window_index": 1
+   }
+  },
+  {
+   "name": "sync with a string window index",
+   "method": "POST",
+   "path": "/api/connections/{C1}/sync",
+   "body": {
+    "window_index": "0"
+   }
+  },
+  {
+   "name": "sync with an extra key",
+   "method": "POST",
+   "path": "/api/connections/{C1}/sync",
+   "body": {
+    "window_index": 0,
+    "all": true
+   }
+  },
+  {
+   "name": "sync an unknown connection",
+   "method": "POST",
+   "path": "/api/connections/11111111-2222-4333-8444-555555555555/sync",
+   "body": {}
+  },
+  {
+   "name": "sync 1",
+   "method": "POST",
+   "path": "/api/connections/{C1}/sync",
+   "body": {},
+   "save_body": "SYNC1"
+  },
+  {
+   "name": "detail after sync 1 before apply",
+   "method": "GET",
+   "path": "/api/connections/{C1}"
+  },
+  {
+   "name": "probe requests after sync 1",
+   "probe": "requests"
+  },
+  {
+   "name": "probe counts after sync 1 before apply",
+   "probe": "counts"
+  },
+  {
+   "name": "apply sync 1 with connection_id",
+   "apply_sync": {
+    "sync": "SYNC1",
+    "connection": "C1",
+    "batch_id": "parity-sync-1",
+    "liabilities": {
+     "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d"
+    },
+    "rules": [
+     {
+      "merchant_key": "CHIPOTLE",
+      "category_id": "cat-dining",
+      "kind": "expense",
+      "source": "user"
+     },
+     {
+      "merchant_key": "SAFEWAY",
+      "category_id": "cat-groceries",
+      "kind": "expense",
+      "source": "user"
+     }
+    ]
+   },
+   "save": {
+    "I1A": "imports.0.import_id",
+    "I1B": "imports.1.import_id"
+   }
+  },
+  {
+   "name": "probe counts after apply 1",
+   "probe": "counts"
+  },
+  {
+   "name": "probe transactions per account after apply 1",
+   "probe": "transaction_counts"
+  },
+  {
+   "name": "probe liabilities after apply 1",
+   "probe": "liabilities"
+  },
+  {
+   "name": "imports list shows the connection",
+   "method": "GET",
+   "path": "/api/smart-import/imports"
+  },
+  {
+   "name": "detail after apply 1 moves next_since",
+   "method": "GET",
+   "path": "/api/connections/{C1}"
+  },
+  {
+   "name": "apply sync 1 again is skipped by file hash",
+   "apply_sync": {
+    "sync": "SYNC1",
+    "connection": "C1",
+    "batch_id": "parity-sync-1-again",
+    "liabilities": {
+     "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d"
+    }
+   }
+  },
+  {
+   "name": "probe counts after the repeated apply",
+   "probe": "counts"
+  },
+  {
+   "name": "a week later",
+   "clock": "2026-10-11"
+  },
+  {
+   "name": "detail a week later",
+   "method": "GET",
+   "path": "/api/connections/{C1}"
+  },
+  {
+   "name": "probe requests a week later",
+   "probe": "requests"
+  },
+  {
+   "name": "sync 2 overlapping sync 1",
+   "method": "POST",
+   "path": "/api/connections/{C1}/sync",
+   "save_body": "SYNC2"
+  },
+  {
+   "name": "apply sync 2 with its overlap",
+   "apply_sync": {
+    "sync": "SYNC2",
+    "connection": "C1",
+    "batch_id": "parity-sync-2",
+    "liabilities": {
+     "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d"
+    }
+   },
+   "save": {
+    "I2A": "imports.0.import_id",
+    "I2B": "imports.1.import_id"
+   }
+  },
+  {
+   "name": "probe counts after apply 2",
+   "probe": "counts"
+  },
+  {
+   "name": "probe transactions per account after apply 2",
+   "probe": "transaction_counts"
+  },
+  {
+   "name": "probe liabilities after apply 2",
+   "probe": "liabilities"
+  },
+  {
+   "name": "detail after apply 2",
+   "method": "GET",
+   "path": "/api/connections/{C1}"
+  },
+  {
+   "name": "undo the first statement of sync 2",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/{I2A}"
+  },
+  {
+   "name": "undo the second statement of sync 2",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/{I2B}"
+  },
+  {
+   "name": "detail after undoing sync 2 rewinds next_since",
+   "method": "GET",
+   "path": "/api/connections/{C1}"
+  },
+  {
+   "name": "probe counts after undoing sync 2",
+   "probe": "counts"
+  },
+  {
+   "name": "probe liabilities after undoing sync 2",
+   "probe": "liabilities"
+  },
+  {
+   "name": "refresh the account list keeps the mapping",
+   "method": "POST",
+   "path": "/api/connections/{C1}/accounts"
+  },
+  {
+   "name": "refresh an unknown connection",
+   "method": "POST",
+   "path": "/api/connections/11111111-2222-4333-8444-555555555555/accounts"
+  },
+  {
+   "name": "probe requests after the refresh",
+   "probe": "requests"
+  },
+  {
+   "name": "reconnect the demo connection",
+   "method": "POST",
+   "path": "/api/connections/{C1}/credentials",
+   "body": {}
+  },
+  {
+   "name": "reconnect the demo with an access url",
+   "method": "POST",
+   "path": "/api/connections/{C1}/credentials",
+   "body": {
+    "access_url": "https://u:p@bridge.simplefin.org/simplefin"
+   }
+  },
+  {
+   "name": "reconnect an unknown connection",
+   "method": "POST",
+   "path": "/api/connections/11111111-2222-4333-8444-555555555555/credentials",
+   "body": {}
+  },
+  {
+   "name": "probe requests after the reconnect",
+   "probe": "requests"
+  },
+  {
+   "name": "store a simplefin connection at its daily limit",
+   "db": "put_connection",
+   "id": "5f5f5f5f-0000-4000-8000-000000000001",
+   "entry": {
+    "provider": "simplefin",
+    "label": "Bank at its limit",
+    "created_at": "2026-10-01T09:00:00Z",
+    "status": "ok",
+    "status_at": "2026-10-01T09:00:00Z",
+    "last_synced_at": null,
+    "first_sync_days": 30,
+    "requests": [],
+    "accounts": {
+     "sf-chk": {
+      "name": "Everyday",
+      "institution": "Sample Bank",
+      "currency": "USD",
+      "kind": "checking",
+      "role": "cash_flow",
+      "label": "Everyday",
+      "account_key": "acct:8ca815d23dbb3aef1673c8c6ed9c1565e1602eceb29a673c4f271b72e0e5adc0",
+      "liability_id": null,
+      "flip_balance": false,
+      "same_as_key": null
+     }
+    }
+   },
+   "recent_requests": 20
+  },
+  {
+   "name": "detail at the daily limit",
+   "method": "GET",
+   "path": "/api/connections/5f5f5f5f-0000-4000-8000-000000000001"
+  },
+  {
+   "name": "sync at the daily limit",
+   "method": "POST",
+   "path": "/api/connections/5f5f5f5f-0000-4000-8000-000000000001/sync",
+   "body": {}
+  },
+  {
+   "name": "refresh at the daily limit",
+   "method": "POST",
+   "path": "/api/connections/5f5f5f5f-0000-4000-8000-000000000001/accounts"
+  },
+  {
+   "name": "store a simplefin connection with no credential",
+   "db": "put_connection",
+   "id": "5f5f5f5f-0000-4000-8000-000000000002",
+   "entry": {
+    "provider": "simplefin",
+    "label": "Bank without a credential",
+    "created_at": "2026-10-01T09:00:00Z",
+    "status": "ok",
+    "status_at": "2026-10-01T09:00:00Z",
+    "last_synced_at": null,
+    "first_sync_days": 30,
+    "requests": [],
+    "accounts": {
+     "sf-chk": {
+      "name": "Everyday",
+      "institution": "Sample Bank",
+      "currency": "USD",
+      "kind": "checking",
+      "role": "cash_flow",
+      "label": "Everyday",
+      "account_key": "acct:8ca815d23dbb3aef1673c8c6ed9c1565e1602eceb29a673c4f271b72e0e5adc0",
+      "liability_id": null,
+      "flip_balance": false,
+      "same_as_key": null
+     }
+    }
+   },
+   "recent_requests": 3
+  },
+  {
+   "name": "sync with no stored credential",
+   "method": "POST",
+   "path": "/api/connections/5f5f5f5f-0000-4000-8000-000000000002/sync",
+   "body": {}
+  },
+  {
+   "name": "detail after the missing credential",
+   "method": "GET",
+   "path": "/api/connections/5f5f5f5f-0000-4000-8000-000000000002"
+  },
+  {
+   "name": "sync a connection that needs reconnecting",
+   "method": "POST",
+   "path": "/api/connections/5f5f5f5f-0000-4000-8000-000000000002/sync",
+   "body": {}
+  },
+  {
+   "name": "refresh a connection that needs reconnecting",
+   "method": "POST",
+   "path": "/api/connections/5f5f5f5f-0000-4000-8000-000000000002/accounts"
+  },
+  {
+   "name": "reconnect with a pasted access url the bridge refuses",
+   "method": "POST",
+   "path": "/api/connections/5f5f5f5f-0000-4000-8000-000000000002/credentials",
+   "body": {
+    "access_url": "https://parity-user:parity-revoked@bridge.simplefin.org/simplefin"
+   }
+  },
+  {
+   "name": "probe connections after the refused reconnect",
+   "probe": "connections"
+  },
+  {
+   "name": "probe requests after the refused calls",
+   "probe": "requests"
+  },
+  {
+   "name": "list with three connections",
+   "method": "GET",
+   "path": "/api/connections"
+  },
+  {
+   "name": "create filler connection 1",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "label": "Filler 1"
+   },
+   "save": {
+    "F1": "id"
+   }
+  },
+  {
+   "name": "create filler connection 2",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "label": "Filler 2"
+   },
+   "save": {
+    "F2": "id"
+   }
+  },
+  {
+   "name": "create filler connection 3",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "label": "Filler 3"
+   },
+   "save": {
+    "F3": "id"
+   }
+  },
+  {
+   "name": "create filler connection 4",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "label": "Filler 4"
+   },
+   "save": {
+    "F4": "id"
+   }
+  },
+  {
+   "name": "create filler connection 5",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "label": "Filler 5"
+   },
+   "save": {
+    "F5": "id"
+   }
+  },
+  {
+   "name": "create filler connection 6",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "label": "Filler 6"
+   },
+   "save": {
+    "F6": "id"
+   }
+  },
+  {
+   "name": "create filler connection 7",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "label": "Filler 7"
+   },
+   "save": {
+    "F7": "id"
+   }
+  },
+  {
+   "name": "create an eleventh connection",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "label": "One too many"
+   }
+  },
+  {
+   "name": "probe connections at the limit",
+   "probe": "connections"
+  },
+  {
+   "name": "disconnect filler connection 1",
+   "method": "DELETE",
+   "path": "/api/connections/{F1}"
+  },
+  {
+   "name": "disconnect filler connection 2",
+   "method": "DELETE",
+   "path": "/api/connections/{F2}"
+  },
+  {
+   "name": "disconnect filler connection 3",
+   "method": "DELETE",
+   "path": "/api/connections/{F3}"
+  },
+  {
+   "name": "disconnect filler connection 4",
+   "method": "DELETE",
+   "path": "/api/connections/{F4}"
+  },
+  {
+   "name": "disconnect filler connection 5",
+   "method": "DELETE",
+   "path": "/api/connections/{F5}"
+  },
+  {
+   "name": "disconnect filler connection 6",
+   "method": "DELETE",
+   "path": "/api/connections/{F6}"
+  },
+  {
+   "name": "disconnect filler connection 7",
+   "method": "DELETE",
+   "path": "/api/connections/{F7}"
+  },
+  {
+   "name": "disconnect with an unrecognised remove_data",
+   "method": "DELETE",
+   "path": "/api/connections/{C1}?remove_data=maybe"
+  },
+  {
+   "name": "disconnect with remove_data=1",
+   "method": "DELETE",
+   "path": "/api/connections/{C1}?remove_data=1"
+  },
+  {
+   "name": "disconnect an unknown connection",
+   "method": "DELETE",
+   "path": "/api/connections/11111111-2222-4333-8444-555555555555"
+  },
+  {
+   "name": "disconnect keeping the imported data",
+   "method": "DELETE",
+   "path": "/api/connections/{C1}?remove_data=false"
+  },
+  {
+   "name": "probe connections after the plain disconnect",
+   "probe": "connections"
+  },
+  {
+   "name": "probe counts after the plain disconnect",
+   "probe": "counts"
+  },
+  {
+   "name": "imports keep the removed connection id",
+   "method": "GET",
+   "path": "/api/smart-import/imports"
+  },
+  {
+   "name": "detail of the removed connection",
+   "method": "GET",
+   "path": "/api/connections/{C1}"
+  },
+  {
+   "name": "disconnect the removed connection again",
+   "method": "DELETE",
+   "path": "/api/connections/{C1}"
+  },
+  {
+   "name": "apply naming the removed connection",
+   "apply_sync": {
+    "sync": "SYNC2",
+    "connection": "C1",
+    "batch_id": "parity-removed",
+    "liabilities": {
+     "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d"
+    }
+   }
+  },
+  {
+   "name": "create a second demo connection",
+   "method": "POST",
+   "path": "/api/connections",
+   "body": {
+    "provider": "demo",
+    "first_sync_days": 30
+   },
+   "save": {
+    "C2": "id"
+   }
+  },
+  {
+   "name": "map the second connection's card",
+   "method": "PUT",
+   "path": "/api/connections/{C2}",
+   "body": {
+    "accounts": {
+     "demo-card": {
+      "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d"
+     }
+    }
+   }
+  },
+  {
+   "name": "sync the second connection",
+   "method": "POST",
+   "path": "/api/connections/{C2}/sync",
+   "body": {
+    "window_index": 0
+   },
+   "save_body": "SYNC3"
+  },
+  {
+   "name": "apply the second connection's sync",
+   "apply_sync": {
+    "sync": "SYNC3",
+    "connection": "C2",
+    "batch_id": "parity-sync-3",
+    "liabilities": {
+     "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d"
+    }
+   },
+   "save": {
+    "I3A": "imports.0.import_id"
+   }
+  },
+  {
+   "name": "probe counts before removing the second connection's data",
+   "probe": "counts"
+  },
+  {
+   "name": "probe liabilities before removing the second connection's data",
+   "probe": "liabilities"
+  },
+  {
+   "name": "disconnect the second connection and remove its data",
+   "method": "DELETE",
+   "path": "/api/connections/{C2}?remove_data=true"
+  },
+  {
+   "name": "probe counts after removing the data",
+   "probe": "counts"
+  },
+  {
+   "name": "probe transactions per account after removing the data",
+   "probe": "transaction_counts"
+  },
+  {
+   "name": "probe liabilities after removing the data",
+   "probe": "liabilities"
+  },
+  {
+   "name": "probe connections after removing the data",
+   "probe": "connections"
+  },
+  {
+   "name": "imports after removing the data",
+   "method": "GET",
+   "path": "/api/smart-import/imports"
+  },
+  {
+   "name": "undo an import of the removed connection",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/{I3A}"
+  },
+  {
+   "name": "undo an import of the plainly disconnected connection",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/{I1A}"
+  },
+  {
+   "name": "disconnect the stored connection at its limit",
+   "method": "DELETE",
+   "path": "/api/connections/5f5f5f5f-0000-4000-8000-000000000001?remove_data=true"
+  },
+  {
+   "name": "disconnect the stored connection with no credential",
+   "method": "DELETE",
+   "path": "/api/connections/5f5f5f5f-0000-4000-8000-000000000002"
+  },
+  {
+   "name": "list after every disconnect",
+   "method": "GET",
+   "path": "/api/connections"
+  },
+  {
+   "name": "probe requests at the end",
+   "probe": "requests"
+  },
+  {
+   "name": "probe connections at the end",
+   "probe": "connections"
+  }
+ ],
+ "divergences": {
+  "allowlist": [
+   {
+    "id": "minted-ids",
+    "what": "Connection, import and other generated ids.",
+    "why": "Each path mints its own (uuid4 on the server, crypto.randomUUID in the browser).",
+    "handling": "Replaced with <id-n> in order of first appearance; the scenario's own ids stay exact."
+   },
+   {
+    "id": "wall-clock-stamps",
+    "what": "created_at, updated_at, imported_at, analyzed_at, uploaded_at, status_at, last_synced_at, quota_resets_at.",
+    "why": "Each path pins its own clock (the server in UTC, the browser's fake Date in local time), one second per step.",
+    "handling": "Only whether the stamp is set is compared. Dates that follow `today` (next_since, windows, posted and snapshot dates) are exact, and the request counts are probed exactly."
+   },
+   {
+    "id": "rule-ids",
+    "what": "Merchant rule ids inside a v2 sync request's context.rules.",
+    "why": "Minted per path; the v2 core matches rules on merchant_key and never reads the id.",
+    "handling": "Left out of both sides of the v2 request comparison; every other field is exact."
+   },
+   {
+    "id": "v2-status-call",
+    "what": "GET /api/v2/connectors/status.",
+    "why": "The browser composites read the enabled providers and allowed hosts from it (cached per page); the server reads its own environment.",
+    "handling": "Answered from the recorded server answer and not counted as a provider call."
+   }
+  ],
+  "error_codes": {
+   "bad_request": {
+    "paths": "both",
+    "reached": true,
+    "status": 422,
+    "detail": "The request could not be read."
+   },
+   "liability_not_found": {
+    "paths": "both",
+    "reached": true,
+    "status": 404,
+    "detail": "Debt not found."
+   },
+   "import_not_found": {
+    "paths": "both",
+    "reached": true,
+    "status": 404,
+    "detail": "Import not found. It may have already been undone."
+   },
+   "save_failed": {
+    "paths": "both",
+    "reached": false,
+    "why_not_reached": "Needs an unusable key or a failing write.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 500,
+    "detail": "The change could not be saved."
+   },
+   "bad_setup_token": {
+    "paths": "both-via-v2",
+    "reached": true,
+    "status": 422,
+    "detail": "This does not look like a SimpleFIN setup token."
+   },
+   "claim_refused": {
+    "paths": "both-via-v2",
+    "reached": false,
+    "why_not_reached": "Needs SimpleFIN Bridge to refuse a claim (a network answer).",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 422,
+    "detail": "This setup token was already used or is not valid. If you did not use it, disable it at SimpleFIN Bridge."
+   },
+   "host_not_allowed": {
+    "paths": "both",
+    "reached": true,
+    "status": 422,
+    "detail": "This connection address is not allowed."
+   },
+   "reconnect_needed": {
+    "paths": "both",
+    "reached": true,
+    "status": 409,
+    "detail": "The provider no longer accepts this connection. Reconnect to continue."
+   },
+   "payment_required": {
+    "paths": "both",
+    "reached": false,
+    "why_not_reached": "Needs a provider 402.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 409,
+    "detail": "The provider reports that the subscription needs attention."
+   },
+   "provider_rate_limited": {
+    "paths": "both",
+    "reached": false,
+    "why_not_reached": "Needs a provider 429.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 429,
+    "detail": "The provider asked for fewer requests. Try again tomorrow."
+   },
+   "quota_reached": {
+    "paths": "both",
+    "reached": true,
+    "status": 429,
+    "detail": "This connection has reached its daily sync limit. Try again tomorrow."
+   },
+   "window_too_long": {
+    "paths": "both-via-v2",
+    "reached": false,
+    "why_not_reached": "The plan never builds a window over 90 days; only a direct v2 call can send one.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 422,
+    "detail": "The sync period is longer than 90 days or ends in the future."
+   },
+   "provider_timeout": {
+    "paths": "both",
+    "reached": false,
+    "why_not_reached": "Needs a provider that does not answer.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 504,
+    "detail": "The provider took too long to respond."
+   },
+   "response_too_large": {
+    "paths": "both-via-v2",
+    "reached": false,
+    "why_not_reached": "Needs an oversized provider answer.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 502,
+    "detail": "The provider sent more data than the limit allows."
+   },
+   "provider_bad_response": {
+    "paths": "both",
+    "reached": false,
+    "why_not_reached": "Needs an unusable provider answer.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 502,
+    "detail": "The provider returned an unusable response."
+   },
+   "provider_unavailable": {
+    "paths": "both",
+    "reached": false,
+    "why_not_reached": "Needs an unreachable provider.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 502,
+    "detail": "The provider could not be reached."
+   },
+   "connector_disabled": {
+    "paths": "both",
+    "reached": false,
+    "why_not_reached": "The server routes run only where every provider is enabled (not shared); the browser learns it from v2 /status on a shared deployment.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 503,
+    "detail": "This connection type is not enabled here."
+   },
+   "connections_unavailable": {
+    "paths": "server-only",
+    "reached": false,
+    "why_not_reached": "The server refuses connections on a shared deployment; hosted mode keeps them in the browser, which has no such gate.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 403,
+    "detail": "Connected accounts are not available on this deployment."
+   },
+   "connection_not_found": {
+    "paths": "both",
+    "reached": true,
+    "status": 404,
+    "detail": "Connection not found."
+   },
+   "connection_limit": {
+    "paths": "both",
+    "reached": true,
+    "status": 422,
+    "detail": "This profile already has the maximum of 10 connections. Disconnect one first."
+   },
+   "claim_not_saved": {
+    "paths": "both",
+    "reached": false,
+    "why_not_reached": "Needs a good claim (a network answer) followed by a failed save.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 500,
+    "detail": "Your setup token was used but the connection could not be saved. Create a new setup token in SimpleFIN and try again."
+   },
+   "claim_timeout": {
+    "paths": "both",
+    "reached": false,
+    "why_not_reached": "Needs a claim that times out.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 504,
+    "detail": "The setup token may have been used. If connecting again fails, create a new one."
+   },
+   "request_time_short": {
+    "paths": "server-only",
+    "reached": false,
+    "why_not_reached": "The server's per-request deadline after waiting on its lock; the browser has no request deadline (B5, B6 divergence 4).",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ],
+    "status": 503,
+    "detail": "Not enough time was left to contact the provider. Try again."
+   },
+   "connection_busy": {
+    "paths": "browser-only",
+    "reached": false,
+    "why_not_reached": "A second call on a busy connection in one tab; the server waits on its lock instead (B6 divergence 3). The scenario is sequential.",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ]
+   },
+   "storage_unavailable": {
+    "paths": "browser-only",
+    "reached": false,
+    "why_not_reached": "IndexedDB or WebCrypto failing while a sealed credential is opened (B6 review round 1, item 2).",
+    "covered_by": [
+     "tests/api/test_connections_api.py",
+     "src/web/test/api/connections-composite.test.ts"
+    ]
+   }
+  },
+  "known": [
+   {
+    "id": "b5-invalid-account-key",
+    "source": "cn-B5 divergence 1",
+    "handling": "Not reachable: v2 always sends a valid account_key. Not exercised."
+   },
+   {
+    "id": "b5-hand-edited-row",
+    "source": "cn-B3 known gap, cn-B5 divergence 2",
+    "handling": "Not reachable: NaN or Infinity, first_sync_days 30.0 and integer-like account ids need a hand-edited row; Finlity never writes them. Not exercised."
+   },
+   {
+    "id": "b5-write-returns-memory",
+    "source": "cn-B5 divergence 3",
+    "handling": "Differs only for a hand-edited row with more than 64 requests. The scenario's create, refresh, reconnect and update answers are asserted equal."
+   },
+   {
+    "id": "b6-access-url-without-status",
+    "source": "cn-B6 divergence 1 and review round 1, item 1",
+    "handling": "Asserted with /status available: both refuse an off-allowlist Access URL with host_not_allowed and store nothing (step 'create simplefin with an access url off the allowlist'). The /status-down variant is not run here."
+   },
+   {
+    "id": "b6-disabled-without-status",
+    "source": "cn-B6 divergence 2",
+    "handling": "Not reachable here (connector_disabled above)."
+   },
+   {
+    "id": "b6-busy",
+    "source": "cn-B6 divergence 3",
+    "handling": "Not reachable in a sequential scenario (connection_busy above)."
+   },
+   {
+    "id": "b6-no-deadline",
+    "source": "cn-B5, cn-B6 divergence 4",
+    "handling": "Server only (request_time_short above)."
+   },
+   {
+    "id": "b6-count-timestamp",
+    "source": "cn-B6 divergence 5",
+    "handling": "Stamps are normalized (wall-clock-stamps); the request counts are asserted after every provider call and every refusal."
+   },
+   {
+    "id": "b6-reconnect-order",
+    "source": "cn-B6 review round 1, item 1 (contract note)",
+    "handling": "Asserted: a pasted Access URL the bridge refuses with 401 is verified before it is stored on both paths (step 'reconnect with a pasted access url the bridge refuses'): accounts_error, the request counted, status and secret rows unchanged. The demo reconnect (no credential, a refresh on both paths) is asserted equal too."
+   },
+   {
+    "id": "b6-claim-status-0",
+    "source": "cn-B6 review round 1, item 7",
+    "handling": "Not reachable: the test transport always answers (claim_timeout above)."
+   },
+   {
+    "id": "core-wall-clock",
+    "source": "found in B7",
+    "handling": "Not a path divergence: normalize.to_statements takes `now` as a required keyword and never reads the wall clock. The service passes its clock and the v2 route its own; the server run pins both to the scenario clock and the browser replays the v2 answer, so the expected file does not depend on the real date."
+   }
+  ]
+ }
+}

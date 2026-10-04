@@ -1072,6 +1072,7 @@
         "batch_id": "batch-3",
         "closing_balance": null,
         "closing_balance_date": null,
+        "connection_id": null,
         "file_name": "synthetic-chk.csv",
         "format": "csv",
         "import_id": "<id-5>",
@@ -1096,6 +1097,7 @@
         "batch_id": "batch-1",
         "closing_balance": 640.0,
         "closing_balance_date": "2026-09-25",
+        "connection_id": null,
         "file_name": "synthetic-card.ofx",
         "format": "ofx",
         "import_id": "<id-2>",
@@ -1120,6 +1122,7 @@
         "batch_id": "batch-1",
         "closing_balance": null,
         "closing_balance_date": null,
+        "connection_id": null,
         "file_name": "synthetic-chk.csv",
         "format": "csv",
         "import_id": "<id-1>",
@@ -1212,6 +1215,7 @@
         "batch_id": "batch-4",
         "closing_balance": 700.0,
         "closing_balance_date": "2026-09-01",
+        "connection_id": null,
         "file_name": "synthetic-card.ofx",
         "format": "ofx",
         "import_id": "<id-7>",
@@ -1236,6 +1240,7 @@
         "batch_id": "batch-4",
         "closing_balance": null,
         "closing_balance_date": null,
+        "connection_id": null,
         "file_name": "synthetic-sav.ofx",
         "format": "ofx",
         "import_id": "<id-6>",
@@ -1260,6 +1265,7 @@
         "batch_id": "batch-3",
         "closing_balance": null,
         "closing_balance_date": null,
+        "connection_id": null,
         "file_name": "synthetic-chk.csv",
         "format": "csv",
         "import_id": "<id-5>",
@@ -1284,6 +1290,7 @@
         "batch_id": "batch-1",
         "closing_balance": 640.0,
         "closing_balance_date": "2026-09-25",
+        "connection_id": null,
         "file_name": "synthetic-card.ofx",
         "format": "ofx",
         "import_id": "<id-2>",
@@ -1308,6 +1315,7 @@
         "batch_id": "batch-1",
         "closing_balance": null,
         "closing_balance_date": null,
+        "connection_id": null,
         "file_name": "synthetic-chk.csv",
         "format": "csv",
         "import_id": "<id-1>",
@@ -2155,6 +2163,7 @@
         "batch_id": "batch-5",
         "closing_balance": 1000.0,
         "closing_balance_date": "2026-09-30",
+        "connection_id": null,
         "file_name": "synthetic-chk2.csv",
         "format": "csv",
         "import_id": "<id-11>",
@@ -2179,6 +2188,7 @@
         "batch_id": "batch-5",
         "closing_balance": 300.0,
         "closing_balance_date": "2026-10-10",
+        "connection_id": null,
         "file_name": "synthetic-card.csv",
         "format": "csv",
         "import_id": "<id-10>",
@@ -2203,6 +2213,7 @@
         "batch_id": "batch-5",
         "closing_balance": -20.0,
         "closing_balance_date": "2026-09-20",
+        "connection_id": null,
         "file_name": "synthetic-card.csv",
         "format": "csv",
         "import_id": "<id-9>",
@@ -2227,6 +2238,7 @@
         "batch_id": "batch-5",
         "closing_balance": 600.0,
         "closing_balance_date": "2026-08-25",
+        "connection_id": null,
         "file_name": "synthetic-card.csv",
         "format": "csv",
         "import_id": "<id-8>",
@@ -2251,6 +2263,7 @@
         "batch_id": "batch-4",
         "closing_balance": 700.0,
         "closing_balance_date": "2026-09-01",
+        "connection_id": null,
         "file_name": "synthetic-card.ofx",
         "format": "ofx",
         "import_id": "<id-7>",
@@ -2275,6 +2288,7 @@
         "batch_id": "batch-4",
         "closing_balance": null,
         "closing_balance_date": null,
+        "connection_id": null,
         "file_name": "synthetic-sav.ofx",
         "format": "ofx",
         "import_id": "<id-6>",
@@ -2299,6 +2313,7 @@
         "batch_id": "batch-3",
         "closing_balance": null,
         "closing_balance_date": null,
+        "connection_id": null,
         "file_name": "synthetic-chk.csv",
         "format": "csv",
         "import_id": "<id-5>",
@@ -2323,6 +2338,7 @@
         "batch_id": "batch-1",
         "closing_balance": 640.0,
         "closing_balance_date": "2026-09-25",
+        "connection_id": null,
         "file_name": "synthetic-card.ofx",
         "format": "ofx",
         "import_id": "<id-2>",
@@ -3070,5 +3086,1921 @@
       "smart_import_meta": 8,
       "smart_import_settings_rows": 1
     }
+  },
+  {
+    "detail": "Connection not found.",
+    "error": 404,
+    "error_type": "connection_not_found",
+    "name": "apply a synced statement before any connection exists"
+  },
+  {
+    "name": "store a connection",
+    "ok": "done"
+  },
+  {
+    "detail": "The request could not be read.",
+    "error": 422,
+    "error_type": "bad_request",
+    "name": "apply a synced statement without connection_id"
+  },
+  {
+    "detail": "The request could not be read.",
+    "error": 422,
+    "error_type": "bad_request",
+    "name": "apply a file statement with connection_id"
+  },
+  {
+    "detail": "The request could not be read.",
+    "error": 422,
+    "error_type": "bad_request",
+    "name": "apply a sample statement with connection_id"
+  },
+  {
+    "detail": "Connection not found.",
+    "error": 404,
+    "error_type": "connection_not_found",
+    "name": "apply a synced statement with an unknown connection"
+  },
+  {
+    "name": "probe counts after refused syncs",
+    "ok": {
+      "bank_statement_imports": 9,
+      "budget_expenses": 3,
+      "import_transactions": 0,
+      "liabilities": 2,
+      "liability_balance_snapshots": 2,
+      "merchant_rules": 3,
+      "recurring_candidates": 0,
+      "smart_import_ledger": 1,
+      "smart_import_meta": 8,
+      "smart_import_settings_rows": 1
+    }
+  },
+  {
+    "name": "apply a sync: balance dated tomorrow, two days ahead, checking",
+    "ok": {
+      "expenses_created": 0,
+      "expenses_linked": 0,
+      "imports": [
+        {
+          "balance": "recorded",
+          "file_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "import_id": "<id-18>",
+          "txn_duplicate": 0,
+          "txn_excluded": 0,
+          "txn_new": 1
+        },
+        {
+          "balance": "skipped_future",
+          "file_hash": "7777777777777777777777777777777777777777777777777777777777777777",
+          "import_id": "<id-19>",
+          "txn_duplicate": 0,
+          "txn_excluded": 0,
+          "txn_new": 0
+        },
+        {
+          "balance": "none",
+          "file_hash": "8888888888888888888888888888888888888888888888888888888888888888",
+          "import_id": "<id-20>",
+          "txn_duplicate": 0,
+          "txn_excluded": 0,
+          "txn_new": 2
+        }
+      ],
+      "pruned": 0,
+      "rules_saved": 1,
+      "skipped_files": []
+    }
+  },
+  {
+    "name": "probe counts after sync",
+    "ok": {
+      "bank_statement_imports": 12,
+      "budget_expenses": 3,
+      "import_transactions": 3,
+      "liabilities": 2,
+      "liability_balance_snapshots": 3,
+      "merchant_rules": 4,
+      "recurring_candidates": 0,
+      "smart_import_ledger": 3,
+      "smart_import_meta": 11,
+      "smart_import_settings_rows": 1
+    }
+  },
+  {
+    "name": "probe transactions after sync",
+    "ok": [
+      {
+        "account_key": "acct:conn-card",
+        "amount": -18.5,
+        "category_id": "cat-dining",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn-card|CAFE|2026-10-01|-18.5",
+        "description": "CAFE SYNTHETIC",
+        "import_id": "<id-18>",
+        "kind": "expense",
+        "merchant_key": "CAFE",
+        "posted_date": "2026-10-01"
+      },
+      {
+        "account_key": "acct:conn-chk",
+        "amount": -64.2,
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn-chk|GROCER|2026-10-02|-64.2",
+        "description": "GROCER SYNTHETIC",
+        "import_id": "<id-20>",
+        "kind": "expense",
+        "merchant_key": "GROCER",
+        "posted_date": "2026-10-02"
+      },
+      {
+        "account_key": "acct:conn-chk",
+        "amount": 3000.0,
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:conn-chk|PAYROLL|2026-09-30|3000",
+        "description": "PAYROLL SYNTHETIC",
+        "import_id": "<id-20>",
+        "kind": "income",
+        "merchant_key": "PAYROLL",
+        "posted_date": "2026-09-30"
+      }
+    ]
+  },
+  {
+    "name": "probe rules after sync",
+    "ok": [
+      {
+        "category_id": "cat-dining",
+        "has_updated_at": true,
+        "hits": 1,
+        "kind": "expense",
+        "last_import_id": "<id-18>",
+        "merchant_key": "CAFE",
+        "source": "connector",
+        "updated_since_created": false
+      },
+      {
+        "category_id": "cat-other",
+        "has_updated_at": true,
+        "hits": 1,
+        "kind": "expense",
+        "last_import_id": "<id-5>",
+        "merchant_key": "GYMCLUB",
+        "source": "import",
+        "updated_since_created": false
+      },
+      {
+        "category_id": "cat-dining",
+        "has_updated_at": true,
+        "hits": 2,
+        "kind": "expense",
+        "last_import_id": "<id-5>",
+        "merchant_key": "NETFLIX",
+        "source": "ai",
+        "updated_since_created": true
+      },
+      {
+        "category_id": null,
+        "has_updated_at": true,
+        "hits": 1,
+        "kind": "income",
+        "last_import_id": "<id-1>",
+        "merchant_key": "PAYROLL",
+        "source": "user",
+        "updated_since_created": false
+      }
+    ]
+  },
+  {
+    "name": "probe liabilities after sync",
+    "ok": [
+      {
+        "balance_as_of": "2026-01-01",
+        "current_balance": 0.0,
+        "id": "L-archived",
+        "snapshots": []
+      },
+      {
+        "balance_as_of": "2026-10-04",
+        "current_balance": 410.0,
+        "id": "L-card",
+        "snapshots": [
+          {
+            "balance": 600.0,
+            "snapshot_date": "2026-08-25",
+            "source": "import",
+            "source_ref": "<id-8>"
+          },
+          {
+            "balance": 500.0,
+            "snapshot_date": "2026-09-01",
+            "source": "manual",
+            "source_ref": null
+          },
+          {
+            "balance": 410.0,
+            "snapshot_date": "2026-10-04",
+            "source": "import",
+            "source_ref": "<id-18>"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "probe ledger after sync",
+    "ok": {
+      "balance_moved": 1,
+      "snapshot": 2
+    }
+  },
+  {
+    "name": "imports after sync",
+    "ok": [
+      {
+        "account_key": "acct:conn-chk",
+        "account_kind": "checking",
+        "account_label": "Main",
+        "account_last4": null,
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "sync-1",
+        "closing_balance": 2500.0,
+        "closing_balance_date": "2026-10-05",
+        "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100",
+        "file_name": "synthetic-conn-chk.connector",
+        "format": "connector",
+        "import_id": "<id-20>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "connector",
+        "parser": "connector:demo",
+        "period_end": "2026-10-04",
+        "period_start": "2026-09-05",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 2
+      },
+      {
+        "account_key": "acct:conn-card2",
+        "account_kind": "credit_card",
+        "account_label": "Main",
+        "account_last4": null,
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "sync-1",
+        "closing_balance": 90.0,
+        "closing_balance_date": "2026-10-06",
+        "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100",
+        "file_name": "synthetic-conn-card2.connector",
+        "format": "connector",
+        "import_id": "<id-19>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "connector",
+        "parser": "connector:demo",
+        "period_end": "2026-10-04",
+        "period_start": "2026-09-05",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:conn-card",
+        "account_kind": "credit_card",
+        "account_label": "Main",
+        "account_last4": null,
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "sync-1",
+        "closing_balance": 410.0,
+        "closing_balance_date": "2026-10-05",
+        "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100",
+        "file_name": "synthetic-conn-card.connector",
+        "format": "connector",
+        "import_id": "<id-18>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "connector",
+        "parser": "connector:demo",
+        "period_end": "2026-10-04",
+        "period_start": "2026-09-05",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:sample",
+        "account_kind": "checking",
+        "account_label": "Sample",
+        "account_last4": "0000",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-7",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-sample.csv",
+        "format": "csv",
+        "import_id": "<id-17>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "sample",
+        "parser": "csv",
+        "period_end": "2025-06-30",
+        "period_start": "2025-06-01",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:old",
+        "account_kind": "checking",
+        "account_label": "Old",
+        "account_last4": "1111",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-7",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-old.csv",
+        "format": "csv",
+        "import_id": "<id-16>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "csv",
+        "period_end": "2025-11-30",
+        "period_start": "2025-05-01",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 3
+      },
+      {
+        "account_key": "acct:chk2",
+        "account_kind": "checking",
+        "account_label": "Bills",
+        "account_last4": "4321",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": 1000.0,
+        "closing_balance_date": "2026-09-30",
+        "connection_id": null,
+        "file_name": "synthetic-chk2.csv",
+        "format": "csv",
+        "import_id": "<id-11>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": 300.0,
+        "closing_balance_date": "2026-10-10",
+        "connection_id": null,
+        "file_name": "synthetic-card.csv",
+        "format": "csv",
+        "import_id": "<id-10>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": -20.0,
+        "closing_balance_date": "2026-09-20",
+        "connection_id": null,
+        "file_name": "synthetic-card.csv",
+        "format": "csv",
+        "import_id": "<id-9>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": 600.0,
+        "closing_balance_date": "2026-08-25",
+        "connection_id": null,
+        "file_name": "synthetic-card.csv",
+        "format": "csv",
+        "import_id": "<id-8>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-4",
+        "closing_balance": 700.0,
+        "closing_balance_date": "2026-09-01",
+        "connection_id": null,
+        "file_name": "synthetic-card.ofx",
+        "format": "ofx",
+        "import_id": "<id-7>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "ofx",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:sav",
+        "account_kind": "savings",
+        "account_label": "Savings",
+        "account_last4": "9012",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-4",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-sav.ofx",
+        "format": "ofx",
+        "import_id": "<id-6>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "ofx",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 2
+      }
+    ]
+  },
+  {
+    "name": "re-apply the same sync is skipped by file hash",
+    "ok": {
+      "expenses_created": 0,
+      "expenses_linked": 0,
+      "imports": [],
+      "pruned": 0,
+      "rules_saved": 0,
+      "skipped_files": [
+        "8888888888888888888888888888888888888888888888888888888888888888"
+      ]
+    }
+  },
+  {
+    "name": "undo the synced card statement",
+    "ok": {
+      "deleted": {
+        "expenses": 0,
+        "recurring_candidates": 0,
+        "snapshots": 1,
+        "transactions": 1
+      },
+      "kept": [],
+      "reassigned": {
+        "transactions": 0
+      },
+      "undone": true
+    }
+  },
+  {
+    "name": "probe counts after undo synced card",
+    "ok": {
+      "bank_statement_imports": 11,
+      "budget_expenses": 3,
+      "import_transactions": 2,
+      "liabilities": 2,
+      "liability_balance_snapshots": 2,
+      "merchant_rules": 4,
+      "recurring_candidates": 0,
+      "smart_import_ledger": 1,
+      "smart_import_meta": 10,
+      "smart_import_settings_rows": 1
+    }
+  },
+  {
+    "name": "probe liabilities after undo synced card",
+    "ok": [
+      {
+        "balance_as_of": "2026-01-01",
+        "current_balance": 0.0,
+        "id": "L-archived",
+        "snapshots": []
+      },
+      {
+        "balance_as_of": "2026-09-01",
+        "current_balance": 500.0,
+        "id": "L-card",
+        "snapshots": [
+          {
+            "balance": 600.0,
+            "snapshot_date": "2026-08-25",
+            "source": "import",
+            "source_ref": "<id-8>"
+          },
+          {
+            "balance": 500.0,
+            "snapshot_date": "2026-09-01",
+            "source": "manual",
+            "source_ref": null
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "probe ledger after undo synced card",
+    "ok": {
+      "snapshot": 1
+    }
+  },
+  {
+    "name": "undo the synced card statement dated two days ahead",
+    "ok": {
+      "deleted": {
+        "expenses": 0,
+        "recurring_candidates": 0,
+        "snapshots": 0,
+        "transactions": 0
+      },
+      "kept": [],
+      "reassigned": {
+        "transactions": 0
+      },
+      "undone": true
+    }
+  },
+  {
+    "name": "undo the synced checking statement",
+    "ok": {
+      "deleted": {
+        "expenses": 0,
+        "recurring_candidates": 0,
+        "snapshots": 0,
+        "transactions": 2
+      },
+      "kept": [],
+      "reassigned": {
+        "transactions": 0
+      },
+      "undone": true
+    }
+  },
+  {
+    "name": "probe counts after undo sync",
+    "ok": {
+      "bank_statement_imports": 9,
+      "budget_expenses": 3,
+      "import_transactions": 0,
+      "liabilities": 2,
+      "liability_balance_snapshots": 2,
+      "merchant_rules": 4,
+      "recurring_candidates": 0,
+      "smart_import_ledger": 1,
+      "smart_import_meta": 8,
+      "smart_import_settings_rows": 1
+    }
+  },
+  {
+    "name": "probe transactions after undo sync",
+    "ok": []
+  },
+  {
+    "name": "probe rules after undo sync",
+    "ok": [
+      {
+        "category_id": "cat-dining",
+        "has_updated_at": true,
+        "hits": 1,
+        "kind": "expense",
+        "last_import_id": "<id-18>",
+        "merchant_key": "CAFE",
+        "source": "connector",
+        "updated_since_created": false
+      },
+      {
+        "category_id": "cat-other",
+        "has_updated_at": true,
+        "hits": 1,
+        "kind": "expense",
+        "last_import_id": "<id-5>",
+        "merchant_key": "GYMCLUB",
+        "source": "import",
+        "updated_since_created": false
+      },
+      {
+        "category_id": "cat-dining",
+        "has_updated_at": true,
+        "hits": 2,
+        "kind": "expense",
+        "last_import_id": "<id-5>",
+        "merchant_key": "NETFLIX",
+        "source": "ai",
+        "updated_since_created": true
+      },
+      {
+        "category_id": null,
+        "has_updated_at": true,
+        "hits": 1,
+        "kind": "income",
+        "last_import_id": "<id-1>",
+        "merchant_key": "PAYROLL",
+        "source": "user",
+        "updated_since_created": false
+      }
+    ]
+  },
+  {
+    "name": "imports after undo sync",
+    "ok": [
+      {
+        "account_key": "acct:sample",
+        "account_kind": "checking",
+        "account_label": "Sample",
+        "account_last4": "0000",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-7",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-sample.csv",
+        "format": "csv",
+        "import_id": "<id-17>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "sample",
+        "parser": "csv",
+        "period_end": "2025-06-30",
+        "period_start": "2025-06-01",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:old",
+        "account_kind": "checking",
+        "account_label": "Old",
+        "account_last4": "1111",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-7",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-old.csv",
+        "format": "csv",
+        "import_id": "<id-16>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "csv",
+        "period_end": "2025-11-30",
+        "period_start": "2025-05-01",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 3
+      },
+      {
+        "account_key": "acct:chk2",
+        "account_kind": "checking",
+        "account_label": "Bills",
+        "account_last4": "4321",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": 1000.0,
+        "closing_balance_date": "2026-09-30",
+        "connection_id": null,
+        "file_name": "synthetic-chk2.csv",
+        "format": "csv",
+        "import_id": "<id-11>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": 300.0,
+        "closing_balance_date": "2026-10-10",
+        "connection_id": null,
+        "file_name": "synthetic-card.csv",
+        "format": "csv",
+        "import_id": "<id-10>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": -20.0,
+        "closing_balance_date": "2026-09-20",
+        "connection_id": null,
+        "file_name": "synthetic-card.csv",
+        "format": "csv",
+        "import_id": "<id-9>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": 600.0,
+        "closing_balance_date": "2026-08-25",
+        "connection_id": null,
+        "file_name": "synthetic-card.csv",
+        "format": "csv",
+        "import_id": "<id-8>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-4",
+        "closing_balance": 700.0,
+        "closing_balance_date": "2026-09-01",
+        "connection_id": null,
+        "file_name": "synthetic-card.ofx",
+        "format": "ofx",
+        "import_id": "<id-7>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "ofx",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:sav",
+        "account_kind": "savings",
+        "account_label": "Savings",
+        "account_last4": "9012",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-4",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-sav.ofx",
+        "format": "ofx",
+        "import_id": "<id-6>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "ofx",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 2
+      }
+    ]
+  },
+  {
+    "name": "store a secret for the connection",
+    "ok": "done"
+  },
+  {
+    "name": "probe connections before disconnect",
+    "ok": {
+      "ids": [
+        "0f0e0d0c-0b0a-4908-8706-050403020100"
+      ],
+      "secret_rows": 1
+    }
+  },
+  {
+    "name": "apply a sync before disconnect",
+    "ok": {
+      "expenses_created": 0,
+      "expenses_linked": 0,
+      "imports": [
+        {
+          "balance": "none",
+          "file_hash": "9999999999999999999999999999999999999999999999999999999999999999",
+          "import_id": "<id-21>",
+          "txn_duplicate": 0,
+          "txn_excluded": 0,
+          "txn_new": 2
+        }
+      ],
+      "pruned": 0,
+      "rules_saved": 0,
+      "skipped_files": []
+    }
+  },
+  {
+    "name": "apply an overlapping sync before disconnect",
+    "ok": {
+      "expenses_created": 0,
+      "expenses_linked": 0,
+      "imports": [
+        {
+          "balance": "none",
+          "file_hash": "abababababababababababababababababababababababababababababababab",
+          "import_id": "<id-22>",
+          "txn_duplicate": 1,
+          "txn_excluded": 0,
+          "txn_new": 1
+        }
+      ],
+      "pruned": 0,
+      "rules_saved": 0,
+      "skipped_files": []
+    }
+  },
+  {
+    "detail": "The request could not be read.",
+    "error": 422,
+    "error_type": "bad_request",
+    "name": "disconnect with an unrecognised remove_data"
+  },
+  {
+    "detail": "Connection not found.",
+    "error": 404,
+    "error_type": "connection_not_found",
+    "name": "disconnect an unknown connection"
+  },
+  {
+    "name": "disconnect keeping the imported data",
+    "ok": {
+      "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100",
+      "deleted": {
+        "expenses": 0,
+        "recurring_candidates": 0,
+        "snapshots": 0,
+        "transactions": 0
+      },
+      "imports_kept": 2,
+      "imports_undone": 0,
+      "kept": [],
+      "reassigned": {
+        "transactions": 0
+      },
+      "remove_data": false
+    }
+  },
+  {
+    "name": "probe counts after disconnect",
+    "ok": {
+      "bank_statement_imports": 11,
+      "budget_expenses": 3,
+      "import_transactions": 3,
+      "liabilities": 2,
+      "liability_balance_snapshots": 2,
+      "merchant_rules": 4,
+      "recurring_candidates": 0,
+      "smart_import_ledger": 2,
+      "smart_import_meta": 10,
+      "smart_import_settings_rows": 1
+    }
+  },
+  {
+    "name": "probe connections after disconnect",
+    "ok": {
+      "ids": [],
+      "secret_rows": 0
+    }
+  },
+  {
+    "name": "imports after disconnect",
+    "ok": [
+      {
+        "account_key": "acct:conn-chk",
+        "account_kind": "checking",
+        "account_label": "Main",
+        "account_last4": null,
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "sync-4",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100",
+        "file_name": "synthetic-conn-chk.connector",
+        "format": "connector",
+        "import_id": "<id-22>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "connector",
+        "parser": "connector:demo",
+        "period_end": "2026-10-04",
+        "period_start": "2026-09-28",
+        "txn_duplicate": 1,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:conn-chk",
+        "account_kind": "checking",
+        "account_label": "Main",
+        "account_last4": null,
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "sync-3",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100",
+        "file_name": "synthetic-conn-chk.connector",
+        "format": "connector",
+        "import_id": "<id-21>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "connector",
+        "parser": "connector:demo",
+        "period_end": "2026-10-04",
+        "period_start": "2026-09-05",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 2
+      },
+      {
+        "account_key": "acct:sample",
+        "account_kind": "checking",
+        "account_label": "Sample",
+        "account_last4": "0000",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-7",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-sample.csv",
+        "format": "csv",
+        "import_id": "<id-17>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "sample",
+        "parser": "csv",
+        "period_end": "2025-06-30",
+        "period_start": "2025-06-01",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:old",
+        "account_kind": "checking",
+        "account_label": "Old",
+        "account_last4": "1111",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-7",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-old.csv",
+        "format": "csv",
+        "import_id": "<id-16>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "csv",
+        "period_end": "2025-11-30",
+        "period_start": "2025-05-01",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 3
+      },
+      {
+        "account_key": "acct:chk2",
+        "account_kind": "checking",
+        "account_label": "Bills",
+        "account_last4": "4321",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": 1000.0,
+        "closing_balance_date": "2026-09-30",
+        "connection_id": null,
+        "file_name": "synthetic-chk2.csv",
+        "format": "csv",
+        "import_id": "<id-11>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": 300.0,
+        "closing_balance_date": "2026-10-10",
+        "connection_id": null,
+        "file_name": "synthetic-card.csv",
+        "format": "csv",
+        "import_id": "<id-10>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": -20.0,
+        "closing_balance_date": "2026-09-20",
+        "connection_id": null,
+        "file_name": "synthetic-card.csv",
+        "format": "csv",
+        "import_id": "<id-9>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": 600.0,
+        "closing_balance_date": "2026-08-25",
+        "connection_id": null,
+        "file_name": "synthetic-card.csv",
+        "format": "csv",
+        "import_id": "<id-8>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-4",
+        "closing_balance": 700.0,
+        "closing_balance_date": "2026-09-01",
+        "connection_id": null,
+        "file_name": "synthetic-card.ofx",
+        "format": "ofx",
+        "import_id": "<id-7>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "ofx",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:sav",
+        "account_kind": "savings",
+        "account_label": "Savings",
+        "account_last4": "9012",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-4",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-sav.ofx",
+        "format": "ofx",
+        "import_id": "<id-6>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "ofx",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 2
+      }
+    ]
+  },
+  {
+    "detail": "Connection not found.",
+    "error": 404,
+    "error_type": "connection_not_found",
+    "name": "disconnect the removed connection again"
+  },
+  {
+    "detail": "Connection not found.",
+    "error": 404,
+    "error_type": "connection_not_found",
+    "name": "a sync for the removed connection is refused"
+  },
+  {
+    "name": "undo a sync of the removed connection",
+    "ok": {
+      "deleted": {
+        "expenses": 0,
+        "recurring_candidates": 0,
+        "snapshots": 0,
+        "transactions": 1
+      },
+      "kept": [],
+      "reassigned": {
+        "transactions": 0
+      },
+      "undone": true
+    }
+  },
+  {
+    "name": "probe counts after undo of a removed connection's sync",
+    "ok": {
+      "bank_statement_imports": 10,
+      "budget_expenses": 3,
+      "import_transactions": 2,
+      "liabilities": 2,
+      "liability_balance_snapshots": 2,
+      "merchant_rules": 4,
+      "recurring_candidates": 0,
+      "smart_import_ledger": 1,
+      "smart_import_meta": 9,
+      "smart_import_settings_rows": 1
+    }
+  },
+  {
+    "name": "store a second connection",
+    "ok": "done"
+  },
+  {
+    "name": "store a secret for the second connection",
+    "ok": "done"
+  },
+  {
+    "name": "probe connections with the second connection",
+    "ok": {
+      "ids": [
+        "11111111-2222-4333-8444-555555555555"
+      ],
+      "secret_rows": 1
+    }
+  },
+  {
+    "name": "apply a card sync of the second connection",
+    "ok": {
+      "expenses_created": 1,
+      "expenses_linked": 0,
+      "imports": [
+        {
+          "balance": "recorded",
+          "file_hash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+          "import_id": "<id-23>",
+          "txn_duplicate": 0,
+          "txn_excluded": 0,
+          "txn_new": 2
+        }
+      ],
+      "pruned": 0,
+      "rules_saved": 1,
+      "skipped_files": []
+    }
+  },
+  {
+    "name": "apply a checking sync of the second connection",
+    "ok": {
+      "expenses_created": 0,
+      "expenses_linked": 0,
+      "imports": [
+        {
+          "balance": "none",
+          "file_hash": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+          "import_id": "<id-24>",
+          "txn_duplicate": 0,
+          "txn_excluded": 0,
+          "txn_new": 2
+        }
+      ],
+      "pruned": 0,
+      "rules_saved": 0,
+      "skipped_files": []
+    }
+  },
+  {
+    "name": "a file import overlaps the second connection's sync",
+    "ok": {
+      "expenses_created": 0,
+      "expenses_linked": 0,
+      "imports": [
+        {
+          "balance": "none",
+          "file_hash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+          "import_id": "<id-25>",
+          "txn_duplicate": 1,
+          "txn_excluded": 0,
+          "txn_new": 0
+        }
+      ],
+      "pruned": 0,
+      "rules_saved": 0,
+      "skipped_files": []
+    }
+  },
+  {
+    "name": "edit the expense the second connection created",
+    "ok": "done"
+  },
+  {
+    "name": "probe counts before disconnect with remove_data",
+    "ok": {
+      "bank_statement_imports": 13,
+      "budget_expenses": 4,
+      "import_transactions": 6,
+      "liabilities": 2,
+      "liability_balance_snapshots": 3,
+      "merchant_rules": 5,
+      "recurring_candidates": 1,
+      "smart_import_ledger": 5,
+      "smart_import_meta": 12,
+      "smart_import_settings_rows": 1
+    }
+  },
+  {
+    "name": "probe liabilities before disconnect with remove_data",
+    "ok": [
+      {
+        "balance_as_of": "2026-01-01",
+        "current_balance": 0.0,
+        "id": "L-archived",
+        "snapshots": []
+      },
+      {
+        "balance_as_of": "2026-10-03",
+        "current_balance": 450.0,
+        "id": "L-card",
+        "snapshots": [
+          {
+            "balance": 600.0,
+            "snapshot_date": "2026-08-25",
+            "source": "import",
+            "source_ref": "<id-8>"
+          },
+          {
+            "balance": 500.0,
+            "snapshot_date": "2026-09-01",
+            "source": "manual",
+            "source_ref": null
+          },
+          {
+            "balance": 450.0,
+            "snapshot_date": "2026-10-03",
+            "source": "import",
+            "source_ref": "<id-23>"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "probe ledger before disconnect with remove_data",
+    "ok": {
+      "balance_moved": 1,
+      "claimed": 1,
+      "created": 1,
+      "snapshot": 2
+    }
+  },
+  {
+    "name": "disconnect and remove imported data",
+    "ok": {
+      "connection_id": "11111111-2222-4333-8444-555555555555",
+      "deleted": {
+        "expenses": 0,
+        "recurring_candidates": 1,
+        "snapshots": 1,
+        "transactions": 3
+      },
+      "imports_kept": 0,
+      "imports_undone": 2,
+      "kept": [
+        {
+          "id": "<id-26>",
+          "reason": "edited",
+          "table": "budget_expenses"
+        }
+      ],
+      "reassigned": {
+        "transactions": 1
+      },
+      "remove_data": true
+    }
+  },
+  {
+    "name": "probe counts after disconnect with remove_data",
+    "ok": {
+      "bank_statement_imports": 11,
+      "budget_expenses": 4,
+      "import_transactions": 3,
+      "liabilities": 2,
+      "liability_balance_snapshots": 2,
+      "merchant_rules": 5,
+      "recurring_candidates": 0,
+      "smart_import_ledger": 1,
+      "smart_import_meta": 10,
+      "smart_import_settings_rows": 1
+    }
+  },
+  {
+    "name": "probe transactions after disconnect with remove_data",
+    "ok": [
+      {
+        "account_key": "acct:conn-chk",
+        "amount": -64.2,
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn-chk|GROCER|2026-10-02|-64.2",
+        "description": "GROCER SYNTHETIC",
+        "import_id": "<id-21>",
+        "kind": "expense",
+        "merchant_key": "GROCER",
+        "posted_date": "2026-10-02"
+      },
+      {
+        "account_key": "acct:conn-chk",
+        "amount": 3000.0,
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:conn-chk|PAYROLL|2026-09-30|3000",
+        "description": "PAYROLL SYNTHETIC",
+        "import_id": "<id-21>",
+        "kind": "income",
+        "merchant_key": "PAYROLL",
+        "posted_date": "2026-09-30"
+      },
+      {
+        "account_key": "acct:conn2-chk",
+        "amount": -40.0,
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:conn2-chk|PHARMACY|2026-09-15|-40",
+        "description": "PHARMACY SYNTHETIC",
+        "import_id": "<id-25>",
+        "kind": "expense",
+        "merchant_key": "PHARMACY",
+        "posted_date": "2026-09-15"
+      }
+    ]
+  },
+  {
+    "name": "probe rules after disconnect with remove_data",
+    "ok": [
+      {
+        "category_id": "cat-dining",
+        "has_updated_at": true,
+        "hits": 1,
+        "kind": "expense",
+        "last_import_id": "<id-18>",
+        "merchant_key": "CAFE",
+        "source": "connector",
+        "updated_since_created": false
+      },
+      {
+        "category_id": "cat-other",
+        "has_updated_at": true,
+        "hits": 1,
+        "kind": "expense",
+        "last_import_id": "<id-5>",
+        "merchant_key": "GYMCLUB",
+        "source": "import",
+        "updated_since_created": false
+      },
+      {
+        "category_id": "cat-dining",
+        "has_updated_at": true,
+        "hits": 2,
+        "kind": "expense",
+        "last_import_id": "<id-5>",
+        "merchant_key": "NETFLIX",
+        "source": "ai",
+        "updated_since_created": true
+      },
+      {
+        "category_id": null,
+        "has_updated_at": true,
+        "hits": 1,
+        "kind": "income",
+        "last_import_id": "<id-1>",
+        "merchant_key": "PAYROLL",
+        "source": "user",
+        "updated_since_created": false
+      },
+      {
+        "category_id": "cat-other",
+        "has_updated_at": true,
+        "hits": 1,
+        "kind": "expense",
+        "last_import_id": "<id-23>",
+        "merchant_key": "STREAMCO",
+        "source": "connector",
+        "updated_since_created": false
+      }
+    ]
+  },
+  {
+    "name": "probe expenses after disconnect with remove_data",
+    "ok": [
+      {
+        "amount": 45.0,
+        "category_id": "cat-other",
+        "entity_id": null,
+        "frequency": "monthly",
+        "id": "E-gym",
+        "is_active": false,
+        "name": "Gym"
+      },
+      {
+        "amount": 15.49,
+        "category_id": "cat-dining",
+        "entity_id": null,
+        "frequency": "monthly",
+        "id": "E-netflix",
+        "is_active": true,
+        "name": "Netflix"
+      },
+      {
+        "amount": 11.99,
+        "category_id": "cat-other",
+        "entity_id": null,
+        "frequency": "monthly",
+        "id": "<id-3>",
+        "is_active": true,
+        "name": "Spotify"
+      },
+      {
+        "amount": 10.99,
+        "category_id": "cat-other",
+        "entity_id": null,
+        "frequency": "monthly",
+        "id": "<id-26>",
+        "is_active": true,
+        "name": "Streamco"
+      }
+    ]
+  },
+  {
+    "name": "probe liabilities after disconnect with remove_data",
+    "ok": [
+      {
+        "balance_as_of": "2026-01-01",
+        "current_balance": 0.0,
+        "id": "L-archived",
+        "snapshots": []
+      },
+      {
+        "balance_as_of": "2026-09-01",
+        "current_balance": 500.0,
+        "id": "L-card",
+        "snapshots": [
+          {
+            "balance": 600.0,
+            "snapshot_date": "2026-08-25",
+            "source": "import",
+            "source_ref": "<id-8>"
+          },
+          {
+            "balance": 500.0,
+            "snapshot_date": "2026-09-01",
+            "source": "manual",
+            "source_ref": null
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "probe ledger after disconnect with remove_data",
+    "ok": {
+      "snapshot": 1
+    }
+  },
+  {
+    "name": "probe connections after disconnect with remove_data",
+    "ok": {
+      "ids": [],
+      "secret_rows": 0
+    }
+  },
+  {
+    "name": "imports after disconnect with remove_data",
+    "ok": [
+      {
+        "account_key": "acct:conn2-chk",
+        "account_kind": "checking",
+        "account_label": "Second",
+        "account_last4": "2468",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "file-9",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-conn2-chk.csv",
+        "format": "csv",
+        "import_id": "<id-25>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:conn-chk",
+        "account_kind": "checking",
+        "account_label": "Main",
+        "account_last4": null,
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "sync-3",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": "0f0e0d0c-0b0a-4908-8706-050403020100",
+        "file_name": "synthetic-conn-chk.connector",
+        "format": "connector",
+        "import_id": "<id-21>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "connector",
+        "parser": "connector:demo",
+        "period_end": "2026-10-04",
+        "period_start": "2026-09-05",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 2
+      },
+      {
+        "account_key": "acct:sample",
+        "account_kind": "checking",
+        "account_label": "Sample",
+        "account_last4": "0000",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-7",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-sample.csv",
+        "format": "csv",
+        "import_id": "<id-17>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "sample",
+        "parser": "csv",
+        "period_end": "2025-06-30",
+        "period_start": "2025-06-01",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:old",
+        "account_kind": "checking",
+        "account_label": "Old",
+        "account_last4": "1111",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-7",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-old.csv",
+        "format": "csv",
+        "import_id": "<id-16>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "csv",
+        "period_end": "2025-11-30",
+        "period_start": "2025-05-01",
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 3
+      },
+      {
+        "account_key": "acct:chk2",
+        "account_kind": "checking",
+        "account_label": "Bills",
+        "account_last4": "4321",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": 1000.0,
+        "closing_balance_date": "2026-09-30",
+        "connection_id": null,
+        "file_name": "synthetic-chk2.csv",
+        "format": "csv",
+        "import_id": "<id-11>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": 300.0,
+        "closing_balance_date": "2026-10-10",
+        "connection_id": null,
+        "file_name": "synthetic-card.csv",
+        "format": "csv",
+        "import_id": "<id-10>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": -20.0,
+        "closing_balance_date": "2026-09-20",
+        "connection_id": null,
+        "file_name": "synthetic-card.csv",
+        "format": "csv",
+        "import_id": "<id-9>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 0
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-5",
+        "closing_balance": 600.0,
+        "closing_balance_date": "2026-08-25",
+        "connection_id": null,
+        "file_name": "synthetic-card.csv",
+        "format": "csv",
+        "import_id": "<id-8>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "csv",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:card",
+        "account_kind": "credit_card",
+        "account_label": "Visa",
+        "account_last4": "5678",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-4",
+        "closing_balance": 700.0,
+        "closing_balance_date": "2026-09-01",
+        "connection_id": null,
+        "file_name": "synthetic-card.ofx",
+        "format": "ofx",
+        "import_id": "<id-7>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": "L-card",
+        "origin": "file",
+        "parser": "ofx",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 1
+      },
+      {
+        "account_key": "acct:sav",
+        "account_kind": "savings",
+        "account_label": "Savings",
+        "account_last4": "9012",
+        "ai_provider": null,
+        "ai_used": 0,
+        "batch_id": "batch-4",
+        "closing_balance": null,
+        "closing_balance_date": null,
+        "connection_id": null,
+        "file_name": "synthetic-sav.ofx",
+        "format": "ofx",
+        "import_id": "<id-6>",
+        "imported_at": "<ts>",
+        "institution": "Sample Bank",
+        "liability_id": null,
+        "origin": "file",
+        "parser": "ofx",
+        "period_end": null,
+        "period_start": null,
+        "txn_duplicate": 0,
+        "txn_excluded": 0,
+        "txn_new": 2
+      }
+    ]
+  },
+  {
+    "detail": "Connection not found.",
+    "error": 404,
+    "error_type": "connection_not_found",
+    "name": "disconnect and remove data again"
   }
 ]

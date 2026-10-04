@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from src.api.dependencies import get_db
 from src.database import Database
 from src.database.models import (
+    AppSettings,
     BankStatementImport,
     BudgetExpense,
     BudgetExpenseCategory,
@@ -22,11 +23,13 @@ from src.database.models import (
     SmartImportMeta,
 )
 from src.main import app
+from tests.connectors.apply_contract import CONNECTION_ID
 
 TODAY = date(2026, 10, 4)
 HASH_A = "a" * 64
 HASH_B = "b" * 64
 HASH_C = "c" * 64
+CONN_ID = CONNECTION_ID
 
 ALL_TABLES = (
     BankStatementImport,
@@ -81,6 +84,28 @@ def add_liability(db, lid="L1", name="Visa", *, balance=500.0, as_of=date(2026, 
         if snapshot:
             s.add(LiabilityBalanceSnapshot(liability_id=lid, snapshot_date=as_of, balance=balance, source="manual"))
         s.commit()
+
+
+def connection_entry(provider="demo", **extra):
+    """One sanitize-valid entry of the ``connections`` settings document."""
+    entry = {
+        "provider": provider, "label": "Demo", "created_at": "2026-10-01T09:00:00Z", "status": "ok",
+        "status_at": "2026-10-01T09:00:00Z", "last_synced_at": None, "first_sync_days": 90,
+        "requests": [], "accounts": {},
+    }
+    entry.update(extra)
+    return entry
+
+
+def add_connections(db, items):
+    """Write the raw ``connections`` row, as the connection store keeps it."""
+    with db.get_session() as s:
+        s.add(AppSettings(key="connections", value=json.dumps({"version": 1, "items": items}), encrypted=False))
+        s.commit()
+
+
+def add_connection(db, cid=CONN_ID, provider="demo"):
+    add_connections(db, {cid: connection_entry(provider)})
 
 
 def add_expense(db, eid="E1", name="Netflix", amount=15.49, frequency="monthly", category="cat-Dining",

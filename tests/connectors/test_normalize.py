@@ -33,6 +33,7 @@ from src.connectors.normalize import (
     to_statements,
 )
 from src.connectors.simplefin import SimpleFinProvider
+from src.database.models import Liability
 from src.connectors.types import (
     AccountRequest,
     FetchedAccount,
@@ -44,6 +45,7 @@ from src.smart_import import normalize as si
 from src.smart_import.settings_store import _ACCOUNT_KEY
 from src.smart_import.types import WARNINGS
 from tests.api.si_support import (  # noqa: F401
+    add_connection,
     add_liability,
     apply_body,
     client,
@@ -251,6 +253,15 @@ def test_no_sign_check_otherwise(kind, balance, amounts, flip):
 # 24 hours after now (UTC); the period end is the window end.
 
 
+def test_to_statements_never_reads_the_wall_clock():
+    """``now`` is keyword-required: every caller passes its own clock."""
+    with pytest.raises(TypeError):
+        to_statements("simplefin", FetchResult(accounts=[]), [], WINDOW, CONTEXT)  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        to_statements("simplefin", FetchResult(accounts=[]), [], WINDOW, CONTEXT, now=None)  # type: ignore[arg-type]
+    assert "datetime.now" not in Path(cn.__file__).read_text(encoding="utf-8")
+
+
 def test_balance_dated_tomorrow_utc_is_kept_as_is():
     tomorrow = END + timedelta(days=1)
     st = _one(_acct(balance_date=tomorrow))
@@ -406,6 +417,7 @@ def test_same_id_in_two_accounts_both_stored_on_the_server_path(client, db):  # 
     a = _acct("ACT-A", txns=[_txn("1788633284")], balance=None)
     b = _acct("ACT-B", txns=[_txn("1788633284")], balance=None)
     out = _run([a, b], [_req("ACT-A"), _req("ACT-B")], context=SERVER_CONTEXT)
+    add_connection(db)
     body = apply_body([as_apply(st) for st in out])
     res = do_apply(client, body)
     assert res.status_code == 200, res.text
@@ -766,18 +778,22 @@ def test_fetched_account_repr_hides_institution():
     assert "Example Secret Bank" not in repr(acct)
 
 
-def test_balance_dated_utc_tomorrow_is_skipped_at_apply_today(client, db):  # noqa: F811
-    """Documents a handoff for PR B/C: Apply's ``skipped_future`` compares
-    ``as_of`` with the local ``today()`` (server: ``clock.today``; browser:
-    ``recordBalance``), so a balance dated tomorrow by UTC is kept here and
-    then not snapshotted when applied on the local day before."""
+def test_balance_dated_utc_tomorrow_is_recorded_as_today_at_apply(client, db):  # noqa: F811
+    """The A4 handoff, resolved in B3: a balance dated tomorrow by UTC is kept
+    here, and Apply records a connector balance dated the local day after
+    ``today()`` as today's snapshot (server ``_record_balance``, browser
+    ``recordBalance``). Two days ahead is still ``skipped_future``."""
     add_liability(db)
+    add_connection(db)
     acct = _acct(balance="-500.00", balance_date=END + timedelta(days=1))
     (st,) = _run([acct], [_req(kind="credit_card")], context=SERVER_CONTEXT)
     body = apply_body([{**as_apply(st), "liability_id": "L1"}])
     res = do_apply(client, body)
     assert res.status_code == 200, res.text
-    assert res.json()["imports"][0]["balance"] == "skipped_future"
+    assert res.json()["imports"][0]["balance"] == "recorded"
+    with db.get_session() as s:
+        liab = s.get(Liability, "L1")
+        assert (liab.current_balance, liab.balance_as_of) == (500.0, END)
 
 
 # ---------------------------------------------------------------------------

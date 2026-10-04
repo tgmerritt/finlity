@@ -15,8 +15,19 @@
 import type { ClientDatabase } from './client-database';
 import * as liabilities from './local-liabilities';
 import * as smartImport from './local-smart-import';
+import * as connections from './local-connections';
 import type {
   ApplyResponse,
+  ConnectionCallResult,
+  ConnectionCallStart,
+  ConnectionProvider,
+  ConnectionDetail,
+  ConnectionListingResponse,
+  ConnectionSummary,
+  ConnectionSyncPlan,
+  ConnectorAccountsResponse,
+  DisconnectResponse,
+  LocalConnectionMeta,
   SmartImportTransactionsDeleted,
   SmartImportUndoResponse,
   SpendingSummary,
@@ -2302,6 +2313,81 @@ export class LocalAPI {
   /** DELETE /api/smart-import/imports/{id} */
   undoSmartImport(id: string): SmartImportUndoResponse {
     return smartImport.undoSmartImport(this.db, id);
+  }
+
+  // Connections (plan B5, see local-connections.ts). The routed ones mirror
+  // src/api/connections.py; the rest are steps the client.ts composites (B6)
+  // call around their WebCrypto and v2 round trips, and have no route.
+
+  /** GET /api/connections */
+  getConnections(): ConnectionSummary[] {
+    return connections.getConnections(this.db);
+  }
+
+  /** GET /api/connections/{id} */
+  getConnection(id: string): ConnectionDetail {
+    return connections.getConnection(this.db, id);
+  }
+
+  /** PUT /api/connections/{id} */
+  updateConnection(id: string, input: unknown): ConnectionDetail {
+    return connections.updateConnection(this.db, id, input);
+  }
+
+  /** DELETE /api/connections/{id}?remove_data=true|false */
+  deleteConnection(id: string, removeData?: string | null): DisconnectResponse {
+    return connections.deleteConnection(this.db, id, removeData);
+  }
+
+  /** Create composite: store the connection and its sealed (`wc1:`) credential. */
+  createConnection(meta: LocalConnectionMeta, sealed: string | null): ConnectionDetail {
+    return connections.createConnection(this.db, meta, sealed);
+  }
+
+  /** Reconnect composite: replace the sealed credential, keep the id and mapping. */
+  replaceConnectionSecret(id: string, sealed: string | null, claimed = false): ConnectionDetail {
+    return connections.replaceConnectionSecret(this.db, id, sealed, claimed);
+  }
+
+  /**
+   * Composites: the gates before a provider call (with the v2 status `enabled`
+   * list when known), one reserved request, and the sealed credential to unseal.
+   */
+  beginConnectionCall(id: string, enabled?: readonly string[] | null): ConnectionCallStart {
+    return connections.beginConnectionCall(this.db, id, enabled);
+  }
+
+  /** Reconnect composite: gates and one reserved request for trying a new credential. */
+  beginReplacementCall(id: string, enabled?: readonly string[] | null): ConnectionProvider {
+    return connections.beginReplacementCall(this.db, id, enabled);
+  }
+
+  /** Composites: forget the call in flight on `id`, keeping its count (use in `finally`). */
+  endConnectionCall(id: string): void {
+    connections.endConnectionCall(this.db, id);
+  }
+
+  /** Composites: hold a connection id (or 'create') across awaits; 409 connection_busy if held. */
+  holdConnection(key: string): () => void {
+    return connections.holdConnection(this.db, key);
+  }
+
+  /** Composites: merge a v2 accounts answer (counts the call unless it was reserved). */
+  mergeConnectionAccounts(
+    id: string,
+    response: ConnectorAccountsResponse
+  ): ConnectionListingResponse {
+    return connections.mergeConnectionAccounts(this.db, id, response);
+  }
+
+  /** Sync composite: the windows and the v2 sync accounts each asks for. */
+  getConnectionSyncPlan(id: string): ConnectionSyncPlan {
+    return connections.getConnectionSyncPlan(this.db, id);
+  }
+
+  /** Composites: record a good sync or a failed (or never made) provider call. */
+  recordConnectionResult(id: string, result: ConnectionCallResult): ConnectionDetail | null {
+    return connections.recordConnectionResult(this.db, id, result);
   }
 
   /** DELETE /api/smart-import/transactions */

@@ -717,6 +717,16 @@ local('DELETE', '/api/smart-import/transactions', () =>
 local('DELETE', '/api/smart-import/imports/{id}', (_req, m) =>
   getLocalAPI().undoSmartImport(m[1]!)
 );
+// Connections (plans B4, B5). Server mode refuses shared deployments, so hosted
+// visitors keep connections in this browser. The static path comes before {id}.
+// Create, credentials, accounts and sync need WebCrypto and a v2 round trip, so
+// they are client.ts composites (plan B6), not routes here.
+local('GET', '/api/connections', () => getLocalAPI().getConnections());
+local('GET', '/api/connections/{id}', (_req, m) => getLocalAPI().getConnection(m[1]!));
+local('PUT', '/api/connections/{id}', (req, m) => getLocalAPI().updateConnection(m[1]!, req.body));
+local('DELETE', '/api/connections/{id}', (req, m) =>
+  getLocalAPI().deleteConnection(m[1]!, req.query.get('remove_data'))
+);
 local('GET', '/api/budget/spending-summary', (req) =>
   getLocalAPI().getSpendingSummary(req.query.get('months'), req.query.get('entity_id'))
 );
