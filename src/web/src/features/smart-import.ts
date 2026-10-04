@@ -411,6 +411,70 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     modal?.removeEventListener('click', onClick, true);
   }
 
+  // ---- focus across re-renders -----------------------------------------
+
+  const SCOPES = '[data-file],[data-statement]';
+  const FOCUSABLE =
+    'button:not(:disabled),select:not(:disabled),input:not(:disabled),[tabindex="0"]';
+
+  interface FocusKey {
+    scope: string | null;
+    si: string | null;
+    field: string | null;
+    index: number;
+  }
+
+  const scopeKey = (node: HTMLElement): string =>
+    node.dataset.statement ? `s:${node.dataset.statement}` : `f:${node.dataset.file ?? ''}`;
+
+  /** Where focus is inside the step, as a key that survives the DOM being rebuilt. */
+  function captureFocus(): FocusKey | null {
+    const a = document.activeElement;
+    if (!(a instanceof HTMLElement)) return null;
+    if (footer?.contains(a)) {
+      return { scope: 'footer', si: a.getAttribute('data-si'), field: null, index: -1 };
+    }
+    if (!body?.contains(a)) return null;
+    const host = a.closest<HTMLElement>(SCOPES);
+    const scopes = Array.from(body.querySelectorAll<HTMLElement>(SCOPES));
+    return {
+      scope: host ? scopeKey(host) : null,
+      si: a.getAttribute('data-si'),
+      field: a.getAttribute('data-field'),
+      index: host ? scopes.indexOf(host) : -1,
+    };
+  }
+
+  /**
+   * Put focus back on the same control after a re-render. When its file or
+   * statement is gone (Remove), the same control on the next one is used, then
+   * that one's first control, then the drop zone or the heading.
+   */
+  function restoreFocus(key: FocusKey | null): void {
+    if (!key) return;
+    const a = document.activeElement;
+    if (a instanceof HTMLElement && a !== document.body && a.isConnected) return;
+    const sel = key.si
+      ? `[data-si="${key.si}"]${key.field ? `[data-field="${key.field}"]` : ''}`
+      : null;
+    const pickIn = (host: HTMLElement): HTMLElement | null =>
+      (sel ? host.querySelector<HTMLElement>(sel) : null) ??
+      host.querySelector<HTMLElement>(FOCUSABLE);
+    const scopes = Array.from(body.querySelectorAll<HTMLElement>(SCOPES));
+    let target: HTMLElement | null = null;
+    if (key.scope === 'footer') {
+      target = sel ? footer.querySelector<HTMLElement>(`${sel}:not(:disabled)`) : null;
+    } else if (key.scope) {
+      const same = scopes.find((n) => scopeKey(n) === key.scope);
+      const nextOne = same ?? scopes[Math.min(key.index, scopes.length - 1)];
+      target = nextOne ? pickIn(nextOne) : null;
+    } else if (sel) {
+      target = body.querySelector<HTMLElement>(sel);
+    }
+    target ??= body.querySelector<HTMLElement>('[data-si="dropzone"]') ?? headingEl();
+    target?.focus();
+  }
+
   // ---- shell -----------------------------------------------------------
 
   const headingEl = (): HTMLElement | null => body.querySelector('.smart-import-heading');
@@ -492,10 +556,12 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   /** Redraw whatever depends on file status. Cheap; safe from async callbacks. */
   function refreshUi(): void {
     if (!modal || !modal.isConnected) return;
+    const focus = captureFocus();
     if (step === 1) renderFileList();
     if (step === 2) renderAccountCards();
     if (step === 3) renderCategorizeParts();
     renderFooter();
+    if (step !== 3) restoreFocus(focus);
   }
 
   async function goTo(n: number): Promise<void> {
@@ -564,6 +630,8 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     input.accept = ACCEPT;
     input.multiple = true;
     input.setAttribute('data-si', 'file-input');
+    // The drop zone (a button) is the keyboard target; the input stays out of the tab order.
+    input.tabIndex = -1;
     input.setAttribute('aria-label', 'Choose statement files');
     input.addEventListener('change', () => {
       const picked = Array.from(input.files ?? []);
@@ -634,6 +702,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     fileList.textContent = '';
     for (const f of st().files) {
       const li = el('li', `smart-import-file is-${f.status}`);
+      li.dataset.file = f.id;
       const name = el('span', 'smart-import-file-name', f.file_name);
       const status = el('span', 'smart-import-file-status', fileStatusText(f));
       const remove = button('Remove', 'btn btn-secondary btn-sm', 'remove-file');
@@ -654,6 +723,11 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   async function renderAccounts(focus?: string): Promise<void> {
     if (!state) return;
     const needsDebts = st().statements.some((s) => isDebtKind(s.account_kind));
+    // Debts may have been added elsewhere since the last visit: always fetch afresh.
+    if (needsDebts) {
+      liabilities = null;
+      liabilitiesLoad = null;
+    }
     await Promise.all([refreshPreview(), needsDebts ? loadLiabilities() : Promise.resolve()]);
     if (!modal || !modal.isConnected) return;
     const h = setStep(2, 'Check the accounts');
@@ -673,6 +747,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
 
   function renderAccountCards(): void {
     if (!cards || !state) return;
+    const focus = captureFocus();
     cards.textContent = '';
     let failed = 0;
     for (const f of st().files) {
@@ -692,6 +767,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       );
     }
     renderFooter();
+    restoreFocus(focus);
   }
 
   /** Card title with the "Leave this file out" text button at the top right. */
@@ -709,6 +785,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
 
   function pendingCard(f: WizardFile): HTMLElement {
     const card = el('section', 'smart-import-card is-pending');
+    card.dataset.file = f.id;
     card.append(el('h4', 'smart-import-card-title', f.file_name), el('p', undefined, 'Reading...'));
     return card;
   }
@@ -832,7 +909,8 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       row.appendChild(flip);
       card.appendChild(row);
 
-      if (s.warnings.includes('date_order_assumed') || f.options.date_order) {
+      const assumed = s.warnings.includes('date_order_assumed') && !f.options.date_order;
+      if (assumed || f.options.date_order) {
         const order = select(
           [
             { value: 'mdy', label: 'Month first (12/31/2026)' },
@@ -846,8 +924,25 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
           void reanalyze(f.id, '[data-si="date-order"]');
         });
         card.appendChild(
-          field('Date order', order, 'The dates in this file could be read either way.')
+          field(
+            'Date order',
+            order,
+            assumed
+              ? 'The dates in this file could be read either way. Month first was assumed.'
+              : undefined
+          )
         );
+        if (assumed) {
+          const confirmRow = el('div', 'smart-import-actions');
+          const ok = button('Looks right', 'btn btn-secondary btn-sm', 'date-confirm');
+          ok.setAttribute('aria-label', 'Month first looks right');
+          ok.addEventListener('click', () => {
+            state = setFileOptions(st(), f.id, { date_order: 'mdy' });
+            void reanalyze(f.id, '[data-si="date-order"]');
+          });
+          confirmRow.appendChild(ok);
+          card.appendChild(confirmRow);
+        }
       }
     }
 
@@ -936,6 +1031,13 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
         'Linking records this statement’s balance on the debt when you apply the import.'
       )
     );
+    group.appendChild(
+      el(
+        'p',
+        'smart-import-hint',
+        '"Add as a new debt" saves that debt right away. Everything else here waits until you apply the import.'
+      )
+    );
     const row = el('div', 'smart-import-actions');
     const skip = button('Skip', 'btn btn-secondary btn-sm', 'debt-skip');
     skip.addEventListener('click', () => {
@@ -1008,6 +1110,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
 
   function mappingCard(f: WizardFile): HTMLElement {
     const card = el('section', 'smart-import-card smart-import-mapping');
+    card.dataset.file = f.id;
     card.appendChild(cardHead('Match the columns', f.id));
     card.appendChild(el('p', 'smart-import-file-name', f.file_name));
     card.appendChild(
@@ -1077,6 +1180,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
 
   function aiCard(f: WizardFile): HTMLElement {
     const card = el('section', 'smart-import-card smart-import-ai-card');
+    card.dataset.file = f.id;
     card.appendChild(cardHead('This PDF needs help', f.id));
     card.appendChild(el('p', 'smart-import-file-name', f.file_name));
     card.appendChild(
@@ -1125,6 +1229,8 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   async function sendLines(fileId: string): Promise<void> {
     const f = fileOf(fileId);
     if (!f || !ctx || sending.has(fileId)) return;
+    // The button is disabled while sending, so focus is put back from this key afterwards.
+    const focus = captureFocus();
     sending.add(fileId);
     sendFailed.delete(fileId);
     renderAccountCards();
@@ -1162,7 +1268,10 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     } finally {
       sending.delete(fileId);
     }
-    if (step === 2 && modal?.isConnected) renderAccountCards();
+    if (step === 2 && modal?.isConnected) {
+      renderAccountCards();
+      restoreFocus(focus);
+    }
   }
 
   // ---- step 3: categorize ------------------------------------------------

@@ -1088,6 +1088,154 @@ describe('smart import wizard', () => {
     });
   });
 
+  describe('focus, touch targets and review fixes', () => {
+    const active = (): HTMLElement => document.activeElement as HTMLElement;
+
+    it('keeps the hidden file input out of the tab order', async () => {
+      await open();
+      expect(q<HTMLInputElement>('input[type="file"]').tabIndex).toBe(-1);
+    });
+
+    it('moves focus to the next Remove button after a file is removed', async () => {
+      await open();
+      pick([csvFile('a.csv'), csvFile('b.csv')]);
+      await flush();
+      const removes = qa<HTMLButtonElement>('.smart-import-files [data-si="remove-file"]');
+      expect(removes).toHaveLength(2);
+      removes[0]!.focus();
+      removes[0]!.click();
+      await flush();
+      expect(active().getAttribute('data-si')).toBe('remove-file');
+      expect(active().isConnected).toBe(true);
+      expect(active().closest('li')!.textContent).toContain('b.csv');
+    });
+
+    it('focuses the drop zone after the last file is removed', async () => {
+      await open();
+      pick([csvFile('a.csv')]);
+      await flush();
+      const remove = q<HTMLButtonElement>('.smart-import-files [data-si="remove-file"]');
+      remove.focus();
+      remove.click();
+      await flush();
+      expect(active().getAttribute('data-si')).toBe('dropzone');
+    });
+
+    it('keeps focus on the same control when an analyze finishes in the background', async () => {
+      let release: () => void = () => {};
+      setup({
+        analyze: (file) =>
+          file.name === 'b.csv'
+            ? new Promise((r) => {
+                release = () => r(okAnswer(statement({ file_name: 'b.csv' })));
+              })
+            : okAnswer(statement({ file_name: file.name })),
+      });
+      await open();
+      pick([csvFile('a.csv')]);
+      await flush();
+      pick([csvFile('b.csv')]);
+      await flush();
+      const first = q<HTMLButtonElement>('.smart-import-files [data-si="remove-file"]');
+      first.focus();
+      release();
+      await flush();
+      expect(active().getAttribute('data-si')).toBe('remove-file');
+      expect(active().isConnected).toBe(true);
+      expect(active().closest('li')!.textContent).toContain('a.csv');
+    });
+
+    it('puts focus back on "Send these N lines" after a failed send', async () => {
+      setup({
+        analyze: () => ({
+          status: 'needs_ai_layout',
+          file_hash: 'hash-pdf',
+          line_count: 1,
+          lines: ['07/01 RENT ***'],
+        }),
+        ai: { pdf_ai_available: true, provider: 'P', model: 'm' },
+      });
+      await open();
+      await toAccounts([csvFile('a.pdf')]);
+      const send = q<HTMLButtonElement>('[data-si="send-lines"]');
+      send.focus();
+      send.click();
+      await flush();
+      expect(active().getAttribute('data-si')).toBe('send-lines');
+      expect(active().isConnected).toBe(true);
+    });
+
+    it('reloads debts each time the Accounts step opens', async () => {
+      setup({
+        analyze: () =>
+          okAnswer(
+            statement({
+              account: {
+                kind: 'credit_card',
+                key: 'acct:card',
+                last4: '1',
+                institution: 'Sample Bank',
+              },
+            })
+          ),
+      });
+      await open();
+      await toAccounts();
+      back().click();
+      await flush();
+      next().click();
+      await flush();
+      expect(calls.filter((c) => c.url === '/api/liabilities')).toHaveLength(2);
+    });
+
+    it('says that "Add as a new debt" saves right away', async () => {
+      setup({
+        analyze: () =>
+          okAnswer(
+            statement({
+              account: {
+                kind: 'credit_card',
+                key: 'acct:card',
+                last4: '1',
+                institution: 'Sample Bank',
+              },
+            })
+          ),
+      });
+      await open();
+      await toAccounts();
+      expect(q('.smart-import-debt').textContent).toContain(
+        '"Add as a new debt" saves that debt right away'
+      );
+    });
+
+    it('lets the person confirm an assumed month-first date order', async () => {
+      setup({
+        analyze: (_f, ctx) =>
+          okAnswer(statement({ warnings: ctx.date_order ? [] : ['date_order_assumed'] })),
+      });
+      await open();
+      await toAccounts();
+      expect(q('[data-statement]').textContent).toContain('could be read either way');
+      const confirm = q<HTMLButtonElement>('[data-si="date-confirm"]');
+      expect(confirm.textContent).toBe('Looks right');
+      confirm.click();
+      await flush();
+      expect((uploadMock.mock.calls[1]![2] as Record<string, unknown>).date_order).toBe('mdy');
+      expect(modal().querySelector('[data-si="date-confirm"]')).toBeNull();
+      expect(q('[data-statement]').textContent).not.toContain('could be read either way');
+      expect(q<HTMLSelectElement>('[data-si="date-order"]').value).toBe('mdy');
+    });
+
+    it('gives every wizard button a 44px target on phones', () => {
+      const css = readFileSync(resolve(import.meta.dirname, '../../style.css'), 'utf8');
+      const start = css.indexOf('/* Smart import wizard: shell, Upload and Accounts steps */');
+      const phone = css.slice(css.indexOf('@media (max-width: 768px)', start));
+      const block = phone.slice(0, phone.indexOf('\n}\n'));
+      expect(block).toMatch(/\.smart-import-step \.btn[^{]*\{[^}]*min-height:\s*44px/);
+    });
+  });
+
   describe('categorize step', () => {
     type Txn = NormalizedStatement['transactions'][number];
     const txn = (row: number, over: Partial<Txn> = {}): Txn => ({

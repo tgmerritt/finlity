@@ -8670,7 +8670,7 @@ body.on-settings #tab-settings {
     .smart-import-footer .btn { min-height: 44px; flex: 1 1 0; white-space: normal; }
     .smart-import-footer.smart-import-confirm { flex-wrap: wrap; }
     .smart-import-confirm-text { flex-basis: 100%; }
-    .smart-import-actions .btn,
+    .smart-import-step .btn,
     .smart-import-leave { min-height: 44px; }
     .smart-import-leave { min-width: 44px; }
     .smart-import-card .form-group select,
