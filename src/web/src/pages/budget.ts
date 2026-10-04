@@ -21,7 +21,19 @@ import {
   type TransitionYear,
   type SSComparisonRow,
 } from '@/charts/budget';
-import type { IncomeSource, Expense, Deduction } from '@/types/api';
+import type { IncomeSource, Expense, Deduction, LiabilityResponse } from '@/types/api';
+
+/** Active debts by the id of the expense they are linked to (set by loadExpenses). */
+let debtByExpense = new Map<string, LiabilityResponse>();
+
+async function fetchLiabilities(): Promise<LiabilityResponse[]> {
+  try {
+    return (await apiCall<LiabilityResponse[]>('/api/liabilities')) ?? [];
+  } catch (error) {
+    console.error('Error loading debts:', (error as Error).name);
+    return [];
+  }
+}
 
 /**
  * Paycheck breakdown from API.
@@ -383,6 +395,10 @@ export async function loadExpenses(): Promise<void> {
   try {
     const data = await apiCall<Expense[]>('/api/budget/expenses');
     store.set('expenses', data || []);
+    debtByExpense = new Map();
+    for (const d of await fetchLiabilities()) {
+      if (d.is_active && d.expense_id && !d.expense_missing) debtByExpense.set(d.expense_id, d);
+    }
     const container = document.getElementById('expenses-list');
     if (!container) return;
 
@@ -411,6 +427,14 @@ export async function loadExpenses(): Promise<void> {
       const details = document.createElement('div');
       details.className = 'expense-item-details';
       details.textContent = `${exp.category_name || 'Uncategorized'} • ${formatExpenseFrequency(exp.frequency)}`;
+
+      const linked = debtByExpense.get(exp.id);
+      if (linked) {
+        const chip = document.createElement('span');
+        chip.className = 'expense-debt-chip';
+        chip.textContent = `Linked to ${linked.name}`;
+        name.appendChild(chip);
+      }
 
       info.appendChild(name);
       info.appendChild(details);
@@ -720,6 +744,18 @@ export async function loadCashFlowData(): Promise<void> {
     updateStat('stat-monthly-expenses', formatCurrency(monthlyExpenses));
     updateStat('stat-monthly-savings', formatCurrency(monthlySavings));
     updateStat('stat-savings-rate', `${savingsRate.toFixed(1)}%`);
+
+    const debts = (await fetchLiabilities()).filter((d) => d.is_active);
+    const debtCard = document.getElementById('stat-monthly-debt-card');
+    if (debtCard) debtCard.hidden = debts.length === 0;
+    updateStat(
+      'stat-monthly-debt',
+      formatCurrency(
+        debts
+          .filter((d) => d.expense_id && !d.expense_missing)
+          .reduce((sum, d) => sum + d.monthly_cash_flow, 0)
+      )
+    );
 
     // Load charts
     await loadPaycheckChart();
@@ -1100,7 +1136,8 @@ export function editExpense(id: string): void {
     return;
   }
 
-  createDynamicModal({
+  const linkedDebt = debtByExpense.get(id);
+  const modal = createDynamicModal({
     title: 'Edit Expense',
     content: `
       <div class="form-group">
@@ -1159,6 +1196,12 @@ export function editExpense(id: string): void {
       showToast('Expense updated', 'success');
     },
   });
+  if (linkedDebt) {
+    const hint = document.createElement('p');
+    hint.className = 'expense-debt-hint';
+    hint.textContent = `This expense follows the debt ${linkedDebt.name}. Change the payment on the Debts page and this amount updates with it.`;
+    modal.querySelector('.modal-body')?.prepend(hint);
+  }
 }
 
 /**

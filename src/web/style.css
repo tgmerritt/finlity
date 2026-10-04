@@ -3032,6 +3032,34 @@ td.text-right {
     font-size: 12px;
 }
 
+.budget-stats-row .stat-card[hidden] {
+    display: none;
+}
+
+.expense-debt-chip {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+    background: var(--color-bg-spotlight);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    vertical-align: middle;
+}
+
+.expense-debt-hint {
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    background: var(--color-bg-spotlight);
+    border-left: 3px solid var(--color-primary);
+    border-radius: 4px;
+}
+
 /* Phones: stack name and meta on top, amount and actions on one wrapping row.
    Must follow the base rules above. */
 @media (max-width: 768px) {
@@ -3066,6 +3094,13 @@ td.text-right {
         flex-wrap: wrap;
         justify-content: flex-end;
         max-width: 100%;
+    }
+}
+
+@media (max-width: 768px) {
+    .expense-debt-chip {
+        display: table;
+        margin: 4px 0 0;
     }
 }
 
