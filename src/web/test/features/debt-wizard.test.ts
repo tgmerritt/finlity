@@ -111,12 +111,20 @@ describe('debt wizard', () => {
     expect(next().disabled).toBe(true);
     choose('auto_loan');
     expect(next().disabled).toBe(false);
-    expect(
-      modal().querySelector('[data-debt-type="auto_loan"]')?.getAttribute('aria-checked')
-    ).toBe('true');
-    expect(modal().querySelector('[data-debt-type="mortgage"]')?.getAttribute('aria-checked')).toBe(
-      'false'
+    const radio = (t: string): HTMLInputElement =>
+      modal().querySelector<HTMLInputElement>(`[data-debt-type="${t}"]`)!;
+    expect(radio('auto_loan').checked).toBe(true);
+    expect(radio('mortgage').checked).toBe(false);
+  });
+
+  it('uses native radio inputs inside labels, in one group', () => {
+    openDebtWizard({});
+    const radios = modal().querySelectorAll<HTMLInputElement>(
+      'input[type="radio"][data-debt-type]'
     );
+    expect(radios).toHaveLength(7);
+    expect(new Set(Array.from(radios).map((r) => r.name)).size).toBe(1);
+    radios.forEach((r) => expect(r.closest('label')).not.toBeNull());
   });
 
   it('moves focus to the step heading on each step', async () => {
@@ -369,6 +377,100 @@ describe('debt wizard', () => {
     const state = onDetails.mock.calls[0]![0] as WizardState;
     expect(state.draft).toMatchObject({ liabilityType: 'auto_loan', name: 'Truck' });
     expect(state.draft.paymentAmount).toBe('');
+  });
+
+  it('still asks on Escape after Back to step 1 with data retained', async () => {
+    await toStep2('personal_loan');
+    type('name', 'Wedding loan');
+    back().click();
+    escape();
+    expect(document.getElementById('dynamic-modal')).not.toBeNull();
+    expect(modal().querySelector('.debt-wizard-confirm')).not.toBeNull();
+  });
+
+  it('swallows Escape while the discard prompt is showing', async () => {
+    await toStep2('personal_loan');
+    type('name', 'Wedding loan');
+    escape();
+    escape();
+    expect(document.getElementById('dynamic-modal')).not.toBeNull();
+    expect(modal().querySelector('.debt-wizard-confirm')).not.toBeNull();
+  });
+
+  it('keeps Tab inside the dialog while the discard prompt is showing', async () => {
+    await toStep2('personal_loan');
+    type('name', 'Wedding loan');
+    escape();
+    modal().querySelector<HTMLElement>('[data-wizard="discard"]')!.focus();
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    document.dispatchEvent(tab);
+    expect(tab.defaultPrevented).toBe(true);
+    expect(modal().contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(modal().querySelector('[data-wizard="discard"]'));
+  });
+
+  it('returns a close() that closes without asking and detaches its listener', async () => {
+    const spy = vi.spyOn(window, 'removeEventListener');
+    const { modal: m, close } = openDebtWizard({});
+    choose('mortgage');
+    next().click();
+    await flush();
+    type('name', 'Entered data');
+    close();
+    expect(m.isConnected).toBe(false);
+    expect(spy.mock.calls.some(([t]) => t === 'keydown')).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('removes its keydown listener when the modal is closed by something else', async () => {
+    const spy = vi.spyOn(window, 'removeEventListener');
+    openDebtWizard({});
+    closeDynamicModal();
+    await flush();
+    expect(spy.mock.calls.some(([t]) => t === 'keydown')).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('does not flip from add to pick once a home name or value is typed', async () => {
+    let resolve!: (v: PositionResponse[]) => void;
+    apiCallMock.mockImplementation(
+      () => new Promise<PositionResponse[]>((r) => (resolve = r)) as never
+    );
+    await toStep2('mortgage');
+    type('homeName', 'My house');
+    resolve([position({})]);
+    await flush();
+    expect(modal().querySelector<HTMLInputElement>('[data-home-mode="add"]')!.checked).toBe(true);
+    expect(field('homeName').value).toBe('My house');
+  });
+
+  it('offers Retry when homes cannot be loaded', async () => {
+    apiCallMock.mockRejectedValueOnce(new Error('down'));
+    await toStep2('mortgage');
+    await flush();
+    expect(modal().querySelector('.debt-wizard-home')?.textContent).toContain(
+      'Couldn\u2019t load your homes'
+    );
+    apiCallMock.mockResolvedValue([position({})]);
+    modal().querySelector<HTMLElement>('[data-wizard="retry-homes"]')!.click();
+    await flush();
+    expect(modal().querySelector('[data-wizard="retry-homes"]')).toBeNull();
+    expect(modal().querySelector<HTMLInputElement>('[data-home-mode="pick"]')!.checked).toBe(true);
+  });
+
+  it('Enter in a details field advances like Next', async () => {
+    const onDetails = vi.fn();
+    await toStep2('auto_loan', onDetails);
+    type('name', 'Truck');
+    type('currentBalance', '20000');
+    field('name').dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+    expect(onDetails).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts an onConvertHome option for the conversion handoff', () => {
+    expect(() => openDebtWizard({ onConvertHome: () => undefined })).not.toThrow();
   });
 
   it('source files contain no em-dash', () => {

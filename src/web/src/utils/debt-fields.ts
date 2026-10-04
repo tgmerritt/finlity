@@ -3,6 +3,7 @@
  * Shared by the Debts page form and the wizard. Drafts hold the raw strings
  * from form inputs; APR is typed as a percent and sent as a decimal.
  */
+import { annuityPayment, periodsPerYear } from '@/utils/amortization';
 import type {
   CreateLiabilityInput,
   LiabilityFrequency,
@@ -180,6 +181,21 @@ function num(raw: string): number {
 
 export function validateDraft(draft: DebtDraft): DraftValidation {
   const errors: DraftValidation['errors'] = {};
+  const name = draft.name.trim();
+  if (!name) errors.name = 'Enter a name';
+  else if (name.length > 120) errors.name = 'Use 120 characters or fewer';
+  const amounts = validateAmounts(draft);
+  Object.assign(errors, amounts.errors);
+  if (Object.keys(errors).length > 0 || !amounts.values) return { errors, values: null };
+  return { errors, values: { name, ...amounts.values } };
+}
+
+/** Everything in a draft except the name, so figures can be shown before a name is typed. */
+export function validateAmounts(draft: DebtDraft): {
+  errors: Partial<Record<DebtFieldKey, string>>;
+  values: Omit<ParsedDebt, 'name'> | null;
+} {
+  const errors: Partial<Record<DebtFieldKey, string>> = {};
   const money = (key: DebtFieldKey, raw: string, required = false): number | null => {
     if (raw.trim() === '') {
       if (required) errors[key] = 'Enter an amount';
@@ -192,10 +208,6 @@ export function validateDraft(draft: DebtDraft): DraftValidation {
     }
     return n;
   };
-
-  const name = draft.name.trim();
-  if (!name) errors.name = 'Enter a name';
-  else if (name.length > 120) errors.name = 'Use 120 characters or fewer';
 
   const currentBalance = money('currentBalance', draft.currentBalance, true);
   const paymentAmount = money('paymentAmount', draft.paymentAmount);
@@ -236,7 +248,6 @@ export function validateDraft(draft: DebtDraft): DraftValidation {
   return {
     errors,
     values: {
-      name,
       currentBalance,
       interestRate,
       paymentAmount,
@@ -246,6 +257,26 @@ export function validateDraft(draft: DebtDraft): DraftValidation {
       termMonths,
     },
   };
+}
+
+/**
+ * Payment calculated from balance, APR and term, when the payment field is
+ * blank and those are all usable. Rounded to cents; null otherwise.
+ */
+export function computedPayment(draft: DebtDraft): number | null {
+  if (draft.paymentAmount.trim() !== '') return null;
+  if (!fieldsFor(draft.liabilityType).some((f) => f.key === 'termMonths')) return null;
+  const { values } = validateAmounts(draft);
+  if (!values || values.termMonths === null || values.currentBalance <= 0) return null;
+  const perYear = periodsPerYear(draft.paymentFrequency);
+  const periods = Math.max(1, Math.round((values.termMonths / 12) * perYear));
+  const payment = annuityPayment(
+    values.currentBalance,
+    values.interestRate ?? 0,
+    periods,
+    draft.paymentFrequency
+  );
+  return Number.isFinite(payment) ? Math.round(payment * 100) / 100 : null;
 }
 
 type Optionals = Pick<

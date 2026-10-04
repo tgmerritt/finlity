@@ -8328,8 +8328,11 @@ body.on-settings #tab-settings {
     border-radius: 8px;
     cursor: pointer;
 }
+.debt-wizard-type { position: relative; }
+.debt-wizard-radio { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.debt-wizard-type:focus-within { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .debt-wizard-type:hover { border-color: var(--color-primary); }
-.debt-wizard-type[aria-checked='true'] {
+.debt-wizard-type.is-selected {
     border-color: var(--color-primary);
     box-shadow: 0 0 0 1px var(--color-primary);
 }

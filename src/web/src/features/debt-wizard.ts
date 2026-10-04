@@ -65,6 +65,18 @@ export interface OpenDebtWizardOptions {
   entities?: readonly Entity[];
   /** Called with the validated details when the person presses Next on step 2. */
   onDetails?: (state: WizardState) => void;
+  /**
+   * Reserved for the conversion dialog: called with a tracked home's position id
+   * when the person chooses "Already tracking this home? Pick it" in the mortgage
+   * step. Not wired to any control yet.
+   */
+  onConvertHome?: (positionId: string) => void;
+}
+
+export interface DebtWizardHandle {
+  modal: HTMLElement;
+  /** Close the wizard without the discard prompt and remove its listeners. */
+  close: () => void;
 }
 
 const blankHome = (): WizardHome => ({
@@ -118,12 +130,13 @@ function homeErrors(home: WizardHome): Partial<Record<string, string>> {
 }
 
 /** Open the wizard on step 1. Returns the modal element. */
-export function openDebtWizard(options: OpenDebtWizardOptions = {}): HTMLElement {
+export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardHandle {
   const state: WizardState = { step: 1, draft: defaultsFor('mortgage'), home: blankHome() };
   let chosen: LiabilityType | null = null;
   let fields: DebtFieldsHandle | null = null;
   let homeTouched = false;
   let positions: PositionResponse[] | null = null;
+  let positionsFailed = false;
   let positionsLoad: Promise<void> | null = null;
 
   const shell = el('div', 'debt-wizard');
@@ -145,7 +158,7 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): HTMLElement
 
   /** Anything typed beyond choosing a type. */
   const isDirty = (): boolean => {
-    if (state.step < 2 || chosen === null) return false;
+    if (chosen === null) return false;
     syncFromDom();
     const base = defaultsFor(chosen);
     const changed = (Object.keys(base) as (keyof DebtDraft)[]).some(
@@ -202,8 +215,8 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): HTMLElement
     if (event.key !== 'Escape') return;
     event.stopImmediatePropagation();
     event.preventDefault();
-    if (confirming) footer.querySelector<HTMLElement>('[data-wizard="keep"]')?.click();
-    else requestClose();
+    // While the prompt shows, Escape does nothing: the buttons decide.
+    if (!confirming) requestClose();
   };
   const onClick = (event: Event): void => {
     const target = event.target;
@@ -212,10 +225,16 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): HTMLElement
     event.stopPropagation();
     if (!confirming) requestClose();
   };
+  // Removal paths: close(), the discard prompt, and any outside removal of the modal.
+  const watcher = new MutationObserver(() => {
+    if (!modal.isConnected) detach();
+  });
   function detach(): void {
     window.removeEventListener('keydown', onKey, true);
+    watcher.disconnect();
   }
   window.addEventListener('keydown', onKey, true);
+  watcher.observe(document.body, { childList: true });
   modal.addEventListener('click', onClick, true);
 
   // ---- state helpers --------------------------------------------------
@@ -280,26 +299,30 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): HTMLElement
     group.setAttribute('role', 'radiogroup');
     group.setAttribute('aria-label', 'Type of debt');
     for (const t of DEBT_TYPES) {
-      const card = el('button', 'debt-wizard-type');
-      card.type = 'button';
-      card.setAttribute('role', 'radio');
-      card.setAttribute('data-debt-type', t);
-      card.setAttribute('aria-checked', String(chosen === t));
-      card
-        .appendChild(el('span', 'debt-wizard-type-icon', TYPE_ICON[t]))
-        .setAttribute('aria-hidden', 'true');
+      const card = el('label', 'debt-wizard-type');
+      const radio = el('input', 'debt-wizard-radio');
+      radio.type = 'radio';
+      radio.name = 'debt-type';
+      radio.value = t;
+      radio.setAttribute('data-debt-type', t);
+      radio.checked = chosen === t;
+      card.classList.toggle('is-selected', chosen === t);
+      card.appendChild(radio);
+      const icon = el('span', 'debt-wizard-type-icon', TYPE_ICON[t]);
+      icon.setAttribute('aria-hidden', 'true');
+      card.appendChild(icon);
       const text = el('span', 'debt-wizard-type-text');
       text.append(
         el('span', 'debt-wizard-type-name', LIABILITY_TYPE_LABELS[t]),
         el('span', 'debt-wizard-type-hint', TYPE_HINT[t])
       );
       card.appendChild(text);
-      card.addEventListener('click', () => {
+      radio.addEventListener('change', () => {
         if (chosen !== null && chosen !== t) state.draft = switchType(state.draft, t);
         else if (chosen === null) state.draft = defaultsFor(t);
         chosen = t;
-        group.querySelectorAll('[data-debt-type]').forEach((n) => {
-          n.setAttribute('aria-checked', String(n === card));
+        group.querySelectorAll('.debt-wizard-type').forEach((n) => {
+          n.classList.toggle('is-selected', n === card);
         });
         footer.querySelector<HTMLButtonElement>('[data-wizard="next"]')!.disabled = false;
       });
@@ -317,10 +340,12 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): HTMLElement
         positions = (Array.isArray(all) ? all : []).filter(
           (p) => p.position_type === 'real_estate'
         );
+        positionsFailed = false;
       })
       .catch((error: unknown) => {
         console.error('Homes load failed:', error instanceof Error ? error.name : 'error');
         positions = [];
+        positionsFailed = true;
       });
     return positionsLoad;
   }
@@ -349,7 +374,8 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): HTMLElement
     host.textContent = '';
     const loaded = positions !== null;
     const homes = positions ?? [];
-    if (loaded && !homeTouched && state.home.mode === 'add' && homes.length > 0) {
+    const typedHome = !!(state.home.name.trim() || state.home.value.trim());
+    if (loaded && !homeTouched && !typedHome && state.home.mode === 'add' && homes.length > 0) {
       state.home.mode = 'pick';
     }
     if (loaded && homes.length === 0 && state.home.mode === 'pick') state.home.mode = 'add';
@@ -383,6 +409,27 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): HTMLElement
       host.appendChild(row);
     }
     if (!loaded) host.appendChild(el('p', 'debt-field-hint', 'Looking for your homes...'));
+    if (positionsFailed) {
+      const note = el('p', 'debt-field-hint debt-wizard-homes-error');
+      note.setAttribute('role', 'alert');
+      note.append('Couldn\u2019t load your homes. ');
+      const retry = button('Retry', 'btn btn-secondary btn-sm', 'retry-homes');
+      retry.addEventListener('click', () => {
+        positions = null;
+        positionsFailed = false;
+        positionsLoad = null;
+        readHome();
+        renderHome(host);
+        void loadPositions().then(() => {
+          if (host.isConnected) {
+            readHome();
+            renderHome(host);
+          }
+        });
+      });
+      note.appendChild(retry);
+      host.appendChild(note);
+    }
 
     if (state.home.mode === 'pick' && homes.length > 0) {
       const wrap = el('div', 'form-group');
@@ -422,6 +469,13 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): HTMLElement
     const form = el('form', 'debt-form');
     form.noValidate = true;
     form.addEventListener('submit', (e) => e.preventDefault());
+    form.addEventListener('keydown', (event) => {
+      const target = event.target;
+      if (event.key !== 'Enter' || !(target instanceof HTMLInputElement)) return;
+      if (target.type === 'radio' || target.type === 'checkbox' || target.type === 'button') return;
+      event.preventDefault();
+      goNext();
+    });
     if (t === 'mortgage') {
       const set = el('fieldset', 'debt-wizard-home');
       form.appendChild(set);
@@ -476,5 +530,11 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): HTMLElement
   }
 
   renderTypeStep();
-  return modal;
+  return {
+    modal,
+    close: () => {
+      detach();
+      closeDynamicModal();
+    },
+  };
 }
