@@ -699,6 +699,19 @@ local('POST', '/api/liabilities/{id}/revert-conversion', (_req, m) =>
   getLocalAPI().revertConversion(m[1]!)
 );
 
+// ---- Smart import (src/api/smart_import.py). Static paths before {id}. Nothing under
+// /api/smart-import may reach the network except the three AI routes (payload() below). ----
+
+local('GET', '/api/smart-import/context', () => getLocalAPI().getSmartImportContext());
+local('POST', '/api/smart-import/preview', (req) => getLocalAPI().previewSmartImport(req.body));
+local('GET', '/api/smart-import/imports', () => getLocalAPI().getSmartImports());
+local('GET', '/api/smart-import/rules', () => getLocalAPI().getMerchantRules());
+local('DELETE', '/api/smart-import/rules/{id}', (_req, m) =>
+  getLocalAPI().deleteMerchantRule(m[1]!)
+);
+local('GET', '/api/smart-import/settings', () => getLocalAPI().getSmartImportSettings());
+local('PUT', '/api/smart-import/settings', (req) => getLocalAPI().putSmartImportSettings(req.body));
+
 // ---- Budget: income, expenses, deductions, tax-config, states, categories ----
 
 local('GET', '/api/budget/income', () => getLocalAPI().getIncomeSources());
@@ -1079,6 +1092,21 @@ payload('POST', '/api/projections/tax-projection', (req) => {
   }
   return { endpoint: '/api/v2/projections/tax-projection', options: { method: 'POST', body } };
 });
+
+// ---- Smart import AI (hosted): the body is forwarded unchanged and no local data is added ----
+
+payload('POST', '/api/smart-import/categorize', (req) => ({
+  endpoint: '/api/v2/smart-import/categorize',
+  options: { method: 'POST', body: req.body },
+}));
+payload('POST', '/api/smart-import/extract', (req) => ({
+  endpoint: '/api/v2/smart-import/extract',
+  options: { method: 'POST', body: req.body },
+}));
+payload('GET', '/api/smart-import/ai-status', () => ({
+  endpoint: '/api/v2/smart-import/status',
+  options: { method: 'GET' },
+}));
 
 // ---- Budget ----
 
