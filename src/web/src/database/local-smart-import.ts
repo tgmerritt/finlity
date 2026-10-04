@@ -154,6 +154,14 @@ function isoOut(value: unknown): string | null {
 /** SQL expression that sorts mixed 'T' / space datetime text consistently. */
 const sortable = (column: string): string => `replace(${column}, 'T', ' ')`;
 
+/**
+ * Newest first. One Apply writes every import with the same timestamp here, while the
+ * server's per-row timestamps follow insertion order; rowid (insertion order) breaks the
+ * tie the same way. Random ids never decide the order.
+ */
+const newestFirst = (column: string, table = ''): string =>
+  `${sortable(table + column)} DESC, ${table}rowid DESC`;
+
 function* chunks<T>(items: T[]): Generator<T[]> {
   for (let start = 0; start < items.length; start += IN_CHUNK) {
     yield items.slice(start, start + IN_CHUNK);
@@ -373,7 +381,7 @@ function knownAccounts(
   const rows = db.query<MetaAccountRow>(
     `SELECT account_key, account_label, account_last4, account_kind, institution, liability_id
        FROM smart_import_meta WHERE account_key IS NOT NULL
-      ORDER BY ${sortable('created_at')} DESC, import_id DESC`
+      ORDER BY ${newestFirst('created_at')}`
   );
   const seen = new Map<string, SmartImportContext['accounts'][number]>();
   for (const row of rows) {
@@ -487,7 +495,7 @@ function priorFiles(db: ClientDatabase, hashes: string[]): PreviewResponse['prio
     const row = db.query<{ id: string; analyzed_at: string | null; uploaded_at: string | null }>(
       `SELECT id, analyzed_at, uploaded_at FROM bank_statement_imports
         WHERE content_hash = ? OR substr(content_hash, 1, ?) = ?
-        ORDER BY ${sortable('analyzed_at')} DESC, ${sortable('uploaded_at')} DESC, id DESC LIMIT 1`,
+        ORDER BY ${sortable('analyzed_at')} DESC, ${newestFirst('uploaded_at')} LIMIT 1`,
       [fileHash, fileHash.length + 1, `${fileHash}:`]
     )[0];
     if (row) {
@@ -544,7 +552,7 @@ function previousLiability(
   const rows = db.query<{ liability_id: string }>(
     `SELECT liability_id FROM smart_import_meta
       WHERE account_key = ? AND liability_id IS NOT NULL
-      ORDER BY ${sortable('created_at')} DESC, import_id DESC`,
+      ORDER BY ${newestFirst('created_at')}`,
     [accountKey]
   );
   for (const row of rows) if (activeIds.has(row.liability_id)) return row.liability_id;
@@ -639,7 +647,7 @@ export function getSmartImports(db: ClientDatabase): SmartImportSummary[] {
                 m.period_end, m.closing_balance, m.closing_balance_date, m.liability_id,
                 m.txn_new, m.txn_duplicate, m.txn_excluded, m.ai_used, m.ai_provider, m.created_at
            FROM smart_import_meta m JOIN bank_statement_imports b ON b.id = m.import_id
-          ORDER BY ${sortable('m.created_at')} DESC, m.import_id DESC`
+          ORDER BY ${newestFirst('created_at', 'm.')}`
         )
         .map(({ created_at, ...rest }) => ({
           ...rest,

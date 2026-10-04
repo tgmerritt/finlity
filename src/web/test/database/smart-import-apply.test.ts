@@ -207,6 +207,35 @@ describe('apply', () => {
     expect(hashes).toEqual([HASH_A, `${HASH_A}:1`, `${HASH_A}:2`]);
   });
 
+  it('orders the imports of one batch newest first by insertion, not by id', () => {
+    // Ids that sort opposite to creation order: an id tie-break would list the first import first.
+    let n = 0;
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(
+      () =>
+        `id-${String(999 - ++n).padStart(3, '0')}` as `${string}-${string}-${string}-${string}-${string}`
+    );
+    const card = statement(HASH_A, [txn(D1, -5, 'BOOKSHOP', { dedupe_key: 'card|1' })], {
+      key: 'acct:card',
+      kind: 'credit_card',
+    });
+    const out = apply(applyBody([basic(HASH_A), card], { batch: 'split' }));
+    const [first, second] = out.imports.map((i: Row) => i.import_id as string);
+    expect(env.api.getSmartImports().map((i) => i.import_id)).toEqual([second, first]);
+    const preview = env.api.previewSmartImport({
+      statements: [
+        {
+          file_hash: HASH_A,
+          account_key: 'acct:card',
+          account_kind: 'credit_card',
+          institution: null,
+          dedupe_keys: [],
+          merchant_keys: [],
+        },
+      ],
+    });
+    expect(preview.prior_files.map((p) => p.import_id)).toEqual([second]);
+  });
+
   it('is a no-op with no statements', () => {
     expect(apply(applyBody([]))).toEqual({
       imports: [],
