@@ -189,9 +189,9 @@ def dropped_accounts(
     return out
 
 
-def _utc(now: datetime | None) -> datetime:
-    if now is None:
-        return datetime.now(timezone.utc)
+def _utc(now: datetime) -> datetime:
+    if not isinstance(now, datetime):
+        raise TypeError("now must be a datetime")
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("now must be timezone-aware")
     return now.astimezone(timezone.utc)
@@ -297,7 +297,7 @@ def to_statements(
     window: tuple[date, date],
     context: Mapping[str, Any] | None,
     *,
-    now: datetime | None = None,
+    now: datetime,
 ) -> list[NormalizedStatement]:
     """One statement per requested account that has transactions or a
     balance (design 5.2). Accounts with a provider error or an unsupported
@@ -307,7 +307,8 @@ def to_statements(
     early (``result.end`` before ``end``) the period ends there and each
     statement warns ``connector_partial``. ``context`` is the analyze context
     (``rules``, ``categories``); ``origin`` is always ``connector``. ``now``
-    is injectable for tests and must be timezone-aware.
+    (required, timezone-aware) is the caller's clock, used only to drop a
+    balance dated in the future; the core never reads the wall clock.
     """
     label = _DISPLAY_NAMES.get(provider_id)
     if label is None:

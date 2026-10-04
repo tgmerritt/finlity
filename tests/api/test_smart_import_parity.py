@@ -6,10 +6,12 @@ tests/fixtures/smart_import_scenario.expected.json. The browser half is
 src/web/test/api/smart-import-parity.test.ts; both must match the same file
 (money within 0.01, everything else exact, error_type and detail included).
 
+The scenario is built by tests/fixtures/build_smart_import_scenario.py.
 Regenerate the expected file from the server path (then review it by hand):
     WRITE_SMART_IMPORT_PARITY_EXPECTED=1 python -m pytest tests/api/test_smart_import_parity.py
 """
 
+import importlib.util
 import json
 import os
 import re
@@ -21,6 +23,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.dependencies import get_db
+from src.connectors import store as connection_store
 from src.database import Database
 from src.database.models import (
     AppSettings,
@@ -43,6 +46,9 @@ EXPECTED_PATH = FIXTURES / "smart_import_scenario.expected.json"
 ID_KEYS = {
     "id", "import_id", "liability_id", "expense_id", "created_expense_id", "last_import_id", "target_id",
     "source_ref",
+    # Connection ids: the scenario's stored ones are fixed; ids minted by a
+    # create (plan B7) become placeholders like any other generated id.
+    "connection_id",
 }
 TIMESTAMP_KEYS = {"created_at", "updated_at", "imported_at", "analyzed_at", "uploaded_at"}
 
@@ -50,7 +56,19 @@ TIMESTAMP_KEYS = {"created_at", "updated_at", "imported_at", "analyzed_at", "upl
 def _fixed_ids() -> set[str]:
     setup = SCENARIO["setup"]
     fixed = {row["id"] for key in ("categories", "liabilities", "snapshots", "expenses") for row in setup[key]}
-    return fixed | {step["id"] for step in SCENARIO["steps"] if step.get("db") == "insert_legacy_import"}
+    fixed |= {step["id"] for step in SCENARIO["steps"] if step.get("db") == "insert_legacy_import"}
+    return fixed | _stored_connection_ids()
+
+
+def _stored_connection_ids() -> set[str]:
+    """Connection ids the scenario writes itself (store_connections, store_connection_secret)."""
+    ids: set[str] = set()
+    for step in SCENARIO["steps"]:
+        if step.get("db") == "store_connections":
+            ids.update(step["value"]["items"])
+        elif step.get("db") == "store_connection_secret":
+            ids.add(step["id"])
+    return ids
 
 
 class Normalizer:
@@ -170,6 +188,10 @@ def _probe(db: Database, kind: str) -> Any:
                     ),
                 })
             return out_rows
+        if kind == "connections":
+            ids = sorted(connection_store.read_connections(None, session=s)["items"])
+            secrets = s.query(AppSettings).filter(AppSettings.key.like("connection_secret:%")).count()
+            return {"ids": ids, "secret_rows": secrets}
         if kind == "ledger":
             counts: dict[str, int] = {}
             for (action,) in s.query(SmartImportLedger.action):
@@ -183,6 +205,17 @@ def _db_op(db: Database, step: dict) -> None:
     with db.get_session() as s:
         if op == "edit_expense":
             s.query(BudgetExpense).filter_by(name=step["expense_name"]).one().amount = step["amount"]
+        elif op == "store_connections":
+            # The connections row as the connection store writes it (plan B3); a
+            # browser twin of POST /api/connections arrives in B5. Replaces the row.
+            row = s.query(AppSettings).filter_by(key="connections").first()
+            if row is None:
+                s.add(AppSettings(key="connections", value=json.dumps(step["value"]), encrypted=False))
+            else:
+                row.value = json.dumps(step["value"])
+        elif op == "store_connection_secret":
+            # A stand-in secret row (plan B4): disconnect deletes it without decrypting.
+            s.add(AppSettings(key=f"connection_secret:{step['id']}", value="fernet:parity", encrypted=True))
         elif op == "insert_legacy_import":
             s.add(BankStatementImport(
                 id=step["id"], content_hash=step["content_hash"], file_name=step["file_name"], row_count=3,
@@ -274,3 +307,22 @@ def test_server_path_matches_expected(tmp_path, monkeypatch):
     assert [r["name"] for r in results] == [e["name"] for e in expected]
     for actual, want in zip(results, expected):
         assert_matches(actual, want, want["name"])
+
+
+def test_minted_connection_ids_are_normalized() -> None:
+    """Plan B7 mints connection ids through a create; they normalize like any
+    generated id, while the scenario's stored ids stay as they are."""
+    norm = Normalizer()
+    stored = next(iter(_stored_connection_ids()))
+    minted = "9f8e7d6c-5b4a-4398-8776-655443322110"
+    assert norm({"connection_id": minted, "id": minted}) == {"connection_id": "<id-1>", "id": "<id-1>"}
+    assert norm({"connection_id": stored}) == {"connection_id": stored}
+
+
+def test_scenario_file_is_what_the_builder_writes():
+    """The fixture is regenerated from tests/fixtures/build_smart_import_scenario.py."""
+    spec = importlib.util.spec_from_file_location("build_smart_import_scenario", FIXTURES / "build_smart_import_scenario.py")
+    assert spec is not None and spec.loader is not None
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    assert builder.render() == (FIXTURES / "smart_import_scenario.json").read_text()

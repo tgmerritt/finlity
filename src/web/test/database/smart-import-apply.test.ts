@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SmartImportHttpError } from '@/database/local-smart-import';
 import {
+  CONN_ID,
   D1,
   D2,
   D3,
@@ -14,11 +15,14 @@ import {
   HASH_B,
   HASH_C,
   TODAY,
+  addConnection,
+  addConnections,
   addExpense,
   addLiability,
   applyBody,
   basic,
   candidate,
+  connectionEntry,
   count,
   setup,
   statement,
@@ -1133,5 +1137,191 @@ describe('spending summary', () => {
   it('treats an empty entity as none', () => {
     seedSpending();
     expect(summary(3, '').months_covered).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// connection_id (plan B3), mirror of the server tests in test_smart_import_apply.py
+// ---------------------------------------------------------------------------
+
+/** A connector statement as the wizard sends it after a sync. */
+function synced(fileHash: string = HASH_A, txns: Row[] = [txn(D1, -1)], o: Row = {}): Row {
+  const { cid, ...rest } = o;
+  const body = statement(fileHash, txns, { origin: 'connector', ...rest });
+  body.format = 'connector';
+  body.parser = 'connector:demo';
+  body.file_name = 'Demo sync';
+  if (cid !== null) body.connection_id = cid === undefined ? CONN_ID : cid;
+  return body;
+}
+
+describe('connection_id', () => {
+  const UNKNOWN = '11111111-2222-4333-8444-555555555555';
+
+  it.each<[string, () => Row]>([
+    ['a connector statement without one', () => synced(HASH_A, [txn(D1, -1)], { cid: null })],
+    [
+      'a file statement with one',
+      () => ({ ...statement(HASH_A, [txn(D1, -1)]), connection_id: CONN_ID }),
+    ],
+    [
+      'a sample statement with one',
+      () => ({ ...statement(HASH_A, [txn(D1, -1)], { origin: 'sample' }), connection_id: CONN_ID }),
+    ],
+    ['an empty one', () => synced(HASH_A, [txn(D1, -1)], { cid: '' })],
+    ['one over 64 characters', () => synced(HASH_A, [txn(D1, -1)], { cid: 'c'.repeat(65) })],
+    ['a number', () => synced(HASH_A, [txn(D1, -1)], { cid: 7 })],
+  ])('refuses %s with a fixed 422 and writes nothing', (_n, make) => {
+    addConnection(env.db);
+    const before = tableHashes(env.db);
+    expectError(() => apply(applyBody([make()])), 422, 'bad_request');
+    expect(tableHashes(env.db)).toEqual(before);
+  });
+
+  it('accepts a file statement with a null connection_id', () => {
+    const st = { ...statement(HASH_A, [txn(D1, -1)]), connection_id: null };
+    expect(apply(applyBody([st])).imports).toHaveLength(1);
+  });
+
+  it.each([UNKNOWN, CONN_ID.toUpperCase(), 'connections'])(
+    'refuses an unknown connection %s with 404 and writes nothing',
+    (cid) => {
+      addConnection(env.db);
+      const before = tableHashes(env.db);
+      expectError(
+        () => apply(applyBody([synced(HASH_A, [txn(D1, -1)], { cid })])),
+        404,
+        'connection_not_found'
+      );
+      expect(tableHashes(env.db)).toEqual(before);
+    }
+  );
+
+  it('refuses with no connections row', () => {
+    expectError(() => apply(applyBody([synced()])), 404, 'connection_not_found');
+  });
+
+  it('does not count an entry the store would drop', () => {
+    addConnections(env.db, { [CONN_ID]: connectionEntry({ provider: 'plaid' }) });
+    expectError(() => apply(applyBody([synced()])), 404, 'connection_not_found');
+  });
+
+  it('refuses the whole batch for an unknown connection in a later statement', () => {
+    addConnection(env.db);
+    const before = tableHashes(env.db);
+    const body = applyBody([
+      synced(HASH_A, [txn(D1, -1, 'NETFLIX', { dedupe_key: '1' })]),
+      synced(HASH_B, [txn(D1, -2, 'NETFLIX', { dedupe_key: '2' })], { cid: UNKNOWN }),
+    ]);
+    expectError(() => apply(body), 404, 'connection_not_found');
+    expect(tableHashes(env.db)).toEqual(before);
+  });
+
+  it('stores the connection in the meta row and lists it', () => {
+    addConnection(env.db);
+    const out = apply(
+      applyBody([
+        synced(HASH_A, [txn(D1, -1, 'NETFLIX', { dedupe_key: '1' })], {
+          period: { start: '2026-09-01', end: '2026-10-04' },
+        }),
+        statement(HASH_B, [txn(D1, -2, 'NETFLIX', { dedupe_key: '2' })]),
+      ])
+    );
+    const [connectorId, fileId] = (out.imports as Row[]).map((i) => i.import_id as string);
+    const meta = (id: string): Row =>
+      one('SELECT * FROM smart_import_meta WHERE import_id = ?', [id]);
+    expect([meta(connectorId!).connection_id, meta(connectorId!).origin]).toEqual([
+      CONN_ID,
+      'connector',
+    ]);
+    expect(meta(fileId!).connection_id).toBeNull();
+    const rows = Object.fromEntries(env.api.getSmartImports().map((r) => [r.import_id, r]));
+    expect([rows[connectorId!]!.connection_id, rows[connectorId!]!.origin]).toEqual([
+      CONN_ID,
+      'connector',
+    ]);
+    expect(rows[fileId!]!.connection_id).toBeNull();
+  });
+
+  it('leaves undo of a connector import unchanged', () => {
+    addConnection(env.db);
+    addLiability(env.db, 'L1', { balance: 500, asOf: '2026-09-01' });
+    const before = tableHashes(env.db);
+    const out = apply(
+      applyBody(
+        [
+          synced(HASH_A, [txn(D1, -1)], {
+            kind: 'credit_card',
+            liabilityId: 'L1',
+            closing: { amount: 321.5, as_of: '2026-09-30' },
+          }),
+        ],
+        { rules: [{ merchant_key: 'NETFLIX', category_id: 'cat-Dining', source: 'connector' }] }
+      )
+    );
+    env.api.undoSmartImport(out.imports[0].import_id);
+    expect(env.api.getSmartImports()).toEqual([]);
+    const after = tableHashes(env.db);
+    for (const table of ['budget_expenses', 'liability_balance_snapshots']) {
+      expect(after[table]).toBe(before[table]);
+    }
+    for (const table of [
+      'import_transactions',
+      'smart_import_ledger',
+      'smart_import_meta',
+      'bank_statement_imports',
+    ]) {
+      expect(count(env.db, table)).toBe(0);
+    }
+    const liab = one("SELECT current_balance, balance_as_of FROM liabilities WHERE id = 'L1'");
+    expect([liab.current_balance, liab.balance_as_of]).toEqual([500, '2026-09-01']);
+    expect(count(env.db, 'merchant_rules')).toBe(1);
+  });
+});
+
+describe('connector balances', () => {
+  const cardSync = (closing: Row): Row =>
+    applyBody([synced(HASH_A, [txn(D1, -1)], { kind: 'credit_card', liabilityId: 'L1', closing })]);
+
+  it('records a balance dated tomorrow as today and undo restores it', () => {
+    addConnection(env.db);
+    addLiability(env.db, 'L1', { balance: 500, asOf: '2026-09-01' });
+    const out = apply(cardSync({ amount: 321.5, as_of: '2026-10-05' }));
+    expect(out.imports[0].balance).toBe('recorded');
+    const importId = out.imports[0].import_id;
+    const snap = one("SELECT * FROM liability_balance_snapshots WHERE source = 'import'");
+    expect([snap.snapshot_date, snap.balance]).toEqual([TODAY, 321.5]);
+    const liab = one("SELECT current_balance, balance_as_of FROM liabilities WHERE id = 'L1'");
+    expect([liab.current_balance, liab.balance_as_of]).toEqual([321.5, TODAY]);
+    const ledger = Object.fromEntries(
+      env.db.query<Row>('SELECT * FROM smart_import_ledger').map((l) => [l.action, l])
+    );
+    expect(JSON.parse(ledger.snapshot.after_json).snapshot_date).toBe(TODAY);
+    expect(JSON.parse(ledger.balance_moved.after_json).balance_as_of).toBe(TODAY);
+    expect(one('SELECT closing_balance_date FROM smart_import_meta').closing_balance_date).toBe(
+      '2026-10-05'
+    );
+    env.api.undoSmartImport(importId);
+    const back = one("SELECT current_balance, balance_as_of FROM liabilities WHERE id = 'L1'");
+    expect([back.current_balance, back.balance_as_of]).toEqual([500, '2026-09-01']);
+    expect(count(env.db, 'liability_balance_snapshots')).toBe(1);
+  });
+
+  it('keeps a snapshot already on today', () => {
+    addConnection(env.db);
+    addLiability(env.db, 'L1', { balance: 500, asOf: TODAY });
+    expect(apply(cardSync({ amount: 321.5, as_of: '2026-10-05' })).imports[0].balance).toBe(
+      'skipped_existing'
+    );
+    expect(count(env.db, 'liability_balance_snapshots')).toBe(1);
+  });
+
+  it('still skips a balance two days ahead', () => {
+    addConnection(env.db);
+    addLiability(env.db, 'L1');
+    expect(apply(cardSync({ amount: 1, as_of: '2026-10-06' })).imports[0].balance).toBe(
+      'skipped_future'
+    );
+    expect(count(env.db, 'liability_balance_snapshots')).toBe(1);
   });
 });

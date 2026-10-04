@@ -52,6 +52,12 @@ export default defineConfig({
           ) {
             return undefined;
           }
+          // The connection composites and the WebCrypto seal load only when a hosted
+          // visitor creates, reconnects, refreshes or syncs a connection. Grouped into
+          // `shared` they would load at startup with every page.
+          if (/\/src\/web\/src\/(api\/connections-composite|utils\/connector-seal)/.test(id)) {
+            return undefined;
+          }
           if (id.includes('/src/web/src/pages/')) {
             const match = id.match(/\/pages\/([^/]+)/);
             if (match) return `page-${match[1]}`;

@@ -794,6 +794,8 @@ export interface SmartImportSummary {
   txn_excluded: number;
   ai_used: number;
   ai_provider: string | null;
+  /** The connection a synced import came from; null for file and sample imports. */
+  connection_id: string | null;
   imported_at: string | null;
 }
 
@@ -857,6 +859,8 @@ export interface ApplyStatement {
   ai_used?: boolean;
   ai_provider?: string | null;
   transactions: ApplyTxn[];
+  /** Required when origin is 'connector' and only then; must name a stored connection. */
+  connection_id?: string | null;
 }
 
 /** A remembered merchant choice (server ApplyRule). */
@@ -916,6 +920,218 @@ export interface SmartImportUndoResponse {
   reassigned: { transactions: number };
   kept: { table: string; id: string; reason: string }[];
 }
+
+/**
+ * DELETE /api/connections/{id}[?remove_data=true|false] (plan B4, design 8.6).
+ * `deleted`, `reassigned` and `kept` are the smart import undo results summed
+ * over the undone imports (zero and empty for a plain disconnect).
+ * `imports_kept` counts the imports that stay with the removed connection's id.
+ */
+export interface DisconnectResponse {
+  connection_id: string;
+  remove_data: boolean;
+  imports_undone: number;
+  imports_kept: number;
+  deleted: SmartImportUndoResponse['deleted'];
+  reassigned: { transactions: number };
+  kept: SmartImportUndoResponse['kept'];
+}
+
+// Connections (plan B2 server contract; B5 browser twin in local-connections.ts).
+export type ConnectionProvider = 'simplefin' | 'akahu' | 'demo';
+export type ConnectionStatus =
+  'ok' | 'accounts_pending' | 'reconnect_needed' | 'payment_required' | 'rate_limited' | 'error';
+export type ConnectionAccountRole = 'debt' | 'cash_flow' | 'ignore';
+
+/** One item of GET /api/connections. Never a credential. */
+export interface ConnectionSummary {
+  id: string;
+  provider: ConnectionProvider;
+  label: string;
+  status: ConnectionStatus;
+  status_at: string;
+  created_at: string;
+  last_synced_at: string | null;
+  first_sync_days: 30 | 60 | 90;
+  accounts_count: number;
+  accounts_enabled: number;
+  /** Provider calls allowed per rolling 24 hours; null when unlimited (demo). */
+  quota_budget: number | null;
+  quota_left: number | null;
+  /** Set only when quota_left is 0: the oldest counted call plus 24 hours. */
+  quota_resets_at: string | null;
+}
+
+export interface ConnectionAccount {
+  provider_account_id: string;
+  name: string;
+  institution: string | null;
+  currency: string;
+  kind: SmartImportAccountKind;
+  role: ConnectionAccountRole;
+  label: string;
+  account_key: string;
+  liability_id: string | null;
+  flip_balance: boolean;
+  same_as_key: string | null;
+  /** Where the next sync starts (design 9.1); null when the account is ignored. */
+  next_since: string | null;
+}
+
+/** GET /api/connections/{id}: the summary plus the sync plan's windows (oldest first). */
+export interface ConnectionDetail extends ConnectionSummary {
+  windows: { start: string; end: string }[];
+  accounts: ConnectionAccount[];
+}
+
+export interface ConnectionAccountError {
+  provider_account_id: string | null;
+  code: string;
+}
+
+/** Create, reconnect and refresh answers: the detail plus the listing's transient codes. */
+export interface ConnectionListingResponse extends ConnectionDetail {
+  account_errors: ConnectionAccountError[];
+  /** Create and reconnect only: the error type of a failed account listing, else null. */
+  accounts_error?: string | null;
+}
+
+/** POST /api/connections/{id}/credentials (reconnect). */
+export interface ReplaceCredentialsRequest {
+  setup_token?: string;
+  access_url?: string;
+  user_token?: string;
+  app_token?: string;
+}
+
+/** POST /api/connections. */
+export interface CreateConnectionRequest extends ReplaceCredentialsRequest {
+  provider: ConnectionProvider;
+  label?: string;
+  first_sync_days?: 30 | 60 | 90;
+}
+
+export interface ConnectionAccountUpdate {
+  kind?: SmartImportAccountKind;
+  role?: ConnectionAccountRole;
+  label?: string;
+  liability_id?: string | null;
+  flip_balance?: boolean;
+  same_as_key?: string | null;
+}
+
+/** PUT /api/connections/{id}: only the fields sent change. */
+export interface UpdateConnectionRequest {
+  label?: string;
+  first_sync_days?: 30 | 60 | 90;
+  accounts?: Record<string, ConnectionAccountUpdate>;
+}
+
+/** POST /api/connections/{id}/sync. */
+export interface ConnectionSyncRequest {
+  window_index?: number;
+}
+
+/** One account of POST /api/v2/connectors/{provider}/accounts. */
+export interface ConnectorProviderAccount {
+  provider_account_id: string;
+  name: string;
+  institution: string | null;
+  currency: string;
+  balance: number | null;
+  balance_date: string | null;
+  kind_guess: string;
+  account_key: string;
+  error: string | null;
+}
+
+export interface ConnectorAccountsResponse {
+  accounts: ConnectorProviderAccount[];
+  errors: string[];
+}
+
+/** One account of a v2 sync request. */
+export interface ConnectorSyncAccount {
+  provider_account_id: string;
+  since: string;
+  account_key: string;
+  kind: SmartImportAccountKind;
+  flip_balance: boolean;
+}
+
+/** POST /api/v2/connectors/{provider}/sync, and POST /api/connections/{id}/sync. */
+export interface ConnectorSyncResponse {
+  statements: NormalizedStatement[];
+  account_errors: ConnectionAccountError[];
+  window: { start: string; end: string };
+}
+
+/**
+ * The `credentials` of a v2 connector request: `{access_url}` for SimpleFIN,
+ * `{user_token, app_token}` for Akahu, `{}` for the demo. Sent per request,
+ * never stored by the server.
+ */
+export type ConnectorCredentials =
+  { access_url: string } | { user_token: string; app_token: string } | Record<string, never>;
+
+/** POST /api/v2/connectors/simplefin/claim. */
+export interface ClaimRequest {
+  setup_token: string;
+}
+
+/** The Access URL, returned once to the caller that sent the setup token. */
+export interface ClaimResponse {
+  access_url: string;
+}
+
+/** POST /api/v2/connectors/{provider}/accounts. */
+export interface ConnectorAccountsRequest {
+  credentials: ConnectorCredentials;
+}
+
+/** POST /api/v2/connectors/{provider}/sync: one window, at most 90 days. */
+export interface ConnectorSyncRequest {
+  credentials: ConnectorCredentials;
+  start: string;
+  end: string;
+  accounts: ConnectorSyncAccount[];
+  context?: {
+    rules?: SmartImportContext['rules'] | null;
+    categories?: SmartImportContext['categories'];
+  };
+}
+
+// LocalAPI-only shapes the client.ts composites use (plan B6). None has a route.
+
+/** createConnection metadata: the composite mints the id before it seals. */
+export interface LocalConnectionMeta {
+  id: string;
+  provider: ConnectionProvider;
+  label?: string;
+  first_sync_days?: 30 | 60 | 90;
+  /** A setup token was claimed for this connection (one counted provider call). */
+  claimed?: boolean;
+}
+
+/** getConnectionSyncPlan: each window with the v2 sync accounts it asks for. */
+export interface ConnectionSyncPlan {
+  connection_id: string;
+  provider: ConnectionProvider;
+  status: ConnectionStatus;
+  quota_left: number | null;
+  windows: { start: string; end: string; accounts: ConnectorSyncAccount[] }[];
+}
+
+/** beginConnectionCall: the sealed credential for one provider call (null for the demo). */
+export interface ConnectionCallStart {
+  provider: ConnectionProvider;
+  sealed: string | null;
+}
+
+/** recordConnectionResult: a good sync, or a call that failed (or was never made). */
+export type ConnectionCallResult =
+  | { kind: 'sync'; response: ConnectorSyncResponse }
+  | { kind: 'failed'; error_type: string; requested: boolean };
 
 export interface SpendingSummary {
   months_covered: number;

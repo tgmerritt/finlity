@@ -14,6 +14,7 @@
 
 import type { ClientDatabase } from './client-database';
 import { LocalHttpError } from './local-error';
+import { connectionExists } from './local-connections-store';
 import { today as clockToday } from '@/utils/clock';
 import type {
   ApplyRecurring,
@@ -62,6 +63,39 @@ const CATALOG: Record<string, [number, string]> = {
   category_not_found: [404, 'Category not found.'],
   liability_not_found: [404, 'Debt not found.'],
   expense_not_found: [404, 'Expense not found.'],
+  connection_not_found: [404, 'Connection not found.'],
+  // Connector codes the browser connection store and the B6 composites raise
+  // (src/connectors/errors.py, same status and detail).
+  connection_limit: [
+    422,
+    'This profile already has the maximum of 10 connections. Disconnect one first.',
+  ],
+  reconnect_needed: [409, 'The provider no longer accepts this connection. Reconnect to continue.'],
+  payment_required: [409, 'The provider reports that the subscription needs attention.'],
+  provider_rate_limited: [429, 'The provider asked for fewer requests. Try again tomorrow.'],
+  quota_reached: [429, 'This connection has reached its daily sync limit. Try again tomorrow.'],
+  connector_disabled: [503, 'This connection type is not enabled here.'],
+  claim_not_saved: [
+    500,
+    'Your setup token was used but the connection could not be saved. Create a ' +
+      'new setup token in SimpleFIN and try again.',
+  ],
+  claim_timeout: [
+    504,
+    'The setup token may have been used. If connecting again fails, create a new one.',
+  ],
+  // A v2 call the browser could not finish (no answer, or the request timed out).
+  provider_timeout: [504, 'The provider took too long to respond.'],
+  provider_unavailable: [502, 'The provider could not be reached.'],
+  provider_bad_response: [502, 'The provider returned an unusable response.'],
+  host_not_allowed: [422, 'This connection address is not allowed.'],
+  // Browser only: the key store or WebCrypto failed; the connection is unchanged.
+  storage_unavailable: [
+    503,
+    'This browser could not open its saved connection details. Try again in a moment.',
+  ],
+  // Browser only: one provider call per connection at a time in this tab (plan B6).
+  connection_busy: [409, 'This connection is busy with another request. Try again in a moment.'],
   server_error: [500, 'Something went wrong.'],
   save_failed: [500, 'The change could not be saved.'],
 };
@@ -568,13 +602,35 @@ function previousLiability(
   return null;
 }
 
+const activeLiabilities = (db: ClientDatabase): LiabilityRow[] =>
+  db.query<LiabilityRow>(
+    'SELECT id, name, liability_type, lender FROM liabilities WHERE is_active = 1 ORDER BY name, id'
+  );
+
+/**
+ * store.suggest_liability (plan B5): the debt a new connected card or loan
+ * most likely belongs to, by the preview's rules (the debt an earlier import
+ * of the same key was linked to, else a lender or name match). Null when
+ * nothing fits. The caller keeps only a canonical id, as the server does.
+ */
+export function suggestLiability(
+  db: ClientDatabase,
+  institution: string | null,
+  kind: string,
+  accountKey: string | null
+): string | null {
+  const liabilities = activeLiabilities(db);
+  const activeIds = new Set(liabilities.map((x) => x.id));
+  return (
+    previousLiability(db, accountKey, activeIds) ?? lenderMatch(institution, kind, liabilities)
+  );
+}
+
 function liabilitySuggestions(
   db: ClientDatabase,
   statements: PreviewRequest['statements']
 ): PreviewResponse['liability_suggestions'] {
-  const liabilities = db.query<LiabilityRow>(
-    'SELECT id, name, liability_type, lender FROM liabilities WHERE is_active = 1 ORDER BY name, id'
-  );
+  const liabilities = activeLiabilities(db);
   const activeIds = new Set(liabilities.map((x) => x.id));
   const out: PreviewResponse['liability_suggestions'] = [];
   for (const st of statements) {
@@ -654,7 +710,8 @@ export function getSmartImports(db: ClientDatabase): SmartImportSummary[] {
           `SELECT m.import_id, m.batch_id, b.file_name, m.origin, m.format, m.parser, m.account_kind,
                 m.account_key, m.account_label, m.account_last4, m.institution, m.period_start,
                 m.period_end, m.closing_balance, m.closing_balance_date, m.liability_id,
-                m.txn_new, m.txn_duplicate, m.txn_excluded, m.ai_used, m.ai_provider, m.created_at
+                m.txn_new, m.txn_duplicate, m.txn_excluded, m.ai_used, m.ai_provider, m.connection_id,
+                m.created_at
            FROM smart_import_meta m JOIN bank_statement_imports b ON b.id = m.import_id
           ORDER BY ${newestFirst('created_at', 'm.')}`
         )
@@ -838,7 +895,7 @@ function parseStatement(raw: unknown): ParsedStatement {
   const o = shape(
     raw,
     ['file_hash', 'file_name', 'origin', 'format', 'parser', 'account', 'transactions'],
-    ['period', 'closing_balance', 'liability_id', 'ai_used', 'ai_provider']
+    ['period', 'closing_balance', 'liability_id', 'ai_used', 'ai_provider', 'connection_id']
   );
   need(typeof o.file_hash === 'string' && HASH.test(o.file_hash));
   need(textBetween(o.file_name, 0, 1000));
@@ -862,10 +919,14 @@ function parseStatement(raw: unknown): ParsedStatement {
   }
   if (o.ai_used !== undefined) need(typeof o.ai_used === 'boolean');
   need(Array.isArray(o.transactions) && o.transactions.length <= MAX_APPLY_TRANSACTIONS);
+  const origin = oneOf(o.origin, ORIGINS);
+  // A synced statement names its connection, and only a synced statement does.
+  const connectionId = optText(o.connection_id, 1, 64);
+  need((origin === 'connector') === (connectionId !== null));
   return {
     file_hash: o.file_hash as string,
     file_name: o.file_name as string,
-    origin: oneOf(o.origin, ORIGINS),
+    origin,
     format: oneOf(o.format, FORMATS),
     parser: o.parser as string,
     account: {
@@ -881,6 +942,7 @@ function parseStatement(raw: unknown): ParsedStatement {
     ai_used: o.ai_used === true,
     ai_provider: optText(o.ai_provider, 0, 64),
     transactions: (o.transactions as unknown[]).map(parseTxn),
+    connection_id: connectionId,
   };
 }
 
@@ -1032,6 +1094,11 @@ function checkReferences(db: ClientDatabase, request: ParsedApply): void {
       throw fail('liability_not_found');
     }
   }
+  for (const st of request.statements) {
+    if (st.connection_id !== null && !connectionExists(db, st.connection_id)) {
+      throw fail('connection_not_found');
+    }
+  }
 }
 
 interface Created {
@@ -1128,8 +1195,8 @@ function insertStatement(
   db.execute(
     `INSERT INTO smart_import_meta (import_id, batch_id, origin, format, parser, account_kind, account_key,
        account_label, account_last4, institution, period_start, period_end, closing_balance, closing_balance_date,
-       liability_id, txn_new, txn_duplicate, txn_excluded, ai_used, ai_provider, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       liability_id, txn_new, txn_duplicate, txn_excluded, ai_used, ai_provider, created_at, connection_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       importId,
       batch.batch_id,
@@ -1152,6 +1219,7 @@ function insertStatement(
       st.ai_used ? 1 : 0,
       st.ai_provider,
       now,
+      st.connection_id,
     ]
   );
   return {
@@ -1287,7 +1355,12 @@ function applyRecurring(
 function recordBalance(db: ClientDatabase, imp: Created, today: string, now: string): string {
   const { closing_balance: closing, liability_id: liabilityId } = imp.statement;
   if (!closing || !liabilityId || closing.amount < 0) return 'none'; // a credit balance never reaches a debt
-  const day = closing.as_of;
+  let day = closing.as_of;
+  if (imp.statement.origin === 'connector' && day === minusDays(today, -1)) {
+    // A provider dates balances by UTC, which can be a day ahead of the local
+    // day: record it as today's. The meta row keeps the provider's date.
+    day = today;
+  }
   if (day > today) return 'skipped_future';
   if (
     db.query(
@@ -1482,7 +1555,17 @@ function handOverClaimedRows(db: ClientDatabase, importId: string): number {
   return claims.size;
 }
 
-function undoInside(db: ClientDatabase, importId: string, now: string): SmartImportUndoResponse {
+/**
+ * Undo one import inside the caller's transaction (twin of the server's
+ * `undo_in_session`): it opens no savepoint and commits nothing, so a caller
+ * such as disconnect with remove_data (local-connections.ts) can undo several
+ * imports and roll all of them back together. `now` is an ISO timestamp.
+ */
+export function undoInside(
+  db: ClientDatabase,
+  importId: string,
+  now: string
+): SmartImportUndoResponse {
   if (!db.query('SELECT 1 FROM smart_import_meta WHERE import_id = ?', [importId]).length) {
     // A plain statement import row is a legacy import; no row at all is unknown or already undone.
     throw fail(
@@ -1570,6 +1653,21 @@ function undoInside(db: ClientDatabase, importId: string, now: string): SmartImp
   db.execute('DELETE FROM smart_import_meta WHERE import_id = ?', [importId]);
   db.execute('DELETE FROM bank_statement_imports WHERE id = ?', [importId]);
   return { undone: true, deleted, reassigned: { transactions: reassigned }, kept };
+}
+
+/**
+ * The imports synced from one connection, newest first: created_at, then
+ * insertion order (twin of the server's `connection_import_ids`). Statements
+ * of one Apply share created_at, so the later one comes first.
+ */
+export function connectionImportIds(db: ClientDatabase, connectionId: string): string[] {
+  return db
+    .query<{ import_id: string }>(
+      `SELECT import_id FROM smart_import_meta WHERE connection_id = ?
+        ORDER BY ${newestFirst('created_at')}`,
+      [connectionId]
+    )
+    .map((row) => row.import_id);
 }
 
 /** DELETE /api/smart-import/imports/{id}: remove exactly what one import created, keep what the user changed. */

@@ -217,6 +217,11 @@ EXPECTED_STATUS = {
     "connector_disabled": 503,
     "connections_unavailable": 403,
     "connection_not_found": 404,
+    # Server-mode connection service (plan B2 review).
+    "connection_limit": 422,
+    "claim_not_saved": 500,
+    "claim_timeout": 504,
+    "request_time_short": 503,
 }
 
 
@@ -398,6 +403,13 @@ _BANNED_TOP = frozenset(
     ).split()
 )
 _BANNED_FULL = ("urllib.request", "src.database", "src.services", "http.client")
+# The server data layer (plan B1) lives in this package but is not part of the
+# stateless core: only these modules may reach the database and the secrets
+# manager, and only through these exact imports. Nothing in the core or the
+# v2 routes imports them (test_store.py checks that).
+_DATA_LAYER_IMPORTS = {
+    "store.py": frozenset({"src.database", "src.services.secrets"}),
+}
 
 
 def test_connector_core_imports_nothing_stateful_or_dangerous():
@@ -418,6 +430,8 @@ def test_connector_core_imports_nothing_stateful_or_dangerous():
             elif isinstance(node, ast.ImportFrom) and node.level > 1:
                 names = ["src." + (node.module or "")]
             for n in names:
+                if n in _DATA_LAYER_IMPORTS.get(rel, ()):
+                    continue
                 top = n.split(".")[0]
                 assert top not in _BANNED_TOP, f"{rel} imports {n}"
                 assert not any(n == b or n.startswith(b + ".") for b in _BANNED_FULL), (

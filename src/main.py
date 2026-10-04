@@ -32,6 +32,7 @@ from src.api import (
     settings_router,
     profiles_router,
     plugins_router,
+    connections_router,
 )
 from src.api.budget import router as budget_router
 from src.api.bank_statements import router as bank_statements_router
@@ -361,6 +362,7 @@ app.include_router(entities_router)
 app.include_router(liabilities_router)
 app.include_router(smart_import_router)
 app.include_router(smart_import_budget_router)
+app.include_router(connections_router)
 app.include_router(v2_router)
 
 # Serve static files (web dashboard)

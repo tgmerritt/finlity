@@ -1,0 +1,132 @@
+{
+ "_comment": "Synthetic cases: which connections the stored document keeps, so which connection_id smart import Apply accepts (plan B3). 'value' is the raw app_settings row (null: no row); 'ids' is the server's answer (store.read_connections). Read by tests/connectors/test_store.py and src/web/test/database/connections-store.test.ts.",
+ "cases": [
+  {
+   "name": "no row",
+   "value": null,
+   "ids": []
+  },
+  {
+   "name": "empty value",
+   "value": "",
+   "ids": []
+  },
+  {
+   "name": "not JSON",
+   "value": "{not json",
+   "ids": []
+  },
+  {
+   "name": "a JSON list",
+   "value": "[]",
+   "ids": []
+  },
+  {
+   "name": "items not an object",
+   "value": "{\"version\": 1, \"items\": []}",
+   "ids": []
+  },
+  {
+   "name": "one valid entry",
+   "value": "{\"version\": 1, \"items\": {\"00000000-0000-4000-8000-000000000001\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}}}",
+   "ids": [
+    "00000000-0000-4000-8000-000000000001"
+   ]
+  },
+  {
+   "name": "each provider and status",
+   "value": "{\"version\": 1, \"items\": {\"00000000-0000-4000-8000-000000000001\": {\"provider\": \"simplefin\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"accounts_pending\"}, \"00000000-0000-4000-8000-000000000002\": {\"provider\": \"akahu\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"reconnect_needed\"}, \"00000000-0000-4000-8000-000000000003\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"payment_required\"}, \"00000000-0000-4000-8000-000000000004\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"rate_limited\"}, \"00000000-0000-4000-8000-000000000005\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"error\"}}}",
+   "ids": [
+    "00000000-0000-4000-8000-000000000001",
+    "00000000-0000-4000-8000-000000000002",
+    "00000000-0000-4000-8000-000000000003",
+    "00000000-0000-4000-8000-000000000004",
+    "00000000-0000-4000-8000-000000000005"
+   ]
+  },
+  {
+   "name": "uppercase id",
+   "value": "{\"version\": 1, \"items\": {\"0000000A-0000-4000-8000-000000000001\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"0000000a-0000-4000-8000-000000000002\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}}}",
+   "ids": [
+    "0000000a-0000-4000-8000-000000000002"
+   ]
+  },
+  {
+   "name": "not a uuid",
+   "value": "{\"version\": 1, \"items\": {\"connection-1\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"connections\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}}}",
+   "ids": []
+  },
+  {
+   "name": "entry not an object",
+   "value": "{\"version\": 1, \"items\": {\"00000000-0000-4000-8000-000000000001\": \"demo\", \"00000000-0000-4000-8000-000000000002\": [], \"00000000-0000-4000-8000-000000000003\": null}}",
+   "ids": []
+  },
+  {
+   "name": "unknown provider",
+   "value": "{\"version\": 1, \"items\": {\"00000000-0000-4000-8000-000000000001\": {\"provider\": \"plaid\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000002\": {\"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}}}",
+   "ids": []
+  },
+  {
+   "name": "labels",
+   "value": "{\"version\": 1, \"items\": {\"00000000-0000-4000-8000-000000000001\": {\"provider\": \"demo\", \"label\": \"\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000002\": {\"provider\": \"demo\", \"label\": \"bad\\nlabel\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000003\": {\"provider\": \"demo\", \"label\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000004\": {\"provider\": \"demo\", \"label\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000005\": {\"provider\": \"demo\", \"label\": \"\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\\ud83d\\ude00\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000006\": {\"provider\": \"demo\", \"label\": 7, \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000007\": {\"provider\": \"demo\", \"label\": \"tab\\there\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000008\": {\"provider\": \"demo\", \"label\": \"del\\u007f\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}}}",
+   "ids": [
+    "00000000-0000-4000-8000-000000000004",
+    "00000000-0000-4000-8000-000000000005"
+   ]
+  },
+  {
+   "name": "timestamps",
+   "value": "{\"version\": 1, \"items\": {\"00000000-0000-4000-8000-000000000001\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000002\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-02-30T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000003\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T24:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000004\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00.123456+05:30\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000005\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00+24:00\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000006\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01 09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000007\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000008\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": 20261001, \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000009\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2024-02-29T23:59:59-23:59\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000010\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:60Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000011\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00+00:60\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000012\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00-00:99\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000013\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00+23:60\", \"status\": \"ok\"}}}",
+   "ids": [
+    "00000000-0000-4000-8000-000000000004",
+    "00000000-0000-4000-8000-000000000009",
+    "00000000-0000-4000-8000-000000000011",
+    "00000000-0000-4000-8000-000000000012"
+   ]
+  },
+  {
+   "name": "unknown status",
+   "value": "{\"version\": 1, \"items\": {\"00000000-0000-4000-8000-000000000001\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"paused\"}, \"00000000-0000-4000-8000-000000000002\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\"}}}",
+   "ids": []
+  },
+  {
+   "name": "eleven valid keep the first ten",
+   "value": "{\"version\": 1, \"items\": {\"00000000-0000-4000-8000-000000000011\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000010\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000009\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000008\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000007\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000006\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000005\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000004\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000003\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000002\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000001\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}}}",
+   "ids": [
+    "00000000-0000-4000-8000-000000000011",
+    "00000000-0000-4000-8000-000000000010",
+    "00000000-0000-4000-8000-000000000009",
+    "00000000-0000-4000-8000-000000000008",
+    "00000000-0000-4000-8000-000000000007",
+    "00000000-0000-4000-8000-000000000006",
+    "00000000-0000-4000-8000-000000000005",
+    "00000000-0000-4000-8000-000000000004",
+    "00000000-0000-4000-8000-000000000003",
+    "00000000-0000-4000-8000-000000000002"
+   ]
+  },
+  {
+   "name": "invalid entries do not count toward the cap",
+   "value": "{\"version\": 1, \"items\": {\"00000000-0000-4000-8000-000000000100\": {\"provider\": \"x\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000101\": {\"provider\": \"x\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000102\": {\"provider\": \"x\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000103\": {\"provider\": \"x\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000104\": {\"provider\": \"x\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000001\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000002\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000003\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000004\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000005\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000006\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000007\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000008\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000009\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000010\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}, \"00000000-0000-4000-8000-000000000011\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\"}}}",
+   "ids": [
+    "00000000-0000-4000-8000-000000000001",
+    "00000000-0000-4000-8000-000000000002",
+    "00000000-0000-4000-8000-000000000003",
+    "00000000-0000-4000-8000-000000000004",
+    "00000000-0000-4000-8000-000000000005",
+    "00000000-0000-4000-8000-000000000006",
+    "00000000-0000-4000-8000-000000000007",
+    "00000000-0000-4000-8000-000000000008",
+    "00000000-0000-4000-8000-000000000009",
+    "00000000-0000-4000-8000-000000000010"
+   ]
+  },
+  {
+   "name": "extra keys are fine",
+   "value": "{\"version\": 1, \"items\": {\"00000000-0000-4000-8000-000000000001\": {\"provider\": \"demo\", \"label\": \"Demo\", \"created_at\": \"2026-10-01T09:00:00Z\", \"status\": \"ok\", \"secret\": \"never here\", \"accounts\": \"junk\", \"requests\": 5}}}",
+   "ids": [
+    "00000000-0000-4000-8000-000000000001"
+   ]
+  }
+ ]
+}

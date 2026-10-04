@@ -60,6 +60,7 @@ function addImport(
     origin?: string;
     batch?: string;
     uploaded?: string;
+    connectionId?: string | null;
   }
 ): void {
   db.execute(
@@ -69,8 +70,9 @@ function addImport(
   );
   db.execute(
     `INSERT INTO smart_import_meta (import_id, batch_id, origin, format, parser, account_kind,
-       account_key, account_label, account_last4, institution, liability_id, created_at)
-     VALUES (?, ?, ?, 'csv', 'csv', ?, ?, ?, ?, ?, ?, ?)`,
+       account_key, account_label, account_last4, institution, liability_id, created_at,
+       connection_id)
+     VALUES (?, ?, ?, 'csv', 'csv', ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       o.batch ?? 'batch-1',
@@ -82,6 +84,7 @@ function addImport(
       o.institution === undefined ? 'Sample Bank' : o.institution,
       o.liabilityId ?? null,
       o.created ?? '2026-09-01 12:00:00',
+      o.connectionId ?? null,
     ]
   );
 }
@@ -541,8 +544,18 @@ describe('imports', () => {
       txn_excluded: 0,
       ai_used: 0,
       ai_provider: null,
+      connection_id: null,
       imported_at: '2026-09-01T00:00:00',
     });
+  });
+
+  it('returns the connection of a synced import', () => {
+    const cid = '0f0e0d0c-0b0a-4908-8706-050403020100';
+    addImport('i1', { hash: 'h1', key: 'acct:one', origin: 'connector', connectionId: cid });
+    addImport('i2', { hash: 'h2', key: 'acct:one', created: '2026-09-02 00:00:00' });
+    const rows = Object.fromEntries(api.getSmartImports().map((r) => [r.import_id, r]));
+    expect(rows['i1']!.connection_id).toBe(cid);
+    expect(rows['i2']!.connection_id).toBeNull();
   });
 
   it('skips legacy imports with no meta row', () => {
