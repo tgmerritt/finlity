@@ -4,7 +4,14 @@
  *
  * No DOM or network access, so every function is unit tested.
  */
-import type { AccountResponse, DashboardPosition, SnapshotHistory } from '@/types/api';
+import type {
+  AccountResponse,
+  DashboardData,
+  DashboardLiability,
+  DashboardPosition,
+  SnapshotHistory,
+} from '@/types/api';
+import { formatCurrency } from '@/utils/format';
 
 export type AllocationClass = 'stocks' | 'bonds' | 'cash' | 'alternatives';
 
@@ -203,7 +210,7 @@ export function defaultRange(history: SnapshotHistory[]): RangeKey {
   return (last - first) / 86_400_000 > 30 ? '1Y' : 'ALL';
 }
 
-export type AccountGroupKey = 'retirement' | 'taxable' | 'cash';
+export type AccountGroupKey = 'retirement' | 'taxable' | 'cash' | 'property';
 
 export interface AccountRow {
   id: string;
@@ -232,9 +239,11 @@ const GROUP_LABELS: Record<AccountGroupKey, string> = {
   retirement: 'Retirement',
   taxable: 'Taxable',
   cash: 'Cash & savings',
+  property: 'Property',
 };
 
 function groupKey(a: AccountResponse): AccountGroupKey {
+  if (a.account_type === 'property') return 'property';
   if (CASH_ACCOUNT_TYPES.has(a.account_type)) return 'cash';
   return a.is_retirement ? 'retirement' : 'taxable';
 }
@@ -255,7 +264,7 @@ export function groupAccounts(
       .map(([name]) => name)
   );
 
-  const order: AccountGroupKey[] = ['retirement', 'taxable', 'cash'];
+  const order: AccountGroupKey[] = ['retirement', 'taxable', 'cash', 'property'];
   return order
     .map((key): AccountGroup => {
       const rows = accounts
@@ -289,9 +298,27 @@ export function groupAccounts(
 }
 
 export interface AttentionItem {
-  kind: 'stale-prices' | 'cd-maturing' | 'duplicates' | 'alert';
+  kind:
+    | 'stale-prices'
+    | 'cd-maturing'
+    | 'duplicates'
+    | 'alert'
+    | 'add-debts'
+    | 'property-unlinked'
+    | 'stale-balance';
   message: string;
-  action: 'refresh-prices' | 'show-duplicates' | 'open-holdings' | 'open-analysis';
+  action:
+    | 'refresh-prices'
+    | 'show-duplicates'
+    | 'open-holdings'
+    | 'open-analysis'
+    | 'add-debts'
+    | 'review-property'
+    | 'update-balance';
+  /** Position id (review-property) or liability id (update-balance). */
+  targetId?: string;
+  /** Key to store in the dismissed set; present only on dismissible items. */
+  dismissKey?: string;
 }
 
 export interface TriggeredAlert {
@@ -318,6 +345,13 @@ export function attentionItems(input: {
   duplicateCount: number;
   triggeredAlerts: TriggeredAlert[];
   today: Date;
+  /** Number of accounts; the add-debts prompt needs at least one. */
+  accountCount?: number;
+  /** summary.liabilities_included; debt items are skipped unless true. */
+  liabilitiesIncluded?: boolean;
+  liabilities?: DashboardLiability[];
+  /** Dismissal keys (AttentionItem.dismissKey) the user has already cleared. */
+  dismissed?: ReadonlySet<string>;
 }): AttentionItem[] {
   const items: AttentionItem[] = [];
   const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -369,5 +403,143 @@ export function attentionItems(input: {
     });
   }
 
+  items.push(...debtAttentionItems(input, todayUtc));
+
   return items;
+}
+
+const STALE_BALANCE_DAYS = 45;
+
+function debtAttentionItems(
+  input: {
+    positions: DashboardPosition[];
+    accountCount?: number;
+    liabilitiesIncluded?: boolean;
+    liabilities?: DashboardLiability[];
+    dismissed?: ReadonlySet<string>;
+  },
+  todayUtc: number
+): AttentionItem[] {
+  if (!input.liabilitiesIncluded) return [];
+  const items: AttentionItem[] = [];
+  const debts = input.liabilities ?? [];
+  const dismissed = input.dismissed;
+
+  if (debts.length === 0 && (input.accountCount ?? 0) > 0 && !dismissed?.has('add-debts')) {
+    items.push({
+      kind: 'add-debts',
+      message: 'Add your debts to see your net worth',
+      action: 'add-debts',
+      dismissKey: 'add-debts',
+    });
+  }
+
+  const linked = new Set(debts.map((d) => d.linked_position_id).filter(Boolean));
+  for (const p of input.positions) {
+    if (p.position_type !== 'real_estate' || linked.has(p.id)) continue;
+    const key = `property:${p.id}`;
+    if (dismissed?.has(key)) continue;
+    items.push({
+      kind: 'property-unlinked',
+      message: `Is ${p.name || p.ticker} financed?`,
+      action: 'review-property',
+      targetId: p.id,
+      dismissKey: key,
+    });
+  }
+
+  for (const d of debts) {
+    if (d.is_amortizing || !d.last_reported_date) continue;
+    const reported = Date.parse(`${d.last_reported_date.slice(0, 10)}T00:00:00Z`);
+    if (Number.isNaN(reported)) continue;
+    if ((todayUtc - reported) / 86_400_000 <= STALE_BALANCE_DAYS) continue;
+    items.push({
+      kind: 'stale-balance',
+      message: `Update the ${d.name} balance`,
+      action: 'update-balance',
+      targetId: d.id,
+    });
+  }
+  return items;
+}
+
+export interface HeroPoint {
+  date: string;
+  /** Net worth in net-worth mode, total assets in portfolio mode. */
+  value: number;
+  assets: number;
+  /** Total owed, or null in portfolio mode. */
+  debts: number | null;
+}
+
+export interface HeroModel {
+  mode: 'portfolio' | 'net-worth';
+  label: string;
+  value: number;
+  assets: number;
+  debts: number | null;
+  /** "Assets $1,284,000.00 · Debts $412,300.00" in net-worth mode, otherwise null. */
+  breakdown: string | null;
+  dayChange: Change | null;
+  rangeChange: Change | null;
+  series: HeroPoint[];
+}
+
+function change(first: number, last: number): Change {
+  return { amount: last - first, pct: first > 0 ? ((last - first) / first) * 100 : null };
+}
+
+/**
+ * Hero figures for the dashboard. `history` should already be filtered to the
+ * selected range. Net-worth mode needs liabilities_included and at least one
+ * active liability; otherwise the hero is exactly the portfolio hero.
+ */
+export function heroModel(
+  data: Pick<DashboardData, 'summary' | 'positions' | 'history'>
+): HeroModel {
+  const { summary, positions, history } = data;
+  const assets = summary.total_value;
+  const debtCount = summary.liabilities?.length ?? 0;
+  const netWorthMode = summary.liabilities_included === true && debtCount > 0;
+  const dayAssets = portfolioDayChange(positions, assets);
+
+  if (!netWorthMode) {
+    return {
+      mode: 'portfolio',
+      label: 'Portfolio value',
+      value: assets,
+      assets,
+      debts: null,
+      breakdown: null,
+      dayChange: dayAssets,
+      rangeChange: historyChange(history),
+      series: history.map((h) => ({ date: h.date, value: h.total, assets: h.total, debts: null })),
+    };
+  }
+
+  const debts = summary.liabilities_total ?? 0;
+  const netWorth = summary.net_worth ?? assets - debts;
+  const series = history.map((h): HeroPoint => {
+    const owed = h.liabilities ?? 0;
+    return { date: h.date, value: h.net_worth ?? h.total - owed, assets: h.total, debts: owed };
+  });
+  return {
+    mode: 'net-worth',
+    label: 'Net worth',
+    value: netWorth,
+    assets,
+    debts,
+    breakdown: `Assets ${formatCurrency(assets)} \u00b7 Debts ${formatCurrency(debts)}`,
+    // Debts do not move intraday, so only assets contribute; percent is against yesterday's net worth.
+    dayChange: dayAssets && {
+      amount: dayAssets.amount,
+      pct:
+        netWorth - dayAssets.amount > 0
+          ? (dayAssets.amount / (netWorth - dayAssets.amount)) * 100
+          : null,
+    },
+    rangeChange:
+      series.length < 2 ? null : change(series[0]!.value, series[series.length - 1]!.value),
+    series,
+  };
 }

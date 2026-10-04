@@ -567,7 +567,10 @@ async function renderOnTrack(gen: number): Promise<void> {
   host.appendChild(link);
 }
 
-const ATTENTION_ACTIONS: Record<AttentionItem['action'], { label: string; run: () => void }> = {
+// The debt actions (add-debts, review-property, update-balance) are wired in the dashboard UI task.
+const ATTENTION_ACTIONS: Partial<
+  Record<AttentionItem['action'], { label: string; run: () => void }>
+> = {
   'refresh-prices': {
     label: 'Refresh',
     run: () => {
@@ -617,6 +620,7 @@ async function renderAttention(positions: DashboardPosition[], gen: number): Pro
     const li = h('li');
     li.appendChild(h('span', 'attention-message', item.message));
     const action = ATTENTION_ACTIONS[item.action];
+    if (!action) continue;
     const btn = h('button', 'btn btn-secondary btn-sm', action.label);
     btn.type = 'button';
     btn.addEventListener('click', action.run);
