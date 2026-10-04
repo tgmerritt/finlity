@@ -349,7 +349,9 @@ describe('smart import wizard', () => {
     it('lists files with a status, shows a failed file with fixed copy, and removes it', async () => {
       setup({
         analyze: () => {
-          throw new ApiError(422, 'The PDF is password protected.');
+          throw new ApiError(422, 'The PDF is password protected.', {
+            error_type: 'encrypted_pdf',
+          });
         },
       });
       await open();
@@ -366,7 +368,10 @@ describe('smart import wizard', () => {
     it('does not render server detail text for unknown errors', async () => {
       setup({
         analyze: () => {
-          throw new ApiError(422, 'SELECT secret FROM something');
+          throw new ApiError(422, 'SELECT secret FROM something', {
+            error_type: 'not_in_catalog',
+            detail: 'SELECT secret FROM something',
+          });
         },
       });
       await open();
@@ -374,6 +379,19 @@ describe('smart import wizard', () => {
       await flush();
       expect(modal().textContent).not.toContain('SELECT');
       expect(modal().textContent).toContain('could not be read');
+    });
+
+    it('falls back to the status when there is no error_type', async () => {
+      setup({
+        analyze: () => {
+          throw new ApiError(413, 'whatever the server said');
+        },
+      });
+      await open();
+      pick([csvFile()]);
+      await flush();
+      expect(q('.smart-import-file').textContent).toContain('larger than the 10 MB limit');
+      expect(modal().textContent).not.toContain('whatever');
     });
 
     it('puts file names in the DOM as text, never as markup', async () => {
@@ -427,6 +445,32 @@ describe('smart import wizard', () => {
       expect(await (csv as File).text()).toBe(
         readFileSync(resolve(here, 'sample-checking.csv'), 'utf8')
       );
+    });
+
+    it('presets the sample checking file as Checking named "Sample checking", so Next works untouched', async () => {
+      setup({
+        analyze: (file) =>
+          okAnswer(
+            file.name.endsWith('.csv')
+              ? statement({
+                  file_name: file.name,
+                  origin: 'sample',
+                  account: { kind: 'checking', key: null, last4: null, institution: null },
+                })
+              : statement({ file_name: file.name, file_hash: 'hash-ofx', origin: 'sample' })
+          ),
+      });
+      await open();
+      q('[data-si="sample"]').click();
+      await flush();
+      const csvCall = uploadMock.mock.calls.find((c) => (c[1] as File).name.endsWith('.csv'))!;
+      expect((csvCall[2] as Record<string, unknown>).account_kind).toBe('checking');
+      const ofxCall = uploadMock.mock.calls.find((c) => (c[1] as File).name.endsWith('.ofx'))!;
+      expect((ofxCall[2] as Record<string, unknown>).account_kind).toBeUndefined();
+      next().click();
+      await flush();
+      expect(q<HTMLInputElement>('[data-si="label"]').value).toBe('Sample checking');
+      expect(next().disabled).toBe(false);
     });
 
     it('presets the account kind hint for a preset entry point', async () => {
@@ -794,6 +838,54 @@ describe('smart import wizard', () => {
       expect(handle.getState().statements[0]!.liability_id).toBe('l2');
     });
 
+    it('suggests the only debt of a fitting type when the preview has no suggestion', async () => {
+      setup({
+        analyze: () => okAnswer(cardStatement()),
+        liabilities: [
+          liability({ id: 'only', name: 'Only Card' }),
+          liability({ id: 'm1', name: 'Home', liability_type: 'mortgage' }),
+        ],
+      });
+      const handle = await open();
+      await toAccounts();
+      expect(q<HTMLSelectElement>('[data-si="debt"]').value).toBe('only');
+      expect(modal().textContent).toContain('Suggested match');
+      expect(handle.getState().statements[0]!.liability_id).toBeNull();
+      next().click();
+      await flush();
+      expect(handle.getState().statements[0]!.liability_id).toBe('only');
+    });
+
+    it('does not guess when two debts fit', async () => {
+      setup({
+        analyze: () => okAnswer(cardStatement()),
+        liabilities: [liability(), liability({ id: 'l9', name: 'Second' })],
+      });
+      await open();
+      await toAccounts();
+      expect(q<HTMLSelectElement>('[data-si="debt"]').value).toBe('');
+    });
+
+    it('has one "Link to a debt" label, with Skip and Add grouped with the select', async () => {
+      setup({ analyze: () => okAnswer(cardStatement()), liabilities: [] });
+      await open();
+      await toAccounts();
+      const group = q('.smart-import-debt-group');
+      expect(modal().textContent!.split('Link to a debt').length - 1).toBe(1);
+      expect(group.querySelector('label')!.textContent).toBe('Link to a debt');
+      expect(group.querySelector('[data-si="debt-skip"]')).not.toBeNull();
+      expect(group.querySelector('[data-si="debt-new"]')).not.toBeNull();
+    });
+
+    it('puts "Leave this file out" in the card header', async () => {
+      await open();
+      await toAccounts();
+      expect(q('.smart-import-card-head [data-si="remove-file"]').textContent).toBe(
+        'Leave this file out'
+      );
+      expect(qa('.smart-import-card [data-si="remove-file"]')).toHaveLength(1);
+    });
+
     it('Skip clears the choice and the suggestion is not committed', async () => {
       setup({
         analyze: () => okAnswer(cardStatement()),
@@ -929,7 +1021,8 @@ describe('smart import wizard', () => {
       await open();
       await toAccounts([csvFile('a.pdf')]);
       apiCallMock.mockImplementation(async (url: string) => {
-        if (url === '/api/smart-import/extract') throw new ApiError(502, 'raw upstream text');
+        if (url === '/api/smart-import/extract')
+          throw new ApiError(502, 'raw upstream text', { error_type: 'ai_bad_response' });
         return {};
       });
       q('[data-si="send-lines"]').click();
@@ -937,6 +1030,20 @@ describe('smart import wizard', () => {
       expect(modal().textContent).not.toContain('raw upstream');
       expect(modal().textContent).toContain('could not read these lines');
       expect(q('.smart-import-lines')).not.toBeNull();
+    });
+
+    it('reads ai_not_enabled from the error body', async () => {
+      setup({ analyze: () => layout, ai: aiOn });
+      await open();
+      await toAccounts([csvFile('a.pdf')]);
+      apiCallMock.mockImplementation(async (url: string) => {
+        if (url === '/api/smart-import/extract')
+          throw new ApiError(400, 'x', { error_type: 'ai_not_enabled' });
+        return {};
+      });
+      q('[data-si="send-lines"]').click();
+      await flush();
+      expect(modal().textContent).toContain('turned off');
     });
 
     it('hides the send button and shows the CSV or OFX hint when PDF AI is off', async () => {

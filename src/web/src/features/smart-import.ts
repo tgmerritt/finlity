@@ -32,6 +32,7 @@ import {
   button,
   countText,
   el,
+  errorTypeOf,
   extractErrorText,
   field,
   guessMapping,
@@ -84,6 +85,8 @@ export interface SmartImportHandle {
   getState: () => WizardState;
 }
 
+const SAMPLE_CHECKING_NAME = 'sample-checking.csv';
+const SAMPLE_CHECKING_LABEL = 'Sample checking';
 const ALLOWED_EXT = /\.(csv|ofx|qfx|pdf)$/i;
 
 const FALLBACK_AI: SmartImportAiStatus = {
@@ -116,6 +119,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   const fileObjs = new Map<string, File>();
   const mappingDrafts = new Map<string, Record<string, string>>();
   const mappingErrors = new Set<string>();
+  const sampleLabels = new Map<string, string>();
   const sending = new Set<string>();
   const sendFailed = new Map<string, string>();
   /** Statements whose debt choice the person made (or committed with Next). */
@@ -226,6 +230,14 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       );
       if (!fileOf(fileId)) return;
       state = mergeAnalyze(st(), fileId, answer);
+      const presetLabel = sampleLabels.get(fileId);
+      if (presetLabel) {
+        for (const x of statementsOf(fileId)) {
+          if (!x.account_key && !x.account_label) {
+            state = setStatement(st(), x.id, { account_label: presetLabel });
+          }
+        }
+      }
       if (answer.status === 'needs_mapping' && !wf.options.mapping) {
         const remembered = layoutFor(ctx, answer.headers);
         if (remembered) {
@@ -236,9 +248,12 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     } catch (error) {
       if (!fileOf(fileId)) return;
       const status = error instanceof ApiError ? error.status : 0;
-      const detail = error instanceof ApiError ? error.message : '';
       console.error('Analyze failed:', error instanceof Error ? error.name : 'error');
-      state = markFileError(st(), fileId, analyzeErrorType(status, detail));
+      state = markFileError(
+        st(),
+        fileId,
+        analyzeErrorType(status, error instanceof ApiError ? error.data : undefined)
+      );
     }
     refreshUi();
   }
@@ -266,6 +281,11 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       fileObjs.set(id, f);
       state = addFile(st(), { id, file_name: f.name, origin });
       if (options.preset) state = setFileOptions(st(), id, { account_kind: options.preset });
+      if (origin === 'sample' && f.name === SAMPLE_CHECKING_NAME) {
+        // The sample checking file has no account id: name it so a visitor can click through.
+        state = setFileOptions(st(), id, { account_kind: 'checking' });
+        sampleLabels.set(id, SAMPLE_CHECKING_LABEL);
+      }
       void enqueue(() => analyze(id));
     }
     if (badType) showToast('Only CSV, OFX, QFX and PDF files can be imported.', 'error');
@@ -278,7 +298,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     if (!state || st().files.some((f) => f.origin === 'sample')) return;
     void addFiles(
       [
-        new File([sampleCsv], 'sample-checking.csv', { type: 'text/csv' }),
+        new File([sampleCsv], SAMPLE_CHECKING_NAME, { type: 'text/csv' }),
         new File([sampleOfx], 'sample-card.ofx', { type: 'application/x-ofx' }),
       ],
       'sample'
@@ -640,6 +660,19 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     renderFooter();
   }
 
+  /** Card title with the "Leave this file out" text button at the top right. */
+  function cardHead(title: string, fileId: string): HTMLElement {
+    const head = el('div', 'smart-import-card-head');
+    head.appendChild(el('h4', 'smart-import-card-title', title));
+    const leave = button('Leave this file out', 'smart-import-leave', 'remove-file');
+    leave.addEventListener('click', () => {
+      removeFile(fileId);
+      refreshUi();
+    });
+    head.appendChild(leave);
+    return head;
+  }
+
   function pendingCard(f: WizardFile): HTMLElement {
     const card = el('section', 'smart-import-card is-pending');
     card.append(el('h4', 'smart-import-card-title', f.file_name), el('p', undefined, 'Reading...'));
@@ -669,7 +702,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   function statementCard(s: WizardStatement, f: WizardFile): HTMLElement {
     const card = el('section', 'smart-import-card');
     card.setAttribute('data-statement', s.id);
-    card.appendChild(el('h4', 'smart-import-card-title', accountTitle(s)));
+    card.appendChild(cardHead(accountTitle(s), f.id));
 
     const facts = el('dl', 'smart-import-facts');
     const fact = (label: string, value: string): void => {
@@ -790,12 +823,6 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       renderDebtSection(host, s.id);
     }
 
-    const remove = button('Leave this file out', 'btn btn-secondary btn-sm', 'remove-file');
-    remove.addEventListener('click', () => {
-      removeFile(f.id);
-      refreshUi();
-    });
-    card.appendChild(remove);
     return card;
   }
 
@@ -810,16 +837,30 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   /** What the select shows: the person's choice, else the preview's suggestion. */
   function debtValue(s: WizardStatement): string {
     if (debtTouched.has(s.id)) return s.liability_id ?? '';
-    return s.suggested_liability_id ?? '';
+    return suggestionFor(s);
+  }
+
+  /** Active debts whose type fits the statement: cards for a card, loan types for a loan. */
+  function fittingDebts(s: WizardStatement): LiabilityResponse[] {
+    return (liabilities ?? []).filter(
+      (l) =>
+        l.is_active !== false &&
+        (s.account_kind === 'credit_card'
+          ? l.liability_type === 'credit_card'
+          : l.liability_type !== 'credit_card' && l.liability_type !== 'heloc')
+    );
+  }
+
+  /** The preview's suggestion, else the only debt of a fitting type. */
+  function suggestionFor(s: WizardStatement): string {
+    if (s.suggested_liability_id) return s.suggested_liability_id;
+    const fits = fittingDebts(s);
+    return fits.length === 1 ? fits[0]!.id : '';
   }
 
   function debtChoices(s: WizardStatement): LiabilityResponse[] {
     const all = (liabilities ?? []).filter((l) => l.is_active !== false);
-    const fits = all.filter((l) =>
-      s.account_kind === 'credit_card'
-        ? l.liability_type === 'credit_card'
-        : l.liability_type !== 'credit_card'
-    );
+    const fits = fittingDebts(s);
     const chosen = debtValue(s);
     const extra = chosen ? all.find((l) => l.id === chosen && !fits.includes(l)) : undefined;
     return extra ? [...fits, extra] : fits;
@@ -829,7 +870,6 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     const s = st().statements.find((x) => x.id === statementId);
     if (!s) return;
     host.textContent = '';
-    host.appendChild(el('h5', 'smart-import-subtitle', 'Link to a debt'));
     const choices = debtChoices(s);
     const options = [
       { value: '', label: 'Do not link a debt' },
@@ -842,13 +882,12 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       debtTouched.add(s.id);
       renderDebtSection(host, s.id);
     });
-    host.appendChild(field('Debt', sel));
-    if (
-      !debtTouched.has(s.id) &&
-      s.suggested_liability_id &&
-      sel.value === s.suggested_liability_id
-    ) {
-      host.appendChild(
+    const group = el('div', 'smart-import-debt-group');
+    group.appendChild(field('Link to a debt', sel));
+    host.appendChild(group);
+    const suggested = suggestionFor(s);
+    if (!debtTouched.has(s.id) && suggested && sel.value === suggested) {
+      group.appendChild(
         el(
           'p',
           'smart-import-hint',
@@ -856,7 +895,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
         )
       );
     }
-    host.appendChild(
+    group.appendChild(
       el(
         'p',
         'smart-import-hint',
@@ -873,7 +912,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     const add = button('Add as a new debt', 'btn btn-secondary btn-sm', 'debt-new');
     add.addEventListener('click', () => void addDebtFor(s.id));
     row.append(skip, add);
-    host.appendChild(row);
+    group.appendChild(row);
   }
 
   /**
@@ -935,7 +974,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
 
   function mappingCard(f: WizardFile): HTMLElement {
     const card = el('section', 'smart-import-card smart-import-mapping');
-    card.appendChild(el('h4', 'smart-import-card-title', 'Match the columns'));
+    card.appendChild(cardHead('Match the columns', f.id));
     card.appendChild(el('p', 'smart-import-file-name', f.file_name));
     card.appendChild(
       el(
@@ -997,19 +1036,14 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       state = setFileMapping(st(), f.id, { ...draft });
       void reanalyze(f.id, '[data-si="kind"]');
     });
-    const remove = button('Leave this file out', 'btn btn-secondary btn-sm', 'remove-file');
-    remove.addEventListener('click', () => {
-      removeFile(f.id);
-      refreshUi();
-    });
-    row.append(apply, remove);
+    row.append(apply);
     card.appendChild(row);
     return card;
   }
 
   function aiCard(f: WizardFile): HTMLElement {
     const card = el('section', 'smart-import-card smart-import-ai-card');
-    card.appendChild(el('h4', 'smart-import-card-title', 'This PDF needs help'));
+    card.appendChild(cardHead('This PDF needs help', f.id));
     card.appendChild(el('p', 'smart-import-file-name', f.file_name));
     card.appendChild(
       el(
@@ -1051,12 +1085,6 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
         el('p', 'smart-import-hint', 'Try your bank’s CSV or OFX download instead.')
       );
     }
-    const remove = button('Leave this file out', 'btn btn-secondary btn-sm', 'remove-file');
-    remove.addEventListener('click', () => {
-      removeFile(f.id);
-      refreshUi();
-    });
-    card.appendChild(remove);
     return card;
   }
 
@@ -1090,7 +1118,13 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       }
     } catch (error) {
       console.error('PDF AI failed:', error instanceof Error ? error.name : 'error');
-      sendFailed.set(fileId, extractErrorText(error instanceof ApiError ? error.status : 0));
+      sendFailed.set(
+        fileId,
+        extractErrorText(
+          error instanceof ApiError ? error.status : 0,
+          error instanceof ApiError ? errorTypeOf(error.data) : undefined
+        )
+      );
     } finally {
       sending.delete(fileId);
     }

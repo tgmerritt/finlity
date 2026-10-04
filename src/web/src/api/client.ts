@@ -364,8 +364,9 @@ async function postForm<T>(endpoint: string, formData: FormData, timeout: number
 
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}`;
+      let errorData: unknown;
       try {
-        const errorData: unknown = await response.json();
+        errorData = await response.json();
         if (typeof errorData === 'object' && errorData !== null && 'detail' in errorData) {
           errorMessage = String(errorData.detail);
         }
@@ -373,7 +374,7 @@ async function postForm<T>(endpoint: string, formData: FormData, timeout: number
         console.debug(`Upload error response is not JSON for ${endpoint}:`, parseError);
         errorMessage = response.statusText || errorMessage;
       }
-      throw new ApiError(response.status, errorMessage);
+      throw new ApiError(response.status, errorMessage, errorData);
     }
 
     return (await response.json()) as T;

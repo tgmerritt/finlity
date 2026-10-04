@@ -53,6 +53,18 @@ describe('uploadFileWithContext', () => {
     expect(generateSignatureHeaders).not.toHaveBeenCalled();
   });
 
+  it('exposes the error body (error_type) on the ApiError', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      status: 422,
+      statusText: 'x',
+      json: async () => ({ error_type: 'encrypted_pdf', detail: 'The PDF is password protected.' }),
+    } as unknown as Response);
+    await expect(
+      uploadFileWithContext('/api/v2/smart-import/analyze', new File(['x'], 'a.pdf'), {})
+    ).rejects.toMatchObject({ status: 422, data: { error_type: 'encrypted_pdf' } });
+  });
+
   it('throws an ApiError with the status on a failed upload', async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: false,

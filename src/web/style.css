@@ -8558,6 +8558,28 @@ body.on-settings #tab-settings {
     background: var(--color-bg-elevated);
     min-width: 0;
 }
+.smart-import-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin: 0 0 8px; }
+.smart-import-card-head .smart-import-card-title { margin: 0; flex: 1 1 auto; }
+.smart-import-leave {
+    flex: none;
+    padding: 4px 6px;
+    border: 0;
+    background: none;
+    color: var(--color-primary);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+.smart-import-leave:hover { text-decoration: underline; }
+.smart-import-leave:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.smart-import-debt-group {
+    margin-top: 8px;
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-secondary);
+}
+.smart-import-debt-group .form-group { margin-bottom: 4px; }
 .smart-import-card-title { margin: 0 0 8px; font-size: 16px; color: var(--color-text-primary); overflow-wrap: anywhere; }
 .smart-import-subtitle { margin: 12px 0 4px; font-size: 14px; color: var(--color-text-primary); }
 .smart-import-facts {
@@ -8648,7 +8670,9 @@ body.on-settings #tab-settings {
     .smart-import-footer .btn { min-height: 44px; flex: 1 1 0; white-space: normal; }
     .smart-import-footer.smart-import-confirm { flex-wrap: wrap; }
     .smart-import-confirm-text { flex-basis: 100%; }
-    .smart-import-actions .btn { min-height: 44px; }
+    .smart-import-actions .btn,
+    .smart-import-leave { min-height: 44px; }
+    .smart-import-leave { min-width: 44px; }
     .smart-import-card .form-group select,
     .smart-import-card .form-group input { font-size: 16px; min-height: 44px; }
 }

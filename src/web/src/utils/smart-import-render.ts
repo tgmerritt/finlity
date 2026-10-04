@@ -4,7 +4,7 @@
  * file names are user data.
  */
 
-import { formatCurrency } from '@/utils/format';
+import { formatCurrency, formatDate } from '@/utils/format';
 import type { SmartImportAccountKind } from '@/types/api';
 import type { WizardStatement } from '@/utils/smart-import-state';
 
@@ -88,22 +88,6 @@ export const KIND_CHOICES: readonly { value: string; label: string }[] = [
   { value: 'loan', label: 'Loan' },
 ];
 
-/** The server's fixed `detail` strings (src/smart_import/errors.py) mapped to a catalog code. */
-const DETAIL_TO_TYPE: Record<string, string> = {
-  'The file is larger than the 10 MB limit.': 'file_too_large',
-  'This file type is not supported. Use CSV, OFX, QFX or PDF.': 'unsupported_type',
-  'The statement has more rows than the import limit allows.': 'too_many_rows',
-  'A field in the file is larger than the import limit allows.': 'field_too_large',
-  'The OFX file is larger than the import limit allows.': 'ofx_too_large',
-  'This OFX file uses features that are not supported.': 'unsupported_ofx',
-  'The PDF has more pages than the import limit allows.': 'too_many_pages',
-  'The PDF contains more text than the import limit allows.': 'pdf_text_too_large',
-  'The file took too long to read.': 'parse_timeout',
-  'The PDF has no readable text. Scanned statements are not supported.': 'no_text_layer',
-  'The PDF is password protected.': 'encrypted_pdf',
-  'Too many files are being read right now. Try again in a moment.': 'busy',
-};
-
 const ERROR_COPY: Record<string, string> = {
   file_too_large: 'This file is larger than the 10 MB limit.',
   unsupported_type: 'Only CSV, OFX, QFX and PDF files can be imported.',
@@ -121,10 +105,17 @@ const ERROR_COPY: Record<string, string> = {
   unreadable: 'This file could not be read as a statement.',
 };
 
-/** A catalog code for a failed analyze call. Never uses the server's text beyond matching it. */
-export function analyzeErrorType(status: number, detail: string): string {
-  const known = DETAIL_TO_TYPE[detail];
-  if (known) return known;
+/**
+ * A catalog code for a failed analyze call: the response's `error_type` when it
+ * is one we have copy for, else a guess from the status. The server's text is
+ * never used.
+ */
+export function analyzeErrorType(status: number, data?: unknown): string {
+  const sent =
+    typeof data === 'object' && data !== null && 'error_type' in data
+      ? (data as { error_type: unknown }).error_type
+      : undefined;
+  if (typeof sent === 'string' && Object.hasOwn(ERROR_COPY, sent)) return sent;
   if (status === 0) return 'network';
   if (status === 413) return 'file_too_large';
   if (status === 415) return 'unsupported_type';
@@ -132,12 +123,23 @@ export function analyzeErrorType(status: number, detail: string): string {
   return 'unreadable';
 }
 
+/** The `error_type` of an ApiError body, if it has one. */
+export function errorTypeOf(data: unknown): string | undefined {
+  if (typeof data === 'object' && data !== null && 'error_type' in data) {
+    const t = (data as { error_type: unknown }).error_type;
+    return typeof t === 'string' ? t : undefined;
+  }
+  return undefined;
+}
+
 export function analyzeErrorText(errorType: string | null): string {
   return (errorType && ERROR_COPY[errorType]) || ERROR_COPY.unreadable!;
 }
 
 /** Fixed copy for a failed PDF extract call. */
-export function extractErrorText(status: number): string {
+export function extractErrorText(status: number, errorType?: string): string {
+  if (errorType === 'ai_not_enabled') status = 403;
+  else if (errorType === 'ai_unavailable') status = 503;
   if (status === 403) {
     return 'AI for unreadable PDFs is turned off. Turn it on in Settings, or try your bank’s CSV or OFX download.';
   }
@@ -158,22 +160,11 @@ export const WARNING_COPY: Record<string, string> = {
 
 // ---------------------------------------------------------------- formatting
 
-/**
- * "Jul 1, 2026" for a 'YYYY-MM-DD' day. Built from the parts so the day never
- * shifts with the time zone (new Date('2026-07-01') is midnight UTC).
- */
-export function formatDay(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  if (!m) return iso;
-  const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
 export function periodText(period: WizardStatement['period']): string {
   const { start, end } = period;
-  if (start && end) return `${formatDay(start)} to ${formatDay(end)}`;
-  if (end) return `Through ${formatDay(end)}`;
-  if (start) return `From ${formatDay(start)}`;
+  if (start && end) return `${formatDate(start)} to ${formatDate(end)}`;
+  if (end) return `Through ${formatDate(end)}`;
+  if (start) return `From ${formatDate(start)}`;
   return 'Period not shown in the file';
 }
 
@@ -186,7 +177,7 @@ export function balanceText(stmt: WizardStatement): string | null {
   const bal = stmt.closing_balance;
   if (!bal) return null;
   const label = isDebtKind(stmt.account_kind) ? 'Balance owed' : 'Closing balance';
-  return `${label} ${formatCurrency(bal.amount)} on ${formatDay(bal.as_of)}`;
+  return `${label} ${formatCurrency(bal.amount)} on ${formatDate(bal.as_of)}`;
 }
 
 export function countText(n: number, singular: string): string {
