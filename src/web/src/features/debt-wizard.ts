@@ -8,7 +8,7 @@
  * All values go into the DOM with textContent or element properties.
  */
 
-import { apiCall } from '@/api/client';
+import { apiCall, ApiError } from '@/api/client';
 import { createDynamicModal, closeDynamicModal } from '@/ui/modal';
 import { emit } from '@/state/events';
 import { withSubmitGuard } from '@/ui/with-submit-guard';
@@ -171,6 +171,7 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
   let positions: PositionResponse[] | null = null;
   let positionsFailed = false;
   let saved = false;
+  let blocked = false;
   let cash: { mode: CashMode; expenseId: string } = { mode: 'none', expenseId: '' };
   let cashTouched = false;
   let paidInFull = true;
@@ -325,7 +326,7 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
       state.step === 3
         ? button('Save debt', 'btn btn-primary', 'save')
         : button('Next', 'btn btn-primary', 'next');
-    right.disabled = state.step === 1 && chosen === null;
+    right.disabled = (state.step === 1 && chosen === null) || (state.step === 3 && blocked);
     left.addEventListener('click', () => {
       if (state.step === 1) requestClose();
       else goBack();
@@ -728,6 +729,7 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
     ];
     for (const [mode, label, enabled] of choices) {
       const wrap = el('label', 'debt-wizard-choice');
+      if (!enabled) wrap.classList.add('is-disabled');
       const radio = el('input');
       radio.type = 'radio';
       radio.name = 'debt-cash-mode';
@@ -742,6 +744,12 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
       });
       wrap.append(radio, el('span', undefined, label));
       host.appendChild(wrap);
+      if (mode === 'link' && !enabled) {
+        const hint = el('p', 'debt-field-hint debt-wizard-choice-hint', 'No unlinked expenses yet');
+        hint.id = 'debt-cash-link-hint';
+        radio.setAttribute('aria-describedby', hint.id);
+        host.appendChild(hint);
+      }
     }
     if (cash.mode === 'link') {
       const group = el('div', 'form-group');
@@ -760,17 +768,29 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
         select.appendChild(o);
       }
       select.value = cash.expenseId;
+      const compare = el('span', 'debt-field-hint');
+      compare.id = 'debt-cash-compare';
+      select.setAttribute('aria-describedby', compare.id);
+      const showCompare = (): void => {
+        const e = free.find((x) => x.id === select.value);
+        compare.textContent = e
+          ? `Expense ${formatCurrency(e.monthly_amount)} a month vs payment ${formatCurrency(monthly)}`
+          : '';
+      };
+      showCompare();
       select.addEventListener('change', () => {
         cash.expenseId = select.value;
         cashTouched = true;
+        showCompare();
       });
-      group.append(l, select);
+      group.append(l, select, compare);
       host.appendChild(group);
     }
   }
 
   function renderReviewStep(): void {
     const review = reviewDebt(state.draft, today());
+    blocked = review.neverPaysOff;
     const h = setStep(3, 'Review your debt');
     const wrap = el('div', 'debt-review');
     const grid = el('dl', 'debt-review-grid');
@@ -782,6 +802,23 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
         'Payment',
         `${formatCurrency(review.payment)} per ${FREQUENCY_WORD[freq]}${review.paymentCalculated ? ' (calculated)' : ''}`
       );
+    }
+    const escrow = Number(state.draft.escrowAmount.replace(/[$,\s]/g, ''));
+    if (state.draft.liabilityType === 'mortgage' && escrow > 0) {
+      row(grid, 'Escrow', `${formatCurrency(escrow)} per ${FREQUENCY_WORD[freq]}`);
+    }
+    if (state.draft.liabilityType === 'mortgage') {
+      const home = state.home;
+      if (home.mode === 'add') {
+        row(
+          grid,
+          'Home',
+          `Adds home: ${home.name.trim()}, ${formatCurrency(parseMoney(home.value))}`
+        );
+      } else if (home.mode === 'pick') {
+        const p = positions?.find((x) => x.id === home.positionId);
+        row(grid, 'Home', `Links home: ${p ? p.name || p.ticker : 'selected home'}`);
+      }
     }
     if (review.projected && !review.neverPaysOff) {
       const fmt = (v: number | null): string => formatCurrency(v ?? 0);
@@ -799,7 +836,7 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
       row(grid, 'Total interest left', fmt(review.totalInterestLeft));
       row(
         grid,
-        'Paid this year',
+        'Rest of this year',
         `${formatCurrency(review.yearPrincipal)} principal, ${formatCurrency(review.yearInterest)} interest`
       );
     }
@@ -829,8 +866,6 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
     const cashHost = el('fieldset', 'debt-wizard-home debt-wizard-cashflow');
     wrap.appendChild(cashHost);
     body.appendChild(wrap);
-    const save = footer.querySelector<HTMLButtonElement>('[data-wizard="save"]');
-    if (save) save.disabled = review.neverPaysOff;
     renderCash(cashHost, review);
     if (expenses === null) {
       void loadExpenses().then(() => {
@@ -845,6 +880,7 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
   const parseMoney = (raw: string): number => Number(raw.replace(/[$,\s]/g, ''));
 
   function buildInput(): CreateLiabilityInput | null {
+    if (blocked) return null;
     const draft = { ...state.draft };
     const { payment } = effectivePayment(draft);
     if (payment !== null && draft.paymentAmount.trim() === '')
@@ -878,6 +914,7 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
   }
 
   async function save(btn: HTMLButtonElement): Promise<void> {
+    if (blocked || saved) return;
     const input = buildInput();
     if (!input) return;
     try {
@@ -886,10 +923,23 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
       );
       saved = true;
       emit({ type: 'liabilities:changed', reason: 'added' });
-      await options.onSaved?.(result);
+      try {
+        await options.onSaved?.(result);
+      } catch (error) {
+        // The debt is saved; a failing callback must not read as a failed save.
+        console.error('Debt saved callback failed:', error instanceof Error ? error.name : 'error');
+      }
       renderSuccess(result);
     } catch (error) {
       console.error('Debt save failed:', error instanceof Error ? error.name : 'error');
+      if (error instanceof ApiError && error.status === 409) {
+        // Someone linked that expense since we looked: start the list again.
+        expenses = null;
+        expensesLoad = null;
+        takenExpenseIds = new Set();
+        cashTouched = false;
+        renderReviewStep();
+      }
       showFormError(body, debtErrorMessage(error));
     }
   }

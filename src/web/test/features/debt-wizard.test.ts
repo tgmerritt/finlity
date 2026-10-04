@@ -163,7 +163,7 @@ describe('debt wizard', () => {
     type('currentBalance', '300000');
     type('aprPercent', '6.5');
     expect(computed()).toContain('Calculated');
-    expect(computed()).toContain('$1,896.20');
+    expect(computed()).toContain('$1,896.21');
     type('termMonths', '180');
     expect(computed()).toContain('$2,613.');
     type('currentBalance', '200000');
@@ -174,7 +174,7 @@ describe('debt wizard', () => {
     await toStep2('auto_loan');
     type('currentBalance', '20000');
     type('aprPercent', '7');
-    expect(computed()).toContain('$396.02');
+    expect(computed()).toContain('$396.03');
     type('paymentAmount', '450');
     expect(computed()).toBe('');
     back().click();
@@ -550,8 +550,8 @@ describe('debt wizard review and save', () => {
     expect(text).toContain('Payoff date');
     expect(text).toContain('Payments left');
     expect(text).toContain('Total interest left');
-    expect(text).toContain('Paid this year');
-    expect(text).toContain('$396.02');
+    expect(text).toContain('Rest of this year');
+    expect(text).toContain('$396.03');
     expect(saveBtn().disabled).toBe(false);
     expect(modal().querySelector('.debt-review-spark svg')).not.toBeNull();
   });
@@ -600,7 +600,7 @@ describe('debt wizard review and save', () => {
   });
 
   it('saves once with source wizard, a new home and a linked expense', async () => {
-    expenses = [expense('e2', 'Mortgage', 3000)];
+    expenses = [expense('e2', 'Mortgage', 2000)];
     apiCallMock.mockImplementation(
       async (url: string, opts?: { method?: string; body?: unknown }) => {
         if (opts?.method === 'POST') {
@@ -643,7 +643,7 @@ describe('debt wizard review and save', () => {
       liability_type: 'mortgage',
       current_balance: 300000,
       interest_rate: 0.065,
-      payment_amount: 1896.2,
+      payment_amount: 1896.21,
       source: 'wizard',
       property: {
         mode: 'create',
@@ -734,6 +734,126 @@ describe('debt wizard review and save', () => {
     await flush();
     escape();
     expect(document.getElementById('dynamic-modal')).toBeNull();
+  });
+
+  it('shows 360 payments left for a 360-month loan, and the home and escrow lines', async () => {
+    await toReview('mortgage', {
+      name: 'Home loan',
+      currentBalance: '300000',
+      aprPercent: '6.5',
+      escrowAmount: '500',
+    });
+    const text = modal().querySelector('.debt-review')!.textContent!;
+    expect(text).toContain('Payments left360');
+    expect(text).toContain('Links home: Lake house');
+    expect(text).toContain('Escrow$500.00 per month');
+  });
+
+  it('shows the added home on review', async () => {
+    apiCallMock.mockImplementation(async (url: string) =>
+      url === '/api/budget/expenses' ? [] : url === '/api/portfolio/positions' ? [] : []
+    );
+    await toStep2('mortgage');
+    await flush();
+    type('homeName', 'Main house');
+    type('homeValue', '450000');
+    type('name', 'Loan');
+    type('currentBalance', '300000');
+    next().click();
+    await flush();
+    expect(modal().querySelector('.debt-review')!.textContent).toContain(
+      'Adds home: Main house, $450,000.00'
+    );
+  });
+
+  it('explains a disabled link choice and ties it to the radio', async () => {
+    expenses = [];
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    expect(cash('link').disabled).toBe(true);
+    const hint = modal().querySelector('#debt-cash-link-hint')!;
+    expect(hint.textContent).toBe('No unlinked expenses yet');
+    expect(cash('link').getAttribute('aria-describedby')).toBe('debt-cash-link-hint');
+  });
+
+  it('compares the chosen expense with the payment', async () => {
+    expenses = [expense('e2', 'Car Payment #1', 400)];
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    expect(modal().textContent).toContain('Expense $400.00 a month vs payment $396.03');
+  });
+
+  it('keeps Save blocked after Escape, Keep editing re-renders the footer', async () => {
+    await toReview('mortgage', {
+      name: 'Home loan',
+      currentBalance: '300000',
+      aprPercent: '6.5',
+      paymentAmount: '1000',
+    });
+    expect(saveBtn().disabled).toBe(true);
+    escape();
+    modal().querySelector<HTMLElement>('[data-wizard="keep"]')!.click();
+    expect(saveBtn().disabled).toBe(true);
+    saveBtn().disabled = false;
+    saveBtn().click();
+    await flush();
+    expect(posts).toHaveLength(0);
+  });
+
+  it('emits liabilities:changed once on success and never on 409 or 422', async () => {
+    const changed = vi.fn();
+    const off = on('liabilities:changed', changed);
+    for (const status of [409, 422]) {
+      postResult = async () => {
+        throw new ApiError(status, 'x');
+      };
+      await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+      saveBtn().click();
+      await flush();
+      await flush();
+      closeDynamicModal();
+    }
+    expect(changed).not.toHaveBeenCalled();
+    postResult = async () => ({ id: 'n', name: 'Truck' });
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    saveBtn().click();
+    await flush();
+    await flush();
+    expect(changed).toHaveBeenCalledTimes(1);
+    off();
+  });
+
+  it('a throwing onSaved does not turn a saved debt into a failed save', async () => {
+    const onSaved = vi.fn().mockRejectedValue(new Error('boom'));
+    openDebtWizard({ onSaved });
+    choose('auto_loan');
+    next().click();
+    await flush();
+    type('name', 'Truck');
+    type('currentBalance', '20000');
+    next().click();
+    await flush();
+    await flush();
+    saveBtn().click();
+    await flush();
+    await flush();
+    expect(progress()).toBe('Step 4 of 4');
+    expect(modal().querySelector('.debt-form-error')).toBeNull();
+  });
+
+  it('after a 409 it reloads the expense list and offers fresh choices', async () => {
+    expenses = [expense('e2', 'Car Payment #1', 400)];
+    postResult = async () => {
+      throw new ApiError(409, 'x');
+    };
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    expect(cash('link').checked).toBe(true);
+    expenses = [];
+    saveBtn().click();
+    await flush();
+    await flush();
+    await flush();
+    expect(modal().querySelector('.debt-form-error')).not.toBeNull();
+    expect(cash('link').disabled).toBe(true);
+    expect(cash('create').checked).toBe(true);
   });
 
   it('renders expense names as text', async () => {

@@ -116,10 +116,15 @@ const TYPE_WORDS: Record<LiabilityType, string[]> = {
   other: [],
 };
 
+const escapeRe = (w: string): string => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const gapOf = (amount: number, payment: number): number => Math.abs(amount - payment) / payment;
+
 /**
- * An existing expense that probably is this debt's payment: its name holds the
- * type word, else its monthly amount is within 10% of the monthly payment
- * (the closest wins). `taken` holds expense ids already linked to a debt.
+ * An existing expense that probably is this debt's payment. A whole-word match
+ * on the type word counts only when the amount is also within 50% of the
+ * monthly payment (so "Auto insurance" is not a car loan); otherwise the
+ * closest amount within 10% wins. Null when nothing passes: the caller creates
+ * a new expense. `taken` holds expense ids already linked to a debt.
  */
 export function suggestExpense(
   expenses: readonly Expense[],
@@ -128,14 +133,16 @@ export function suggestExpense(
   taken: ReadonlySet<string> = new Set()
 ): Expense | null {
   const free = expenses.filter((e) => e.is_active !== false && !taken.has(e.id));
-  const words = TYPE_WORDS[type];
-  const byName = free.find((e) => words.some((w) => e.name.toLowerCase().includes(w)));
-  if (byName) return byName;
   if (monthlyPayment === null || monthlyPayment <= 0) return null;
+  const patterns = TYPE_WORDS[type].map((w) => new RegExp(`\\b${escapeRe(w)}\\b`, 'i'));
+  const byName = free.find(
+    (e) => patterns.some((re) => re.test(e.name)) && gapOf(e.monthly_amount, monthlyPayment) <= 0.5
+  );
+  if (byName) return byName;
   let best: Expense | null = null;
   let bestGap = Infinity;
   for (const e of free) {
-    const gap = Math.abs(e.monthly_amount - monthlyPayment) / monthlyPayment;
+    const gap = gapOf(e.monthly_amount, monthlyPayment);
     if (gap <= 0.1 && gap < bestGap) {
       best = e;
       bestGap = gap;

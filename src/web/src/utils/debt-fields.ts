@@ -261,7 +261,8 @@ export function validateAmounts(draft: DebtDraft): {
 
 /**
  * Payment calculated from balance, APR and term, when the payment field is
- * blank and those are all usable. Rounded to cents; null otherwise.
+ * blank and those are all usable. Rounded up to the cent, so the loan still
+ * clears in its term; null otherwise.
  */
 export function computedPayment(draft: DebtDraft): number | null {
   if (draft.paymentAmount.trim() !== '') return null;
@@ -276,7 +277,7 @@ export function computedPayment(draft: DebtDraft): number | null {
     periods,
     draft.paymentFrequency
   );
-  return Number.isFinite(payment) ? Math.round(payment * 100) / 100 : null;
+  return Number.isFinite(payment) ? Math.ceil(payment * 100 - 1e-9) / 100 : null;
 }
 
 type Optionals = Pick<

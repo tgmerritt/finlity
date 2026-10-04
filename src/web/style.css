@@ -8436,3 +8436,7 @@ body.on-settings #tab-settings {
     .debt-wizard-cashflow .form-group select { font-size: 16px; min-height: 44px; }
     .debt-wizard-footer .btn { white-space: normal; }
 }
+
+.debt-wizard-choice:has(input:disabled),
+.debt-wizard-choice.is-disabled { opacity: 0.55; cursor: not-allowed; }
+.debt-wizard-choice-hint { margin: -2px 0 6px 28px; }
