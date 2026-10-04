@@ -1,0 +1,1270 @@
+[
+  {
+    "name": "counts before",
+    "ok": {
+      "accounts": 3,
+      "liabilities": 0,
+      "liability_snapshots": 0,
+      "portfolio_snapshots": 10,
+      "positions": 5
+    }
+  },
+  {
+    "name": "dashboard with no liabilities",
+    "ok": {
+      "demo_mode": "<env>",
+      "history": [
+        {
+          "date": "2026-09-25",
+          "liabilities": 0,
+          "net_worth": 1000000.0,
+          "retirement": 200000.0,
+          "taxable": 800000.0,
+          "total": 1000000.0
+        },
+        {
+          "date": "2026-09-26",
+          "liabilities": 0,
+          "net_worth": 1001000.0,
+          "retirement": 200100.0,
+          "taxable": 800900.0,
+          "total": 1001000.0
+        },
+        {
+          "date": "2026-09-27",
+          "liabilities": 0,
+          "net_worth": 1002000.0,
+          "retirement": 200200.0,
+          "taxable": 801800.0,
+          "total": 1002000.0
+        },
+        {
+          "date": "2026-09-28",
+          "liabilities": 0,
+          "net_worth": 1003000.0,
+          "retirement": 200300.0,
+          "taxable": 802700.0,
+          "total": 1003000.0
+        },
+        {
+          "date": "2026-09-29",
+          "liabilities": 0,
+          "net_worth": 1004000.0,
+          "retirement": 200400.0,
+          "taxable": 803600.0,
+          "total": 1004000.0
+        },
+        {
+          "date": "2026-09-30",
+          "liabilities": 0,
+          "net_worth": 1005000.0,
+          "retirement": 200500.0,
+          "taxable": 804500.0,
+          "total": 1005000.0
+        },
+        {
+          "date": "2026-10-01",
+          "liabilities": 0,
+          "net_worth": 1006000.0,
+          "retirement": 200600.0,
+          "taxable": 805400.0,
+          "total": 1006000.0
+        },
+        {
+          "date": "2026-10-02",
+          "liabilities": 0,
+          "net_worth": 1007000.0,
+          "retirement": 200700.0,
+          "taxable": 806300.0,
+          "total": 1007000.0
+        },
+        {
+          "date": "2026-10-03",
+          "liabilities": 0,
+          "net_worth": 1008000.0,
+          "retirement": 200800.0,
+          "taxable": 807200.0,
+          "total": 1008000.0
+        },
+        {
+          "date": "2026-10-04",
+          "liabilities": 0,
+          "net_worth": 1009000.0,
+          "retirement": 200900.0,
+          "taxable": 808100.0,
+          "total": 1009000.0
+        }
+      ],
+      "imports": [],
+      "positions": [
+        {
+          "account": "Home",
+          "id": "pos-re",
+          "position_type": "real_estate",
+          "shares": 1.0,
+          "ticker": "RE",
+          "value": 600000.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-re-b",
+          "position_type": "real_estate",
+          "shares": 1.0,
+          "ticker": "RE",
+          "value": 200000.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-vti",
+          "position_type": "equity",
+          "shares": 10.0,
+          "ticker": "VTI",
+          "value": 3300.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-vxus-a",
+          "position_type": "equity",
+          "shares": 5.5,
+          "ticker": "VXUS",
+          "value": 330.0
+        },
+        {
+          "account": "IRA",
+          "id": "pos-vxus-b",
+          "position_type": "equity",
+          "shares": 5.5,
+          "ticker": "VXUS",
+          "value": 330.0
+        }
+      ],
+      "summary": {
+        "account_count": 3,
+        "accounts": [
+          {
+            "account_type": "taxable",
+            "id": "acct-brk",
+            "name": "Brokerage",
+            "position_count": 3,
+            "value": 203630.0
+          },
+          {
+            "account_type": "property",
+            "id": "acct-home",
+            "name": "Home",
+            "position_count": 1,
+            "value": 600000.0
+          },
+          {
+            "account_type": "roth_ira",
+            "id": "acct-ira",
+            "name": "IRA",
+            "position_count": 1,
+            "value": 330.0
+          }
+        ],
+        "liabilities": [],
+        "liabilities_included": true,
+        "liabilities_total": 0.0,
+        "net_worth": 803960.0,
+        "position_count": 5,
+        "retirement_value": 330.0,
+        "taxable_value": 803630.0,
+        "total_cost_basis": null,
+        "total_gain_loss": null,
+        "total_value": 803960.0
+      },
+      "view_id": null
+    }
+  },
+  {
+    "name": "dashboard filtered with no liabilities",
+    "ok": {
+      "demo_mode": "<env>",
+      "history": [
+        {
+          "date": "2026-09-25",
+          "retirement": 200000.0,
+          "taxable": 800000.0,
+          "total": 1000000.0
+        },
+        {
+          "date": "2026-09-26",
+          "retirement": 200100.0,
+          "taxable": 800900.0,
+          "total": 1001000.0
+        },
+        {
+          "date": "2026-09-27",
+          "retirement": 200200.0,
+          "taxable": 801800.0,
+          "total": 1002000.0
+        },
+        {
+          "date": "2026-09-28",
+          "retirement": 200300.0,
+          "taxable": 802700.0,
+          "total": 1003000.0
+        },
+        {
+          "date": "2026-09-29",
+          "retirement": 200400.0,
+          "taxable": 803600.0,
+          "total": 1004000.0
+        },
+        {
+          "date": "2026-09-30",
+          "retirement": 200500.0,
+          "taxable": 804500.0,
+          "total": 1005000.0
+        },
+        {
+          "date": "2026-10-01",
+          "retirement": 200600.0,
+          "taxable": 805400.0,
+          "total": 1006000.0
+        },
+        {
+          "date": "2026-10-02",
+          "retirement": 200700.0,
+          "taxable": 806300.0,
+          "total": 1007000.0
+        },
+        {
+          "date": "2026-10-03",
+          "retirement": 200800.0,
+          "taxable": 807200.0,
+          "total": 1008000.0
+        },
+        {
+          "date": "2026-10-04",
+          "retirement": 200900.0,
+          "taxable": 808100.0,
+          "total": 1009000.0
+        }
+      ],
+      "imports": [],
+      "positions": [
+        {
+          "account": "Brokerage",
+          "id": "pos-re-b",
+          "position_type": "real_estate",
+          "shares": 1.0,
+          "ticker": "RE",
+          "value": 200000.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-vti",
+          "position_type": "equity",
+          "shares": 10.0,
+          "ticker": "VTI",
+          "value": 3300.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-vxus-a",
+          "position_type": "equity",
+          "shares": 5.5,
+          "ticker": "VXUS",
+          "value": 330.0
+        }
+      ],
+      "summary": {
+        "account_count": 1,
+        "accounts": [
+          {
+            "account_type": "taxable",
+            "id": "acct-brk",
+            "name": "Brokerage",
+            "position_count": 3,
+            "value": 203630.0
+          }
+        ],
+        "liabilities_included": false,
+        "position_count": 3,
+        "retirement_value": 0,
+        "taxable_value": 203630.0,
+        "total_cost_basis": null,
+        "total_gain_loss": null,
+        "total_value": 203630.0
+      },
+      "view_id": "view-brokerage"
+    }
+  },
+  {
+    "name": "create mortgage linked to the house",
+    "ok": {
+      "balance_as_of": "2026-07-06",
+      "closed_date": null,
+      "created_at": "<ts>",
+      "credit_limit": null,
+      "current_balance": 480000.0,
+      "entity_id": "ent-1",
+      "escrow_amount": null,
+      "estimated_balance": 477883.83,
+      "expense": null,
+      "expense_id": null,
+      "expense_missing": false,
+      "id": "<id-1>",
+      "interest_rate": 0.0625,
+      "is_active": true,
+      "is_amortizing": true,
+      "last_reported_date": "2026-07-06",
+      "lender": "First Bank",
+      "liability_type": "mortgage",
+      "linked_position": {
+        "id": "pos-re",
+        "name": "House",
+        "value": 600000.0
+      },
+      "linked_position_id": "pos-re",
+      "linked_position_missing": false,
+      "maturity_date": "2052-07-01",
+      "monthly_cash_flow": 3201.73,
+      "monthly_payment": 3201.73,
+      "name": "Home loan",
+      "next_payment_date": "2026-11-01",
+      "notes": null,
+      "original_principal": 520000.0,
+      "origination_date": "2022-07-01",
+      "payment_amount": 3201.73,
+      "payment_frequency": "monthly",
+      "payoff_date": "2050-12-01",
+      "periods_remaining": 290,
+      "source": "manual",
+      "source_ref": null,
+      "term_months": 360,
+      "total_interest_remaining": 448040.76,
+      "updated_at": "<ts>"
+    }
+  },
+  {
+    "name": "create card",
+    "ok": {
+      "balance_as_of": "2026-09-24",
+      "closed_date": null,
+      "created_at": "<ts>",
+      "credit_limit": 15000.0,
+      "current_balance": 3200.0,
+      "entity_id": null,
+      "escrow_amount": null,
+      "estimated_balance": 3200.0,
+      "expense": null,
+      "expense_id": null,
+      "expense_missing": false,
+      "id": "<id-2>",
+      "interest_rate": 0.2299,
+      "is_active": true,
+      "is_amortizing": false,
+      "last_reported_date": "2026-09-24",
+      "lender": null,
+      "liability_type": "credit_card",
+      "linked_position": null,
+      "linked_position_id": null,
+      "linked_position_missing": false,
+      "maturity_date": null,
+      "monthly_cash_flow": 0.0,
+      "monthly_payment": 0.0,
+      "name": "Rewards card",
+      "next_payment_date": null,
+      "notes": null,
+      "original_principal": null,
+      "origination_date": null,
+      "payment_amount": null,
+      "payment_frequency": "monthly",
+      "payoff_date": null,
+      "periods_remaining": null,
+      "source": "manual",
+      "source_ref": null,
+      "term_months": null,
+      "total_interest_remaining": null,
+      "updated_at": "<ts>"
+    }
+  },
+  {
+    "name": "report a newer card balance",
+    "ok": {
+      "balance_as_of": "2026-09-30",
+      "closed_date": null,
+      "created_at": "<ts>",
+      "credit_limit": 15000.0,
+      "current_balance": 2750.0,
+      "entity_id": null,
+      "escrow_amount": null,
+      "estimated_balance": 2750.0,
+      "expense": null,
+      "expense_id": null,
+      "expense_missing": false,
+      "id": "<id-2>",
+      "interest_rate": 0.2299,
+      "is_active": true,
+      "is_amortizing": false,
+      "last_reported_date": "2026-09-30",
+      "lender": null,
+      "liability_type": "credit_card",
+      "linked_position": null,
+      "linked_position_id": null,
+      "linked_position_missing": false,
+      "maturity_date": null,
+      "monthly_cash_flow": 0.0,
+      "monthly_payment": 0.0,
+      "name": "Rewards card",
+      "next_payment_date": null,
+      "notes": null,
+      "original_principal": null,
+      "origination_date": null,
+      "payment_amount": null,
+      "payment_frequency": "monthly",
+      "payoff_date": null,
+      "periods_remaining": null,
+      "source": "manual",
+      "source_ref": null,
+      "term_months": null,
+      "total_interest_remaining": null,
+      "updated_at": "<ts>"
+    }
+  },
+  {
+    "name": "create auto loan to archive",
+    "ok": {
+      "balance_as_of": "2026-09-26",
+      "closed_date": null,
+      "created_at": "<ts>",
+      "credit_limit": null,
+      "current_balance": 4000.0,
+      "entity_id": null,
+      "escrow_amount": null,
+      "estimated_balance": 4000.0,
+      "expense": null,
+      "expense_id": null,
+      "expense_missing": false,
+      "id": "<id-3>",
+      "interest_rate": 0.05,
+      "is_active": true,
+      "is_amortizing": true,
+      "last_reported_date": "2026-09-26",
+      "lender": null,
+      "liability_type": "auto_loan",
+      "linked_position": null,
+      "linked_position_id": null,
+      "linked_position_missing": false,
+      "maturity_date": null,
+      "monthly_cash_flow": 400.0,
+      "monthly_payment": 400.0,
+      "name": "Old truck",
+      "next_payment_date": "2026-10-26",
+      "notes": null,
+      "original_principal": null,
+      "origination_date": null,
+      "payment_amount": 400.0,
+      "payment_frequency": "monthly",
+      "payoff_date": "2027-08-26",
+      "periods_remaining": 11,
+      "source": "manual",
+      "source_ref": null,
+      "term_months": null,
+      "total_interest_remaining": 94.38,
+      "updated_at": "<ts>"
+    }
+  },
+  {
+    "name": "archive the auto loan",
+    "ok": {
+      "balance_as_of": "2026-09-26",
+      "closed_date": "2026-10-04",
+      "created_at": "<ts>",
+      "credit_limit": null,
+      "current_balance": 4000.0,
+      "entity_id": null,
+      "escrow_amount": null,
+      "estimated_balance": 0.0,
+      "expense": null,
+      "expense_id": null,
+      "expense_missing": false,
+      "id": "<id-3>",
+      "interest_rate": 0.05,
+      "is_active": false,
+      "is_amortizing": true,
+      "last_reported_date": "2026-09-26",
+      "lender": null,
+      "liability_type": "auto_loan",
+      "linked_position": null,
+      "linked_position_id": null,
+      "linked_position_missing": false,
+      "maturity_date": null,
+      "monthly_cash_flow": 400.0,
+      "monthly_payment": 400.0,
+      "name": "Old truck",
+      "next_payment_date": "2026-10-26",
+      "notes": null,
+      "original_principal": null,
+      "origination_date": null,
+      "payment_amount": 400.0,
+      "payment_frequency": "monthly",
+      "payoff_date": null,
+      "periods_remaining": null,
+      "source": "manual",
+      "source_ref": null,
+      "term_months": null,
+      "total_interest_remaining": null,
+      "updated_at": "<ts>"
+    }
+  },
+  {
+    "name": "counts after liabilities",
+    "ok": {
+      "accounts": 3,
+      "liabilities": 3,
+      "liability_snapshots": 4,
+      "portfolio_snapshots": 10,
+      "positions": 5
+    }
+  },
+  {
+    "name": "dashboard unfiltered with liabilities",
+    "ok": {
+      "demo_mode": "<env>",
+      "history": [
+        {
+          "date": "2026-09-25",
+          "liabilities": 485792.89,
+          "net_worth": 514207.11,
+          "retirement": 200000.0,
+          "taxable": 800000.0,
+          "total": 1000000.0
+        },
+        {
+          "date": "2026-09-26",
+          "liabilities": 485792.89,
+          "net_worth": 515207.11,
+          "retirement": 200100.0,
+          "taxable": 800900.0,
+          "total": 1001000.0
+        },
+        {
+          "date": "2026-09-27",
+          "liabilities": 485792.89,
+          "net_worth": 516207.11,
+          "retirement": 200200.0,
+          "taxable": 801800.0,
+          "total": 1002000.0
+        },
+        {
+          "date": "2026-09-28",
+          "liabilities": 485792.89,
+          "net_worth": 517207.11,
+          "retirement": 200300.0,
+          "taxable": 802700.0,
+          "total": 1003000.0
+        },
+        {
+          "date": "2026-09-29",
+          "liabilities": 485792.89,
+          "net_worth": 518207.11,
+          "retirement": 200400.0,
+          "taxable": 803600.0,
+          "total": 1004000.0
+        },
+        {
+          "date": "2026-09-30",
+          "liabilities": 485342.89,
+          "net_worth": 519657.11,
+          "retirement": 200500.0,
+          "taxable": 804500.0,
+          "total": 1005000.0
+        },
+        {
+          "date": "2026-10-01",
+          "liabilities": 484633.83,
+          "net_worth": 521366.17,
+          "retirement": 200600.0,
+          "taxable": 805400.0,
+          "total": 1006000.0
+        },
+        {
+          "date": "2026-10-02",
+          "liabilities": 484633.83,
+          "net_worth": 522366.17,
+          "retirement": 200700.0,
+          "taxable": 806300.0,
+          "total": 1007000.0
+        },
+        {
+          "date": "2026-10-03",
+          "liabilities": 484633.83,
+          "net_worth": 523366.17,
+          "retirement": 200800.0,
+          "taxable": 807200.0,
+          "total": 1008000.0
+        },
+        {
+          "date": "2026-10-04",
+          "liabilities": 480633.83,
+          "net_worth": 528366.17,
+          "retirement": 200900.0,
+          "taxable": 808100.0,
+          "total": 1009000.0
+        }
+      ],
+      "imports": [],
+      "positions": [
+        {
+          "account": "Home",
+          "id": "pos-re",
+          "position_type": "real_estate",
+          "shares": 1.0,
+          "ticker": "RE",
+          "value": 600000.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-re-b",
+          "position_type": "real_estate",
+          "shares": 1.0,
+          "ticker": "RE",
+          "value": 200000.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-vti",
+          "position_type": "equity",
+          "shares": 10.0,
+          "ticker": "VTI",
+          "value": 3300.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-vxus-a",
+          "position_type": "equity",
+          "shares": 5.5,
+          "ticker": "VXUS",
+          "value": 330.0
+        },
+        {
+          "account": "IRA",
+          "id": "pos-vxus-b",
+          "position_type": "equity",
+          "shares": 5.5,
+          "ticker": "VXUS",
+          "value": 330.0
+        }
+      ],
+      "summary": {
+        "account_count": 3,
+        "accounts": [
+          {
+            "account_type": "taxable",
+            "id": "acct-brk",
+            "name": "Brokerage",
+            "position_count": 3,
+            "value": 203630.0
+          },
+          {
+            "account_type": "property",
+            "id": "acct-home",
+            "name": "Home",
+            "position_count": 1,
+            "value": 600000.0
+          },
+          {
+            "account_type": "roth_ira",
+            "id": "acct-ira",
+            "name": "IRA",
+            "position_count": 1,
+            "value": 330.0
+          }
+        ],
+        "liabilities": [
+          {
+            "balance": 477883.83,
+            "entity_id": "ent-1",
+            "id": "<id-1>",
+            "interest_rate": 0.0625,
+            "is_amortizing": true,
+            "last_reported_date": "2026-07-06",
+            "liability_type": "mortgage",
+            "linked_position_id": "pos-re",
+            "name": "Home loan",
+            "payment_amount": 3201.73,
+            "payment_frequency": "monthly",
+            "payoff_date": "2050-12-01"
+          },
+          {
+            "balance": 2750.0,
+            "entity_id": null,
+            "id": "<id-2>",
+            "interest_rate": 0.2299,
+            "is_amortizing": false,
+            "last_reported_date": "2026-09-30",
+            "liability_type": "credit_card",
+            "linked_position_id": null,
+            "name": "Rewards card",
+            "payment_amount": null,
+            "payment_frequency": "monthly",
+            "payoff_date": null
+          }
+        ],
+        "liabilities_included": true,
+        "liabilities_total": 480633.83,
+        "net_worth": 323326.17,
+        "position_count": 5,
+        "retirement_value": 330.0,
+        "taxable_value": 803630.0,
+        "total_cost_basis": null,
+        "total_gain_loss": null,
+        "total_value": 803960.0
+      },
+      "view_id": null
+    }
+  },
+  {
+    "name": "dashboard with a view that has no accounts",
+    "ok": {
+      "demo_mode": "<env>",
+      "history": [
+        {
+          "date": "2026-09-25",
+          "liabilities": 485792.89,
+          "net_worth": 514207.11,
+          "retirement": 200000.0,
+          "taxable": 800000.0,
+          "total": 1000000.0
+        },
+        {
+          "date": "2026-09-26",
+          "liabilities": 485792.89,
+          "net_worth": 515207.11,
+          "retirement": 200100.0,
+          "taxable": 800900.0,
+          "total": 1001000.0
+        },
+        {
+          "date": "2026-09-27",
+          "liabilities": 485792.89,
+          "net_worth": 516207.11,
+          "retirement": 200200.0,
+          "taxable": 801800.0,
+          "total": 1002000.0
+        },
+        {
+          "date": "2026-09-28",
+          "liabilities": 485792.89,
+          "net_worth": 517207.11,
+          "retirement": 200300.0,
+          "taxable": 802700.0,
+          "total": 1003000.0
+        },
+        {
+          "date": "2026-09-29",
+          "liabilities": 485792.89,
+          "net_worth": 518207.11,
+          "retirement": 200400.0,
+          "taxable": 803600.0,
+          "total": 1004000.0
+        },
+        {
+          "date": "2026-09-30",
+          "liabilities": 485342.89,
+          "net_worth": 519657.11,
+          "retirement": 200500.0,
+          "taxable": 804500.0,
+          "total": 1005000.0
+        },
+        {
+          "date": "2026-10-01",
+          "liabilities": 484633.83,
+          "net_worth": 521366.17,
+          "retirement": 200600.0,
+          "taxable": 805400.0,
+          "total": 1006000.0
+        },
+        {
+          "date": "2026-10-02",
+          "liabilities": 484633.83,
+          "net_worth": 522366.17,
+          "retirement": 200700.0,
+          "taxable": 806300.0,
+          "total": 1007000.0
+        },
+        {
+          "date": "2026-10-03",
+          "liabilities": 484633.83,
+          "net_worth": 523366.17,
+          "retirement": 200800.0,
+          "taxable": 807200.0,
+          "total": 1008000.0
+        },
+        {
+          "date": "2026-10-04",
+          "liabilities": 480633.83,
+          "net_worth": 528366.17,
+          "retirement": 200900.0,
+          "taxable": 808100.0,
+          "total": 1009000.0
+        }
+      ],
+      "imports": [],
+      "positions": [
+        {
+          "account": "Home",
+          "id": "pos-re",
+          "position_type": "real_estate",
+          "shares": 1.0,
+          "ticker": "RE",
+          "value": 600000.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-re-b",
+          "position_type": "real_estate",
+          "shares": 1.0,
+          "ticker": "RE",
+          "value": 200000.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-vti",
+          "position_type": "equity",
+          "shares": 10.0,
+          "ticker": "VTI",
+          "value": 3300.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-vxus-a",
+          "position_type": "equity",
+          "shares": 5.5,
+          "ticker": "VXUS",
+          "value": 330.0
+        },
+        {
+          "account": "IRA",
+          "id": "pos-vxus-b",
+          "position_type": "equity",
+          "shares": 5.5,
+          "ticker": "VXUS",
+          "value": 330.0
+        }
+      ],
+      "summary": {
+        "account_count": 3,
+        "accounts": [
+          {
+            "account_type": "taxable",
+            "id": "acct-brk",
+            "name": "Brokerage",
+            "position_count": 3,
+            "value": 203630.0
+          },
+          {
+            "account_type": "property",
+            "id": "acct-home",
+            "name": "Home",
+            "position_count": 1,
+            "value": 600000.0
+          },
+          {
+            "account_type": "roth_ira",
+            "id": "acct-ira",
+            "name": "IRA",
+            "position_count": 1,
+            "value": 330.0
+          }
+        ],
+        "liabilities": [
+          {
+            "balance": 477883.83,
+            "entity_id": "ent-1",
+            "id": "<id-1>",
+            "interest_rate": 0.0625,
+            "is_amortizing": true,
+            "last_reported_date": "2026-07-06",
+            "liability_type": "mortgage",
+            "linked_position_id": "pos-re",
+            "name": "Home loan",
+            "payment_amount": 3201.73,
+            "payment_frequency": "monthly",
+            "payoff_date": "2050-12-01"
+          },
+          {
+            "balance": 2750.0,
+            "entity_id": null,
+            "id": "<id-2>",
+            "interest_rate": 0.2299,
+            "is_amortizing": false,
+            "last_reported_date": "2026-09-30",
+            "liability_type": "credit_card",
+            "linked_position_id": null,
+            "name": "Rewards card",
+            "payment_amount": null,
+            "payment_frequency": "monthly",
+            "payoff_date": null
+          }
+        ],
+        "liabilities_included": true,
+        "liabilities_total": 480633.83,
+        "net_worth": 323326.17,
+        "position_count": 5,
+        "retirement_value": 330.0,
+        "taxable_value": 803630.0,
+        "total_cost_basis": null,
+        "total_gain_loss": null,
+        "total_value": 803960.0
+      },
+      "view_id": "view-empty"
+    }
+  },
+  {
+    "name": "dashboard with an unknown view",
+    "ok": {
+      "demo_mode": "<env>",
+      "history": [
+        {
+          "date": "2026-09-25",
+          "liabilities": 485792.89,
+          "net_worth": 514207.11,
+          "retirement": 200000.0,
+          "taxable": 800000.0,
+          "total": 1000000.0
+        },
+        {
+          "date": "2026-09-26",
+          "liabilities": 485792.89,
+          "net_worth": 515207.11,
+          "retirement": 200100.0,
+          "taxable": 800900.0,
+          "total": 1001000.0
+        },
+        {
+          "date": "2026-09-27",
+          "liabilities": 485792.89,
+          "net_worth": 516207.11,
+          "retirement": 200200.0,
+          "taxable": 801800.0,
+          "total": 1002000.0
+        },
+        {
+          "date": "2026-09-28",
+          "liabilities": 485792.89,
+          "net_worth": 517207.11,
+          "retirement": 200300.0,
+          "taxable": 802700.0,
+          "total": 1003000.0
+        },
+        {
+          "date": "2026-09-29",
+          "liabilities": 485792.89,
+          "net_worth": 518207.11,
+          "retirement": 200400.0,
+          "taxable": 803600.0,
+          "total": 1004000.0
+        },
+        {
+          "date": "2026-09-30",
+          "liabilities": 485342.89,
+          "net_worth": 519657.11,
+          "retirement": 200500.0,
+          "taxable": 804500.0,
+          "total": 1005000.0
+        },
+        {
+          "date": "2026-10-01",
+          "liabilities": 484633.83,
+          "net_worth": 521366.17,
+          "retirement": 200600.0,
+          "taxable": 805400.0,
+          "total": 1006000.0
+        },
+        {
+          "date": "2026-10-02",
+          "liabilities": 484633.83,
+          "net_worth": 522366.17,
+          "retirement": 200700.0,
+          "taxable": 806300.0,
+          "total": 1007000.0
+        },
+        {
+          "date": "2026-10-03",
+          "liabilities": 484633.83,
+          "net_worth": 523366.17,
+          "retirement": 200800.0,
+          "taxable": 807200.0,
+          "total": 1008000.0
+        },
+        {
+          "date": "2026-10-04",
+          "liabilities": 480633.83,
+          "net_worth": 528366.17,
+          "retirement": 200900.0,
+          "taxable": 808100.0,
+          "total": 1009000.0
+        }
+      ],
+      "imports": [],
+      "positions": [
+        {
+          "account": "Home",
+          "id": "pos-re",
+          "position_type": "real_estate",
+          "shares": 1.0,
+          "ticker": "RE",
+          "value": 600000.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-re-b",
+          "position_type": "real_estate",
+          "shares": 1.0,
+          "ticker": "RE",
+          "value": 200000.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-vti",
+          "position_type": "equity",
+          "shares": 10.0,
+          "ticker": "VTI",
+          "value": 3300.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-vxus-a",
+          "position_type": "equity",
+          "shares": 5.5,
+          "ticker": "VXUS",
+          "value": 330.0
+        },
+        {
+          "account": "IRA",
+          "id": "pos-vxus-b",
+          "position_type": "equity",
+          "shares": 5.5,
+          "ticker": "VXUS",
+          "value": 330.0
+        }
+      ],
+      "summary": {
+        "account_count": 3,
+        "accounts": [
+          {
+            "account_type": "taxable",
+            "id": "acct-brk",
+            "name": "Brokerage",
+            "position_count": 3,
+            "value": 203630.0
+          },
+          {
+            "account_type": "property",
+            "id": "acct-home",
+            "name": "Home",
+            "position_count": 1,
+            "value": 600000.0
+          },
+          {
+            "account_type": "roth_ira",
+            "id": "acct-ira",
+            "name": "IRA",
+            "position_count": 1,
+            "value": 330.0
+          }
+        ],
+        "liabilities": [
+          {
+            "balance": 477883.83,
+            "entity_id": "ent-1",
+            "id": "<id-1>",
+            "interest_rate": 0.0625,
+            "is_amortizing": true,
+            "last_reported_date": "2026-07-06",
+            "liability_type": "mortgage",
+            "linked_position_id": "pos-re",
+            "name": "Home loan",
+            "payment_amount": 3201.73,
+            "payment_frequency": "monthly",
+            "payoff_date": "2050-12-01"
+          },
+          {
+            "balance": 2750.0,
+            "entity_id": null,
+            "id": "<id-2>",
+            "interest_rate": 0.2299,
+            "is_amortizing": false,
+            "last_reported_date": "2026-09-30",
+            "liability_type": "credit_card",
+            "linked_position_id": null,
+            "name": "Rewards card",
+            "payment_amount": null,
+            "payment_frequency": "monthly",
+            "payoff_date": null
+          }
+        ],
+        "liabilities_included": true,
+        "liabilities_total": 480633.83,
+        "net_worth": 323326.17,
+        "position_count": 5,
+        "retirement_value": 330.0,
+        "taxable_value": 803630.0,
+        "total_cost_basis": null,
+        "total_gain_loss": null,
+        "total_value": 803960.0
+      },
+      "view_id": "view-missing"
+    }
+  },
+  {
+    "name": "dashboard filtered by view",
+    "ok": {
+      "demo_mode": "<env>",
+      "history": [
+        {
+          "date": "2026-09-25",
+          "retirement": 200000.0,
+          "taxable": 800000.0,
+          "total": 1000000.0
+        },
+        {
+          "date": "2026-09-26",
+          "retirement": 200100.0,
+          "taxable": 800900.0,
+          "total": 1001000.0
+        },
+        {
+          "date": "2026-09-27",
+          "retirement": 200200.0,
+          "taxable": 801800.0,
+          "total": 1002000.0
+        },
+        {
+          "date": "2026-09-28",
+          "retirement": 200300.0,
+          "taxable": 802700.0,
+          "total": 1003000.0
+        },
+        {
+          "date": "2026-09-29",
+          "retirement": 200400.0,
+          "taxable": 803600.0,
+          "total": 1004000.0
+        },
+        {
+          "date": "2026-09-30",
+          "retirement": 200500.0,
+          "taxable": 804500.0,
+          "total": 1005000.0
+        },
+        {
+          "date": "2026-10-01",
+          "retirement": 200600.0,
+          "taxable": 805400.0,
+          "total": 1006000.0
+        },
+        {
+          "date": "2026-10-02",
+          "retirement": 200700.0,
+          "taxable": 806300.0,
+          "total": 1007000.0
+        },
+        {
+          "date": "2026-10-03",
+          "retirement": 200800.0,
+          "taxable": 807200.0,
+          "total": 1008000.0
+        },
+        {
+          "date": "2026-10-04",
+          "retirement": 200900.0,
+          "taxable": 808100.0,
+          "total": 1009000.0
+        }
+      ],
+      "imports": [],
+      "positions": [
+        {
+          "account": "Brokerage",
+          "id": "pos-re-b",
+          "position_type": "real_estate",
+          "shares": 1.0,
+          "ticker": "RE",
+          "value": 200000.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-vti",
+          "position_type": "equity",
+          "shares": 10.0,
+          "ticker": "VTI",
+          "value": 3300.0
+        },
+        {
+          "account": "Brokerage",
+          "id": "pos-vxus-a",
+          "position_type": "equity",
+          "shares": 5.5,
+          "ticker": "VXUS",
+          "value": 330.0
+        }
+      ],
+      "summary": {
+        "account_count": 1,
+        "accounts": [
+          {
+            "account_type": "taxable",
+            "id": "acct-brk",
+            "name": "Brokerage",
+            "position_count": 3,
+            "value": 203630.0
+          }
+        ],
+        "liabilities_included": false,
+        "position_count": 3,
+        "retirement_value": 0,
+        "taxable_value": 203630.0,
+        "total_cost_basis": null,
+        "total_gain_loss": null,
+        "total_value": 203630.0
+      },
+      "view_id": "view-brokerage"
+    }
+  },
+  {
+    "name": "duplicates ignore real estate",
+    "ok": {
+      "count": 1,
+      "duplicates": [
+        {
+          "positions": [
+            {
+              "account_id": "acct-brk",
+              "account_name": "Brokerage",
+              "id": "pos-vxus-a",
+              "name": "Intl",
+              "value": 330.0
+            },
+            {
+              "account_id": "acct-ira",
+              "account_name": "IRA",
+              "id": "pos-vxus-b",
+              "name": "Intl",
+              "value": 330.0
+            }
+          ],
+          "reason": "Exact same quantity (5.500000) of VXUS found in 2 different accounts: Brokerage, IRA",
+          "shares": 5.5,
+          "ticker": "VXUS"
+        }
+      ],
+      "has_duplicates": true
+    }
+  },
+  {
+    "name": "counts after reads",
+    "ok": {
+      "accounts": 3,
+      "liabilities": 3,
+      "liability_snapshots": 4,
+      "portfolio_snapshots": 10,
+      "positions": 5
+    }
+  }
+]

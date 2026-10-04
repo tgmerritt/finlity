@@ -47,6 +47,10 @@ def check_demo_mode_write() -> None:
     check_demo_data_protection()
 
 
+# Property accounts hold a home, not investable allocation (plan decision D6).
+PROPERTY_ACCOUNT_TYPE = "property"
+
+
 def map_account_type_str(account_type: Optional[str]) -> AccountType:
     """Map a raw account_type string (as stored in the DB / sent by a v2
     payload) to the Pydantic AccountType enum used by analysis.
@@ -83,6 +87,8 @@ def db_to_portfolio(db: Database) -> Portfolio:
         # instance they are the underlying T at runtime. Cast where needed.
         account_name = cast(str, db_account.name)
         account_brokerage = cast(Optional[str], db_account.brokerage)
+        if db_account.account_type == PROPERTY_ACCOUNT_TYPE:
+            continue
         positions = []
         for db_pos in db_account.positions:
             # Skip positions without prices

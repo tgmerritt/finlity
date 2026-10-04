@@ -94,6 +94,8 @@ export function allocationVsTarget(
   const totals: Record<AllocationClass, number> = { stocks: 0, bonds: 0, cash: 0, alternatives: 0 };
   let sum = 0;
   for (const p of positions) {
+    // Property accounts are a home, not investable allocation (plan decision D6).
+    if (p.account_type === 'property') continue;
     const value = Math.max(0, p.value || 0);
     totals[classifyPosition(p)] += value;
     sum += value;

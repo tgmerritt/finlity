@@ -13,6 +13,16 @@
  */
 
 import type { ClientDatabase } from './client-database';
+import * as liabilities from './local-liabilities';
+import type {
+  CreateLiabilityInput,
+  DashboardLiabilities,
+  DeleteLiabilityResult,
+  LiabilityHistoryResponse,
+  LiabilityResponse,
+  RecordBalanceInput,
+  UpdateLiabilityInput,
+} from '@/types/api';
 
 // =====================================================================
 // Shared helpers
@@ -1583,7 +1593,7 @@ export class LocalAPI {
   /**
    * GET /api/portfolio/duplicates - ports operations.py find_duplicate_positions:
    * group all positions by (ticker.upper(), round(shares, 6)); any group whose
-   * members span 2+ distinct accounts is flagged.
+   * members span 2+ distinct accounts is flagged. Real estate positions are skipped.
    */
   getDuplicates(): DuplicatesResponse {
     const positions = this.db.query<PositionRow>('SELECT * FROM positions');
@@ -1592,6 +1602,8 @@ export class LocalAPI {
 
     const groups = new Map<string, PositionRow[]>();
     for (const pos of positions) {
+      // A home is one whole unit (shares 1.0), so two of them are two properties.
+      if (pos.position_type === 'real_estate') continue;
       const key = `${pos.ticker.toUpperCase()}::${Math.round(pos.shares * 1e6) / 1e6}`;
       const group = groups.get(key);
       if (group) {
@@ -2190,6 +2202,54 @@ export class LocalAPI {
       ]
     );
     return { id, name: data.name, amount: data.amount, frequency };
+  }
+
+  // ===================================================================
+  // Liabilities (see local-liabilities.ts)
+  // ===================================================================
+
+  /** Liabilities part of GET /api/dashboard/data (read only). */
+  getDashboardLiabilities<H extends { date: string; total: number | null }>(
+    filtered: boolean,
+    history: H[],
+    totalValue: number
+  ): DashboardLiabilities<H> {
+    return liabilities.dashboardLiabilities(this.db, filtered, history, totalValue);
+  }
+
+  /** GET /api/liabilities */
+  getLiabilities(entityId?: string | null, includeArchived = false): LiabilityResponse[] {
+    return liabilities.getLiabilities(this.db, entityId, includeArchived);
+  }
+
+  /** POST /api/liabilities */
+  createLiability(input: CreateLiabilityInput): LiabilityResponse {
+    return liabilities.createLiability(this.db, input);
+  }
+
+  /** GET /api/liabilities/{id} */
+  getLiability(id: string): LiabilityResponse {
+    return liabilities.getLiability(this.db, id);
+  }
+
+  /** PUT /api/liabilities/{id} */
+  updateLiability(id: string, input: UpdateLiabilityInput, syncExpense = true): LiabilityResponse {
+    return liabilities.updateLiability(this.db, id, input, syncExpense);
+  }
+
+  /** DELETE /api/liabilities/{id} */
+  deleteLiability(id: string, deleteExpense = false): DeleteLiabilityResult {
+    return liabilities.deleteLiability(this.db, id, deleteExpense);
+  }
+
+  /** GET /api/liabilities/{id}/history */
+  getLiabilityHistory(id: string): LiabilityHistoryResponse {
+    return liabilities.getLiabilityHistory(this.db, id);
+  }
+
+  /** POST /api/liabilities/{id}/balance */
+  recordLiabilityBalance(id: string, input: RecordBalanceInput): LiabilityResponse {
+    return liabilities.recordLiabilityBalance(this.db, id, input);
   }
 
   /** PUT /api/budget/expenses/{id} */

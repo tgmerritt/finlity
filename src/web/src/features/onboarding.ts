@@ -1236,66 +1236,148 @@ export async function seedDemoDatasetIfEmpty(): Promise<boolean> {
       accounts: Array<Record<string, unknown>>;
       positions: Array<Record<string, unknown>>;
       snapshots: Array<Record<string, unknown>>;
+      liabilities?: Array<Record<string, unknown>>;
+      liability_snapshots?: Array<Record<string, unknown>>;
     }>('/api/settings/demo-mode/export');
 
     if (!data.accounts?.length) return false;
 
-    for (const e of data.entities ?? []) {
-      clientDB.execute(
-        `INSERT OR IGNORE INTO entities (id, name, entity_type, is_default, is_household, color, icon)
+    // All-or-nothing: a throw partway must not leave a half-seeded database
+    // for autosave to persist (the visitor would then never be reseeded).
+    clientDB.execute('BEGIN');
+    try {
+      for (const e of data.entities ?? []) {
+        clientDB.execute(
+          `INSERT OR IGNORE INTO entities (id, name, entity_type, is_default, is_household, color, icon)
          VALUES (?, ?, ?, 0, 0, ?, ?)`,
-        [e.id, e.name, e.entity_type, e.color ?? '#4A90D9', e.icon ?? 'user']
-      );
-    }
-    for (const a of data.accounts) {
-      clientDB.execute(
-        `INSERT OR IGNORE INTO accounts (id, entity_id, name, account_type, brokerage, beneficiary, custom_type_name, is_retirement_account)
+          [e.id, e.name, e.entity_type, e.color ?? '#4A90D9', e.icon ?? 'user']
+        );
+      }
+      for (const a of data.accounts) {
+        clientDB.execute(
+          `INSERT OR IGNORE INTO accounts (id, entity_id, name, account_type, brokerage, beneficiary, custom_type_name, is_retirement_account)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          a.id,
-          a.entity_id ?? null,
-          a.name,
-          a.account_type,
-          a.brokerage ?? 'other',
-          a.beneficiary ?? null,
-          a.custom_type_name ?? null,
-          a.is_retirement_account ? 1 : 0,
-        ]
-      );
-    }
-    for (const p of data.positions) {
-      clientDB.execute(
-        `INSERT OR IGNORE INTO positions (id, account_id, ticker, name, shares, cost_basis, current_price, sector, is_fund, asset_class, position_type, maturity_date, interest_rate, purchase_date, option_underlying, option_expiration, option_strike, option_type, contract_multiplier)
+          [
+            a.id,
+            a.entity_id ?? null,
+            a.name,
+            a.account_type,
+            a.brokerage ?? 'other',
+            a.beneficiary ?? null,
+            a.custom_type_name ?? null,
+            a.is_retirement_account ? 1 : 0,
+          ]
+        );
+      }
+      for (const p of data.positions) {
+        clientDB.execute(
+          `INSERT OR IGNORE INTO positions (id, account_id, ticker, name, shares, cost_basis, current_price, sector, is_fund, asset_class, position_type, maturity_date, interest_rate, purchase_date, option_underlying, option_expiration, option_strike, option_type, contract_multiplier)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          p.id,
-          p.account_id,
-          p.ticker,
-          p.name ?? null,
-          p.shares,
-          p.cost_basis ?? null,
-          p.current_price ?? null,
-          p.sector ?? null,
-          p.is_fund ? 1 : 0,
-          p.asset_class ?? 'equity',
-          p.position_type ?? 'equity',
-          p.maturity_date ?? null,
-          p.interest_rate ?? null,
-          p.purchase_date ?? null,
-          p.option_underlying ?? null,
-          p.option_expiration ?? null,
-          p.option_strike ?? null,
-          p.option_type ?? null,
-          p.contract_multiplier ?? null,
-        ]
-      );
-    }
-    for (const s of data.snapshots ?? []) {
-      clientDB.execute(
-        `INSERT OR IGNORE INTO portfolio_snapshots (id, snapshot_date, total_value, retirement_value, taxable_value, positions_json, created_at)
+          [
+            p.id,
+            p.account_id,
+            p.ticker,
+            p.name ?? null,
+            p.shares,
+            p.cost_basis ?? null,
+            p.current_price ?? null,
+            p.sector ?? null,
+            p.is_fund ? 1 : 0,
+            p.asset_class ?? 'equity',
+            p.position_type ?? 'equity',
+            p.maturity_date ?? null,
+            p.interest_rate ?? null,
+            p.purchase_date ?? null,
+            p.option_underlying ?? null,
+            p.option_expiration ?? null,
+            p.option_strike ?? null,
+            p.option_type ?? null,
+            p.contract_multiplier ?? null,
+          ]
+        );
+      }
+      for (const s of data.snapshots ?? []) {
+        clientDB.execute(
+          `INSERT OR IGNORE INTO portfolio_snapshots (id, snapshot_date, total_value, retirement_value, taxable_value, positions_json, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [s.id, s.snapshot_date, s.total_value, s.retirement_value, s.taxable_value, s.positions_json, s.created_at]
-      );
+          [
+            s.id,
+            s.snapshot_date,
+            s.total_value,
+            s.retirement_value,
+            s.taxable_value,
+            s.positions_json,
+            s.created_at,
+          ]
+        );
+      }
+
+      // Calendar days only: the table CHECKs length 10, so slice any datetime.
+      const day = (v: unknown): string | null =>
+        typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null;
+      // The household entity is not exported (the browser makes its own), so
+      // only keep entity ids that were seeded. expense_id is cleared: the
+      // server's budget expenses are not seeded here.
+      const seeded = new Set((data.entities ?? []).map((e) => e.id));
+      for (const l of data.liabilities ?? []) {
+        if (!day(l.balance_as_of)) continue; // required column, row unusable
+        clientDB.execute(
+          `INSERT OR IGNORE INTO liabilities (id, entity_id, name, liability_type, lender, current_balance, balance_as_of, interest_rate, payment_amount, payment_frequency, next_payment_date, escrow_amount, original_principal, origination_date, term_months, maturity_date, credit_limit, is_amortizing, linked_position_id, expense_id, source, source_ref, source_detail, is_active, closed_date, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            l.id,
+            seeded.has(l.entity_id) ? l.entity_id : null,
+            l.name,
+            l.liability_type,
+            l.lender ?? null,
+            l.current_balance,
+            day(l.balance_as_of),
+            l.interest_rate ?? null,
+            l.payment_amount ?? null,
+            l.payment_frequency ?? 'monthly',
+            day(l.next_payment_date),
+            l.escrow_amount ?? null,
+            l.original_principal ?? null,
+            day(l.origination_date),
+            l.term_months ?? null,
+            day(l.maturity_date),
+            l.credit_limit ?? null,
+            l.is_amortizing ? 1 : 0,
+            l.linked_position_id ?? null,
+            null,
+            l.source ?? 'demo',
+            l.source_ref ?? null,
+            l.source_detail ?? null,
+            l.is_active === 0 || l.is_active === false ? 0 : 1,
+            day(l.closed_date),
+            l.notes ?? null,
+          ]
+        );
+      }
+      for (const s of data.liability_snapshots ?? []) {
+        if (!day(s.snapshot_date)) continue;
+        clientDB.execute(
+          `INSERT OR IGNORE INTO liability_balance_snapshots (id, liability_id, snapshot_date, balance, source, source_ref)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            s.id,
+            s.liability_id,
+            day(s.snapshot_date),
+            s.balance,
+            s.source ?? 'demo',
+            s.source_ref ?? null,
+          ]
+        );
+      }
+
+      clientDB.execute('COMMIT');
+    } catch (seedError) {
+      try {
+        clientDB.execute('ROLLBACK');
+      } catch {
+        // already rolled back
+      }
+      throw seedError;
     }
 
     await clientDB.saveToIndexedDB();

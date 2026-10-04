@@ -63,8 +63,18 @@ def ensure_recent_demo_history(db, today: date | None = None, days: int = 365) -
     if not _is_demo_database(db):
         return 0
 
+    from src.liabilities import clock as liabilities_clock
+
+    liabilities_today = today or liabilities_clock.today()
     today = today or datetime.utcnow().date()
     yesterday = today - timedelta(days=1)
+
+    # Demo liability history has its own staleness check and demo guard, so it
+    # stays current even when portfolio history already ends yesterday.
+    from src.services.demo_liabilities import rewrite_demo_liability_history
+
+    # Without an explicit `today`, liabilities follow the process-local calendar (clock), not UTC.
+    rewrite_demo_liability_history(db, liabilities_today - timedelta(days=1))
 
     with db.get_session() as session:
         latest = session.query(PortfolioSnapshot).order_by(PortfolioSnapshot.snapshot_date.desc()).first()

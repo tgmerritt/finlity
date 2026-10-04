@@ -4,7 +4,20 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional, cast
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, Boolean, text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import declarative_base, relationship
 
 Base: Any = declarative_base()
@@ -570,3 +583,69 @@ class RecurringCandidate(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     import_record = relationship('BankStatementImport', back_populates='candidates')
     created_expense = relationship('BudgetExpense', foreign_keys='RecurringCandidate.created_expense_id')
+
+
+class Liability(Base):
+    """A debt (mortgage, loan, card, ...) counted against net worth.
+
+    entity_id, linked_position_id and expense_id are soft references: they are
+    deliberately not foreign keys, so no existing delete path has to change.
+    They are resolved on read and reported as missing when the row is gone.
+
+    Calendar-date columns (balance_as_of, next_payment_date, origination_date,
+    maturity_date, closed_date) are Date, stored as 'YYYY-MM-DD'. On both data
+    paths they are always local-calendar days, never toISOString() datetimes.
+    Only created_at / updated_at are datetimes.
+    """
+
+    __tablename__ = "liabilities"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    entity_id = Column(String, nullable=True)  # Null = household/joint
+    name = Column(String, nullable=False)
+    liability_type = Column(String, nullable=False)
+    lender = Column(String, nullable=True)
+    current_balance = Column(Float, nullable=False)  # Latest reported balance
+    balance_as_of = Column(Date, nullable=False)
+    interest_rate = Column(Float, nullable=True)  # APR as a decimal (0.0625)
+    payment_amount = Column(Float, nullable=True)
+    payment_frequency = Column(String, nullable=False, default="monthly", server_default="monthly")
+    next_payment_date = Column(Date, nullable=True)
+    escrow_amount = Column(Float, nullable=True)
+    original_principal = Column(Float, nullable=True)
+    origination_date = Column(Date, nullable=True)
+    term_months = Column(Integer, nullable=True)
+    maturity_date = Column(Date, nullable=True)
+    credit_limit = Column(Float, nullable=True)
+    is_amortizing = Column(Boolean, nullable=False)
+    linked_position_id = Column(String, nullable=True)
+    expense_id = Column(String, nullable=True)
+    source = Column(String, nullable=False, default="manual", server_default="manual")
+    source_ref = Column(String, nullable=True)
+    source_detail = Column(Text, nullable=True)  # JSON
+    is_active = Column(Boolean, nullable=False, default=True, server_default="1")
+    closed_date = Column(Date, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class LiabilityBalanceSnapshot(Base):
+    """A reported balance for a liability on one calendar day (reports only, never computed).
+
+    snapshot_date is a local-calendar 'YYYY-MM-DD' on both paths, never toISOString().
+    The server's unique constraint is an inline table constraint (SQLite autoindex);
+    the browser path creates a named unique index, ux_liability_snapshot_day.
+    source_ref carries an external id (statement import dedupe and undo).
+    """
+
+    __tablename__ = "liability_balance_snapshots"
+    __table_args__ = (UniqueConstraint("liability_id", "snapshot_date", name="ux_liability_snapshot_day"),)
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    liability_id = Column(String, ForeignKey("liabilities.id"), nullable=False)
+    snapshot_date = Column(Date, nullable=False)
+    balance = Column(Float, nullable=False)
+    source = Column(String, nullable=False, default="manual", server_default="manual")
+    source_ref = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -23,6 +23,7 @@
 
 import { clientDB } from '@/database/client-database';
 import { createLocalAPI, type LocalAPI } from '@/database/local-api';
+import { queryFlag } from '@/database/local-liabilities';
 import { store } from '@/state/store';
 import type { ApiCallOptions } from './client';
 
@@ -558,7 +559,8 @@ local('GET', '/api/dashboard/data', (req) => {
   if (viewId) {
     const views = api.getViews();
     const view = views.find((v) => v.id === viewId);
-    if (view) accountIds = new Set(view.account_ids);
+    // An empty account list means "everything", like the server.
+    if (view?.account_ids.length) accountIds = new Set(view.account_ids);
   }
 
   const accounts = api.getAccounts();
@@ -622,10 +624,19 @@ local('GET', '/api/dashboard/data', (req) => {
     accounts: filteredAccounts,
   };
 
+  // A failure in the liabilities block must not take the dashboard down: fall back to
+  // the pre-liabilities payload. Log the error type only (messages can carry values).
+  let nw: ReturnType<LocalAPI['getDashboardLiabilities']>;
+  try {
+    nw = api.getDashboardLiabilities(accountIds !== null, api.getHistory(), totalValue);
+  } catch (e) {
+    console.error(`dashboard liabilities block failed: ${e instanceof Error ? e.name : typeof e}`);
+    nw = { summary: { liabilities_included: false }, history: api.getHistory() };
+  }
   return {
-    summary,
+    summary: { ...summary, ...nw.summary },
     positions,
-    history: api.getHistory(),
+    history: nw.history,
     imports: [],
     view_id: viewId ?? null,
     demo_mode: store.get('demoMode') ?? false,
@@ -648,6 +659,39 @@ local('GET', '/api/imports/price-status', (req) => {
   const timezone = req.query.get('timezone') ?? undefined;
   return getLocalAPI().getPriceStatus(maxAgeHours ? Number(maxAgeHours) : undefined, timezone);
 });
+
+// ---- Liabilities (src/api/liabilities.py). Register static paths such as
+// /convert-position before the {id} routes. ----
+
+local('GET', '/api/liabilities', (req) =>
+  getLocalAPI().getLiabilities(
+    req.query.get('entity_id'),
+    queryFlag(req.query.get('include_archived'), false)
+  )
+);
+local('POST', '/api/liabilities', (req) =>
+  getLocalAPI().createLiability(req.body as Parameters<LocalAPI['createLiability']>[0])
+);
+local('GET', '/api/liabilities/{id}', (_req, m) => getLocalAPI().getLiability(m[1]!));
+local('PUT', '/api/liabilities/{id}', (req, m) =>
+  getLocalAPI().updateLiability(
+    m[1]!,
+    req.body as Parameters<LocalAPI['updateLiability']>[1],
+    queryFlag(req.query.get('sync_expense'), true)
+  )
+);
+local('DELETE', '/api/liabilities/{id}', (req, m) =>
+  getLocalAPI().deleteLiability(m[1]!, queryFlag(req.query.get('delete_expense'), false))
+);
+local('GET', '/api/liabilities/{id}/history', (_req, m) =>
+  getLocalAPI().getLiabilityHistory(m[1]!)
+);
+local('POST', '/api/liabilities/{id}/balance', (req, m) =>
+  getLocalAPI().recordLiabilityBalance(
+    m[1]!,
+    req.body as Parameters<LocalAPI['recordLiabilityBalance']>[1]
+  )
+);
 
 // ---- Budget: income, expenses, deductions, tax-config, states, categories ----
 

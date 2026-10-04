@@ -52,6 +52,7 @@ output/
 !tsconfig.json
 !.eslintrc.json
 !.claude/*.json
+!tests/fixtures/*.json
 
 # ----- Secrets & API Keys -----
 .env

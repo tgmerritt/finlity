@@ -1,0 +1,953 @@
+{
+ "today": "2026-10-04",
+ "setup": {
+  "categories": [
+   {
+    "id": "cat-housing",
+    "name": "Housing",
+    "sort_order": 0
+   },
+   {
+    "id": "cat-transport",
+    "name": "Transportation",
+    "sort_order": 1
+   },
+   {
+    "id": "cat-debt",
+    "name": "Debt Payments",
+    "sort_order": 2
+   },
+   {
+    "id": "cat-other",
+    "name": "Other",
+    "sort_order": 3
+   }
+  ],
+  "accounts": [
+   {
+    "id": "acct-1",
+    "name": "Brokerage",
+    "account_type": "taxable"
+   }
+  ],
+  "positions": [
+   {
+    "id": "pos-vti",
+    "account_id": "acct-1",
+    "ticker": "VTI",
+    "name": "Total Market",
+    "shares": 10,
+    "current_price": 330,
+    "position_type": "equity",
+    "asset_class": "equity"
+   },
+   {
+    "id": "pos-re",
+    "account_id": "acct-1",
+    "ticker": "RE",
+    "name": "Lake House",
+    "shares": 1,
+    "current_price": 450000,
+    "position_type": "real_estate",
+    "asset_class": "alternative"
+   }
+  ],
+  "expenses": [
+   {
+    "id": "exp-1",
+    "category_id": "cat-transport",
+    "name": "Car Payment",
+    "amount": 450,
+    "frequency": "monthly"
+   },
+   {
+    "id": "exp-2",
+    "category_id": "cat-housing",
+    "name": "Mortgage",
+    "amount": 1500,
+    "frequency": "monthly"
+   }
+  ]
+ },
+ "steps": [
+  {
+   "name": "list starts empty",
+   "method": "GET",
+   "path": "/api/liabilities"
+  },
+  {
+   "name": "create mortgage with new property and expense",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "save": "mortgage",
+   "body": {
+    "name": "Home loan",
+    "liability_type": "mortgage",
+    "lender": "First Bank",
+    "current_balance": 520000,
+    "balance_as_of": "2026-10-01",
+    "interest_rate": 0.0625,
+    "payment_amount": 3201.73,
+    "escrow_amount": 500,
+    "next_payment_date": "2026-11-01",
+    "origination_date": "2026-10-01",
+    "term_months": 360,
+    "property": {
+     "mode": "create",
+     "name": "Main St",
+     "value": 700000,
+     "cost_basis": 500000,
+     "purchase_date": "2015-06-01"
+    },
+    "cash_flow": {
+     "mode": "create"
+    }
+   }
+  },
+  {
+   "name": "probe accounts after property create",
+   "probe": "accounts"
+  },
+  {
+   "name": "probe positions after property create",
+   "probe": "positions"
+  },
+  {
+   "name": "probe expenses after mortgage create",
+   "probe": "expenses"
+  },
+  {
+   "name": "create auto loan linked to existing property and expense",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "save": "auto",
+   "body": {
+    "name": "Truck",
+    "liability_type": "auto_loan",
+    "current_balance": 18000,
+    "balance_as_of": "2026-09-20",
+    "interest_rate": 0.059,
+    "payment_amount": 225,
+    "payment_frequency": "biweekly",
+    "next_payment_date": "2026-10-10",
+    "entity_id": "ent-1",
+    "property": {
+     "mode": "link",
+     "position_id": "pos-re"
+    },
+    "cash_flow": {
+     "mode": "link",
+     "expense_id": "exp-1"
+    }
+   }
+  },
+  {
+   "name": "create credit card",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "save": "card",
+   "body": {
+    "name": "Card",
+    "liability_type": "credit_card",
+    "current_balance": 2400,
+    "balance_as_of": "2026-09-12",
+    "interest_rate": 0.2199,
+    "credit_limit": 9000
+   }
+  },
+  {
+   "name": "create interest-only heloc with expense",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "save": "heloc",
+   "body": {
+    "name": "HELOC",
+    "liability_type": "heloc",
+    "current_balance": 60000,
+    "balance_as_of": "2026-10-02",
+    "interest_rate": 0.085,
+    "payment_amount": 425,
+    "cash_flow": {
+     "mode": "create"
+    }
+   }
+  },
+  {
+   "name": "create other with term, balance date defaulting to today",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "save": "other",
+   "body": {
+    "name": "Family loan",
+    "liability_type": "other",
+    "current_balance": 12000,
+    "interest_rate": 0.03,
+    "payment_amount": 400,
+    "term_months": 36,
+    "next_payment_date": "2026-10-15",
+    "origination_date": "2026-09-30"
+   }
+  },
+  {
+   "name": "second property create reuses the account",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "save": "cabin",
+   "body": {
+    "name": "Cabin loan",
+    "liability_type": "mortgage",
+    "current_balance": 90000,
+    "balance_as_of": "2026-10-03",
+    "interest_rate": 0.07,
+    "payment_amount": 700,
+    "next_payment_date": "2026-11-03",
+    "property": {
+     "mode": "create",
+     "name": "Cabin",
+     "value": 150000
+    }
+   }
+  },
+  {
+   "name": "probe accounts after reuse",
+   "probe": "accounts"
+  },
+  {
+   "name": "probe positions after reuse",
+   "probe": "positions"
+  },
+  {
+   "name": "probe expenses after creates",
+   "probe": "expenses"
+  },
+  {
+   "name": "bad type",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "x",
+    "liability_type": "boat",
+    "current_balance": 1
+   }
+  },
+  {
+   "name": "future balance date",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "x",
+    "liability_type": "other",
+    "current_balance": 1,
+    "balance_as_of": "2026-10-05"
+   }
+  },
+  {
+   "name": "datetime string rejected",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "x",
+    "liability_type": "other",
+    "current_balance": 1,
+    "balance_as_of": "2026-10-01T00:00:00"
+   }
+  },
+  {
+   "name": "maturity before origination",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "x",
+    "liability_type": "other",
+    "current_balance": 1,
+    "origination_date": "2026-01-01",
+    "maturity_date": "2025-12-31"
+   }
+  },
+  {
+   "name": "extra field rejected",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "x",
+    "liability_type": "other",
+    "current_balance": 1,
+    "surprise": true
+   }
+  },
+  {
+   "name": "expense create without payment",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "x",
+    "liability_type": "other",
+    "current_balance": 1,
+    "property": {
+     "mode": "create",
+     "name": "Ghost",
+     "value": 1
+    },
+    "cash_flow": {
+     "mode": "create"
+    }
+   }
+  },
+  {
+   "name": "missing property position",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "x",
+    "liability_type": "other",
+    "current_balance": 1,
+    "property": {
+     "mode": "link",
+     "position_id": "nope"
+    }
+   }
+  },
+  {
+   "name": "missing expense link",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "x",
+    "liability_type": "other",
+    "current_balance": 1,
+    "cash_flow": {
+     "mode": "link",
+     "expense_id": "nope"
+    }
+   }
+  },
+  {
+   "name": "expense already linked",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "x",
+    "liability_type": "other",
+    "current_balance": 1,
+    "cash_flow": {
+     "mode": "link",
+     "expense_id": "exp-1"
+    }
+   }
+  },
+  {
+   "name": "probe positions unchanged by failed creates",
+   "probe": "positions"
+  },
+  {
+   "name": "payment change syncs expense",
+   "method": "PUT",
+   "path": "/api/liabilities/{mortgage}",
+   "body": {
+    "payment_amount": 3500
+   }
+  },
+  {
+   "name": "probe expenses after sync",
+   "probe": "expenses"
+  },
+  {
+   "name": "payment change without sync",
+   "method": "PUT",
+   "path": "/api/liabilities/{mortgage}?sync_expense=false",
+   "body": {
+    "payment_amount": 3400
+   }
+  },
+  {
+   "name": "null payment with sync",
+   "method": "PUT",
+   "path": "/api/liabilities/{mortgage}",
+   "body": {
+    "payment_amount": null
+   }
+  },
+  {
+   "name": "zero payment with sync",
+   "method": "PUT",
+   "path": "/api/liabilities/{mortgage}",
+   "body": {
+    "payment_amount": 0
+   }
+  },
+  {
+   "name": "clear payment without sync",
+   "method": "PUT",
+   "path": "/api/liabilities/{mortgage}?sync_expense=false",
+   "body": {
+    "payment_amount": null
+   }
+  },
+  {
+   "name": "restore payment without sync",
+   "method": "PUT",
+   "path": "/api/liabilities/{mortgage}?sync_expense=false",
+   "body": {
+    "payment_amount": 3201.73
+   }
+  },
+  {
+   "name": "relink mortgage to existing expense",
+   "method": "PUT",
+   "path": "/api/liabilities/{mortgage}",
+   "body": {
+    "expense_id": "exp-2"
+   }
+  },
+  {
+   "name": "relink to an expense linked elsewhere",
+   "method": "PUT",
+   "path": "/api/liabilities/{mortgage}",
+   "body": {
+    "expense_id": "exp-1"
+   }
+  },
+  {
+   "name": "unlink expense",
+   "method": "PUT",
+   "path": "/api/liabilities/{auto}",
+   "body": {
+    "expense_id": null
+   }
+  },
+  {
+   "name": "probe expenses after relink",
+   "probe": "expenses"
+  },
+  {
+   "name": "type change rederives amortizing",
+   "method": "PUT",
+   "path": "/api/liabilities/{card}",
+   "body": {
+    "liability_type": "personal_loan"
+   }
+  },
+  {
+   "name": "explicit amortizing wins",
+   "method": "PUT",
+   "path": "/api/liabilities/{card}",
+   "body": {
+    "liability_type": "credit_card",
+    "is_amortizing": true
+   }
+  },
+  {
+   "name": "archive",
+   "method": "PUT",
+   "path": "/api/liabilities/{other}",
+   "body": {
+    "is_active": false
+   }
+  },
+  {
+   "name": "reactivate",
+   "method": "PUT",
+   "path": "/api/liabilities/{other}",
+   "body": {
+    "is_active": true
+   }
+  },
+  {
+   "name": "update unknown",
+   "method": "PUT",
+   "path": "/api/liabilities/nope",
+   "body": {
+    "notes": "x"
+   }
+  },
+  {
+   "name": "update bad rate",
+   "method": "PUT",
+   "path": "/api/liabilities/{card}",
+   "body": {
+    "interest_rate": 2
+   }
+  },
+  {
+   "name": "update null name",
+   "method": "PUT",
+   "path": "/api/liabilities/{card}",
+   "body": {
+    "name": null
+   }
+  },
+  {
+   "name": "link missing position",
+   "method": "PUT",
+   "path": "/api/liabilities/{card}",
+   "body": {
+    "linked_position_id": "nope"
+   }
+  },
+  {
+   "name": "record a newer balance",
+   "method": "POST",
+   "path": "/api/liabilities/{card}/balance",
+   "body": {
+    "balance": 3100,
+    "as_of": "2026-10-03"
+   }
+  },
+  {
+   "name": "record the same day again",
+   "method": "POST",
+   "path": "/api/liabilities/{card}/balance",
+   "body": {
+    "balance": 2900,
+    "as_of": "2026-10-03"
+   }
+  },
+  {
+   "name": "record an older balance",
+   "method": "POST",
+   "path": "/api/liabilities/{card}/balance",
+   "body": {
+    "balance": 1200,
+    "as_of": "2026-08-15"
+   }
+  },
+  {
+   "name": "record defaulting to today",
+   "method": "POST",
+   "path": "/api/liabilities/{mortgage}/balance",
+   "body": {
+    "balance": 519000
+   }
+  },
+  {
+   "name": "record future date",
+   "method": "POST",
+   "path": "/api/liabilities/{card}/balance",
+   "body": {
+    "balance": 1,
+    "as_of": "2026-10-05"
+   }
+  },
+  {
+   "name": "record negative",
+   "method": "POST",
+   "path": "/api/liabilities/{card}/balance",
+   "body": {
+    "balance": -1
+   }
+  },
+  {
+   "name": "record unknown",
+   "method": "POST",
+   "path": "/api/liabilities/nope/balance",
+   "body": {
+    "balance": 1
+   }
+  },
+  {
+   "name": "card history",
+   "method": "GET",
+   "path": "/api/liabilities/{card}/history"
+  },
+  {
+   "name": "mortgage history",
+   "method": "GET",
+   "path": "/api/liabilities/{mortgage}/history"
+  },
+  {
+   "name": "history unknown",
+   "method": "GET",
+   "path": "/api/liabilities/nope/history"
+  },
+  {
+   "name": "get one",
+   "method": "GET",
+   "path": "/api/liabilities/{heloc}"
+  },
+  {
+   "name": "get unknown",
+   "method": "GET",
+   "path": "/api/liabilities/nope"
+  },
+  {
+   "name": "archive the heloc",
+   "method": "PUT",
+   "path": "/api/liabilities/{heloc}",
+   "body": {
+    "is_active": false
+   }
+  },
+  {
+   "name": "list active",
+   "method": "GET",
+   "path": "/api/liabilities"
+  },
+  {
+   "name": "list with archived",
+   "method": "GET",
+   "path": "/api/liabilities?include_archived=true"
+  },
+  {
+   "name": "list by entity",
+   "method": "GET",
+   "path": "/api/liabilities?entity_id=ent-1&include_archived=true"
+  },
+  {
+   "name": "explicit category found",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "Van",
+    "liability_type": "auto_loan",
+    "current_balance": 9000,
+    "balance_as_of": "2026-10-01",
+    "interest_rate": 0.06,
+    "payment_amount": 300,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-11-01",
+    "cash_flow": {
+     "mode": "create",
+     "category_id": "cat-other"
+    }
+   },
+   "save": "van"
+  },
+  {
+   "name": "explicit category missing",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "Van2",
+    "liability_type": "auto_loan",
+    "current_balance": 9000,
+    "balance_as_of": "2026-10-01",
+    "interest_rate": 0.06,
+    "payment_amount": 300,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-11-01",
+    "cash_flow": {
+     "mode": "create",
+     "category_id": "nope"
+    }
+   }
+  },
+  {
+   "name": "weekly loan with expense",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "Weekly",
+    "liability_type": "personal_loan",
+    "current_balance": 3000,
+    "balance_as_of": "2026-10-01",
+    "interest_rate": 0.08,
+    "payment_amount": 100,
+    "payment_frequency": "weekly",
+    "next_payment_date": "2026-10-09",
+    "cash_flow": {
+     "mode": "create"
+    }
+   },
+   "save": "weekly"
+  },
+  {
+   "name": "quarterly loan with expense",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "Quarterly",
+    "liability_type": "student_loan",
+    "current_balance": 8000,
+    "balance_as_of": "2026-10-01",
+    "interest_rate": 0.045,
+    "payment_amount": 500,
+    "payment_frequency": "quarterly",
+    "next_payment_date": "2026-12-01",
+    "cash_flow": {
+     "mode": "create"
+    }
+   }
+  },
+  {
+   "name": "annual loan with expense",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "Annual",
+    "liability_type": "student_loan",
+    "current_balance": 5000,
+    "balance_as_of": "2026-10-01",
+    "interest_rate": 0.04,
+    "payment_amount": 1200,
+    "payment_frequency": "annual",
+    "next_payment_date": "2027-03-01",
+    "cash_flow": {
+     "mode": "create"
+    }
+   },
+   "save": "annual"
+  },
+  {
+   "name": "cash flow none writes no expense",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "Plain",
+    "liability_type": "other",
+    "current_balance": 400,
+    "cash_flow": {
+     "mode": "none"
+    }
+   }
+  },
+  {
+   "name": "null is_amortizing derives from type",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "Derived",
+    "liability_type": "credit_card",
+    "current_balance": 50,
+    "is_amortizing": null
+   }
+  },
+  {
+   "name": "expenses after frequencies and categories",
+   "probe": "expenses"
+  },
+  {
+   "name": "escrow-only change syncs expense",
+   "method": "PUT",
+   "path": "/api/liabilities/{weekly}",
+   "body": {
+    "escrow_amount": 20
+   }
+  },
+  {
+   "name": "expenses after escrow sync",
+   "probe": "expenses"
+  },
+  {
+   "name": "frequency-only change syncs expense",
+   "method": "PUT",
+   "path": "/api/liabilities/{weekly}",
+   "body": {
+    "payment_frequency": "biweekly"
+   }
+  },
+  {
+   "name": "expenses after frequency sync",
+   "probe": "expenses"
+  },
+  {
+   "name": "relink a non-mortgage",
+   "method": "PUT",
+   "path": "/api/liabilities/{weekly}",
+   "body": {
+    "expense_id": "exp-1"
+   }
+  },
+  {
+   "name": "expenses after non-mortgage relink",
+   "probe": "expenses"
+  },
+  {
+   "name": "empty update",
+   "method": "PUT",
+   "path": "/api/liabilities/{weekly}",
+   "body": {}
+  },
+  {
+   "name": "activate an active liability",
+   "method": "PUT",
+   "path": "/api/liabilities/{annual}",
+   "body": {
+    "is_active": true
+   }
+  },
+  {
+   "name": "archive",
+   "method": "PUT",
+   "path": "/api/liabilities/{annual}",
+   "body": {
+    "is_active": false
+   }
+  },
+  {
+   "name": "archive an archived liability",
+   "method": "PUT",
+   "path": "/api/liabilities/{annual}",
+   "body": {
+    "is_active": false
+   }
+  },
+  {
+   "name": "invalid include_archived flag",
+   "method": "GET",
+   "path": "/api/liabilities?include_archived=maybe"
+  },
+  {
+   "name": "invalid sync_expense flag",
+   "method": "PUT",
+   "path": "/api/liabilities/{weekly}?sync_expense=maybe",
+   "body": {
+    "notes": "x"
+   }
+  },
+  {
+   "name": "invalid delete_expense flag",
+   "method": "DELETE",
+   "path": "/api/liabilities/{annual}?delete_expense=maybe"
+  },
+  {
+   "name": "empty expense id",
+   "method": "PUT",
+   "path": "/api/liabilities/{weekly}",
+   "body": {
+    "expense_id": ""
+   }
+  },
+  {
+   "name": "delete the linked position",
+   "db": "delete_position",
+   "id": "pos-re"
+  },
+  {
+   "name": "delete the linked expense",
+   "db": "delete_expense",
+   "id": "exp-1"
+  },
+  {
+   "name": "dangling position",
+   "method": "GET",
+   "path": "/api/liabilities/{auto}"
+  },
+  {
+   "name": "dangling expense",
+   "method": "GET",
+   "path": "/api/liabilities/{weekly}"
+  },
+  {
+   "name": "delete with expense already gone",
+   "method": "DELETE",
+   "path": "/api/liabilities/{weekly}?delete_expense=true"
+  },
+  {
+   "name": "delete keeping expense",
+   "method": "DELETE",
+   "path": "/api/liabilities/{cabin}"
+  },
+  {
+   "name": "delete with expense",
+   "method": "DELETE",
+   "path": "/api/liabilities/{heloc}?delete_expense=true"
+  },
+  {
+   "name": "delete again",
+   "method": "DELETE",
+   "path": "/api/liabilities/{heloc}"
+  },
+  {
+   "name": "rename housing",
+   "db": "rename_category",
+   "id": "cat-housing",
+   "to": "Zz1"
+  },
+  {
+   "name": "rename transportation",
+   "db": "rename_category",
+   "id": "cat-transport",
+   "to": "Zz2"
+  },
+  {
+   "name": "rename debt payments",
+   "db": "rename_category",
+   "id": "cat-debt",
+   "to": "Zz3"
+  },
+  {
+   "name": "category falls back to Other",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "Fallback Other",
+    "liability_type": "heloc",
+    "current_balance": 1000,
+    "balance_as_of": "2026-10-01",
+    "interest_rate": 0.08,
+    "payment_amount": 100,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-11-01",
+    "cash_flow": {
+     "mode": "create"
+    }
+   }
+  },
+  {
+   "name": "rename other",
+   "db": "rename_category",
+   "id": "cat-other",
+   "to": "Zz4"
+  },
+  {
+   "name": "category falls back to any",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "Fallback Any",
+    "liability_type": "heloc",
+    "current_balance": 1000,
+    "balance_as_of": "2026-10-01",
+    "interest_rate": 0.08,
+    "payment_amount": 100,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-11-01",
+    "cash_flow": {
+     "mode": "create"
+    }
+   }
+  },
+  {
+   "name": "expenses after category fallbacks",
+   "probe": "expenses"
+  },
+  {
+   "name": "final expenses",
+   "probe": "expenses"
+  },
+  {
+   "name": "final counts",
+   "probe": "counts"
+  },
+  {
+   "name": "remove all expenses",
+   "db": "delete_all_expenses"
+  },
+  {
+   "name": "remove all categories",
+   "db": "delete_all_categories"
+  },
+  {
+   "name": "no category at all",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "body": {
+    "name": "Orphan",
+    "liability_type": "heloc",
+    "current_balance": 1000,
+    "balance_as_of": "2026-10-01",
+    "interest_rate": 0.08,
+    "payment_amount": 100,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-11-01",
+    "cash_flow": {
+     "mode": "create"
+    }
+   }
+  },
+  {
+   "name": "counts with no categories",
+   "probe": "counts"
+  }
+ ]
+}
