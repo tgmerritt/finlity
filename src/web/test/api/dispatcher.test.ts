@@ -79,6 +79,20 @@ describe('dispatcher', () => {
   });
 
   describe('PAYLOAD routes', () => {
+    it('rewrites GET /api/projections/account-balances-by-type (what the Taxes page sends) into the v2 POST', () => {
+      const match = matchPayloadRoute('/api/projections/account-balances-by-type', {
+        method: 'GET',
+      });
+      expect(match).not.toBe(NOT_HANDLED);
+      if (match === NOT_HANDLED) throw new Error('unreachable');
+      expect(match.endpoint).toBe('/api/v2/projections/account-balances-by-type');
+      expect(match.options.method).toBe('POST');
+      expect(match.options.body).toHaveProperty('accounts');
+      expect(
+        matchPayloadRoute('/api/projections/account-balances-by-type', { method: 'POST' })
+      ).toBe(NOT_HANDLED);
+    });
+
     it('rewrites GET /api/analysis/allocation into a POST /api/v2/analysis/allocation with a portfolio body', () => {
       const match = matchPayloadRoute('/api/analysis/allocation', { method: 'GET' });
       expect(match).not.toBe(NOT_HANDLED);

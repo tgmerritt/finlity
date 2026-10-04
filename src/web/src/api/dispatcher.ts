@@ -1080,7 +1080,10 @@ payload('POST', '/api/projections/fire', (req) => ({
   options: { method: 'POST', body: req.body },
 }));
 
-payload('POST', '/api/projections/account-balances-by-type', () => ({
+// v1 serves this as a GET (src/api/projections.py) and the Taxes page calls it
+// as a GET; v2 takes the portfolio payload via POST, so only the upstream
+// request is a POST.
+payload('GET', '/api/projections/account-balances-by-type', () => ({
   endpoint: '/api/v2/projections/account-balances-by-type',
   options: { method: 'POST', body: buildPortfolioPayload() },
 }));
