@@ -164,6 +164,17 @@ describe('dispatcher', () => {
   });
 
   describe('DISABLED routes', () => {
+    it('returns server-shaped stubs for the plugin list endpoints', () => {
+      // features/plugins.ts calls plugins.forEach on /api/plugins (bare array)
+      // and permData.plugins.forEach / pending_count on security/permissions.
+      expect(tryLocalRoute('/api/plugins', { method: 'GET' })).toEqual([]);
+      expect(tryLocalRoute('/api/plugins/installed', { method: 'GET' })).toEqual({ plugins: [] });
+      expect(tryLocalRoute('/api/plugins/security/permissions', { method: 'GET' })).toEqual({
+        plugins: [],
+        pending_count: 0,
+      });
+    });
+
     it('throws LocalModeDisabledError for plugin endpoints', () => {
       expect(() =>
         tryLocalRoute('/api/plugins/install/git', { method: 'POST', body: {} })

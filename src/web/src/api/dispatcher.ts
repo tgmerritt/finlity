@@ -865,11 +865,14 @@ local('PUT', '/api/settings/config/{section}', (req, m) =>
 
 // ---- DISABLED: plugins ----
 
-disabled('GET', '/api/plugins', () => ({ plugins: [] }));
+// Shapes mirror the server: GET /api/plugins returns a bare array, and
+// security/permissions returns { plugins, pending_count } (features/plugins.ts
+// calls .forEach / .pending_count on these).
+disabled('GET', '/api/plugins', () => []);
 disabled('GET', '/api/plugins/installed', () => ({ plugins: [] }));
 disabled('GET', '/api/analysis/plugins', () => ({ plugins: [] }));
 disabled('GET', '/api/analysis/widgets', () => ({ widgets: [] }));
-disabled('GET', '/api/plugins/security/permissions', () => ({ permissions: [] }));
+disabled('GET', '/api/plugins/security/permissions', () => ({ plugins: [], pending_count: 0 }));
 disabled('*', '/api/plugins/**', () => {
   throw new LocalModeDisabledError('Plugins are disabled in hosted mode.');
 });
