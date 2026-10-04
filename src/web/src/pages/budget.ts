@@ -922,6 +922,12 @@ export interface AddExpensePrefill {
  * Fill the category select from the API. Ids are integers on the server and UUIDs
  * in the browser database, so the dialog never carries a fixed list. `selected` is
  * chosen when it exists; otherwise the first category stays selected.
+ *
+ * With `keepUnknown` (the Edit dialog) the expense's own category always stays
+ * selectable: an id the list lacks gets a "Current category" option, no category
+ * gets a blank "No category" option, and a failed fetch offers just the current
+ * value. A blank value is left out of the save, so editing other fields never
+ * assigns or clears a category.
  */
 async function fillCategorySelect(selected?: string | null, keepUnknown = false): Promise<void> {
   const select = document.getElementById('expense-category') as HTMLSelectElement | null;
@@ -935,29 +941,37 @@ async function fillCategorySelect(selected?: string | null, keepUnknown = false)
       select.appendChild(opt);
     }
   };
+  const want =
+    selected !== null && selected !== undefined && selected !== '' ? String(selected) : null;
+  const prepend = (value: string, label: string): void => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    select.insertBefore(opt, select.firstChild);
+    select.value = value;
+  };
   try {
     const categories = await apiCall<{ id: string; name: string }[]>(
       '/api/budget/expense-categories'
     );
     if (!select.isConnected) return;
     fill((categories || []).map((c) => ({ value: c.id, label: c.name })));
-    if (selected !== null && selected !== undefined && selected !== '') {
-      const want = String(selected);
+    if (want !== null) {
       const match = (categories || []).find((c) => String(c.id) === want);
       if (match) {
         select.value = String(match.id);
       } else if (keepUnknown) {
         // An id the list does not have (legacy or orphaned): keep it unless changed on purpose.
-        const keep = document.createElement('option');
-        keep.value = want;
-        keep.textContent = 'Current category (not in the list)';
-        select.insertBefore(keep, select.firstChild);
-        select.value = want;
+        prepend(want, 'Current category (not in the list)');
       }
+    } else if (keepUnknown) {
+      prepend('', 'No category');
     }
   } catch {
     if (!select.isConnected) return;
-    fill([{ value: '', label: 'Categories unavailable' }]);
+    if (!keepUnknown) fill([{ value: '', label: 'Categories unavailable' }]);
+    else if (want !== null) fill([{ value: want, label: 'Current category (list unavailable)' }]);
+    else fill([{ value: '', label: 'No category' }]);
   }
 }
 
@@ -1230,10 +1244,11 @@ export function editExpense(id: string): void {
       </div>
     `,
     onSave: async () => {
-      if (!categoryIsChosen()) return;
+      // A blank category ("No category", or still loading) is left out, so the saved one stays.
+      const categoryId = (document.getElementById('expense-category') as HTMLSelectElement).value;
       const data = {
         name: (document.getElementById('expense-name') as HTMLInputElement).value,
-        category_id: (document.getElementById('expense-category') as HTMLSelectElement).value,
+        ...(categoryId ? { category_id: categoryId } : {}),
         amount:
           parseFloat((document.getElementById('expense-amount') as HTMLInputElement).value) || 0,
         frequency: (document.getElementById('expense-frequency') as HTMLSelectElement).value,

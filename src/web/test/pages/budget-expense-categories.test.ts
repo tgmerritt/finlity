@@ -150,6 +150,7 @@ describe('Edit Expense keeps a category that is not in the list', () => {
     closeDynamicModal();
     document.body.innerHTML = '<div id="expenses-list"></div>';
     apiCallMock.mockReset();
+    vi.mocked(showToast).mockReset();
     store.set('expenses', [
       {
         id: 'e1',
@@ -215,6 +216,64 @@ describe('Edit Expense keeps a category that is not in the list', () => {
         })
       )
     );
+  });
+
+  const saveBody = async (): Promise<Record<string, unknown>> => {
+    document.querySelector<HTMLButtonElement>('[data-action="save"]')!.click();
+    await vi.waitFor(() =>
+      expect(apiCallMock.mock.calls.some(([url]) => url === '/api/budget/expenses/e1')).toBe(true)
+    );
+    const put = apiCallMock.mock.calls.find(([url]) => url === '/api/budget/expenses/e1')!;
+    return (put[1] as { body: Record<string, unknown> }).body;
+  };
+
+  it.each([null, ''])(
+    'offers "No category" for an expense with category %j and never assigns one',
+    async (none) => {
+      edit(none);
+      answer();
+      editExpense('e1');
+      await loaded();
+      expect(options()[0]!.textContent).toBe('No category');
+      expect(value()).toBe('');
+      (document.getElementById('expense-amount') as HTMLInputElement).value = '55';
+      const body = await saveBody();
+      expect(body).toMatchObject({ amount: 55, name: 'Dog food' });
+      expect('category_id' in body).toBe(false);
+      expect(showToast).not.toHaveBeenCalledWith('Choose a category.', 'error');
+    }
+  );
+
+  it('still lets a category be chosen for an expense that had none', async () => {
+    edit(null);
+    answer();
+    editExpense('e1');
+    await loaded();
+    (document.getElementById('expense-category') as HTMLSelectElement).value = 'c-food';
+    expect(await saveBody()).toMatchObject({ category_id: 'c-food' });
+  });
+
+  it('saves other edits and keeps the category when the list cannot load', async () => {
+    edit('c-food');
+    answer('fail');
+    editExpense('e1');
+    await vi.waitFor(() =>
+      expect(options()[0]?.textContent).toBe('Current category (list unavailable)')
+    );
+    (document.getElementById('expense-amount') as HTMLInputElement).value = '60';
+    const body = await saveBody();
+    expect(body).toMatchObject({ amount: 60, category_id: 'c-food' });
+  });
+
+  it('saves other edits of an expense with no category when the list cannot load', async () => {
+    edit(null);
+    answer('fail');
+    editExpense('e1');
+    await vi.waitFor(() => expect(options()[0]?.textContent).toBe('No category'));
+    (document.getElementById('expense-amount') as HTMLInputElement).value = '61';
+    const body = await saveBody();
+    expect(body).toMatchObject({ amount: 61 });
+    expect('category_id' in body).toBe(false);
   });
 
   it('does not add a keep option in the Add dialog', async () => {
