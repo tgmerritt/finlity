@@ -168,7 +168,10 @@ describe('dispatcher', () => {
       // features/plugins.ts calls plugins.forEach on /api/plugins (bare array)
       // and permData.plugins.forEach / pending_count on security/permissions.
       expect(tryLocalRoute('/api/plugins', { method: 'GET' })).toEqual([]);
-      expect(tryLocalRoute('/api/plugins/installed', { method: 'GET' })).toEqual({ plugins: [] });
+      expect(tryLocalRoute('/api/plugins/installed', { method: 'GET' })).toEqual({
+        plugins: [],
+        count: 0,
+      });
       expect(tryLocalRoute('/api/plugins/security/permissions', { method: 'GET' })).toEqual({
         plugins: [],
         pending_count: 0,

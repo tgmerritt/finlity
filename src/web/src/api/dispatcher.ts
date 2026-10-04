@@ -869,7 +869,7 @@ local('PUT', '/api/settings/config/{section}', (req, m) =>
 // security/permissions returns { plugins, pending_count } (features/plugins.ts
 // calls .forEach / .pending_count on these).
 disabled('GET', '/api/plugins', () => []);
-disabled('GET', '/api/plugins/installed', () => ({ plugins: [] }));
+disabled('GET', '/api/plugins/installed', () => ({ plugins: [], count: 0 }));
 disabled('GET', '/api/analysis/plugins', () => ({ plugins: [] }));
 disabled('GET', '/api/analysis/widgets', () => ({ widgets: [] }));
 disabled('GET', '/api/plugins/security/permissions', () => ({ plugins: [], pending_count: 0 }));
