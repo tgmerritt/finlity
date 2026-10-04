@@ -141,7 +141,7 @@ describe('settings sections navigation details', () => {
 
   it('puts each button inside an h2', () => {
     const headings = document.querySelectorAll('.settings-section > h2');
-    expect(headings.length).toBe(8);
+    expect(headings.length).toBe(9);
     for (const h of headings) {
       expect(h.querySelector(':scope > button.settings-section-header')).not.toBeNull();
     }

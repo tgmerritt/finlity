@@ -87,4 +87,25 @@ describe('createDynamicModal dialog semantics', () => {
     closeDynamicModal();
     expect(document.activeElement).toBe(opener);
   });
+
+  it('stays open on X, backdrop, Cancel and Escape while canClose says no', () => {
+    let allow = false;
+    const onClose = vi.fn();
+    const modal = createDynamicModal({
+      title: 'T',
+      content: content(),
+      onClose,
+      canClose: () => allow,
+    });
+    (modal.querySelector('.modal-close') as HTMLElement).click();
+    (modal.querySelector('.modal-backdrop') as HTMLElement).click();
+    (modal.querySelector('[data-action="cancel"]') as HTMLElement).click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(modal.isConnected).toBe(true);
+    expect(onClose).not.toHaveBeenCalled();
+    allow = true;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(modal.isConnected).toBe(false);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

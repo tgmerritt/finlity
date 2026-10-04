@@ -7,6 +7,14 @@
  * Apply is one POST, then the settings PUT (labels and CSV layouts); Undo is one
  * DELETE per import id.
  *
+ * Sync now (connections design 9.2) opens this wizard with `connection`: the
+ * synced statements arrive ready, the Upload step is skipped (shown as a
+ * finished "Sync"), the account cards come prefilled from the connection's
+ * mapping, Apply sends `connection_id`, and `onApplied` lets the caller write
+ * the mapping changes back once Apply succeeded. Nothing else changes: preview
+ * marks the overlap with earlier syncs as duplicates, and Undo works as for a
+ * file.
+ *
  * Statement text, file names and account labels are user data: everything goes
  * into the DOM with textContent or element properties.
  *
@@ -36,7 +44,6 @@ import {
   PRIVACY_LINE,
   STEP_LABELS,
   TXN_KIND_CHOICES,
-  WARNING_COPY,
   analyzeErrorText,
   analyzeErrorType,
   balanceText,
@@ -59,11 +66,13 @@ import {
   select,
   sourceChipText,
   undoRefusedText,
+  warningText,
   whatGetsSentPanel,
 } from '@/utils/smart-import-render';
 import {
   ApplyTooLargeError,
   acceptAllSuggestions,
+  addConnectorStatements,
   addFile,
   applyCategorizeResponse,
   applyPreview,
@@ -103,8 +112,10 @@ import type {
   ApplyRequest,
   ApplyResponse,
   CategorizeResponse,
+  ConnectionAccountRole,
   Expense,
   LiabilityResponse,
+  NormalizedStatement,
   PreviewResponse,
   RecurringCandidateSuggestion,
   SmartImportAccountKind,
@@ -118,11 +129,34 @@ import type {
 import sampleCsv from '@/samples/sample-checking.csv?raw';
 import sampleOfx from '@/samples/sample-card.ofx?raw';
 
+/** What Sync now hands the wizard (connections design 9.2 and 12, plan E11). */
+export interface ConnectorSyncInput {
+  connection_id: string;
+  provider_label: string;
+  /** The synced statements, oldest window first; at most 12 (one Apply). */
+  statements: NormalizedStatement[];
+  /** The connection's mapping by account key: the name and debt link to prefill. */
+  accounts?: Record<
+    string,
+    { liability_id: string | null; label: string | null; role: ConnectionAccountRole }
+  >;
+  /** Fixed-copy lines shown above the account cards (a stopped sync, account problems). */
+  notices?: string[];
+  /** This part of a sync of more than 12 statements. */
+  turn?: { index: number; total: number };
+  /** Runs once Apply succeeded, with the applied state; a rejection shows a note on Done. */
+  onApplied?: (state: WizardState) => Promise<void>;
+}
+
 export interface OpenSmartImportOptions {
   /** Files to analyze right away (the Expenses drop zone hands its drop over). */
   files?: File[];
   /** Account kind hint for every file (the Debts toolbar passes 'credit_card'). */
   preset?: SmartImportAccountKind;
+  /** Open on Accounts with the statements of a Sync now instead of Upload. */
+  connection?: ConnectorSyncInput;
+  /** Called once when the wizard closes (Done, Cancel or Discard). */
+  onClose?: (outcome: { applied: boolean; undone: boolean }) => void;
 }
 
 export interface SmartImportHandle {
@@ -179,6 +213,9 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   let busy = false;
   let liabilities: LiabilityResponse[] | null = null;
   let liabilitiesLoad: Promise<void> | null = null;
+  const connector = options.connection ?? null;
+  /** The first step there is to go back to: Accounts for a sync, Upload otherwise. */
+  const firstStep = connector ? 2 : 1;
 
   const fileObjs = new Map<string, File>();
   const mappingDrafts = new Map<string, Record<string, string>>();
@@ -407,9 +444,13 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   }
 
   function finish(): void {
+    const first = !closed;
     closed = true;
     detach();
     closeDynamicModal();
+    if (!first) return;
+    const applied = !!applyResult && applyResult.imports.length > 0;
+    options.onClose?.({ applied, undone: applied && pendingUndo().length === 0 });
   }
 
   let resumeFocus: HTMLElement | null = null;
@@ -421,7 +462,9 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     const text = el(
       'p',
       'smart-import-confirm-text',
-      'Discard this import? Nothing has been saved yet.'
+      connector
+        ? 'Discard this sync? Nothing has been saved yet. The next Sync now offers these transactions again.'
+        : 'Discard this import? Nothing has been saved yet.'
     );
     text.setAttribute('role', 'alert');
     const keep = button('Keep editing', 'btn btn-secondary', 'keep');
@@ -539,7 +582,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     body = el('div', 'smart-import-step');
     shell.append(progress, body);
     modal = createDynamicModal({
-      title: 'Import statements',
+      title: connector ? `Review the ${connector.provider_label} sync` : 'Import statements',
       content: shell,
       showFooter: false,
       modalClass: 'smart-import-modal modal-sheet',
@@ -561,7 +604,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       const li = el(
         'li',
         i + 1 === step ? 'is-current' : i + 1 < step ? 'is-done' : undefined,
-        label
+        connector && i === 0 ? 'Sync' : label
       );
       if (i + 1 === step) li.setAttribute('aria-current', 'step');
       list.appendChild(li);
@@ -572,7 +615,11 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       'smart-import-progress-short',
       done ? 'Done' : `${step} of ${STEP_LABELS.length}`
     );
-    const name = el('span', 'smart-import-step-name', done ? '' : STEP_LABELS[step - 1]);
+    const name = el(
+      'span',
+      'smart-import-step-name',
+      done ? '' : connector && step === 1 ? 'Sync' : STEP_LABELS[step - 1]
+    );
     progress.append(list, short, name);
   }
 
@@ -591,8 +638,16 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     if (confirming) return;
     footer.textContent = '';
     if (step === 6) {
-      const close = button('Done', 'btn btn-primary', 'close');
-      close.disabled = undoing;
+      const turn = connector?.turn;
+      const more = !!turn && turn.index < turn.total && pendingUndo().length > 0;
+      const close = button(
+        more && turn ? `Next part (${turn.index + 1} of ${turn.total})` : 'Done',
+        'btn btn-primary',
+        'close'
+      );
+      // Next part waits for the write-back; a plain Done may close at once.
+      close.disabled = undoing || (more && writingBack);
+      if (more && writingBack) close.setAttribute('aria-busy', 'true');
       close.addEventListener('click', finish);
       footer.append(el('span'), close);
       return;
@@ -609,9 +664,9 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       return;
     }
     const left = button(
-      step === 1 ? 'Cancel' : 'Back',
+      step === firstStep ? 'Cancel' : 'Back',
       'btn btn-secondary',
-      step === 1 ? 'cancel' : 'back'
+      step === firstStep ? 'cancel' : 'back'
     );
     const right = button('Next', 'btn btn-primary', 'next');
     right.disabled =
@@ -625,7 +680,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
               ? !canLeaveRecurring()
               : true;
     left.addEventListener('click', () => {
-      if (step === 1) requestClose();
+      if (step === firstStep) requestClose();
       else void goTo(step - 1);
     });
     right.addEventListener('click', () => void goNext());
@@ -644,6 +699,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   }
 
   async function goTo(n: number): Promise<void> {
+    if (n < firstStep) return;
     if (n === 1) renderUpload();
     else if (n === 2) await renderAccounts();
     else if (n === 3) renderCategorize();
@@ -816,9 +872,27 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       el(
         'p',
         'smart-import-lead',
-        'Confirm what each statement is. Nothing is saved until you apply the import.'
+        connector
+          ? `Confirm each account from ${connector.provider_label}. Nothing is saved until you apply the import.`
+          : 'Confirm what each statement is. Nothing is saved until you apply the import.'
       )
     );
+    if (connector?.turn && connector.turn.total > 1) {
+      const { index, total } = connector.turn;
+      body.appendChild(
+        el(
+          'p',
+          'smart-import-note',
+          `Part ${index} of ${total} of this sync.${index < total ? ' The next part opens after you apply this one.' : ''}`
+        )
+      );
+    }
+    for (const line of connector?.notices ?? []) {
+      const note = el('p', 'smart-import-note', line);
+      note.setAttribute('role', 'status');
+      note.setAttribute('data-si', 'sync-notice');
+      body.appendChild(note);
+    }
     cards = el('div', 'smart-import-cards');
     body.appendChild(cards);
     renderAccountCards();
@@ -855,7 +929,11 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   function cardHead(title: string, fileId: string): HTMLElement {
     const head = el('div', 'smart-import-card-head');
     head.appendChild(el('h4', 'smart-import-card-title', title));
-    const leave = button('Leave this file out', 'smart-import-leave', 'remove-file');
+    const leave = button(
+      fileOf(fileId)?.origin === 'connector' ? 'Leave this account out' : 'Leave this file out',
+      'smart-import-leave',
+      'remove-file'
+    );
     leave.addEventListener('click', () => {
       removeFile(fileId);
       refreshUi();
@@ -912,7 +990,8 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     );
     const bal = balanceText(s);
     if (bal) fact('Balance', bal);
-    fact('File', s.file_name || f.file_name);
+    if (f.origin === 'connector') fact('Source', s.file_name || f.file_name);
+    else fact('File', s.file_name || f.file_name);
     card.appendChild(facts);
 
     if (s.prior_import_at !== null) {
@@ -921,7 +1000,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       );
     }
     for (const w of s.warnings) {
-      const text = WARNING_COPY[w];
+      const text = warningText(w, s.origin === 'connector');
       if (text) card.appendChild(el('p', 'smart-import-note', text));
     }
 
@@ -967,7 +1046,17 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     if (statementsOf(f.id).length === 1) {
       const kind = select(KIND_CHOICES, s.account_kind, { 'data-si': 'kind' });
       kind.addEventListener('change', () => {
-        state = setFileOptions(st(), f.id, { account_kind: kind.value as SmartImportAccountKind });
+        const value = kind.value as SmartImportAccountKind;
+        if (f.origin === 'connector') {
+          // Synced rows are not read again: the kind is the mapping, written back after Apply.
+          state = setStatement(st(), s.id, {
+            account_kind: value,
+            ...(isDebtKind(value) ? {} : { liability_id: null }),
+          });
+          void renderAccounts(`[data-statement="${s.id}"] [data-si="kind"]`);
+          return;
+        }
+        state = setFileOptions(st(), f.id, { account_kind: value });
         void reanalyze(f.id, '[data-si="kind"]');
       });
       card.appendChild(field('Account type', kind));
@@ -1109,7 +1198,9 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       el(
         'p',
         'smart-import-hint',
-        'Linking records this statement’s balance on the debt when you apply the import.'
+        fileOf(s.file_id)?.origin === 'connector'
+          ? 'Linking records this account’s balance on the debt when you apply the import.'
+          : 'Linking records this statement’s balance on the debt when you apply the import.'
       )
     );
     group.appendChild(
@@ -2344,6 +2435,11 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
    * client does not know every snapshot date, so a normal move is hedged.
    */
   function debtLines(debts: ReviewCounts['debts']): DebtLine[] {
+    // Apply records a connector balance dated tomorrow (a UTC date) as today's.
+    const now = new Date(`${today()}T12:00:00Z`);
+    now.setUTCDate(now.getUTCDate() + 1);
+    const tomorrow = now.toISOString().slice(0, 10);
+    debts = debts.map((d) => (d.connector && d.as_of === tomorrow ? { ...d, as_of: today() } : d));
     const sorted = [...debts].sort((a, b) => a.as_of.localeCompare(b.as_of));
     const current = new Map<string, { balance: number | null; asOf: string | null }>();
     const out: DebtLine[] = [];
@@ -2570,9 +2666,37 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   /** Show Done first; the settings save runs after it and only warns. */
   function applied(): void {
     applying = false;
+    // Next part waits for the mapping write-back, so the next turn starts from it.
+    writingBack = !!connector?.onApplied;
     refreshViews();
     if (modal?.isConnected) renderDone();
     void saveSettings();
+    void writeBackMapping();
+  }
+
+  /** Sync now: the caller writes the debt links and kinds chosen here to the connection. */
+  async function writeBackMapping(): Promise<void> {
+    if (!connector?.onApplied) return;
+    try {
+      await connector.onApplied(st());
+      writingBack = false;
+      if (step === 6 && modal?.isConnected) renderFooter();
+    } catch (error) {
+      writingBack = false;
+      if (step === 6 && modal?.isConnected) renderFooter();
+      console.error('Connection update failed:', error instanceof Error ? error.name : 'error');
+      if (step !== 6 || !modal?.isConnected) return;
+      const warn = el(
+        'p',
+        'smart-import-note',
+        'The import is saved, but the account choices could not be kept for the next sync. Change them in Settings, Connected accounts.'
+      );
+      warn.setAttribute('data-si', 'mapping-warning');
+      warn.setAttribute('role', 'status');
+      const anchor = body.querySelector('[data-si="done-summary"]') ?? body.lastElementChild;
+      if (anchor) anchor.after(warn);
+      else body.appendChild(warn);
+    }
   }
 
   async function saveSettings(): Promise<void> {
@@ -2613,6 +2737,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   const undoTotals = { transactions: 0, expenses: 0, snapshots: 0, reassigned: 0 };
   const undoKept: SmartImportUndoResponse['kept'] = [];
   let undoing = false;
+  let writingBack = false;
   let undoFailed = 0;
   /** Fixed copy when the site refused the last Undo (403), else null. */
   let undoRefused: string | null = null;
@@ -2859,13 +2984,60 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
 
   // ---- open ----------------------------------------------------------------
 
+  /** Sync now: the statements arrive ready, so the wizard starts at Accounts. */
+  function renderSyncLoading(): void {
+    const h = setStep(2, 'Check the accounts');
+    if (!ctxFailed) {
+      body.appendChild(el('p', 'smart-import-lead', 'Loading...'));
+      h.focus();
+      return;
+    }
+    const note = el('p', 'smart-import-error', 'Could not load your import settings.');
+    note.setAttribute('role', 'alert');
+    const retry = button('Retry', 'btn btn-secondary', 'retry');
+    retry.addEventListener('click', () => {
+      ctxFailed = false;
+      ready = load();
+      renderSyncLoading();
+      void ready.then(startSync);
+    });
+    body.append(note, retry);
+    h.focus();
+  }
+
+  async function startSync(): Promise<void> {
+    if (closed || !modal?.isConnected || !connector) return;
+    if (!state) {
+      renderSyncLoading();
+      return;
+    }
+    state = addConnectorStatements(st(), connector.connection_id, connector.statements);
+    for (const s of st().statements) {
+      const mapped = s.account_key ? connector.accounts?.[s.account_key] : undefined;
+      if (!mapped) continue;
+      // A mapped link (or a non-debt role) is the person's earlier choice, not a suggestion.
+      const keep = mapped.liability_id !== null || mapped.role !== 'debt';
+      state = setStatement(st(), s.id, {
+        ...(mapped.label ? { account_label: mapped.label } : {}),
+        ...(keep ? { liability_id: isDebtKind(s.account_kind) ? mapped.liability_id : null } : {}),
+      });
+      if (keep) debtTouched.add(s.id);
+    }
+    await renderAccounts();
+  }
+
   mount();
-  renderUpload();
-  void ready.then(() => {
-    if (closed || !modal?.isConnected) return;
-    if (step === 1) renderUpload();
-    if (options.files?.length) void addFiles(options.files);
-  });
+  if (connector) {
+    renderSyncLoading();
+    void ready.then(startSync);
+  } else {
+    renderUpload();
+    void ready.then(() => {
+      if (closed || !modal?.isConnected) return;
+      if (step === 1) renderUpload();
+      if (options.files?.length) void addFiles(options.files);
+    });
+  }
 
   return {
     get modal(): HTMLElement | null {

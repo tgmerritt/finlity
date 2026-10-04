@@ -1515,6 +1515,11 @@
                                 <div id="bank-statement-drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Choose statement files to import">
                                     <p>Drop bank, card or loan statements here (CSV, OFX, QFX or text PDF), or click to choose files. Import several months at once to find recurring bills.</p>
                                 </div>
+                                <section class="import-connections" id="import-connections" aria-labelledby="import-connections-title" hidden>
+                                    <h4 id="import-connections-title" class="import-history-title">Connected accounts</h4>
+                                    <ul id="import-connections-list" class="import-connections-list"></ul>
+                                    <p id="import-connections-status" class="import-history-status" role="status" tabindex="-1"></p>
+                                </section>
                                 <section class="import-history" aria-labelledby="import-history-title">
                                     <h4 id="import-history-title" class="import-history-title">Import history</h4>
                                     <div id="smart-import-history-list" class="import-history-list">
@@ -1713,6 +1718,7 @@
                         <a class="settings-index-link" href="#settings-targets" data-section="settings-targets">Targets</a>
                         <a class="settings-index-link" href="#settings-assumptions" data-section="settings-assumptions">Assumptions</a>
                         <a class="settings-index-link" href="#settings-accounts-data" data-section="settings-accounts-data">Accounts &amp; data</a>
+                        <a class="settings-index-link" href="#settings-connected-accounts" data-section="settings-connected-accounts">Connected accounts</a>
                         <a class="settings-index-link" href="#settings-imported-transactions" data-section="settings-imported-transactions">Imported transactions</a>
                         <a class="settings-index-link" href="#settings-sources-ai" data-section="settings-sources-ai">Data sources &amp; AI</a>
                         <a class="settings-index-link" href="#settings-plugins" data-section="settings-plugins">Plugins</a>
@@ -2202,6 +2208,25 @@
                                         <p class="settings-hint" style="margin-top: 12px; font-size: 0.85em; opacity: 0.7;">
                                             Note: Changing demo mode requires a page reload to take effect.
                                         </p>
+                                    </div>
+                                </div>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="settings-section" id="settings-connected-accounts">
+                            <h2 class="settings-section-heading"><button type="button" class="settings-section-header" id="settings-connected-accounts-header" aria-controls="settings-connected-accounts-body">Connected accounts</button></h2>
+                            <div class="settings-section-body" id="settings-connected-accounts-body">
+                                <div class="settings-grid">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h3>Connected accounts</h3>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="settings-description">Link a bank to pull in its transactions. Every sync opens the import review first, so nothing is added until you apply it.</p>
+                                        <ul id="connections-list" class="connections-list" aria-live="polite"></ul>
+                                        <h4 class="connections-subheading">Available here</h4>
+                                        <ul id="connections-providers" class="connections-providers"></ul>
+                                        <p id="connections-status" class="connections-status" role="status" tabindex="-1"></p>
                                     </div>
                                 </div>
                                 </div>

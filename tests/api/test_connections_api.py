@@ -703,6 +703,29 @@ def test_update_changes_the_label_range_and_mapping(client, db, fake):
     assert fake.requests[-1].url.params.get("balances-only") == "1"  # no provider call since
 
 
+def test_update_links_a_debt_whose_id_is_not_a_uuid(client, db, fake):
+    """The demo's debts have ids such as ``demo-card``; Apply links them, so the
+    mapping must too, and the link survives the sanitizer on read."""
+    with db.get_session() as s:
+        s.add(
+            Liability(
+                id="demo-card",
+                name="Credit card",
+                liability_type="credit_card",
+                lender="Chase Sapphire",
+                current_balance=10.0,
+                balance_as_of=date(2026, 9, 1),
+                is_amortizing=False,
+            )
+        )
+        s.commit()
+    cid = _simplefin(client)["id"]
+    resp = client.put(f"{BASE}/{cid}", json={"accounts": {SF_CARD: {"liability_id": "demo-card"}}})
+    assert resp.status_code == 200
+    detail = client.get(f"{BASE}/{cid}").json()
+    assert _accounts_by_id(detail)[SF_CARD]["liability_id"] == "demo-card"
+
+
 @pytest.mark.parametrize(
     "accounts, status, error_type",
     [
@@ -1311,12 +1334,12 @@ def test_routes_are_registered_static_first():
 def test_an_account_the_sanitizer_drops_rolls_the_whole_update_back(client, db, fake, env):
     cid = _simplefin(client)["id"]
     before = _conn(db, cid)
-    # Let a non-UUID liability id past validation: the store's sanitizer would
-    # then drop the whole account.
+    # Let a liability id with a control character past validation: the store's
+    # sanitizer would then drop the whole account.
     env.setattr(store, "liability_exists", lambda db, lid: True)
     resp = client.put(
         f"{BASE}/{cid}",
-        json={"label": "Renamed", "accounts": {SF_CHK: {"liability_id": "L1"}}},
+        json={"label": "Renamed", "accounts": {SF_CHK: {"liability_id": "L\x011"}}},
     )
     _assert_fixed_error(resp, 500, "save_failed")
     assert _conn(db, cid) == before  # nothing was committed, not even the label

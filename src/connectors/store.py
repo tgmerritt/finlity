@@ -131,6 +131,20 @@ def _is_uuid(value: Any) -> bool:
     return isinstance(value, str) and _UUID.fullmatch(value) is not None
 
 
+MAX_LIABILITY_ID_CHARS = 64
+
+
+def _is_liability_id(value: Any) -> bool:
+    """A debt id as the mapping request accepts it: 1 to 64 characters, no
+    control characters. Not only UUIDs: smart import Apply links any existing
+    debt, and the demo's debts have ids such as ``demo-card``."""
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= MAX_LIABILITY_ID_CHARS
+        and _CONTROL.search(value) is None
+    )
+
+
 def _parse_iso(value: Any) -> Optional[datetime]:
     if not isinstance(value, str) or not _ISO.fullmatch(value):
         return None
@@ -186,7 +200,7 @@ def _clean_account(raw: Any) -> Optional[dict[str, Any]]:
         or not _member(role, ROLES)
         or label is None
         or not (isinstance(account_key, str) and _CONNECTOR_ACCOUNT_KEY.fullmatch(account_key))
-        or not (liability_id is None or _is_uuid(liability_id))
+        or not (liability_id is None or _is_liability_id(liability_id))
         or not (
             same_as_key is None
             or (isinstance(same_as_key, str) and _ANY_ACCOUNT_KEY.fullmatch(same_as_key))
@@ -632,9 +646,9 @@ def imported_account_keys(db: Any) -> set[str]:
 
 
 def liability_exists(db: Any, liability_id: str) -> bool:
-    """A liability with this id exists. The connections row stores UUIDs only,
-    so any other id is treated as missing."""
-    if not _is_uuid(liability_id):
+    """A liability with this id exists. An id the connections row could not
+    store (``_is_liability_id``) is treated as missing."""
+    if not _is_liability_id(liability_id):
         return False
     with db.get_session() as session:
         return session.get(Liability, liability_id) is not None
@@ -660,4 +674,4 @@ def suggest_liability(
         found = previous_liability(session, account_key, active_ids)
         if found is None:
             found = lender_match(institution, kind, liabilities)
-    return found if _is_uuid(found) else None
+    return found if _is_liability_id(found) else None

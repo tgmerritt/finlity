@@ -200,7 +200,8 @@ def sanitize_cases() -> list[dict[str, Any]]:
         "label-empty": acct(label=""), "label-121": acct(label="l" * 121), "label-control": acct(label="a\nb"),
         "key-short": acct(account_key="acct:abc"), "key-label": acct(account_key="label:Main"),
         "key-upper": acct(account_key="acct:" + "A" * 64), "key-65": acct(account_key="acct:" + "a" * 65),
-        "liab-bad": acct(liability_id="not-a-uuid"), "liab-upper": acct(liability_id=LIAB.upper()),
+        "liab-65": acct(liability_id="x" * 65), "liab-control": acct(liability_id="a\x01b"),
+        "liab-empty": acct(liability_id=""), "liab-number": acct(liability_id=7),
         "same-bad-prefix": acct(same_as_key="foo:x"), "same-empty": acct(same_as_key="acct:"),
         "same-191": acct(same_as_key="label:" + "x" * 191), "same-control": acct(same_as_key="label:a\x7fb"),
         "same-astral-191": acct(same_as_key="label:" + EMOJI * 191),
@@ -218,6 +219,10 @@ def sanitize_cases() -> list[dict[str, Any]]:
         "flip-missing": {k: v for k, v in acct().items() if k != "flip_balance"},
         "same-missing": {k: v for k, v in acct().items() if k != "same_as_key"},
         "liab-missing": {k: v for k, v in acct().items() if k != "liability_id"},
+        # Any debt id up to 64 characters: Apply links any existing debt, and the
+        # demo's debts have ids such as "demo-card".
+        "liab-demo": acct(liability_id="demo-card"), "liab-upper": acct(liability_id=LIAB.upper()),
+        "liab-64": acct(liability_id="x" * 64),
         "i" * 200: acct(), "id " + EMOJI: acct(), "XXX-cur": acct(currency="XXX"),
         **{f"kind-{k}": acct(kind=k) for k in ("savings", "credit_card", "loan", "unknown")},
         **{f"role-{r}": acct(role=r) for r in ("debt", "ignore")},

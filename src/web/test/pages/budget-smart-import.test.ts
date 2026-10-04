@@ -37,6 +37,10 @@ vi.mock('@/charts/budget', () => ({
   renderIncomeTransitionTable: vi.fn(),
 }));
 vi.mock('@/utils/smart-import-launcher', () => ({ openSmartImportLazy: vi.fn() }));
+vi.mock('@/features/connections', () => ({
+  syncNow: vi.fn(async () => {}),
+  openConnectDialog: vi.fn(async () => {}),
+}));
 
 import { apiCall, ApiError } from '@/api/client';
 import { closeDynamicModal } from '@/ui/modal';
@@ -44,7 +48,9 @@ import { store } from '@/state/store';
 import { on, _resetEventBus } from '@/state/events';
 import { loadBudgetTab } from '@/pages/budget';
 import { loadImportCards, type ImportCardDeps } from '@/pages/budget-smart-import';
-import type { SmartImportSummary, SpendingSummary } from '@/types/api';
+import { syncNow, openConnectDialog } from '@/features/connections';
+import { resetSyncDue } from '@/utils/connections-render';
+import type { ConnectionSummary, SmartImportSummary, SpendingSummary } from '@/types/api';
 
 const apiCallMock = vi.mocked(apiCall);
 const EM_DASH = String.fromCharCode(0x2014);
@@ -142,6 +148,10 @@ const deps: ImportCardDeps = {
 
 function html(): void {
   document.body.innerHTML = `
+    <section id="import-connections" hidden>
+      <ul id="import-connections-list"></ul>
+      <p id="import-connections-status" role="status" tabindex="-1"></p>
+    </section>
     <div id="smart-import-history-list"></div>
     <p id="smart-import-history-status" role="status" tabindex="-1"></p>
     <div id="planned-actual-body"></div>
@@ -152,6 +162,7 @@ interface Routes {
   imports?: SmartImportSummary[] | 'fail';
   summary?: SpendingSummary | 'fail';
   undo?: unknown;
+  connections?: ConnectionSummary[] | 'fail';
 }
 
 function route(r: Routes = {}): void {
@@ -159,6 +170,10 @@ function route(r: Routes = {}): void {
     if (url === '/api/smart-import/imports' && !opts?.method) {
       if (r.imports === 'fail') throw new Error('boom');
       return r.imports ?? IMPORTS;
+    }
+    if (url === '/api/connections' && !opts?.method) {
+      if (r.connections === 'fail') throw new Error('boom');
+      return r.connections ?? [];
     }
     if (url.startsWith('/api/budget/spending-summary')) {
       if (r.summary === 'fail') throw new Error('boom');
@@ -380,6 +395,281 @@ describe('import history', () => {
       )
     );
     expect(document.querySelectorAll('.import-history-row')).toHaveLength(3);
+  });
+});
+
+function conn(over: Partial<ConnectionSummary> = {}): ConnectionSummary {
+  return {
+    id: 'c1',
+    provider: 'simplefin',
+    label: 'Everyday bank',
+    status: 'ok',
+    status_at: new Date().toISOString(),
+    created_at: '2026-09-01T10:00:00',
+    last_synced_at: new Date(Date.now() - 2 * 3600_000).toISOString(),
+    first_sync_days: 30,
+    accounts_count: 2,
+    accounts_enabled: 2,
+    quota_budget: 20,
+    quota_left: 18,
+    quota_resets_at: null,
+    ...over,
+  };
+}
+const hoursAgo = (h: number): string => new Date(Date.now() - h * 3600_000).toISOString();
+const rows = (): HTMLElement[] =>
+  Array.from(document.querySelectorAll<HTMLElement>('.import-connection'));
+const syncBtn = (row: HTMLElement): HTMLButtonElement =>
+  row.querySelector<HTMLButtonElement>('[data-si-conn="sync"]')!;
+
+async function flushAll(): Promise<void> {
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+describe('connections in the import card', () => {
+  beforeEach(() => {
+    html();
+    apiCallMock.mockReset();
+    vi.mocked(syncNow).mockClear();
+    vi.mocked(openConnectDialog).mockClear();
+    vi.mocked(deps.refresh).mockClear();
+    store.set('currentEntityId', null);
+    sessionStorage.clear();
+    resetSyncDue();
+  });
+
+  it('has the markup in the import card, hidden until there is a connection', () => {
+    const doc = new DOMParser().parseFromString(
+      readFileSync(resolve(__dirname, '../../index.html'), 'utf8'),
+      'text/html'
+    );
+    const card = doc.getElementById('bank-statement-import-panel')!;
+    const box = card.querySelector('#import-connections')!;
+    expect(box.hasAttribute('hidden')).toBe(true);
+    expect(box.querySelector('#import-connections-list')).not.toBeNull();
+    expect(box.querySelector('#import-connections-status')!.getAttribute('role')).toBe('status');
+  });
+
+  it('stays hidden with no connections or when the list cannot load', async () => {
+    route({ connections: [] });
+    await loadImportCards(deps);
+    expect(document.getElementById('import-connections')!.hidden).toBe(true);
+    route({ connections: 'fail' });
+    await loadImportCards(deps);
+    expect(document.getElementById('import-connections')!.hidden).toBe(true);
+  });
+
+  it('lists each connection with a Sync now entry, and starts that sync', async () => {
+    route({ connections: [conn(), conn({ id: 'c2', label: 'Demo', provider: 'demo' })] });
+    await loadImportCards(deps);
+    expect(document.getElementById('import-connections')!.hidden).toBe(false);
+    expect(rows()).toHaveLength(2);
+    expect(rows()[0]!.textContent).toContain('Everyday bank');
+    expect(rows()[0]!.textContent).toContain('SimpleFIN Bridge');
+    expect(syncBtn(rows()[0]!).textContent).toBe('Sync now');
+    expect(syncBtn(rows()[0]!).getAttribute('aria-label')).toBe('Sync Everyday bank now');
+    syncBtn(rows()[1]!).click();
+    await flushAll();
+    expect(syncNow).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(syncNow).mock.calls[0]![0]).toBe('c2');
+  });
+
+  it('renders a hostile label as text', async () => {
+    route({ connections: [conn({ label: '<img src=x onerror=alert(1)>' })] });
+    await loadImportCards(deps);
+    expect(rows()[0]!.querySelector('img')).toBeNull();
+    expect(rows()[0]!.textContent).toContain('<img src=x onerror=alert(1)>');
+  });
+
+  it('disables Sync on reconnect_needed and Reconnect keeps that connection', async () => {
+    const broken = conn({ status: 'reconnect_needed' });
+    route({ connections: [broken] });
+    await loadImportCards(deps);
+    const row = rows()[0]!;
+    expect(syncBtn(row).disabled).toBe(true);
+    syncBtn(row).click();
+    expect(syncNow).not.toHaveBeenCalled();
+    row.querySelector<HTMLButtonElement>('[data-si-conn="reconnect"]')!.click();
+    await flushAll();
+    expect(openConnectDialog).toHaveBeenCalledTimes(1);
+    const opts = vi.mocked(openConnectDialog).mock.calls[0]![0]!;
+    expect(opts.reconnect).toEqual(broken);
+    expect(row.textContent).toContain('Reconnect to sync again');
+  });
+
+  it('links payment_required to the bridge', async () => {
+    route({ connections: [conn({ status: 'payment_required' })] });
+    await loadImportCards(deps);
+    const link = rows()[0]!.querySelector('a')!;
+    expect(link.getAttribute('href')).toBe('https://beta-bridge.simplefin.org/');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('shows when Sync is available again for rate_limited and a spent quota', async () => {
+    route({
+      connections: [
+        conn({ id: 'r', status: 'rate_limited', status_at: new Date().toISOString() }),
+        conn({
+          id: 'q',
+          quota_left: 0,
+          quota_resets_at: new Date(Date.now() + 7200_000).toISOString(),
+        }),
+      ],
+    });
+    await loadImportCards(deps);
+    for (const row of rows()) {
+      expect(syncBtn(row).disabled).toBe(true);
+      expect(row.textContent).toContain('Sync is available again');
+    }
+  });
+
+  it('shows a sync due line after 24 hours, and never fetches on its own', async () => {
+    route({ connections: [conn({ last_synced_at: hoursAgo(50) })] });
+    await loadImportCards(deps);
+    const due = rows()[0]!.querySelector('.import-connection-due')!;
+    expect(due.textContent).toContain('Last synced 2 days ago.');
+    expect(due.textContent).toContain('Sync now');
+    expect(syncNow).not.toHaveBeenCalled();
+    const writes = apiCallMock.mock.calls.filter(
+      ([u, o]) => (o as { method?: string } | undefined)?.method || String(u).includes('/sync')
+    );
+    expect(writes).toEqual([]);
+  });
+
+  it('shows no sync due line within 24 hours, or for a connection that needs attention', async () => {
+    route({
+      connections: [
+        conn({ last_synced_at: hoursAgo(5) }),
+        conn({ id: 'b', status: 'reconnect_needed', last_synced_at: hoursAgo(90) }),
+      ],
+    });
+    await loadImportCards(deps);
+    expect(document.querySelector('.import-connection-due')).toBeNull();
+  });
+
+  it('dismisses the line for the session and keeps it dismissed after a reload', async () => {
+    route({ connections: [conn({ last_synced_at: hoursAgo(50) })] });
+    await loadImportCards(deps);
+    const dismiss = rows()[0]!.querySelector<HTMLButtonElement>('[data-si-conn="dismiss"]')!;
+    expect(dismiss.getAttribute('aria-label')).toBe('Dismiss the sync reminder for Everyday bank');
+    dismiss.click();
+    expect(document.querySelector('.import-connection-due')).toBeNull();
+    expect(sessionStorage.getItem('finlity.syncDueDismissed')).toBe('["c1"]');
+    await loadImportCards(deps);
+    expect(document.querySelector('.import-connection-due')).toBeNull();
+    expect(syncBtn(rows()[0]!)).not.toBeNull();
+  });
+
+  it('reloads the card after a sync is recorded', async () => {
+    route({ connections: [conn()] });
+    await loadImportCards(deps);
+    syncBtn(rows()[0]!).click();
+    await flushAll();
+    const onChanged = vi.mocked(syncNow).mock.calls[0]![1]!;
+    const before = apiCallMock.mock.calls.filter(([u]) => u === '/api/connections').length;
+    await onChanged();
+    const after = apiCallMock.mock.calls.filter(([u]) => u === '/api/connections').length;
+    expect(after - before).toBe(1);
+  });
+
+  it('fetches the connection list once per load for the card and the history', async () => {
+    route({ connections: [conn()] });
+    await loadImportCards(deps);
+    expect(apiCallMock.mock.calls.filter(([u]) => u === '/api/connections')).toHaveLength(1);
+  });
+
+  it('moves focus to Sync now when the reminder is dismissed', async () => {
+    route({ connections: [conn({ last_synced_at: hoursAgo(50) })] });
+    await loadImportCards(deps);
+    const dismiss = rows()[0]!.querySelector<HTMLButtonElement>('[data-si-conn="dismiss"]')!;
+    dismiss.focus();
+    dismiss.click();
+    expect(document.activeElement).toBe(syncBtn(rows()[0]!));
+  });
+
+  it('moves focus to the card when Sync now is unavailable', async () => {
+    route({
+      connections: [
+        conn({
+          last_synced_at: hoursAgo(50),
+          quota_left: 0,
+          quota_resets_at: new Date(Date.now() + 7200_000).toISOString(),
+        }),
+      ],
+    });
+    await loadImportCards(deps);
+    expect(syncBtn(rows()[0]!).disabled).toBe(true);
+    const dismiss = rows()[0]!.querySelector<HTMLButtonElement>('[data-si-conn="dismiss"]')!;
+    dismiss.focus();
+    dismiss.click();
+    const box = document.getElementById('import-connections')!;
+    expect(document.activeElement).toBe(box);
+    expect(box.getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('has no em-dash in its copy', async () => {
+    route({
+      connections: [
+        conn({ status: 'reconnect_needed' }),
+        conn({ id: 'p', status: 'payment_required' }),
+        conn({ id: 'd', last_synced_at: hoursAgo(50) }),
+      ],
+    });
+    await loadImportCards(deps);
+    expect(document.getElementById('import-connections')!.textContent).not.toContain(EM_DASH);
+  });
+});
+
+describe('import history labels for synced imports', () => {
+  beforeEach(() => {
+    html();
+    apiCallMock.mockReset();
+    store.set('currentEntityId', null);
+  });
+  const synced = (over: Partial<SmartImportSummary>): SmartImportSummary =>
+    imp({
+      import_id: 's1',
+      batch_id: 'sb1',
+      file_name: 'sync-1.json',
+      origin: 'connector',
+      connection_id: 'c1',
+      imported_at: '2026-10-06T15:00:00',
+      ...over,
+    });
+
+  it('labels a connector import with the provider and date, keeping Undo', async () => {
+    route({ imports: [synced({})], connections: [conn()] });
+    await loadImportCards(deps);
+    const row = document.querySelector('.import-history-row')!;
+    expect(row.querySelector('.import-history-file')!.textContent).toBe(
+      'SimpleFIN Bridge sync, Oct 6'
+    );
+    expect(row.textContent).not.toContain('sync-1.json');
+    expect(row.querySelector('[data-si-history="undo"]')).not.toBeNull();
+    expect(row.querySelector('.import-history-chip')).toBeNull();
+  });
+
+  it('marks an import whose connection was removed', async () => {
+    route({ imports: [synced({ connection_id: 'gone' })], connections: [conn()] });
+    await loadImportCards(deps);
+    const row = document.querySelector('.import-history-row')!;
+    expect(row.querySelector('.import-history-file')!.textContent).toBe('Bank sync, Oct 6');
+    expect(row.querySelector('.import-history-chip')!.textContent).toBe('Connection removed');
+  });
+
+  it('does not claim a removal when the connections could not be read', async () => {
+    route({ imports: [synced({})], connections: 'fail' });
+    await loadImportCards(deps);
+    const row = document.querySelector('.import-history-row')!;
+    expect(row.querySelector('.import-history-chip')).toBeNull();
+    expect(row.querySelector('.import-history-file')!.textContent).toBe('Bank sync, Oct 6');
+  });
+
+  it('leaves file imports as they were', async () => {
+    route({ connections: [conn()] });
+    await loadImportCards(deps);
+    expect(document.querySelector('.import-history-file')!.textContent).toBe('newer.csv');
   });
 });
 
