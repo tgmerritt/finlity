@@ -12,6 +12,7 @@ Requires Playwright: pip install playwright && playwright install chromium
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -213,14 +214,19 @@ DASHBOARD_READY_JS = """() => {
 
 def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) -> None:
     # Each new_page() is a fresh context, so the app boots as a first-time
-    # visitor. Boot always lands on the Dashboard and loads data, so no
-    # localStorage priming is needed.
+    # visitor. Boot always lands on the Dashboard and loads data. The theme is
+    # stored under the key the app reads ("theme", see state/theme.ts) before
+    # any page script runs, so charts render in the right theme the first time
+    # instead of being recolored after load.
+    page.add_init_script(f"localStorage.setItem('theme', {json.dumps(theme)})")
 
     # "load" rather than "networkidle": hosted mode keeps requests in flight
     # (CDN assets, background polling), so the network may never go idle.
     # Readiness is decided by the wait_for_function below.
     page.goto(base_url + "/", wait_until="load", timeout=60000)
-    page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
+    page.wait_for_function(
+        "t => document.documentElement.getAttribute('data-theme') === t", arg=theme, timeout=10000
+    )
 
     if hosted:
         # Hosted (browser storage) mode has no server-side database, so
