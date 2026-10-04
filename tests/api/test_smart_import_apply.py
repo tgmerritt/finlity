@@ -19,15 +19,19 @@ from src.database.models import (
     SmartImportMeta,
 )
 from tests.api.si_support import (  # noqa: F401
+    CONN_ID,
     HASH_A,
     HASH_B,
     HASH_C,
     TODAY,
+    add_connection,
+    add_connections,
     add_expense,
     add_liability,
     apply_body,
     candidate,
     client,
+    connection_entry,
     db,
     do_apply,
     statement,
@@ -753,3 +757,176 @@ def test_spending_summary_empty(client):
 def test_spending_summary_rejects_bad_query(client, query):
     r = client.get(f"/api/budget/spending-summary?{query}")
     assert r.status_code == 422 and r.json()["error_type"] == "bad_request"
+
+
+# ------------------------------------------------- connection_id (plan B3)
+
+BAD_REQUEST = {"error_type": "bad_request", "detail": "The request could not be read."}
+NOT_FOUND = {"error_type": "connection_not_found", "detail": "Connection not found."}
+
+
+def synced(file_hash=HASH_A, txns=None, *, cid=CONN_ID, **kw):
+    """A connector statement as the wizard sends it after a sync."""
+    body = statement(file_hash, txns if txns is not None else [txn(D1, -1.0)], origin="connector", **kw)
+    body.update(format="connector", parser="connector:demo", file_name="Demo sync")
+    if cid is not None:
+        body["connection_id"] = cid
+    return body
+
+
+@pytest.mark.parametrize("make", [
+    lambda: synced(cid=None),
+    lambda: dict(statement(HASH_A, [txn(D1, -1.0)]), connection_id=CONN_ID),
+    lambda: dict(statement(HASH_A, [txn(D1, -1.0)], origin="sample"), connection_id=CONN_ID),
+    lambda: synced(cid=""),
+    lambda: synced(cid="c" * 65),
+    lambda: synced(cid=7),
+])
+def test_connection_id_goes_with_connector_origin_and_only_there(client, db, make):
+    add_connection(db)
+    before = table_hashes(db)
+    r = do_apply(client, apply_body([make()]))
+    assert r.status_code == 422
+    assert r.json() == BAD_REQUEST
+    assert table_hashes(db) == before
+
+
+def test_file_statement_with_a_null_connection_id_is_accepted(client, db):
+    r = do_apply(client, apply_body([dict(statement(HASH_A, [txn(D1, -1.0)]), connection_id=None)]))
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.parametrize("cid", [
+    "11111111-2222-4333-8444-555555555555",  # well formed, not stored
+    CONN_ID.upper(),  # stored ids are canonical lowercase
+    "connections",  # never names a settings row
+])
+def test_unknown_connection_is_refused_and_nothing_is_written(client, db, cid):
+    add_connection(db)
+    before = table_hashes(db)
+    r = do_apply(client, apply_body([synced(cid=cid)]))
+    assert r.status_code == 404
+    assert r.json() == NOT_FOUND
+    assert table_hashes(db) == before
+
+
+def test_connection_must_exist_with_no_connections_row(client, db):
+    r = do_apply(client, apply_body([synced()]))
+    assert (r.status_code, r.json()) == (404, NOT_FOUND)
+
+
+def test_an_entry_the_store_would_drop_does_not_count(client, db):
+    """The check reads the sanitized document, so an invalid entry is missing."""
+    add_connections(db, {CONN_ID: connection_entry(provider="plaid")})
+    r = do_apply(client, apply_body([synced()]))
+    assert (r.status_code, r.json()) == (404, NOT_FOUND)
+
+
+def test_unknown_connection_in_a_later_statement_refuses_the_whole_batch(client, db):
+    add_connection(db)
+    before = table_hashes(db)
+    body = apply_body([
+        synced(HASH_A, [txn(D1, -1.0, dedupe="1")]),
+        synced(HASH_B, [txn(D1, -2.0, dedupe="2")], cid="11111111-2222-4333-8444-555555555555"),
+    ])
+    assert do_apply(client, body).status_code == 404
+    assert table_hashes(db) == before
+
+
+def test_apply_stores_the_connection_and_lists_it(client, db):
+    add_connection(db)
+    out = do_apply(client, apply_body([
+        synced(HASH_A, [txn(D1, -1.0, dedupe="1")], period={"start": "2026-09-01", "end": "2026-10-04"}),
+        statement(HASH_B, [txn(D1, -2.0, dedupe="2")]),
+    ])).json()
+    connector_id, file_id = (i["import_id"] for i in out["imports"])
+    with db.get_session() as s:
+        assert s.get(SmartImportMeta, connector_id).connection_id == CONN_ID
+        assert s.get(SmartImportMeta, connector_id).origin == "connector"
+        assert s.get(SmartImportMeta, file_id).connection_id is None
+    rows = {r["import_id"]: r for r in client.get("/api/smart-import/imports").json()}
+    assert rows[connector_id]["connection_id"] == CONN_ID
+    assert rows[connector_id]["origin"] == "connector"
+    assert rows[file_id]["connection_id"] is None
+
+
+def test_undo_of_a_connector_import_is_unchanged(client, db):
+    add_connection(db)
+    add_liability(db, "L1", balance=500.0, as_of=date(2026, 9, 1))
+    before = table_hashes(db)
+    out = do_apply(client, apply_body([
+        synced(HASH_A, [txn(D1, -1.0)], kind="credit_card", liability_id="L1",
+               closing={"amount": 321.5, "as_of": "2026-09-30"}),
+    ], rules=[{"merchant_key": "NETFLIX", "category_id": "cat-Dining", "source": "connector"}])).json()
+    import_id = out["imports"][0]["import_id"]
+    r = client.delete(f"/api/smart-import/imports/{import_id}")
+    assert r.status_code == 200, r.text
+    assert client.get("/api/smart-import/imports").json() == []
+    after = table_hashes(db)
+    for table in ("budget_expenses", "liability_balance_snapshots"):
+        assert after[table] == before[table]
+    with db.get_session() as s:
+        for model in (ImportTransaction, SmartImportLedger, SmartImportMeta, BankStatementImport):
+            assert s.query(model).count() == 0
+        liab = s.get(Liability, "L1")
+        assert (liab.current_balance, liab.balance_as_of) == (500.0, date(2026, 9, 1))
+        # Undo keeps remembered merchants, as for a file import.
+        assert s.query(MerchantRule).count() == 1
+
+
+# Connector balances: a provider dates a balance by UTC, so the local day can be
+# one behind it (A4 handoff). For origin 'connector' only, Apply treats a
+# balance dated tomorrow as today's.
+
+
+def test_connector_balance_dated_tomorrow_is_recorded_as_today(client, db):
+    add_connection(db)
+    add_liability(db, "L1", balance=500.0, as_of=date(2026, 9, 1))
+    tomorrow = "2026-10-05"
+    out = do_apply(client, apply_body([
+        synced(kind="credit_card", liability_id="L1", closing={"amount": 321.5, "as_of": tomorrow}),
+    ])).json()
+    assert out["imports"][0]["balance"] == "recorded"
+    import_id = out["imports"][0]["import_id"]
+    with db.get_session() as s:
+        snap = s.query(LiabilityBalanceSnapshot).filter_by(source="import").one()
+        assert (snap.snapshot_date, snap.balance) == (TODAY, 321.5)
+        liab = s.get(Liability, "L1")
+        assert (liab.current_balance, liab.balance_as_of) == (321.5, TODAY)
+        ledger = {x.action: x for x in s.query(SmartImportLedger).all()}
+        import json
+        assert json.loads(ledger["snapshot"].after_json)["snapshot_date"] == TODAY.isoformat()
+        assert json.loads(ledger["balance_moved"].after_json)["balance_as_of"] == TODAY.isoformat()
+        # The import keeps the provider's own date.
+        assert s.get(SmartImportMeta, import_id).closing_balance_date == date(2026, 10, 5)
+    assert client.delete(f"/api/smart-import/imports/{import_id}").status_code == 200
+    with db.get_session() as s:
+        liab = s.get(Liability, "L1")
+        assert (liab.current_balance, liab.balance_as_of) == (500.0, date(2026, 9, 1))
+        assert s.query(LiabilityBalanceSnapshot).count() == 1
+
+
+def test_connector_balance_dated_tomorrow_keeps_a_snapshot_already_on_today(client, db):
+    add_connection(db)
+    add_liability(db, "L1", balance=500.0, as_of=TODAY)
+    out = do_apply(client, apply_body([
+        synced(kind="credit_card", liability_id="L1", closing={"amount": 321.5, "as_of": "2026-10-05"}),
+    ])).json()
+    assert out["imports"][0]["balance"] == "skipped_existing"
+    assert count(db, LiabilityBalanceSnapshot) == 1
+
+
+def test_connector_balance_two_days_ahead_is_still_skipped(client, db):
+    add_connection(db)
+    add_liability(db, "L1")
+    out = do_apply(client, apply_body([
+        synced(kind="credit_card", liability_id="L1", closing={"amount": 1.0, "as_of": "2026-10-06"}),
+    ])).json()
+    assert out["imports"][0]["balance"] == "skipped_future"
+    assert count(db, LiabilityBalanceSnapshot) == 1
+
+
+def test_file_balance_dated_tomorrow_is_still_skipped(client, db):
+    add_liability(db, "L1")
+    out = do_apply(client, balance_body({"amount": 1.0, "as_of": "2026-10-05"})).json()
+    assert out["imports"][0]["balance"] == "skipped_future"

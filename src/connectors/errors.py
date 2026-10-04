@@ -44,6 +44,24 @@ CONNECTOR_ERRORS: dict[str, tuple[int, str]] = {
         "Connected accounts are not available on this deployment.",
     ),
     "connection_not_found": (404, "Connection not found."),
+    "connection_limit": (
+        422,
+        "This profile already has the maximum of 10 connections. Disconnect one first.",
+    ),
+    "claim_not_saved": (
+        500,
+        "Your setup token was used but the connection could not be saved. Create a "
+        "new setup token in SimpleFIN and try again.",
+    ),
+    "claim_timeout": (
+        504,
+        "The setup token may have been used. If connecting again fails, create a "
+        "new one.",
+    ),
+    "request_time_short": (
+        503,
+        "Not enough time was left to contact the provider. Try again.",
+    ),
 }
 
 

@@ -18,8 +18,10 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Iterable, Optional, TypeVar
 
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import delete, literal_column, or_, select, update
 
+from src.connectors import store as connection_store
+from src.connectors.errors import ConnectorError
 from src.database import Database
 from src.database.models import (
     AppSettings,
@@ -200,7 +202,7 @@ def _prior_files(session: Any, hashes: list[str]) -> list[dict[str, Any]]:
     return prior
 
 
-def _active_liabilities(session: Any) -> list[Liability]:
+def active_liabilities(session: Any) -> list[Liability]:
     return (
         session.query(Liability)
         .filter(Liability.is_active.is_(True))
@@ -214,7 +216,7 @@ def _type_fits(kind: str, liability_type: str) -> bool:
     return (liability_type == "credit_card") == (kind == "credit_card")
 
 
-def _lender_match(institution: Optional[str], kind: str, liabilities: list[Liability]) -> Optional[str]:
+def lender_match(institution: Optional[str], kind: str, liabilities: list[Liability]) -> Optional[str]:
     """Case-insensitive: equal to the lender or name first, then contained in or
     containing it (3+ characters). The first fitting liability by name wins."""
     needle = (institution or "").strip().lower()
@@ -235,7 +237,7 @@ def _lender_match(institution: Optional[str], kind: str, liabilities: list[Liabi
     return None
 
 
-def _previous_liability(session: Any, account_key: Optional[str], active_ids: set[str]) -> Optional[str]:
+def previous_liability(session: Any, account_key: Optional[str], active_ids: set[str]) -> Optional[str]:
     if not account_key:
         return None
     rows = (
@@ -251,17 +253,17 @@ def _previous_liability(session: Any, account_key: Optional[str], active_ids: se
 
 
 def _liability_suggestions(session: Any, statements: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    liabilities = _active_liabilities(session)
+    liabilities = active_liabilities(session)
     active_ids = {x.id for x in liabilities}
     out = []
     for st in statements:
         kind = st["account_kind"]
         if kind not in DEBT_KINDS:
             continue
-        liability_id = _previous_liability(session, st.get("account_key"), active_ids)
+        liability_id = previous_liability(session, st.get("account_key"), active_ids)
         reason = "previous_import"
         if liability_id is None:
-            liability_id = _lender_match(st.get("institution"), kind, liabilities)
+            liability_id = lender_match(st.get("institution"), kind, liabilities)
             reason = "lender_match"
         if liability_id is not None:
             out.append(
@@ -348,6 +350,7 @@ def list_imports(db: Database) -> list[dict[str, Any]]:
                 "txn_excluded": m.txn_excluded,
                 "ai_used": m.ai_used,
                 "ai_provider": m.ai_provider,
+                "connection_id": m.connection_id,
                 "imported_at": _iso(m.created_at),
             }
             for m, b in rows
@@ -482,6 +485,13 @@ def _check_references(session: Any, request: dict[str, Any]) -> None:
         liability_id = st.get("liability_id")
         if liability_id and session.get(Liability, liability_id) is None:
             raise SmartImportError("liability_not_found")
+    connection_ids = [st["connection_id"] for st in request["statements"] if st.get("connection_id") is not None]
+    if connection_ids:
+        # The sanitized document, read in this transaction: an entry the store
+        # would drop does not exist. Its ids are canonical UUIDs only.
+        known_connections = connection_store.read_connections(None, session=session)["items"]
+        if any(cid not in known_connections for cid in connection_ids):
+            raise ConnectorError("connection_not_found")
 
 
 def _insert_statement(
@@ -561,6 +571,7 @@ def _insert_statement(
             txn_excluded=excluded,
             ai_used=1 if st["ai_used"] else 0,
             ai_provider=st["ai_provider"],
+            connection_id=st.get("connection_id"),
         )
     )
     session.flush()
@@ -655,6 +666,10 @@ def _record_balance(session: Any, imp: dict[str, Any], today: date, now: datetim
     if closing is None or not liability_id or closing["amount"] < 0:
         return "none"  # a credit balance never reaches a debt (liabilities require balance >= 0)
     day = _as_date(closing["as_of"])
+    if st["origin"] == "connector" and day == today + timedelta(days=1):
+        # A provider dates balances by UTC, which can be a day ahead of the
+        # local day: record it as today's. The meta row keeps the provider's date.
+        day = today
     if day > today:
         return "skipped_future"
     snapshots = session.query(LiabilityBalanceSnapshot).filter_by(liability_id=liability_id)
@@ -863,7 +878,13 @@ def _hand_over_claimed_rows(session: Any, import_id: str) -> int:
     return len(claims)
 
 
-def _undo(session: Any, import_id: str, now: datetime) -> dict[str, Any]:
+def undo_in_session(session: Any, import_id: str, now: datetime) -> dict[str, Any]:
+    """Undo one import inside the caller's session, committing nothing.
+
+    ``undo_import`` wraps it in its own transaction; disconnect with
+    ``remove_data`` (``connectors.service.delete_connection``) runs it for
+    every import of a connection in one transaction. ``now`` is naive UTC.
+    """
     if session.get(SmartImportMeta, import_id) is None:
         # A plain statement import row is a legacy import; no row at all means unknown
         # or already undone (Undo deletes the import row; nothing else records it).
@@ -938,6 +959,19 @@ def _undo(session: Any, import_id: str, now: datetime) -> dict[str, Any]:
     return {"undone": True, "deleted": deleted, "reassigned": {"transactions": reassigned}, "kept": kept}
 
 
+def connection_import_ids(session: Any, connection_id: str) -> list[str]:
+    """The imports synced from one connection, newest first: ``created_at``,
+    then insertion order (``rowid``), the order the browser twin uses too.
+    Statements of one Apply share ``created_at``, so the later one goes first."""
+    rows = (
+        session.query(SmartImportMeta.import_id)
+        .filter(SmartImportMeta.connection_id == connection_id)
+        .order_by(SmartImportMeta.created_at.desc(), literal_column("smart_import_meta.rowid").desc())
+        .all()
+    )
+    return [import_id for (import_id,) in rows]
+
+
 @_guarded("undo", "save_failed")
 def undo_import(db: Database, import_id: str) -> dict[str, Any]:
     """Remove exactly what one import created and restore what it moved (design 9).
@@ -947,7 +981,7 @@ def undo_import(db: Database, import_id: str) -> dict[str, Any]:
     now = datetime.utcnow()
     with db.get_session() as session:
         try:
-            result = _undo(session, import_id, now)
+            result = undo_in_session(session, import_id, now)
             session.commit()
         except BaseException:
             session.rollback()

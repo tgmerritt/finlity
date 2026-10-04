@@ -101,6 +101,16 @@ export async function apiCall<T>(endpoint: string, options: ApiCallOptions = {})
       return (await handleLocalUpdatePositionSectors()) as T;
     }
 
+    // Plan B6: creating, reconnecting, refreshing and syncing a connection
+    // need WebCrypto and a v2 round trip, so they are async composites in a
+    // lazy chunk (connections-composite.ts), never a network call as is.
+    if (
+      (options.method ?? 'GET') === 'POST' &&
+      CONNECTION_COMPOSITE.test(endpoint.split('?')[0]!)
+    ) {
+      return (await runConnectionComposite(endpoint, options.body)) as T;
+    }
+
     try {
       const localResult = await tryLocalRoute(endpoint, options);
       if (localResult !== NOT_HANDLED) {
@@ -216,6 +226,21 @@ export async function apiCall<T>(endpoint: string, options: ApiCallOptions = {})
     }
 
     throw new ApiError(0, error instanceof Error ? error.message : 'Network error');
+  }
+}
+
+/** The connection POST routes the hosted composites serve (plan B6). */
+const CONNECTION_COMPOSITE = /^\/api\/connections(?:\/[^/]+\/(?:credentials|accounts|sync))?$/;
+
+async function runConnectionComposite(endpoint: string, body: unknown): Promise<unknown> {
+  try {
+    const { routeConnectionComposite } = await import('./connections-composite');
+    return await routeConnectionComposite(endpoint, body);
+  } catch (error) {
+    if (error instanceof LocalHttpError) {
+      throw new ApiError(error.status, error.message, error.data);
+    }
+    throw error;
   }
 }
 

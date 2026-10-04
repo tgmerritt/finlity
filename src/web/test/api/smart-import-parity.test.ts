@@ -13,6 +13,7 @@ import '../database/helpers'; // points sql.js at the wasm binary
 import { clientDB } from '@/database/client-database';
 import { LocalHttpError } from '@/database/local-error';
 import { tryLocalRoute, resetLocalAPICache } from '@/api/dispatcher';
+import { connectionIds } from '@/database/local-connections-store';
 
 const FIXTURES = path.resolve(process.cwd(), '../../tests/fixtures');
 
@@ -31,6 +32,7 @@ interface Step {
   amount?: number;
   content_hash?: string;
   file_name?: string;
+  value?: unknown;
 }
 interface Scenario {
   today: string;
@@ -66,6 +68,9 @@ const ID_KEYS = new Set([
   'last_import_id',
   'target_id',
   'source_ref',
+  // Connection ids: the scenario's stored ones are fixed; ids minted by a
+  // create (plan B7) become placeholders like any other generated id.
+  'connection_id',
 ]);
 const TIMESTAMP_KEYS = new Set([
   'created_at',
@@ -75,12 +80,26 @@ const TIMESTAMP_KEYS = new Set([
   'uploaded_at',
 ]);
 
+/** Connection ids the scenario writes itself (store_connections, store_connection_secret). */
+function storedConnectionIds(): string[] {
+  const ids: string[] = [];
+  for (const st of scenario.steps) {
+    if (st.db === 'store_connections') {
+      ids.push(...Object.keys((st.value as { items: Record<string, unknown> }).items));
+    } else if (st.db === 'store_connection_secret') {
+      ids.push(st.id!);
+    }
+  }
+  return ids;
+}
+
 function makeNormalizer(): (value: unknown, key?: string) => unknown {
   const s = scenario.setup;
   const fixed = new Set<string>([
     ...s.categories.map((r) => r.id),
     ...[...s.liabilities, ...s.snapshots, ...s.expenses].map((r) => String(r['id'])),
     ...scenario.steps.filter((st) => st.db === 'insert_legacy_import').map((st) => st.id!),
+    ...storedConnectionIds(),
   ]);
   const seen = new Map<string, string>();
   const norm = (value: unknown, key = ''): unknown => {
@@ -185,7 +204,9 @@ function probe(kind: string): unknown {
         .sort((a, b) => cmp(a.dedupe_key, b.dedupe_key));
     case 'rules':
       return clientDB
-        .query<Row & { merchant_key: string; created_at: string | null; updated_at: string | null }>(
+        .query<
+          Row & { merchant_key: string; created_at: string | null; updated_at: string | null }
+        >(
           `SELECT merchant_key, category_id, kind, hits, source, last_import_id, created_at, updated_at
              FROM merchant_rules`
         )
@@ -227,11 +248,18 @@ function probe(kind: string): unknown {
         }));
     case 'ledger': {
       const out: Record<string, number> = {};
-      for (const r of clientDB.query<{ action: string }>('SELECT action FROM smart_import_ledger')) {
+      for (const r of clientDB.query<{ action: string }>(
+        'SELECT action FROM smart_import_ledger'
+      )) {
         out[r.action] = (out[r.action] ?? 0) + 1;
       }
       return out;
     }
+    case 'connections':
+      return {
+        ids: [...connectionIds(clientDB)].sort(cmp),
+        secret_rows: count('app_settings', "key LIKE 'connection_secret:%'"),
+      };
     default:
       throw new Error(`unknown probe ${kind}`);
   }
@@ -244,6 +272,21 @@ function dbOp(step: Step): void {
         step.amount,
         step.expense_name,
       ]);
+      break;
+    case 'store_connections':
+      // The connections row as the connection store writes it (plan B3). Replaces the row.
+      clientDB.execute(
+        `INSERT INTO app_settings (key, value, encrypted) VALUES ('connections', ?, 0)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        [JSON.stringify(step.value)]
+      );
+      break;
+    case 'store_connection_secret':
+      // A stand-in sealed secret row (plan B4): disconnect deletes it without unsealing.
+      clientDB.execute(
+        "INSERT INTO app_settings (key, value, encrypted) VALUES (?, 'wc1:parity', 1)",
+        [`connection_secret:${step.id!}`]
+      );
       break;
     case 'insert_legacy_import':
       clientDB.execute(
@@ -376,5 +419,16 @@ describe('smart import parity scenario (browser path)', () => {
     const results = runScenario();
     expect(results.map((r) => r.name)).toEqual(expected.map((e) => e.name));
     results.forEach((actual, i) => expectMatch(actual, expected[i], expected[i]!.name));
+  });
+
+  it('normalizes minted connection ids and keeps the stored ones (plan B7)', () => {
+    const norm = makeNormalizer();
+    const stored = storedConnectionIds()[0]!;
+    const minted = '9f8e7d6c-5b4a-4398-8776-655443322110';
+    expect(norm({ connection_id: minted, id: minted })).toEqual({
+      connection_id: '<id-1>',
+      id: '<id-1>',
+    });
+    expect(norm({ connection_id: stored })).toEqual({ connection_id: stored });
   });
 });

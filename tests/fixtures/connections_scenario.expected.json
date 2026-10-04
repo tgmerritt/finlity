@@ -1,0 +1,5478 @@
+[
+ {
+  "name": "list before any connection",
+  "ok": []
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "create with an unknown provider"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "create with an extra field"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "create the demo with a setup token"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "create with a first sync range that is not offered"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "create with a label over 120 characters"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "create with a control character in the label"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "create simplefin with two credentials"
+ },
+ {
+  "detail": "This connection address is not allowed.",
+  "error": 422,
+  "error_type": "host_not_allowed",
+  "name": "create simplefin with an access url off the allowlist"
+ },
+ {
+  "detail": "This does not look like a SimpleFIN setup token.",
+  "error": 422,
+  "error_type": "bad_setup_token",
+  "name": "create simplefin with a malformed setup token"
+ },
+ {
+  "name": "probe connections after the refused creates",
+  "ok": {
+   "ids": [],
+   "secret_rows": 0
+  }
+ },
+ {
+  "name": "create the demo connection",
+  "ok": {
+   "account_errors": [],
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Demo Rewards Card",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-09-05",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Demo Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-09-05",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "accounts_error": null,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "<id-1>",
+   "label": "Demo checking and card",
+   "last_synced_at": null,
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-04",
+     "start": "2026-09-05"
+    }
+   ]
+  }
+ },
+ {
+  "name": "list after the create",
+  "ok": [
+   {
+    "accounts_count": 2,
+    "accounts_enabled": 2,
+    "created_at": "<ts>",
+    "first_sync_days": 30,
+    "id": "<id-1>",
+    "label": "Demo checking and card",
+    "last_synced_at": null,
+    "provider": "demo",
+    "quota_budget": null,
+    "quota_left": null,
+    "quota_resets_at": null,
+    "status": "ok",
+    "status_at": "<ts>"
+   }
+  ]
+ },
+ {
+  "name": "detail before the first sync",
+  "ok": {
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Demo Rewards Card",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-09-05",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Demo Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-09-05",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "<id-1>",
+   "label": "Demo checking and card",
+   "last_synced_at": null,
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-04",
+     "start": "2026-09-05"
+    }
+   ]
+  }
+ },
+ {
+  "name": "probe requests after the create",
+  "ok": [
+   {
+    "connection_id": "<id-1>",
+    "requests": 1
+   }
+  ]
+ },
+ {
+  "detail": "Connection not found.",
+  "error": 404,
+  "error_type": "connection_not_found",
+  "name": "detail of an unknown connection"
+ },
+ {
+  "detail": "Connection not found.",
+  "error": 404,
+  "error_type": "connection_not_found",
+  "name": "detail with an uppercase id"
+ },
+ {
+  "detail": "Connection not found.",
+  "error": 404,
+  "error_type": "connection_not_found",
+  "name": "update an unknown connection"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "update an unknown account"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "update with a null kind"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "update with a role that does not exist"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "update with an empty label"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "update with an extra field"
+ },
+ {
+  "detail": "Debt not found.",
+  "error": 404,
+  "error_type": "liability_not_found",
+  "name": "update with an unknown liability"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "update with the account's own key as same_as"
+ },
+ {
+  "name": "update the label and the account mapping",
+  "ok": {
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Rewards",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-09-05",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-09-05",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "<id-1>",
+   "label": "Demo bank",
+   "last_synced_at": null,
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-04",
+     "start": "2026-09-05"
+    }
+   ]
+  }
+ },
+ {
+  "name": "probe requests after the mapping update",
+  "ok": [
+   {
+    "connection_id": "<id-1>",
+    "requests": 1
+   }
+  ]
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "sync with window index 4"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "sync with a window index outside the plan"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "sync with a string window index"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "sync with an extra key"
+ },
+ {
+  "detail": "Connection not found.",
+  "error": 404,
+  "error_type": "connection_not_found",
+  "name": "sync an unknown connection"
+ },
+ {
+  "name": "sync 1",
+  "ok": {
+   "account_errors": [],
+   "statements": [
+    {
+     "account": {
+      "institution": "Demo Bank",
+      "key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+      "kind": "credit_card",
+      "last4": null
+     },
+     "closing_balance": {
+      "amount": 2275.43,
+      "as_of": "2026-10-04"
+     },
+     "extras": null,
+     "file_hash": "5c3af78f94244f5243a68535e774bcf58344b9bc7f494d2afdea56bd3e06ef74",
+     "file_name": "Demo sync 2026-10-04",
+     "format": "connector",
+     "origin": "connector",
+     "parser": "connector:demo",
+     "period": {
+      "end": "2026-10-04",
+      "start": "2026-09-05"
+     },
+     "transactions": [
+      {
+       "amount": -92.24,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "1dd89c90b402dd259aa3a71da26fe6980122bd9aa20491e77057c9eca554345f",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-09-05:0",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-09-05",
+       "row": 0
+      },
+      {
+       "amount": -55.24,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "2d3f17dd937f75cc7312e47663038294a07158b0afd5c0b702e9baddff2d1ded",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-09-05:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-09-05",
+       "row": 1
+      },
+      {
+       "amount": -24.07,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "42547ed5d9a1f1152d8552826207759e90ff65992e659970a0a1035e57ee3321",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-06:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-06",
+       "row": 2
+      },
+      {
+       "amount": -35.26,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "e30248a54522b7273d92b9bcb004d0f3e51900ee7c1da1533034fa98390a1979",
+       "description": "DOORDASH ORDER",
+       "external_id": "demo:demo-card:2026-09-07:0",
+       "kind": "expense",
+       "merchant_key": "DOORDASH ORDER",
+       "posted_date": "2026-09-07",
+       "row": 3
+      },
+      {
+       "amount": -26.93,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "887cab69e9cad5bc031f80abfd21595064b0ebf04b5cbf2716794147deba0029",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-08:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-08",
+       "row": 4
+      },
+      {
+       "amount": -25.36,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "acca37eb0f4e518b5a4766aa909ee28059329482ef48650d617a7061423495f5",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-09:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-09",
+       "row": 5
+      },
+      {
+       "amount": -106.29,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "aa043e617ea84a55e4370307b98be77cbbb5231f2f4e5a129296dfcb8d80ecfe",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-09-09:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-09-09",
+       "row": 6
+      },
+      {
+       "amount": -28.22,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "22a0ff1f86af08544e57e76593dd173bdb9c8f2dba8154778d81eca21eac979e",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-10:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-10",
+       "row": 7
+      },
+      {
+       "amount": -13.73,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "cae8abfde8098c73749183188ab709674194465a3126e66927481d304e91ed68",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-11:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-11",
+       "row": 8
+      },
+      {
+       "amount": -12.7,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "d08b3c9c1319f8dcc1f37977d202592e2ba11f2c32928e62a334741e1c8cce09",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-11:1",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-11",
+       "row": 9
+      },
+      {
+       "amount": -11.07,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "54eeeaff0a2ef48f47572c443359784fbc11826cbde568b22236dd188fd510a1",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-12:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-12",
+       "row": 10
+      },
+      {
+       "amount": -60.49,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "09272d8b162c658cbb2aa4550bc07cd7ebd71ad5c0aab29db98973c6550bbace",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-09-12:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-09-12",
+       "row": 11
+      },
+      {
+       "amount": -39.18,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "1feac6bd96d7e4b2b6b48691e5e339d866572e3dbbed12a770e7e72e769f505f",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-13:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-13",
+       "row": 12
+      },
+      {
+       "amount": -9.5,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "5f33d78ba9418ea1fbe3347228366bde0d48b396abe82001a881a1f3e75d6224",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-14:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-14",
+       "row": 13
+      },
+      {
+       "amount": -7.67,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "4aec90629306ef1be9f876ee7964742ba506ab554812278d1c12391c295bc475",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-15:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-15",
+       "row": 14
+      },
+      {
+       "amount": -59.97,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "6e8e4dc5f27cb8a2b4d17e15076469bb78f5d186d0caddbeb3688ee08157d8b9",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-09-16:0",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-09-16",
+       "row": 15
+      },
+      {
+       "amount": -24.26,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "28e6499af8301a4ccb069f53129ea9e2167e448cfa9a267dc8a42c5412c2d5de",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-17:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-17",
+       "row": 16
+      },
+      {
+       "amount": -11.45,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "634944d137c5d25711dc212b0877c0f2a7e2a00fa07e3d6202dc1500ced93ed6",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-17:1",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-17",
+       "row": 17
+      },
+      {
+       "amount": -43.33,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ef5d00618b669884bcb9db9cf96fb0a1adb423ae58339c2008d0d58c63cda17c",
+       "description": "DOORDASH ORDER",
+       "external_id": "demo:demo-card:2026-09-18:0",
+       "kind": "expense",
+       "merchant_key": "DOORDASH ORDER",
+       "posted_date": "2026-09-18",
+       "row": 18
+      },
+      {
+       "amount": -31.92,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ff54f8bfa9b210096721bff971bf89f1da110423a18f1f7a6b3a8b6a1fa80a52",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-19:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-19",
+       "row": 19
+      },
+      {
+       "amount": -34.68,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "0071a34535096987c1b83f0dc6b5da01324d4c0dd79e05bc1ccc6f5422a03ec4",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-09-19:1",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-09-19",
+       "row": 20
+      },
+      {
+       "amount": -11.99,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "864acb5205c0bea29829744cc95bf477752b381fe573dc1dc6b06827e8fa0934",
+       "description": "SPOTIFY USA",
+       "external_id": "demo:demo-card:2026-09-20:0",
+       "kind": "expense",
+       "merchant_key": "SPOTIFY USA",
+       "posted_date": "2026-09-20",
+       "row": 21
+      },
+      {
+       "amount": -7.85,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "69dbcd9aa809727ef8e03bb2114f1d26141cd82f66027f9452d87a7a035a1a37",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-20:1",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-20",
+       "row": 22
+      },
+      {
+       "amount": -13.42,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "5ad192a9d3bcf346f83a6f651ceace9484f11cb828237f36a083019b2cbc30a5",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-21:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-21",
+       "row": 23
+      },
+      {
+       "amount": -7.53,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "30fcdfd0612683794f7152b7150bf2a56005c45e6d4bdf7dbfb8ae93b0a270ad",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-22:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-22",
+       "row": 24
+      },
+      {
+       "amount": -10.47,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "de1d0b0ea19bc33a8367857f09fff1b9012d01770d3180c69447a0f73a369549",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-22:1",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-22",
+       "row": 25
+      },
+      {
+       "amount": -11.9,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "3a5a943ca42b7aa3ec2161602b586d473ad8ca3aed60bc520e42e6d1d41539a0",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-23:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-23",
+       "row": 26
+      },
+      {
+       "amount": -35.66,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "cd18a464688ef0b671ed925d1cbba602c1c176e0e1f681f6d44aad73abed9eac",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-09-24:0",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-09-24",
+       "row": 27
+      },
+      {
+       "amount": -27.08,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "4cd65ed03746e87e3b94e9faa30a5637f598869bd392b681a580d21a5e65051b",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-25:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-25",
+       "row": 28
+      },
+      {
+       "amount": -14.78,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "39687252f7a7d7fe77b9de8a9f1d1d8554dd5fb9862f5299ac106ece23b275b2",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-26:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-26",
+       "row": 29
+      },
+      {
+       "amount": -41.42,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "dc729e2b528d0b96fc082a48cfba2748bf1b78c89e9edb233c931234c1b74576",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-27:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-27",
+       "row": 30
+      },
+      {
+       "amount": -19.57,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "98d3c35e1868aceac42197cd6a89958298122513849ea83f44ddf04598c32428",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-28:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-28",
+       "row": 31
+      },
+      {
+       "amount": -21.3,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "a8f9d075d03b8cb160c8bb2eecb11d5bd895fc3b7276e9b579d3600260b3e0f5",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-28:1",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-28",
+       "row": 32
+      },
+      {
+       "amount": -19.35,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "27793558fa4ca8ea0afb917010382ba6c80fd3688e5ca0d34551109ad4200ca6",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-29:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-29",
+       "row": 33
+      },
+      {
+       "amount": -25.14,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "380473b5882b1ebf0584a9e294824346d28970705d677ce9266dfa5edbf5120a",
+       "description": "DOORDASH ORDER",
+       "external_id": "demo:demo-card:2026-09-29:1",
+       "kind": "expense",
+       "merchant_key": "DOORDASH ORDER",
+       "posted_date": "2026-09-29",
+       "row": 34
+      },
+      {
+       "amount": -9.2,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "436411d4762a44a329a944f95ba63d43364832c2f0dfcdea946b9aefd7ca7a3e",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-30:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-30",
+       "row": 35
+      },
+      {
+       "amount": -104.86,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "0aa0a3894009f3598c99272acba2d5b9bbf479414a32ef959394445a291dc1af",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-01:0",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-01",
+       "row": 36
+      },
+      {
+       "amount": -32.6,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "3f09e0667516bd1b98d21d4b6f3c87a5b33b28b0f4cba474f361da5a172f59ca",
+       "description": "DOORDASH ORDER",
+       "external_id": "demo:demo-card:2026-10-01:1",
+       "kind": "expense",
+       "merchant_key": "DOORDASH ORDER",
+       "posted_date": "2026-10-01",
+       "row": 37
+      },
+      {
+       "amount": -11.59,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "6f26717b3edc549ed40477060db955edc871d8753f9060500582354b32e3d61f",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-10-02:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-10-02",
+       "row": 38
+      },
+      {
+       "amount": -46.7,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "41d95b1146f5159fbb26e15083227594e80adf3e540189406ad12e077a015d7d",
+       "description": "DOORDASH ORDER",
+       "external_id": "demo:demo-card:2026-10-02:1",
+       "kind": "expense",
+       "merchant_key": "DOORDASH ORDER",
+       "posted_date": "2026-10-02",
+       "row": 39
+      },
+      {
+       "amount": -13.52,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ad6fb14e6ee724a3b7ce8b470c88fd548f29e896b5eabd22573e200af1c0679a",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-10-03:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-10-03",
+       "row": 40
+      },
+      {
+       "amount": -98.13,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "f72fc5c3119e81f22c59ac5ab060aa010ccd7a90513c865c9f7b0e33ec8a7008",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-03:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-03",
+       "row": 41
+      },
+      {
+       "amount": -52.44,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "7360f43b31b8cd8ad4b2763fa5883ea888868c52a55b928ece508efced1cb243",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-04:0",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-04",
+       "row": 42
+      },
+      {
+       "amount": -85.5,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "530aab54bccb8207c5e140459d38ebb527507641cf249339cdf0ff2709f9517a",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-04:1",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-04",
+       "row": 43
+      }
+     ],
+     "warnings": []
+    },
+    {
+     "account": {
+      "institution": "Demo Bank",
+      "key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+      "kind": "checking",
+      "last4": null
+     },
+     "closing_balance": {
+      "amount": 3429.36,
+      "as_of": "2026-10-04"
+     },
+     "extras": null,
+     "file_hash": "47fcfcc43a206067ce82abef75df7bc12134cd6b93c6c1e7045175abd94ed36d",
+     "file_name": "Demo sync 2026-10-04",
+     "format": "connector",
+     "origin": "connector",
+     "parser": "connector:demo",
+     "period": {
+      "end": "2026-10-04",
+      "start": "2026-09-05"
+     },
+     "transactions": [
+      {
+       "amount": -73.34,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "1771c390c1f0f95226830b66f55d133f2bf6a14617d48c6dbfea75c14453cc21",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-05:0",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-05",
+       "row": 0
+      },
+      {
+       "amount": -12.01,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "83660f4aabccd6d482443191a31cc91c15e2dba47b7daff84c0de4db1cdae6dc",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-05:1",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-05",
+       "row": 1
+      },
+      {
+       "amount": -56.54,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "13dd3e3c2e32713858661e12e109c80ae5b9dfd41fc972fbcadfb2685222554b",
+       "description": "WHOLE FOODS MARKET",
+       "external_id": "demo:demo-chk:2026-09-06:0",
+       "kind": "expense",
+       "merchant_key": "WHOLE FOODS MARKET",
+       "posted_date": "2026-09-06",
+       "row": 2
+      },
+      {
+       "amount": -15.9,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "59b718efd6f8f6165c42791b00714ae541cb79044d743f1bd77038b206eaa861",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-06:1",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-06",
+       "row": 3
+      },
+      {
+       "amount": -53.36,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "b291de81fa65cb2f09ded289c73fa7431daa2b63975e4f897d934efe6e01b7f2",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-09-07:0",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-09-07",
+       "row": 4
+      },
+      {
+       "amount": -57.19,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "50d3459a497e1136e9d78f8f206fa2afa69427438cb932eeb948e372358b0bd6",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-09-07:1",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-09-07",
+       "row": 5
+      },
+      {
+       "amount": -65.0,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "24520cea2bde67c6632d4fd4d3e1b57777eb555787f803621658020eb7d9ceca",
+       "description": "VERIZON WIRELESS PAYMENT",
+       "external_id": "demo:demo-chk:2026-09-08:0",
+       "kind": "expense",
+       "merchant_key": "VERIZON WIRELESS PAYMENT",
+       "posted_date": "2026-09-08",
+       "row": 6
+      },
+      {
+       "amount": -33.38,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "2669dc96fadb33feb605e85d3cd822acdb6a1e498c9aa55540d5e69737afdf69",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-08:1",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-08",
+       "row": 7
+      },
+      {
+       "amount": -70.08,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "2ca7aef3db59cf98fff4eefb97c69bd503b47ce1b17c723bf30b3115618c9075",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-08:2",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-08",
+       "row": 8
+      },
+      {
+       "amount": -42.82,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ea49762b6800972b6faaa6f327cf4caadcde165603e18a8f1a240d21057fabd3",
+       "description": "WHOLE FOODS MARKET",
+       "external_id": "demo:demo-chk:2026-09-09:0",
+       "kind": "expense",
+       "merchant_key": "WHOLE FOODS MARKET",
+       "posted_date": "2026-09-09",
+       "row": 9
+      },
+      {
+       "amount": -7.71,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "1fa68774595c621ab224e08ec4950763bf5c27bff3d587041a7635feb4a2d7b2",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-10:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-10",
+       "row": 10
+      },
+      {
+       "amount": -18.37,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ba938b8375ec4ad835f1503f9d506171973f01ee8d563e3ac2f84808b10a1eca",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-10:1",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-10",
+       "row": 11
+      },
+      {
+       "amount": -85.38,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "c7ed2d442bc52bd55bbf921a197a01d15ee2c6fb94233bd2557562a50a9d7dc5",
+       "description": "WHOLE FOODS MARKET",
+       "external_id": "demo:demo-chk:2026-09-11:0",
+       "kind": "expense",
+       "merchant_key": "WHOLE FOODS MARKET",
+       "posted_date": "2026-09-11",
+       "row": 12
+      },
+      {
+       "amount": -78.4,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "f07b089f30b82c7c0eeb21140e8fb0329b387f0591a3990c5729c0e170988795",
+       "description": "PG&E ELECTRIC BILL",
+       "external_id": "demo:demo-chk:2026-09-12:0",
+       "kind": "expense",
+       "merchant_key": "PG&E ELECTRIC BILL",
+       "posted_date": "2026-09-12",
+       "row": 13
+      },
+      {
+       "amount": -55.28,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "216db31e39e7a3d3c5b589af77e1b1b8889be57005cbf903dc0459da4a1d90fd",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-12:1",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-12",
+       "row": 14
+      },
+      {
+       "amount": 2400.0,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "92ea890503949ddc79753f74a46b87d5751305c9c56c409280253278d7c9156c",
+       "description": "SAMPLE EMPLOYER PAYROLL",
+       "external_id": "demo:demo-chk:2026-09-13:0",
+       "kind": "income",
+       "merchant_key": "SAMPLE EMPLOYER PAYROLL",
+       "posted_date": "2026-09-13",
+       "row": 15
+      },
+      {
+       "amount": -15.4,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "e7887c4cbfe3dec3c2ed3d8a537ed9d7f9e62f6e96c8844d24bf2ebe77924c03",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-13:1",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-13",
+       "row": 16
+      },
+      {
+       "amount": -42.74,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "28e5a37350dcce5a3e0f31a432d330f7988efb0a0fc4e9ab80189c71a50bcc21",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-13:2",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-13",
+       "row": 17
+      },
+      {
+       "amount": -51.75,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "07ea45dea9896ece3e50d5961b2fec33b74d5668997e3722a70c1b8d27fb077e",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-14:0",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-14",
+       "row": 18
+      },
+      {
+       "amount": -9.21,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "1bb7782c240bcf6eb2d92cf0c782aa2a7ea0218e5c307fe2f7132cc9c4178482",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-15:0",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-15",
+       "row": 19
+      },
+      {
+       "amount": -15.41,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "da5f2f677870f9b9baf2e5e90c3735ab7d64abeae236d2c547c9af2a058ac1e2",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-16:0",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-16",
+       "row": 20
+      },
+      {
+       "amount": -45.28,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "6703ae645f3ca4929fac65e89c760e1ec7b480a355fd2e58e8ae72c8c9756145",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-09-16:1",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-09-16",
+       "row": 21
+      },
+      {
+       "amount": -13.97,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "a59167830ce9f4f4d58fde23d6feebaf2fbc690e0ea8aa992205314848fb921a",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-17:0",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-17",
+       "row": 22
+      },
+      {
+       "amount": -73.87,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "d2af08e0585e8bc2aed896f80d99e8f6cd4e4291ff45da38806cb33895ea5ff0",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-18:0",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-18",
+       "row": 23
+      },
+      {
+       "amount": -59.29,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "c1ccd39b21a6ed88e45200143118703db058fa90f0c59fe3517b2464e0b5c309",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-19:0",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-19",
+       "row": 24
+      },
+      {
+       "amount": -49.7,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "d51fd12e5b6cae88e874e7bc2278482648b598a2e91f0731d24a87627a52d97d",
+       "description": "WHOLE FOODS MARKET",
+       "external_id": "demo:demo-chk:2026-09-20:0",
+       "kind": "expense",
+       "merchant_key": "WHOLE FOODS MARKET",
+       "posted_date": "2026-09-20",
+       "row": 25
+      },
+      {
+       "amount": -14.63,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "78ab8a426ae4e4a141ecb0c7470da6cf89ee602bba7d52f44512dda7702bfede",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-20:1",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-20",
+       "row": 26
+      },
+      {
+       "amount": -57.97,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "15d6e8572fb4ef859e74df8daa14c1055414da4bb2db7978666d5d872643383d",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-21:0",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-21",
+       "row": 27
+      },
+      {
+       "amount": -8.29,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "b81e0d21df9f63008620a1ec4e3dc521117675c1921156844a3ff78343c03555",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-22:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-22",
+       "row": 28
+      },
+      {
+       "amount": -10.89,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "562fd3ac468edd398f39f59a872495022140a0cf7dcee0cc2aa4b5e3b1b917c3",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-22:1",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-22",
+       "row": 29
+      },
+      {
+       "amount": -48.43,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "7c54a19dc0669341c1ee84378711cb750ad0a91232f13fca6f3b38c4deac5a63",
+       "description": "WHOLE FOODS MARKET",
+       "external_id": "demo:demo-chk:2026-09-23:0",
+       "kind": "expense",
+       "merchant_key": "WHOLE FOODS MARKET",
+       "posted_date": "2026-09-23",
+       "row": 30
+      },
+      {
+       "amount": -51.93,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "c52ec6f1269db4343a102379d1136a5afb8e4dce11ed7c54a36284311682f33e",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-23:1",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-23",
+       "row": 31
+      },
+      {
+       "amount": -30.56,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "7528dbe90648490ebbe1e1d1000b91df6e812149d96b105c63e7e6cdbb97af8b",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-09-24:0",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-09-24",
+       "row": 32
+      },
+      {
+       "amount": -7.21,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "92ebb37f1a02336b821cf9dc5bf7062d114436e8349579cb13602159d18782e0",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-24:1",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-24",
+       "row": 33
+      },
+      {
+       "amount": -37.11,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "b50517426865437409f3f148eec66a53837fbb1e0e06ef6b4c0c6cdbda343cd5",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-09-25:0",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-09-25",
+       "row": 34
+      },
+      {
+       "amount": -63.27,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "c831a4b0baa0fbdc48ed1460c8b7163184a47cea2f6af69f0939ff362a697986",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-25:1",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-25",
+       "row": 35
+      },
+      {
+       "amount": -5.12,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "d3b1040dbd32e35c9e2699cb02db0e80bffadf04a9b57c68d2bf792527deefcb",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-26:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-26",
+       "row": 36
+      },
+      {
+       "amount": -33.73,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "829cf9bf78f29ca548652d758a09edcd77669f128772e584c781e2c60ee9c5d1",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-26:1",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-26",
+       "row": 37
+      },
+      {
+       "amount": 2400.0,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "c8bb8e99a859a0e918831d5e7e33df8c01d05c0845f084738c2a596ad76ec7fb",
+       "description": "SAMPLE EMPLOYER PAYROLL",
+       "external_id": "demo:demo-chk:2026-09-27:0",
+       "kind": "income",
+       "merchant_key": "SAMPLE EMPLOYER PAYROLL",
+       "posted_date": "2026-09-27",
+       "row": 38
+      },
+      {
+       "amount": -38.75,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "1393f69fc954bb2fcb95909918a4342e108d5524fde8f62d7cf174d347105116",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-27:1",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-27",
+       "row": 39
+      },
+      {
+       "amount": -80.59,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "86e30d710067594cbd1ccf6b78ae0f9ef708d224364426a4f2f085e22a8ed3a9",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-27:2",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-27",
+       "row": 40
+      },
+      {
+       "amount": -61.01,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "e38611c2d9610556baa8f168c1c1d812a39dafc7aadfc433f27727e27601af7c",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-09-28:0",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-09-28",
+       "row": 41
+      },
+      {
+       "amount": -40.25,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "ffcfcd51cfc5f3395217ac8ac9ac582adbfca2894bddbdb417e8a5316657e9f4",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-29:0",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-29",
+       "row": 42
+      },
+      {
+       "amount": -16.43,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "a611853cf92a0365563344bedd8c9e355cd422e4aac86d24aa65ffc72c212a9b",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-29:1",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-29",
+       "row": 43
+      },
+      {
+       "amount": -6.45,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "b84f06a17c53ea5372f442e4c4992366ec32a116f6129881afbf7b454e612fa4",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-30:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-30",
+       "row": 44
+      },
+      {
+       "amount": -9.57,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ef1abcbbcea4d227b784b6c7ffd06641410ee4ac63648d39ebce3942f2bcf956",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-30:1",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-30",
+       "row": 45
+      },
+      {
+       "amount": -9.47,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "c192f51207c953f38a2641c6501da666b1d0ea5a195a511b3bbf009d8bd7d569",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-10-01:0",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-10-01",
+       "row": 46
+      },
+      {
+       "amount": -46.43,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "34a3de1ae5241ea61e848b3af286e8fe6beabfd3ccfe238b79e09bd573d4c3ce",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-10-02:0",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-10-02",
+       "row": 47
+      },
+      {
+       "amount": -15.49,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "b97ce6e4b5a18469669598b171a5d5afb98b688311828ba61ff6b9a6cfd2f13b",
+       "description": "NETFLIX.COM",
+       "external_id": "demo:demo-chk:2026-10-03:0",
+       "kind": "expense",
+       "merchant_key": "NETFLIX.COM",
+       "posted_date": "2026-10-03",
+       "row": 48
+      },
+      {
+       "amount": -34.79,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ceca8ed46fa9ec38fc789f38c6a56f74f240d3617b5625eab9516a4833b160dd",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-10-03:1",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-10-03",
+       "row": 49
+      },
+      {
+       "amount": -60.9,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "1141e3e96d0c8925a446837372514eee40f08c0ef6d53f32fbd4028856c6beb2",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-10-03:2",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-10-03",
+       "row": 50
+      },
+      {
+       "amount": -5.21,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "6d9bf1cfd5d37f60b7173f19cecde882741825bd22575d51529e5672ecd2597e",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-10-04:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-10-04",
+       "row": 51
+      }
+     ],
+     "warnings": []
+    }
+   ],
+   "window": {
+    "end": "2026-10-04",
+    "start": "2026-09-05"
+   }
+  }
+ },
+ {
+  "name": "detail after sync 1 before apply",
+  "ok": {
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Rewards",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-09-05",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-09-05",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "<id-1>",
+   "label": "Demo bank",
+   "last_synced_at": "<ts>",
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-04",
+     "start": "2026-09-05"
+    }
+   ]
+  }
+ },
+ {
+  "name": "probe requests after sync 1",
+  "ok": [
+   {
+    "connection_id": "<id-1>",
+    "requests": 2
+   }
+  ]
+ },
+ {
+  "name": "probe counts after sync 1 before apply",
+  "ok": {
+   "bank_statement_imports": 0,
+   "budget_expenses": 0,
+   "import_transactions": 0,
+   "liabilities": 1,
+   "liability_balance_snapshots": 1,
+   "merchant_rules": 0,
+   "recurring_candidates": 0,
+   "smart_import_ledger": 0,
+   "smart_import_meta": 0
+  }
+ },
+ {
+  "name": "apply sync 1 with connection_id",
+  "ok": {
+   "expenses_created": 0,
+   "expenses_linked": 0,
+   "imports": [
+    {
+     "balance": "recorded",
+     "file_hash": "5c3af78f94244f5243a68535e774bcf58344b9bc7f494d2afdea56bd3e06ef74",
+     "import_id": "<id-2>",
+     "txn_duplicate": 0,
+     "txn_excluded": 0,
+     "txn_new": 44
+    },
+    {
+     "balance": "none",
+     "file_hash": "47fcfcc43a206067ce82abef75df7bc12134cd6b93c6c1e7045175abd94ed36d",
+     "import_id": "<id-3>",
+     "txn_duplicate": 0,
+     "txn_excluded": 0,
+     "txn_new": 52
+    }
+   ],
+   "pruned": 0,
+   "rules_saved": 2,
+   "skipped_files": []
+  }
+ },
+ {
+  "name": "probe counts after apply 1",
+  "ok": {
+   "bank_statement_imports": 2,
+   "budget_expenses": 0,
+   "import_transactions": 96,
+   "liabilities": 1,
+   "liability_balance_snapshots": 2,
+   "merchant_rules": 2,
+   "recurring_candidates": 0,
+   "smart_import_ledger": 2,
+   "smart_import_meta": 2
+  }
+ },
+ {
+  "name": "probe transactions per account after apply 1",
+  "ok": {
+   "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0": 52,
+   "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea": 44
+  }
+ },
+ {
+  "name": "probe liabilities after apply 1",
+  "ok": [
+   {
+    "balance_as_of": "2026-10-04",
+    "current_balance": 2275.43,
+    "id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+    "snapshots": [
+     {
+      "balance": 1000.0,
+      "snapshot_date": "2026-09-01",
+      "source": "manual"
+     },
+     {
+      "balance": 2275.43,
+      "snapshot_date": "2026-10-04",
+      "source": "import"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "name": "imports list shows the connection",
+  "ok": [
+   {
+    "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+    "account_kind": "checking",
+    "account_label": null,
+    "account_last4": null,
+    "ai_provider": null,
+    "ai_used": 0,
+    "batch_id": "parity-sync-1",
+    "closing_balance": 3429.36,
+    "closing_balance_date": "2026-10-04",
+    "connection_id": "<id-1>",
+    "file_name": "Demo sync 2026-10-04",
+    "format": "connector",
+    "import_id": "<id-3>",
+    "imported_at": "<ts>",
+    "institution": "Demo Bank",
+    "liability_id": null,
+    "origin": "connector",
+    "parser": "connector:demo",
+    "period_end": "2026-10-04",
+    "period_start": "2026-09-05",
+    "txn_duplicate": 0,
+    "txn_excluded": 0,
+    "txn_new": 52
+   },
+   {
+    "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+    "account_kind": "credit_card",
+    "account_label": null,
+    "account_last4": null,
+    "ai_provider": null,
+    "ai_used": 0,
+    "batch_id": "parity-sync-1",
+    "closing_balance": 2275.43,
+    "closing_balance_date": "2026-10-04",
+    "connection_id": "<id-1>",
+    "file_name": "Demo sync 2026-10-04",
+    "format": "connector",
+    "import_id": "<id-2>",
+    "imported_at": "<ts>",
+    "institution": "Demo Bank",
+    "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+    "origin": "connector",
+    "parser": "connector:demo",
+    "period_end": "2026-10-04",
+    "period_start": "2026-09-05",
+    "txn_duplicate": 0,
+    "txn_excluded": 0,
+    "txn_new": 44
+   }
+  ]
+ },
+ {
+  "name": "detail after apply 1 moves next_since",
+  "ok": {
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Rewards",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-09-29",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-09-29",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "<id-1>",
+   "label": "Demo bank",
+   "last_synced_at": "<ts>",
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-04",
+     "start": "2026-09-29"
+    }
+   ]
+  }
+ },
+ {
+  "name": "apply sync 1 again is skipped by file hash",
+  "ok": {
+   "expenses_created": 0,
+   "expenses_linked": 0,
+   "imports": [],
+   "pruned": 0,
+   "rules_saved": 0,
+   "skipped_files": [
+    "5c3af78f94244f5243a68535e774bcf58344b9bc7f494d2afdea56bd3e06ef74",
+    "47fcfcc43a206067ce82abef75df7bc12134cd6b93c6c1e7045175abd94ed36d"
+   ]
+  }
+ },
+ {
+  "name": "probe counts after the repeated apply",
+  "ok": {
+   "bank_statement_imports": 2,
+   "budget_expenses": 0,
+   "import_transactions": 96,
+   "liabilities": 1,
+   "liability_balance_snapshots": 2,
+   "merchant_rules": 2,
+   "recurring_candidates": 0,
+   "smart_import_ledger": 2,
+   "smart_import_meta": 2
+  }
+ },
+ {
+  "name": "a week later",
+  "ok": "done"
+ },
+ {
+  "name": "detail a week later",
+  "ok": {
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Rewards",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-09-29",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-09-29",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "<id-1>",
+   "label": "Demo bank",
+   "last_synced_at": "<ts>",
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-09-29"
+    }
+   ]
+  }
+ },
+ {
+  "name": "probe requests a week later",
+  "ok": [
+   {
+    "connection_id": "<id-1>",
+    "requests": 0
+   }
+  ]
+ },
+ {
+  "name": "sync 2 overlapping sync 1",
+  "ok": {
+   "account_errors": [],
+   "statements": [
+    {
+     "account": {
+      "institution": "Demo Bank",
+      "key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+      "kind": "credit_card",
+      "last4": null
+     },
+     "closing_balance": {
+      "amount": 1951.05,
+      "as_of": "2026-10-11"
+     },
+     "extras": null,
+     "file_hash": "1115d7a92faa712658ee11e168383f2ea24b888327e09688bd541ec9ecab7966",
+     "file_name": "Demo sync 2026-10-11",
+     "format": "connector",
+     "origin": "connector",
+     "parser": "connector:demo",
+     "period": {
+      "end": "2026-10-11",
+      "start": "2026-09-29"
+     },
+     "transactions": [
+      {
+       "amount": -19.35,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "27793558fa4ca8ea0afb917010382ba6c80fd3688e5ca0d34551109ad4200ca6",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-29:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-29",
+       "row": 0
+      },
+      {
+       "amount": -25.14,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "380473b5882b1ebf0584a9e294824346d28970705d677ce9266dfa5edbf5120a",
+       "description": "DOORDASH ORDER",
+       "external_id": "demo:demo-card:2026-09-29:1",
+       "kind": "expense",
+       "merchant_key": "DOORDASH ORDER",
+       "posted_date": "2026-09-29",
+       "row": 1
+      },
+      {
+       "amount": -9.2,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "436411d4762a44a329a944f95ba63d43364832c2f0dfcdea946b9aefd7ca7a3e",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-30:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-30",
+       "row": 2
+      },
+      {
+       "amount": -104.86,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "0aa0a3894009f3598c99272acba2d5b9bbf479414a32ef959394445a291dc1af",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-01:0",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-01",
+       "row": 3
+      },
+      {
+       "amount": -32.6,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "3f09e0667516bd1b98d21d4b6f3c87a5b33b28b0f4cba474f361da5a172f59ca",
+       "description": "DOORDASH ORDER",
+       "external_id": "demo:demo-card:2026-10-01:1",
+       "kind": "expense",
+       "merchant_key": "DOORDASH ORDER",
+       "posted_date": "2026-10-01",
+       "row": 4
+      },
+      {
+       "amount": -11.59,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "6f26717b3edc549ed40477060db955edc871d8753f9060500582354b32e3d61f",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-10-02:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-10-02",
+       "row": 5
+      },
+      {
+       "amount": -46.7,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "41d95b1146f5159fbb26e15083227594e80adf3e540189406ad12e077a015d7d",
+       "description": "DOORDASH ORDER",
+       "external_id": "demo:demo-card:2026-10-02:1",
+       "kind": "expense",
+       "merchant_key": "DOORDASH ORDER",
+       "posted_date": "2026-10-02",
+       "row": 6
+      },
+      {
+       "amount": -13.52,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ad6fb14e6ee724a3b7ce8b470c88fd548f29e896b5eabd22573e200af1c0679a",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-10-03:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-10-03",
+       "row": 7
+      },
+      {
+       "amount": -98.13,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "f72fc5c3119e81f22c59ac5ab060aa010ccd7a90513c865c9f7b0e33ec8a7008",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-03:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-03",
+       "row": 8
+      },
+      {
+       "amount": -52.44,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "7360f43b31b8cd8ad4b2763fa5883ea888868c52a55b928ece508efced1cb243",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-04:0",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-04",
+       "row": 9
+      },
+      {
+       "amount": -85.5,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "530aab54bccb8207c5e140459d38ebb527507641cf249339cdf0ff2709f9517a",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-04:1",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-04",
+       "row": 10
+      },
+      {
+       "amount": -54.84,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "2188d710a864f1f6e21ea257743531cff1fe314ef6809d042a2c998f051018bc",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-05:0",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-05",
+       "row": 11
+      },
+      {
+       "amount": -8.94,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "0019f77d90f7aed8d41f56f7d5080dafc3f75f40a7abfa9f68b16d2e6965bc3f",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-10-05:1",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-10-05",
+       "row": 12
+      },
+      {
+       "amount": -14.38,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "6b41dde9b8189d051181a8704db96e0dbf005f9ea8a184b7b398ee61223dd74c",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-10-06:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-10-06",
+       "row": 13
+      },
+      {
+       "amount": -83.91,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "e11f601b577dc0901326c4468adba51e2ad13b979f14bd627077992cf6d3158f",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-06:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-06",
+       "row": 14
+      },
+      {
+       "amount": -7.16,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "393bf787ed7bc0b22a63916d3940b726fc1b006a1e841a23b8ddc816ef2e9766",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-10-07:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-10-07",
+       "row": 15
+      },
+      {
+       "amount": -62.62,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "76559754d81bf6dc7c5bea2e4e335c97c47110eb821cfe1463a7142bd6dc676c",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-07:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-07",
+       "row": 16
+      },
+      {
+       "amount": -38.86,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "50b2628e5d08c848b43ada72a13ee6a95b5bc9e33b4fab362b3654e1dc866ef3",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-08:0",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-08",
+       "row": 17
+      },
+      {
+       "amount": -9.16,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "811dc14fdcb8594d5a555735defb8925b56dc8acf60a9af6233dc5eab4d69fa2",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-10-09:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-10-09",
+       "row": 18
+      },
+      {
+       "amount": -67.58,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "99edfba9256b67434f549474aa5a014536ce04e3d85c6a12c713426dfc79d934",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-09:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-09",
+       "row": 19
+      },
+      {
+       "amount": -54.83,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "06796ea1d0bfd83cef48341c8696f8513233bfe88c1b37c47c1d2f7006d105a2",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-10:0",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-10",
+       "row": 20
+      },
+      {
+       "amount": -68.16,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "bb4bc7d7305fe2b5f946bc99d90fd1835c14c14e33ab76c2c526e106fbfc5fee",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-10:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-10",
+       "row": 21
+      },
+      {
+       "amount": -10.7,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "71c8b738c49306b2856413b0b7259a084725a3be010e996b14fb6afbbdd86bbc",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-10-11:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-10-11",
+       "row": 22
+      },
+      {
+       "amount": -105.21,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "00fa71f5ba009db84bcda6e5ac13b43ab098d4caa4f79084327a65acd9e76ae5",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-11:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-11",
+       "row": 23
+      }
+     ],
+     "warnings": []
+    },
+    {
+     "account": {
+      "institution": "Demo Bank",
+      "key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+      "kind": "checking",
+      "last4": null
+     },
+     "closing_balance": {
+      "amount": 3906.88,
+      "as_of": "2026-10-11"
+     },
+     "extras": null,
+     "file_hash": "d7191cddcd7742e2186cbab18e704d5662ac155f3965ea01e044e12d26438a07",
+     "file_name": "Demo sync 2026-10-11",
+     "format": "connector",
+     "origin": "connector",
+     "parser": "connector:demo",
+     "period": {
+      "end": "2026-10-11",
+      "start": "2026-09-29"
+     },
+     "transactions": [
+      {
+       "amount": -40.25,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "ffcfcd51cfc5f3395217ac8ac9ac582adbfca2894bddbdb417e8a5316657e9f4",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-29:0",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-29",
+       "row": 0
+      },
+      {
+       "amount": -16.43,
+       "category_id": "cat-dining",
+       "category_source": "rule",
+       "dedupe_base": "a611853cf92a0365563344bedd8c9e355cd422e4aac86d24aa65ffc72c212a9b",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-29:1",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-29",
+       "row": 1
+      },
+      {
+       "amount": -6.45,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "b84f06a17c53ea5372f442e4c4992366ec32a116f6129881afbf7b454e612fa4",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-30:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-30",
+       "row": 2
+      },
+      {
+       "amount": -9.57,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ef1abcbbcea4d227b784b6c7ffd06641410ee4ac63648d39ebce3942f2bcf956",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-30:1",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-30",
+       "row": 3
+      },
+      {
+       "amount": -9.47,
+       "category_id": "cat-dining",
+       "category_source": "rule",
+       "dedupe_base": "c192f51207c953f38a2641c6501da666b1d0ea5a195a511b3bbf009d8bd7d569",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-10-01:0",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-10-01",
+       "row": 4
+      },
+      {
+       "amount": -46.43,
+       "category_id": "cat-groceries",
+       "category_source": "rule",
+       "dedupe_base": "34a3de1ae5241ea61e848b3af286e8fe6beabfd3ccfe238b79e09bd573d4c3ce",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-10-02:0",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-10-02",
+       "row": 5
+      },
+      {
+       "amount": -15.49,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "b97ce6e4b5a18469669598b171a5d5afb98b688311828ba61ff6b9a6cfd2f13b",
+       "description": "NETFLIX.COM",
+       "external_id": "demo:demo-chk:2026-10-03:0",
+       "kind": "expense",
+       "merchant_key": "NETFLIX.COM",
+       "posted_date": "2026-10-03",
+       "row": 6
+      },
+      {
+       "amount": -34.79,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ceca8ed46fa9ec38fc789f38c6a56f74f240d3617b5625eab9516a4833b160dd",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-10-03:1",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-10-03",
+       "row": 7
+      },
+      {
+       "amount": -60.9,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "1141e3e96d0c8925a446837372514eee40f08c0ef6d53f32fbd4028856c6beb2",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-10-03:2",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-10-03",
+       "row": 8
+      },
+      {
+       "amount": -5.21,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "6d9bf1cfd5d37f60b7173f19cecde882741825bd22575d51529e5672ecd2597e",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-10-04:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-10-04",
+       "row": 9
+      },
+      {
+       "amount": -10.85,
+       "category_id": "cat-dining",
+       "category_source": "rule",
+       "dedupe_base": "8ed6fb968d8e99fef27cba318e40189c1d24e2d10211a94324c6c19481dd5d5b",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-10-05:0",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-10-05",
+       "row": 10
+      },
+      {
+       "amount": -55.34,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "6c935a1b8891d738a3d3e718baed5eceeb44fdc72668332c19024981825441fa",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-10-06:0",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-10-06",
+       "row": 11
+      },
+      {
+       "amount": -64.03,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "0fa4a580e72652984f15d3fff73593e24856fa85ef35b5547da52faa45494da8",
+       "description": "WHOLE FOODS MARKET",
+       "external_id": "demo:demo-chk:2026-10-06:1",
+       "kind": "expense",
+       "merchant_key": "WHOLE FOODS MARKET",
+       "posted_date": "2026-10-06",
+       "row": 12
+      },
+      {
+       "amount": -55.2,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "3ed0b5501a94e4dd1e1bc5340b506c2e60ebb292a2a1b01e6f4f98ab9809d584",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-10-07:0",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-10-07",
+       "row": 13
+      },
+      {
+       "amount": -65.0,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "55b955efaca0553925949742d401f1b785a79794208bbad59019e07c2ddba997",
+       "description": "VERIZON WIRELESS PAYMENT",
+       "external_id": "demo:demo-chk:2026-10-08:0",
+       "kind": "expense",
+       "merchant_key": "VERIZON WIRELESS PAYMENT",
+       "posted_date": "2026-10-08",
+       "row": 14
+      },
+      {
+       "amount": -43.07,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "9ac7608f5962d4fa73ec13b3740a0a9abdeafa67673071120c6c4a933bc774e0",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-10-08:1",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-10-08",
+       "row": 15
+      },
+      {
+       "amount": -92.04,
+       "category_id": "cat-groceries",
+       "category_source": "rule",
+       "dedupe_base": "6248c34bf82bf91a3949d6d9fc20508e5beef54f237a3dc8f097558e27aeaf6b",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-10-09:0",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-10-09",
+       "row": 16
+      },
+      {
+       "amount": -8.91,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "f22f46564896ab23f9a736dac5b96f7e698306f0e604353877c644443b2cf8d3",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-10-10:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-10-10",
+       "row": 17
+      },
+      {
+       "amount": -39.19,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "a900b5362ddde89412550a130874b8abc3e4af7b24fd96d33a7e0680ded056d9",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-10-10:1",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-10-10",
+       "row": 18
+      },
+      {
+       "amount": 2400.0,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "7c3c547c0948697d52ec57f9c3cae775c838d04b2cc7cbba255d4a4ce609c5f0",
+       "description": "SAMPLE EMPLOYER PAYROLL",
+       "external_id": "demo:demo-chk:2026-10-11:0",
+       "kind": "income",
+       "merchant_key": "SAMPLE EMPLOYER PAYROLL",
+       "posted_date": "2026-10-11",
+       "row": 19
+      },
+      {
+       "amount": -88.38,
+       "category_id": "cat-groceries",
+       "category_source": "rule",
+       "dedupe_base": "734153130bee8120dd19f123e7066ed9068884e308ecc77f200fa9c25e6c66cb",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-10-11:1",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-10-11",
+       "row": 20
+      },
+      {
+       "amount": -42.77,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "89c8713a055b1182924471255bee8ebd13eb0f1788d97fb075bcf0a6cbb0dd4d",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-10-11:2",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-10-11",
+       "row": 21
+      }
+     ],
+     "warnings": []
+    }
+   ],
+   "window": {
+    "end": "2026-10-11",
+    "start": "2026-09-29"
+   }
+  }
+ },
+ {
+  "name": "apply sync 2 with its overlap",
+  "ok": {
+   "expenses_created": 0,
+   "expenses_linked": 0,
+   "imports": [
+    {
+     "balance": "recorded",
+     "file_hash": "1115d7a92faa712658ee11e168383f2ea24b888327e09688bd541ec9ecab7966",
+     "import_id": "<id-4>",
+     "txn_duplicate": 11,
+     "txn_excluded": 0,
+     "txn_new": 13
+    },
+    {
+     "balance": "none",
+     "file_hash": "d7191cddcd7742e2186cbab18e704d5662ac155f3965ea01e044e12d26438a07",
+     "import_id": "<id-5>",
+     "txn_duplicate": 10,
+     "txn_excluded": 0,
+     "txn_new": 12
+    }
+   ],
+   "pruned": 0,
+   "rules_saved": 0,
+   "skipped_files": []
+  }
+ },
+ {
+  "name": "probe counts after apply 2",
+  "ok": {
+   "bank_statement_imports": 4,
+   "budget_expenses": 0,
+   "import_transactions": 121,
+   "liabilities": 1,
+   "liability_balance_snapshots": 3,
+   "merchant_rules": 2,
+   "recurring_candidates": 0,
+   "smart_import_ledger": 25,
+   "smart_import_meta": 4
+  }
+ },
+ {
+  "name": "probe transactions per account after apply 2",
+  "ok": {
+   "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0": 64,
+   "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea": 57
+  }
+ },
+ {
+  "name": "probe liabilities after apply 2",
+  "ok": [
+   {
+    "balance_as_of": "2026-10-11",
+    "current_balance": 1951.05,
+    "id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+    "snapshots": [
+     {
+      "balance": 1000.0,
+      "snapshot_date": "2026-09-01",
+      "source": "manual"
+     },
+     {
+      "balance": 2275.43,
+      "snapshot_date": "2026-10-04",
+      "source": "import"
+     },
+     {
+      "balance": 1951.05,
+      "snapshot_date": "2026-10-11",
+      "source": "import"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "name": "detail after apply 2",
+  "ok": {
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Rewards",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-10-06",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-10-06",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "<id-1>",
+   "label": "Demo bank",
+   "last_synced_at": "<ts>",
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-10-06"
+    }
+   ]
+  }
+ },
+ {
+  "name": "undo the first statement of sync 2",
+  "ok": {
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 1,
+    "transactions": 13
+   },
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "undone": true
+  }
+ },
+ {
+  "name": "undo the second statement of sync 2",
+  "ok": {
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 0,
+    "transactions": 12
+   },
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "undone": true
+  }
+ },
+ {
+  "name": "detail after undoing sync 2 rewinds next_since",
+  "ok": {
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Rewards",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-09-29",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-09-29",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "<id-1>",
+   "label": "Demo bank",
+   "last_synced_at": "<ts>",
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-09-29"
+    }
+   ]
+  }
+ },
+ {
+  "name": "probe counts after undoing sync 2",
+  "ok": {
+   "bank_statement_imports": 2,
+   "budget_expenses": 0,
+   "import_transactions": 96,
+   "liabilities": 1,
+   "liability_balance_snapshots": 2,
+   "merchant_rules": 2,
+   "recurring_candidates": 0,
+   "smart_import_ledger": 2,
+   "smart_import_meta": 2
+  }
+ },
+ {
+  "name": "probe liabilities after undoing sync 2",
+  "ok": [
+   {
+    "balance_as_of": "2026-10-04",
+    "current_balance": 2275.43,
+    "id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+    "snapshots": [
+     {
+      "balance": 1000.0,
+      "snapshot_date": "2026-09-01",
+      "source": "manual"
+     },
+     {
+      "balance": 2275.43,
+      "snapshot_date": "2026-10-04",
+      "source": "import"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "name": "refresh the account list keeps the mapping",
+  "ok": {
+   "account_errors": [],
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Rewards",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-09-29",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-09-29",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "<id-1>",
+   "label": "Demo bank",
+   "last_synced_at": "<ts>",
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-09-29"
+    }
+   ]
+  }
+ },
+ {
+  "detail": "Connection not found.",
+  "error": 404,
+  "error_type": "connection_not_found",
+  "name": "refresh an unknown connection"
+ },
+ {
+  "name": "probe requests after the refresh",
+  "ok": [
+   {
+    "connection_id": "<id-1>",
+    "requests": 2
+   }
+  ]
+ },
+ {
+  "name": "reconnect the demo connection",
+  "ok": {
+   "account_errors": [],
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Rewards",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-09-29",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-09-29",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "accounts_error": null,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "<id-1>",
+   "label": "Demo bank",
+   "last_synced_at": "<ts>",
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-09-29"
+    }
+   ]
+  }
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "reconnect the demo with an access url"
+ },
+ {
+  "detail": "Connection not found.",
+  "error": 404,
+  "error_type": "connection_not_found",
+  "name": "reconnect an unknown connection"
+ },
+ {
+  "name": "probe requests after the reconnect",
+  "ok": [
+   {
+    "connection_id": "<id-1>",
+    "requests": 3
+   }
+  ]
+ },
+ {
+  "name": "store a simplefin connection at its daily limit",
+  "ok": "done"
+ },
+ {
+  "name": "detail at the daily limit",
+  "ok": {
+   "accounts": [
+    {
+     "account_key": "acct:8ca815d23dbb3aef1673c8c6ed9c1565e1602eceb29a673c4f271b72e0e5adc0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Sample Bank",
+     "kind": "checking",
+     "label": "Everyday",
+     "liability_id": null,
+     "name": "Everyday",
+     "next_since": "2026-09-12",
+     "provider_account_id": "sf-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 1,
+   "accounts_enabled": 1,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "5f5f5f5f-0000-4000-8000-000000000001",
+   "label": "Bank at its limit",
+   "last_synced_at": null,
+   "provider": "simplefin",
+   "quota_budget": 20,
+   "quota_left": 0,
+   "quota_resets_at": "<ts>",
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-09-12"
+    }
+   ]
+  }
+ },
+ {
+  "detail": "This connection has reached its daily sync limit. Try again tomorrow.",
+  "error": 429,
+  "error_type": "quota_reached",
+  "name": "sync at the daily limit"
+ },
+ {
+  "detail": "This connection has reached its daily sync limit. Try again tomorrow.",
+  "error": 429,
+  "error_type": "quota_reached",
+  "name": "refresh at the daily limit"
+ },
+ {
+  "name": "store a simplefin connection with no credential",
+  "ok": "done"
+ },
+ {
+  "detail": "The provider no longer accepts this connection. Reconnect to continue.",
+  "error": 409,
+  "error_type": "reconnect_needed",
+  "name": "sync with no stored credential"
+ },
+ {
+  "name": "detail after the missing credential",
+  "ok": {
+   "accounts": [
+    {
+     "account_key": "acct:8ca815d23dbb3aef1673c8c6ed9c1565e1602eceb29a673c4f271b72e0e5adc0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Sample Bank",
+     "kind": "checking",
+     "label": "Everyday",
+     "liability_id": null,
+     "name": "Everyday",
+     "next_since": "2026-09-12",
+     "provider_account_id": "sf-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 1,
+   "accounts_enabled": 1,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "5f5f5f5f-0000-4000-8000-000000000002",
+   "label": "Bank without a credential",
+   "last_synced_at": null,
+   "provider": "simplefin",
+   "quota_budget": 20,
+   "quota_left": 17,
+   "quota_resets_at": null,
+   "status": "reconnect_needed",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-09-12"
+    }
+   ]
+  }
+ },
+ {
+  "detail": "The provider no longer accepts this connection. Reconnect to continue.",
+  "error": 409,
+  "error_type": "reconnect_needed",
+  "name": "sync a connection that needs reconnecting"
+ },
+ {
+  "detail": "The provider no longer accepts this connection. Reconnect to continue.",
+  "error": 409,
+  "error_type": "reconnect_needed",
+  "name": "refresh a connection that needs reconnecting"
+ },
+ {
+  "name": "reconnect with a pasted access url the bridge refuses",
+  "ok": {
+   "account_errors": [],
+   "accounts": [
+    {
+     "account_key": "acct:8ca815d23dbb3aef1673c8c6ed9c1565e1602eceb29a673c4f271b72e0e5adc0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Sample Bank",
+     "kind": "checking",
+     "label": "Everyday",
+     "liability_id": null,
+     "name": "Everyday",
+     "next_since": "2026-09-12",
+     "provider_account_id": "sf-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 1,
+   "accounts_enabled": 1,
+   "accounts_error": "reconnect_needed",
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "5f5f5f5f-0000-4000-8000-000000000002",
+   "label": "Bank without a credential",
+   "last_synced_at": null,
+   "provider": "simplefin",
+   "quota_budget": 20,
+   "quota_left": 16,
+   "quota_resets_at": null,
+   "status": "reconnect_needed",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-09-12"
+    }
+   ]
+  }
+ },
+ {
+  "name": "probe connections after the refused reconnect",
+  "ok": {
+   "ids": [
+    "5f5f5f5f-0000-4000-8000-000000000001",
+    "5f5f5f5f-0000-4000-8000-000000000002",
+    "<id-1>"
+   ],
+   "secret_rows": 0
+  }
+ },
+ {
+  "name": "probe requests after the refused calls",
+  "ok": [
+   {
+    "connection_id": "5f5f5f5f-0000-4000-8000-000000000001",
+    "requests": 20
+   },
+   {
+    "connection_id": "5f5f5f5f-0000-4000-8000-000000000002",
+    "requests": 4
+   },
+   {
+    "connection_id": "<id-1>",
+    "requests": 3
+   }
+  ]
+ },
+ {
+  "name": "list with three connections",
+  "ok": [
+   {
+    "accounts_count": 1,
+    "accounts_enabled": 1,
+    "created_at": "<ts>",
+    "first_sync_days": 30,
+    "id": "5f5f5f5f-0000-4000-8000-000000000001",
+    "label": "Bank at its limit",
+    "last_synced_at": null,
+    "provider": "simplefin",
+    "quota_budget": 20,
+    "quota_left": 0,
+    "quota_resets_at": "<ts>",
+    "status": "ok",
+    "status_at": "<ts>"
+   },
+   {
+    "accounts_count": 1,
+    "accounts_enabled": 1,
+    "created_at": "<ts>",
+    "first_sync_days": 30,
+    "id": "5f5f5f5f-0000-4000-8000-000000000002",
+    "label": "Bank without a credential",
+    "last_synced_at": null,
+    "provider": "simplefin",
+    "quota_budget": 20,
+    "quota_left": 16,
+    "quota_resets_at": null,
+    "status": "reconnect_needed",
+    "status_at": "<ts>"
+   },
+   {
+    "accounts_count": 2,
+    "accounts_enabled": 2,
+    "created_at": "<ts>",
+    "first_sync_days": 30,
+    "id": "<id-1>",
+    "label": "Demo bank",
+    "last_synced_at": "<ts>",
+    "provider": "demo",
+    "quota_budget": null,
+    "quota_left": null,
+    "quota_resets_at": null,
+    "status": "ok",
+    "status_at": "<ts>"
+   }
+  ]
+ },
+ {
+  "name": "create filler connection 1",
+  "ok": {
+   "account_errors": [],
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Demo Rewards Card",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Demo Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "accounts_error": null,
+   "created_at": "<ts>",
+   "first_sync_days": 90,
+   "id": "<id-6>",
+   "label": "Filler 1",
+   "last_synced_at": null,
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-07-14"
+    }
+   ]
+  }
+ },
+ {
+  "name": "create filler connection 2",
+  "ok": {
+   "account_errors": [],
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Demo Rewards Card",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Demo Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "accounts_error": null,
+   "created_at": "<ts>",
+   "first_sync_days": 90,
+   "id": "<id-7>",
+   "label": "Filler 2",
+   "last_synced_at": null,
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-07-14"
+    }
+   ]
+  }
+ },
+ {
+  "name": "create filler connection 3",
+  "ok": {
+   "account_errors": [],
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Demo Rewards Card",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Demo Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "accounts_error": null,
+   "created_at": "<ts>",
+   "first_sync_days": 90,
+   "id": "<id-8>",
+   "label": "Filler 3",
+   "last_synced_at": null,
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-07-14"
+    }
+   ]
+  }
+ },
+ {
+  "name": "create filler connection 4",
+  "ok": {
+   "account_errors": [],
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Demo Rewards Card",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Demo Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "accounts_error": null,
+   "created_at": "<ts>",
+   "first_sync_days": 90,
+   "id": "<id-9>",
+   "label": "Filler 4",
+   "last_synced_at": null,
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-07-14"
+    }
+   ]
+  }
+ },
+ {
+  "name": "create filler connection 5",
+  "ok": {
+   "account_errors": [],
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Demo Rewards Card",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Demo Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "accounts_error": null,
+   "created_at": "<ts>",
+   "first_sync_days": 90,
+   "id": "<id-10>",
+   "label": "Filler 5",
+   "last_synced_at": null,
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-07-14"
+    }
+   ]
+  }
+ },
+ {
+  "name": "create filler connection 6",
+  "ok": {
+   "account_errors": [],
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Demo Rewards Card",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Demo Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "accounts_error": null,
+   "created_at": "<ts>",
+   "first_sync_days": 90,
+   "id": "<id-11>",
+   "label": "Filler 6",
+   "last_synced_at": null,
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-07-14"
+    }
+   ]
+  }
+ },
+ {
+  "name": "create filler connection 7",
+  "ok": {
+   "account_errors": [],
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Demo Rewards Card",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Demo Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-07-14",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "accounts_error": null,
+   "created_at": "<ts>",
+   "first_sync_days": 90,
+   "id": "<id-12>",
+   "label": "Filler 7",
+   "last_synced_at": null,
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-07-14"
+    }
+   ]
+  }
+ },
+ {
+  "detail": "This profile already has the maximum of 10 connections. Disconnect one first.",
+  "error": 422,
+  "error_type": "connection_limit",
+  "name": "create an eleventh connection"
+ },
+ {
+  "name": "probe connections at the limit",
+  "ok": {
+   "ids": [
+    "5f5f5f5f-0000-4000-8000-000000000001",
+    "5f5f5f5f-0000-4000-8000-000000000002",
+    "<id-1>",
+    "<id-6>",
+    "<id-7>",
+    "<id-8>",
+    "<id-9>",
+    "<id-10>",
+    "<id-11>",
+    "<id-12>"
+   ],
+   "secret_rows": 0
+  }
+ },
+ {
+  "name": "disconnect filler connection 1",
+  "ok": {
+   "connection_id": "<id-6>",
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 0,
+    "transactions": 0
+   },
+   "imports_kept": 0,
+   "imports_undone": 0,
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "remove_data": false
+  }
+ },
+ {
+  "name": "disconnect filler connection 2",
+  "ok": {
+   "connection_id": "<id-7>",
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 0,
+    "transactions": 0
+   },
+   "imports_kept": 0,
+   "imports_undone": 0,
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "remove_data": false
+  }
+ },
+ {
+  "name": "disconnect filler connection 3",
+  "ok": {
+   "connection_id": "<id-8>",
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 0,
+    "transactions": 0
+   },
+   "imports_kept": 0,
+   "imports_undone": 0,
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "remove_data": false
+  }
+ },
+ {
+  "name": "disconnect filler connection 4",
+  "ok": {
+   "connection_id": "<id-9>",
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 0,
+    "transactions": 0
+   },
+   "imports_kept": 0,
+   "imports_undone": 0,
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "remove_data": false
+  }
+ },
+ {
+  "name": "disconnect filler connection 5",
+  "ok": {
+   "connection_id": "<id-10>",
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 0,
+    "transactions": 0
+   },
+   "imports_kept": 0,
+   "imports_undone": 0,
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "remove_data": false
+  }
+ },
+ {
+  "name": "disconnect filler connection 6",
+  "ok": {
+   "connection_id": "<id-11>",
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 0,
+    "transactions": 0
+   },
+   "imports_kept": 0,
+   "imports_undone": 0,
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "remove_data": false
+  }
+ },
+ {
+  "name": "disconnect filler connection 7",
+  "ok": {
+   "connection_id": "<id-12>",
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 0,
+    "transactions": 0
+   },
+   "imports_kept": 0,
+   "imports_undone": 0,
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "remove_data": false
+  }
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "disconnect with an unrecognised remove_data"
+ },
+ {
+  "detail": "The request could not be read.",
+  "error": 422,
+  "error_type": "bad_request",
+  "name": "disconnect with remove_data=1"
+ },
+ {
+  "detail": "Connection not found.",
+  "error": 404,
+  "error_type": "connection_not_found",
+  "name": "disconnect an unknown connection"
+ },
+ {
+  "name": "disconnect keeping the imported data",
+  "ok": {
+   "connection_id": "<id-1>",
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 0,
+    "transactions": 0
+   },
+   "imports_kept": 2,
+   "imports_undone": 0,
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "remove_data": false
+  }
+ },
+ {
+  "name": "probe connections after the plain disconnect",
+  "ok": {
+   "ids": [
+    "5f5f5f5f-0000-4000-8000-000000000001",
+    "5f5f5f5f-0000-4000-8000-000000000002"
+   ],
+   "secret_rows": 0
+  }
+ },
+ {
+  "name": "probe counts after the plain disconnect",
+  "ok": {
+   "bank_statement_imports": 2,
+   "budget_expenses": 0,
+   "import_transactions": 96,
+   "liabilities": 1,
+   "liability_balance_snapshots": 2,
+   "merchant_rules": 2,
+   "recurring_candidates": 0,
+   "smart_import_ledger": 2,
+   "smart_import_meta": 2
+  }
+ },
+ {
+  "name": "imports keep the removed connection id",
+  "ok": [
+   {
+    "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+    "account_kind": "checking",
+    "account_label": null,
+    "account_last4": null,
+    "ai_provider": null,
+    "ai_used": 0,
+    "batch_id": "parity-sync-1",
+    "closing_balance": 3429.36,
+    "closing_balance_date": "2026-10-04",
+    "connection_id": "<id-1>",
+    "file_name": "Demo sync 2026-10-04",
+    "format": "connector",
+    "import_id": "<id-3>",
+    "imported_at": "<ts>",
+    "institution": "Demo Bank",
+    "liability_id": null,
+    "origin": "connector",
+    "parser": "connector:demo",
+    "period_end": "2026-10-04",
+    "period_start": "2026-09-05",
+    "txn_duplicate": 0,
+    "txn_excluded": 0,
+    "txn_new": 52
+   },
+   {
+    "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+    "account_kind": "credit_card",
+    "account_label": null,
+    "account_last4": null,
+    "ai_provider": null,
+    "ai_used": 0,
+    "batch_id": "parity-sync-1",
+    "closing_balance": 2275.43,
+    "closing_balance_date": "2026-10-04",
+    "connection_id": "<id-1>",
+    "file_name": "Demo sync 2026-10-04",
+    "format": "connector",
+    "import_id": "<id-2>",
+    "imported_at": "<ts>",
+    "institution": "Demo Bank",
+    "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+    "origin": "connector",
+    "parser": "connector:demo",
+    "period_end": "2026-10-04",
+    "period_start": "2026-09-05",
+    "txn_duplicate": 0,
+    "txn_excluded": 0,
+    "txn_new": 44
+   }
+  ]
+ },
+ {
+  "detail": "Connection not found.",
+  "error": 404,
+  "error_type": "connection_not_found",
+  "name": "detail of the removed connection"
+ },
+ {
+  "detail": "Connection not found.",
+  "error": 404,
+  "error_type": "connection_not_found",
+  "name": "disconnect the removed connection again"
+ },
+ {
+  "detail": "Connection not found.",
+  "error": 404,
+  "error_type": "connection_not_found",
+  "name": "apply naming the removed connection"
+ },
+ {
+  "name": "create a second demo connection",
+  "ok": {
+   "account_errors": [],
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Demo Rewards Card",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-09-12",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Demo Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-09-12",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "accounts_error": null,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "<id-13>",
+   "label": "Demo",
+   "last_synced_at": null,
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-09-12"
+    }
+   ]
+  }
+ },
+ {
+  "name": "map the second connection's card",
+  "ok": {
+   "accounts": [
+    {
+     "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "credit_card",
+     "label": "Demo Rewards Card",
+     "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+     "name": "Demo Rewards Card",
+     "next_since": "2026-09-12",
+     "provider_account_id": "demo-card",
+     "role": "debt",
+     "same_as_key": null
+    },
+    {
+     "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+     "currency": "USD",
+     "flip_balance": false,
+     "institution": "Demo Bank",
+     "kind": "checking",
+     "label": "Demo Everyday",
+     "liability_id": null,
+     "name": "Demo Everyday",
+     "next_since": "2026-09-12",
+     "provider_account_id": "demo-chk",
+     "role": "cash_flow",
+     "same_as_key": null
+    }
+   ],
+   "accounts_count": 2,
+   "accounts_enabled": 2,
+   "created_at": "<ts>",
+   "first_sync_days": 30,
+   "id": "<id-13>",
+   "label": "Demo",
+   "last_synced_at": null,
+   "provider": "demo",
+   "quota_budget": null,
+   "quota_left": null,
+   "quota_resets_at": null,
+   "status": "ok",
+   "status_at": "<ts>",
+   "windows": [
+    {
+     "end": "2026-10-11",
+     "start": "2026-09-12"
+    }
+   ]
+  }
+ },
+ {
+  "name": "sync the second connection",
+  "ok": {
+   "account_errors": [],
+   "statements": [
+    {
+     "account": {
+      "institution": "Demo Bank",
+      "key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+      "kind": "credit_card",
+      "last4": null
+     },
+     "closing_balance": {
+      "amount": 1951.05,
+      "as_of": "2026-10-11"
+     },
+     "extras": null,
+     "file_hash": "421c0cd84c8b039876bdd81641f34dddb38b070f4e984128d4fd6dc7e6f6d364",
+     "file_name": "Demo sync 2026-10-11",
+     "format": "connector",
+     "origin": "connector",
+     "parser": "connector:demo",
+     "period": {
+      "end": "2026-10-11",
+      "start": "2026-09-12"
+     },
+     "transactions": [
+      {
+       "amount": -11.07,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "54eeeaff0a2ef48f47572c443359784fbc11826cbde568b22236dd188fd510a1",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-12:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-12",
+       "row": 0
+      },
+      {
+       "amount": -60.49,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "09272d8b162c658cbb2aa4550bc07cd7ebd71ad5c0aab29db98973c6550bbace",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-09-12:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-09-12",
+       "row": 1
+      },
+      {
+       "amount": -39.18,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "1feac6bd96d7e4b2b6b48691e5e339d866572e3dbbed12a770e7e72e769f505f",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-13:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-13",
+       "row": 2
+      },
+      {
+       "amount": -9.5,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "5f33d78ba9418ea1fbe3347228366bde0d48b396abe82001a881a1f3e75d6224",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-14:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-14",
+       "row": 3
+      },
+      {
+       "amount": -7.67,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "4aec90629306ef1be9f876ee7964742ba506ab554812278d1c12391c295bc475",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-15:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-15",
+       "row": 4
+      },
+      {
+       "amount": -59.97,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "6e8e4dc5f27cb8a2b4d17e15076469bb78f5d186d0caddbeb3688ee08157d8b9",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-09-16:0",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-09-16",
+       "row": 5
+      },
+      {
+       "amount": -24.26,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "28e6499af8301a4ccb069f53129ea9e2167e448cfa9a267dc8a42c5412c2d5de",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-17:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-17",
+       "row": 6
+      },
+      {
+       "amount": -11.45,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "634944d137c5d25711dc212b0877c0f2a7e2a00fa07e3d6202dc1500ced93ed6",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-17:1",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-17",
+       "row": 7
+      },
+      {
+       "amount": -43.33,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ef5d00618b669884bcb9db9cf96fb0a1adb423ae58339c2008d0d58c63cda17c",
+       "description": "DOORDASH ORDER",
+       "external_id": "demo:demo-card:2026-09-18:0",
+       "kind": "expense",
+       "merchant_key": "DOORDASH ORDER",
+       "posted_date": "2026-09-18",
+       "row": 8
+      },
+      {
+       "amount": -31.92,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ff54f8bfa9b210096721bff971bf89f1da110423a18f1f7a6b3a8b6a1fa80a52",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-19:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-19",
+       "row": 9
+      },
+      {
+       "amount": -34.68,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "0071a34535096987c1b83f0dc6b5da01324d4c0dd79e05bc1ccc6f5422a03ec4",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-09-19:1",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-09-19",
+       "row": 10
+      },
+      {
+       "amount": -11.99,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "864acb5205c0bea29829744cc95bf477752b381fe573dc1dc6b06827e8fa0934",
+       "description": "SPOTIFY USA",
+       "external_id": "demo:demo-card:2026-09-20:0",
+       "kind": "expense",
+       "merchant_key": "SPOTIFY USA",
+       "posted_date": "2026-09-20",
+       "row": 11
+      },
+      {
+       "amount": -7.85,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "69dbcd9aa809727ef8e03bb2114f1d26141cd82f66027f9452d87a7a035a1a37",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-20:1",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-20",
+       "row": 12
+      },
+      {
+       "amount": -13.42,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "5ad192a9d3bcf346f83a6f651ceace9484f11cb828237f36a083019b2cbc30a5",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-21:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-21",
+       "row": 13
+      },
+      {
+       "amount": -7.53,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "30fcdfd0612683794f7152b7150bf2a56005c45e6d4bdf7dbfb8ae93b0a270ad",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-22:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-22",
+       "row": 14
+      },
+      {
+       "amount": -10.47,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "de1d0b0ea19bc33a8367857f09fff1b9012d01770d3180c69447a0f73a369549",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-22:1",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-22",
+       "row": 15
+      },
+      {
+       "amount": -11.9,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "3a5a943ca42b7aa3ec2161602b586d473ad8ca3aed60bc520e42e6d1d41539a0",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-23:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-23",
+       "row": 16
+      },
+      {
+       "amount": -35.66,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "cd18a464688ef0b671ed925d1cbba602c1c176e0e1f681f6d44aad73abed9eac",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-09-24:0",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-09-24",
+       "row": 17
+      },
+      {
+       "amount": -27.08,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "4cd65ed03746e87e3b94e9faa30a5637f598869bd392b681a580d21a5e65051b",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-25:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-25",
+       "row": 18
+      },
+      {
+       "amount": -14.78,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "39687252f7a7d7fe77b9de8a9f1d1d8554dd5fb9862f5299ac106ece23b275b2",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-26:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-26",
+       "row": 19
+      },
+      {
+       "amount": -41.42,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "dc729e2b528d0b96fc082a48cfba2748bf1b78c89e9edb233c931234c1b74576",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-27:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-27",
+       "row": 20
+      },
+      {
+       "amount": -19.57,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "98d3c35e1868aceac42197cd6a89958298122513849ea83f44ddf04598c32428",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-28:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-28",
+       "row": 21
+      },
+      {
+       "amount": -21.3,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "a8f9d075d03b8cb160c8bb2eecb11d5bd895fc3b7276e9b579d3600260b3e0f5",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-09-28:1",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-09-28",
+       "row": 22
+      },
+      {
+       "amount": -19.35,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "27793558fa4ca8ea0afb917010382ba6c80fd3688e5ca0d34551109ad4200ca6",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-09-29:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-09-29",
+       "row": 23
+      },
+      {
+       "amount": -25.14,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "380473b5882b1ebf0584a9e294824346d28970705d677ce9266dfa5edbf5120a",
+       "description": "DOORDASH ORDER",
+       "external_id": "demo:demo-card:2026-09-29:1",
+       "kind": "expense",
+       "merchant_key": "DOORDASH ORDER",
+       "posted_date": "2026-09-29",
+       "row": 24
+      },
+      {
+       "amount": -9.2,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "436411d4762a44a329a944f95ba63d43364832c2f0dfcdea946b9aefd7ca7a3e",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-09-30:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-09-30",
+       "row": 25
+      },
+      {
+       "amount": -104.86,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "0aa0a3894009f3598c99272acba2d5b9bbf479414a32ef959394445a291dc1af",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-01:0",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-01",
+       "row": 26
+      },
+      {
+       "amount": -32.6,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "3f09e0667516bd1b98d21d4b6f3c87a5b33b28b0f4cba474f361da5a172f59ca",
+       "description": "DOORDASH ORDER",
+       "external_id": "demo:demo-card:2026-10-01:1",
+       "kind": "expense",
+       "merchant_key": "DOORDASH ORDER",
+       "posted_date": "2026-10-01",
+       "row": 27
+      },
+      {
+       "amount": -11.59,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "6f26717b3edc549ed40477060db955edc871d8753f9060500582354b32e3d61f",
+       "description": "UBER TRIP",
+       "external_id": "demo:demo-card:2026-10-02:0",
+       "kind": "expense",
+       "merchant_key": "UBER TRIP",
+       "posted_date": "2026-10-02",
+       "row": 28
+      },
+      {
+       "amount": -46.7,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "41d95b1146f5159fbb26e15083227594e80adf3e540189406ad12e077a015d7d",
+       "description": "DOORDASH ORDER",
+       "external_id": "demo:demo-card:2026-10-02:1",
+       "kind": "expense",
+       "merchant_key": "DOORDASH ORDER",
+       "posted_date": "2026-10-02",
+       "row": 29
+      },
+      {
+       "amount": -13.52,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ad6fb14e6ee724a3b7ce8b470c88fd548f29e896b5eabd22573e200af1c0679a",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-10-03:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-10-03",
+       "row": 30
+      },
+      {
+       "amount": -98.13,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "f72fc5c3119e81f22c59ac5ab060aa010ccd7a90513c865c9f7b0e33ec8a7008",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-03:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-03",
+       "row": 31
+      },
+      {
+       "amount": -52.44,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "7360f43b31b8cd8ad4b2763fa5883ea888868c52a55b928ece508efced1cb243",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-04:0",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-04",
+       "row": 32
+      },
+      {
+       "amount": -85.5,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "530aab54bccb8207c5e140459d38ebb527507641cf249339cdf0ff2709f9517a",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-04:1",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-04",
+       "row": 33
+      },
+      {
+       "amount": -54.84,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "2188d710a864f1f6e21ea257743531cff1fe314ef6809d042a2c998f051018bc",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-05:0",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-05",
+       "row": 34
+      },
+      {
+       "amount": -8.94,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "0019f77d90f7aed8d41f56f7d5080dafc3f75f40a7abfa9f68b16d2e6965bc3f",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-10-05:1",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-10-05",
+       "row": 35
+      },
+      {
+       "amount": -14.38,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "6b41dde9b8189d051181a8704db96e0dbf005f9ea8a184b7b398ee61223dd74c",
+       "description": "CVS PHARMACY 0912",
+       "external_id": "demo:demo-card:2026-10-06:0",
+       "kind": "expense",
+       "merchant_key": "CVS PHARMACY",
+       "posted_date": "2026-10-06",
+       "row": 36
+      },
+      {
+       "amount": -83.91,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "e11f601b577dc0901326c4468adba51e2ad13b979f14bd627077992cf6d3158f",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-06:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-06",
+       "row": 37
+      },
+      {
+       "amount": -7.16,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "393bf787ed7bc0b22a63916d3940b726fc1b006a1e841a23b8ddc816ef2e9766",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-10-07:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-10-07",
+       "row": 38
+      },
+      {
+       "amount": -62.62,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "76559754d81bf6dc7c5bea2e4e335c97c47110eb821cfe1463a7142bd6dc676c",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-07:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-07",
+       "row": 39
+      },
+      {
+       "amount": -38.86,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "50b2628e5d08c848b43ada72a13ee6a95b5bc9e33b4fab362b3654e1dc866ef3",
+       "description": "TARGET STORE T-0457",
+       "external_id": "demo:demo-card:2026-10-08:0",
+       "kind": "expense",
+       "merchant_key": "TARGET STORE",
+       "posted_date": "2026-10-08",
+       "row": 40
+      },
+      {
+       "amount": -9.16,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "811dc14fdcb8594d5a555735defb8925b56dc8acf60a9af6233dc5eab4d69fa2",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-10-09:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-10-09",
+       "row": 41
+      },
+      {
+       "amount": -67.58,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "99edfba9256b67434f549474aa5a014536ce04e3d85c6a12c713426dfc79d934",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-09:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-09",
+       "row": 42
+      },
+      {
+       "amount": -54.83,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "06796ea1d0bfd83cef48341c8696f8513233bfe88c1b37c47c1d2f7006d105a2",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-10:0",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-10",
+       "row": 43
+      },
+      {
+       "amount": -68.16,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "bb4bc7d7305fe2b5f946bc99d90fd1835c14c14e33ab76c2c526e106fbfc5fee",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-10:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-10",
+       "row": 44
+      },
+      {
+       "amount": -10.7,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "71c8b738c49306b2856413b0b7259a084725a3be010e996b14fb6afbbdd86bbc",
+       "description": "SUBWAY #",
+       "external_id": "demo:demo-card:2026-10-11:0",
+       "kind": "expense",
+       "merchant_key": "SUBWAY",
+       "posted_date": "2026-10-11",
+       "row": 45
+      },
+      {
+       "amount": -105.21,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "00fa71f5ba009db84bcda6e5ac13b43ab098d4caa4f79084327a65acd9e76ae5",
+       "description": "AMAZON MKTPLACE",
+       "external_id": "demo:demo-card:2026-10-11:1",
+       "kind": "expense",
+       "merchant_key": "AMAZON MKTPLACE",
+       "posted_date": "2026-10-11",
+       "row": 46
+      }
+     ],
+     "warnings": []
+    },
+    {
+     "account": {
+      "institution": "Demo Bank",
+      "key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+      "kind": "checking",
+      "last4": null
+     },
+     "closing_balance": {
+      "amount": 3906.88,
+      "as_of": "2026-10-11"
+     },
+     "extras": null,
+     "file_hash": "b9e87df6470a7d673964775e63030b7b1cf57bca2710ecba1dcebbb561e2d5af",
+     "file_name": "Demo sync 2026-10-11",
+     "format": "connector",
+     "origin": "connector",
+     "parser": "connector:demo",
+     "period": {
+      "end": "2026-10-11",
+      "start": "2026-09-12"
+     },
+     "transactions": [
+      {
+       "amount": -78.4,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "f07b089f30b82c7c0eeb21140e8fb0329b387f0591a3990c5729c0e170988795",
+       "description": "PG&E ELECTRIC BILL",
+       "external_id": "demo:demo-chk:2026-09-12:0",
+       "kind": "expense",
+       "merchant_key": "PG&E ELECTRIC BILL",
+       "posted_date": "2026-09-12",
+       "row": 0
+      },
+      {
+       "amount": -55.28,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "216db31e39e7a3d3c5b589af77e1b1b8889be57005cbf903dc0459da4a1d90fd",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-12:1",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-12",
+       "row": 1
+      },
+      {
+       "amount": 2400.0,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "92ea890503949ddc79753f74a46b87d5751305c9c56c409280253278d7c9156c",
+       "description": "SAMPLE EMPLOYER PAYROLL",
+       "external_id": "demo:demo-chk:2026-09-13:0",
+       "kind": "income",
+       "merchant_key": "SAMPLE EMPLOYER PAYROLL",
+       "posted_date": "2026-09-13",
+       "row": 2
+      },
+      {
+       "amount": -15.4,
+       "category_id": "cat-dining",
+       "category_source": "rule",
+       "dedupe_base": "e7887c4cbfe3dec3c2ed3d8a537ed9d7f9e62f6e96c8844d24bf2ebe77924c03",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-13:1",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-13",
+       "row": 3
+      },
+      {
+       "amount": -42.74,
+       "category_id": "cat-groceries",
+       "category_source": "rule",
+       "dedupe_base": "28e5a37350dcce5a3e0f31a432d330f7988efb0a0fc4e9ab80189c71a50bcc21",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-13:2",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-13",
+       "row": 4
+      },
+      {
+       "amount": -51.75,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "07ea45dea9896ece3e50d5961b2fec33b74d5668997e3722a70c1b8d27fb077e",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-14:0",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-14",
+       "row": 5
+      },
+      {
+       "amount": -9.21,
+       "category_id": "cat-dining",
+       "category_source": "rule",
+       "dedupe_base": "1bb7782c240bcf6eb2d92cf0c782aa2a7ea0218e5c307fe2f7132cc9c4178482",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-15:0",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-15",
+       "row": 6
+      },
+      {
+       "amount": -15.41,
+       "category_id": "cat-dining",
+       "category_source": "rule",
+       "dedupe_base": "da5f2f677870f9b9baf2e5e90c3735ab7d64abeae236d2c547c9af2a058ac1e2",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-16:0",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-16",
+       "row": 7
+      },
+      {
+       "amount": -45.28,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "6703ae645f3ca4929fac65e89c760e1ec7b480a355fd2e58e8ae72c8c9756145",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-09-16:1",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-09-16",
+       "row": 8
+      },
+      {
+       "amount": -13.97,
+       "category_id": "cat-dining",
+       "category_source": "rule",
+       "dedupe_base": "a59167830ce9f4f4d58fde23d6feebaf2fbc690e0ea8aa992205314848fb921a",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-17:0",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-17",
+       "row": 9
+      },
+      {
+       "amount": -73.87,
+       "category_id": "cat-groceries",
+       "category_source": "rule",
+       "dedupe_base": "d2af08e0585e8bc2aed896f80d99e8f6cd4e4291ff45da38806cb33895ea5ff0",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-18:0",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-18",
+       "row": 10
+      },
+      {
+       "amount": -59.29,
+       "category_id": "cat-groceries",
+       "category_source": "rule",
+       "dedupe_base": "c1ccd39b21a6ed88e45200143118703db058fa90f0c59fe3517b2464e0b5c309",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-19:0",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-19",
+       "row": 11
+      },
+      {
+       "amount": -49.7,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "d51fd12e5b6cae88e874e7bc2278482648b598a2e91f0731d24a87627a52d97d",
+       "description": "WHOLE FOODS MARKET",
+       "external_id": "demo:demo-chk:2026-09-20:0",
+       "kind": "expense",
+       "merchant_key": "WHOLE FOODS MARKET",
+       "posted_date": "2026-09-20",
+       "row": 12
+      },
+      {
+       "amount": -14.63,
+       "category_id": "cat-dining",
+       "category_source": "rule",
+       "dedupe_base": "78ab8a426ae4e4a141ecb0c7470da6cf89ee602bba7d52f44512dda7702bfede",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-20:1",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-20",
+       "row": 13
+      },
+      {
+       "amount": -57.97,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "15d6e8572fb4ef859e74df8daa14c1055414da4bb2db7978666d5d872643383d",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-21:0",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-21",
+       "row": 14
+      },
+      {
+       "amount": -8.29,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "b81e0d21df9f63008620a1ec4e3dc521117675c1921156844a3ff78343c03555",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-22:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-22",
+       "row": 15
+      },
+      {
+       "amount": -10.89,
+       "category_id": "cat-dining",
+       "category_source": "rule",
+       "dedupe_base": "562fd3ac468edd398f39f59a872495022140a0cf7dcee0cc2aa4b5e3b1b917c3",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-22:1",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-22",
+       "row": 16
+      },
+      {
+       "amount": -48.43,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "7c54a19dc0669341c1ee84378711cb750ad0a91232f13fca6f3b38c4deac5a63",
+       "description": "WHOLE FOODS MARKET",
+       "external_id": "demo:demo-chk:2026-09-23:0",
+       "kind": "expense",
+       "merchant_key": "WHOLE FOODS MARKET",
+       "posted_date": "2026-09-23",
+       "row": 17
+      },
+      {
+       "amount": -51.93,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "c52ec6f1269db4343a102379d1136a5afb8e4dce11ed7c54a36284311682f33e",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-23:1",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-23",
+       "row": 18
+      },
+      {
+       "amount": -30.56,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "7528dbe90648490ebbe1e1d1000b91df6e812149d96b105c63e7e6cdbb97af8b",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-09-24:0",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-09-24",
+       "row": 19
+      },
+      {
+       "amount": -7.21,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "92ebb37f1a02336b821cf9dc5bf7062d114436e8349579cb13602159d18782e0",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-24:1",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-24",
+       "row": 20
+      },
+      {
+       "amount": -37.11,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "b50517426865437409f3f148eec66a53837fbb1e0e06ef6b4c0c6cdbda343cd5",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-09-25:0",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-09-25",
+       "row": 21
+      },
+      {
+       "amount": -63.27,
+       "category_id": "cat-groceries",
+       "category_source": "rule",
+       "dedupe_base": "c831a4b0baa0fbdc48ed1460c8b7163184a47cea2f6af69f0939ff362a697986",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-25:1",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-25",
+       "row": 22
+      },
+      {
+       "amount": -5.12,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "d3b1040dbd32e35c9e2699cb02db0e80bffadf04a9b57c68d2bf792527deefcb",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-26:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-26",
+       "row": 23
+      },
+      {
+       "amount": -33.73,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "829cf9bf78f29ca548652d758a09edcd77669f128772e584c781e2c60ee9c5d1",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-26:1",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-26",
+       "row": 24
+      },
+      {
+       "amount": 2400.0,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "c8bb8e99a859a0e918831d5e7e33df8c01d05c0845f084738c2a596ad76ec7fb",
+       "description": "SAMPLE EMPLOYER PAYROLL",
+       "external_id": "demo:demo-chk:2026-09-27:0",
+       "kind": "income",
+       "merchant_key": "SAMPLE EMPLOYER PAYROLL",
+       "posted_date": "2026-09-27",
+       "row": 25
+      },
+      {
+       "amount": -38.75,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "1393f69fc954bb2fcb95909918a4342e108d5524fde8f62d7cf174d347105116",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-27:1",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-27",
+       "row": 26
+      },
+      {
+       "amount": -80.59,
+       "category_id": "cat-groceries",
+       "category_source": "rule",
+       "dedupe_base": "86e30d710067594cbd1ccf6b78ae0f9ef708d224364426a4f2f085e22a8ed3a9",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-09-27:2",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-09-27",
+       "row": 27
+      },
+      {
+       "amount": -61.01,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "e38611c2d9610556baa8f168c1c1d812a39dafc7aadfc433f27727e27601af7c",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-09-28:0",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-09-28",
+       "row": 28
+      },
+      {
+       "amount": -40.25,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "ffcfcd51cfc5f3395217ac8ac9ac582adbfca2894bddbdb417e8a5316657e9f4",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-09-29:0",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-09-29",
+       "row": 29
+      },
+      {
+       "amount": -16.43,
+       "category_id": "cat-dining",
+       "category_source": "rule",
+       "dedupe_base": "a611853cf92a0365563344bedd8c9e355cd422e4aac86d24aa65ffc72c212a9b",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-09-29:1",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-09-29",
+       "row": 30
+      },
+      {
+       "amount": -6.45,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "b84f06a17c53ea5372f442e4c4992366ec32a116f6129881afbf7b454e612fa4",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-30:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-30",
+       "row": 31
+      },
+      {
+       "amount": -9.57,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ef1abcbbcea4d227b784b6c7ffd06641410ee4ac63648d39ebce3942f2bcf956",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-09-30:1",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-09-30",
+       "row": 32
+      },
+      {
+       "amount": -9.47,
+       "category_id": "cat-dining",
+       "category_source": "rule",
+       "dedupe_base": "c192f51207c953f38a2641c6501da666b1d0ea5a195a511b3bbf009d8bd7d569",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-10-01:0",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-10-01",
+       "row": 33
+      },
+      {
+       "amount": -46.43,
+       "category_id": "cat-groceries",
+       "category_source": "rule",
+       "dedupe_base": "34a3de1ae5241ea61e848b3af286e8fe6beabfd3ccfe238b79e09bd573d4c3ce",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-10-02:0",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-10-02",
+       "row": 34
+      },
+      {
+       "amount": -15.49,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "b97ce6e4b5a18469669598b171a5d5afb98b688311828ba61ff6b9a6cfd2f13b",
+       "description": "NETFLIX.COM",
+       "external_id": "demo:demo-chk:2026-10-03:0",
+       "kind": "expense",
+       "merchant_key": "NETFLIX.COM",
+       "posted_date": "2026-10-03",
+       "row": 35
+      },
+      {
+       "amount": -34.79,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "ceca8ed46fa9ec38fc789f38c6a56f74f240d3617b5625eab9516a4833b160dd",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-10-03:1",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-10-03",
+       "row": 36
+      },
+      {
+       "amount": -60.9,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "1141e3e96d0c8925a446837372514eee40f08c0ef6d53f32fbd4028856c6beb2",
+       "description": "TRADER JOES",
+       "external_id": "demo:demo-chk:2026-10-03:2",
+       "kind": "expense",
+       "merchant_key": "TRADER JOES",
+       "posted_date": "2026-10-03",
+       "row": 37
+      },
+      {
+       "amount": -5.21,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "6d9bf1cfd5d37f60b7173f19cecde882741825bd22575d51529e5672ecd2597e",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-10-04:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-10-04",
+       "row": 38
+      },
+      {
+       "amount": -10.85,
+       "category_id": "cat-dining",
+       "category_source": "rule",
+       "dedupe_base": "8ed6fb968d8e99fef27cba318e40189c1d24e2d10211a94324c6c19481dd5d5b",
+       "description": "CHIPOTLE 1234",
+       "external_id": "demo:demo-chk:2026-10-05:0",
+       "kind": "expense",
+       "merchant_key": "CHIPOTLE",
+       "posted_date": "2026-10-05",
+       "row": 39
+      },
+      {
+       "amount": -55.34,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "6c935a1b8891d738a3d3e718baed5eceeb44fdc72668332c19024981825441fa",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-10-06:0",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-10-06",
+       "row": 40
+      },
+      {
+       "amount": -64.03,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "0fa4a580e72652984f15d3fff73593e24856fa85ef35b5547da52faa45494da8",
+       "description": "WHOLE FOODS MARKET",
+       "external_id": "demo:demo-chk:2026-10-06:1",
+       "kind": "expense",
+       "merchant_key": "WHOLE FOODS MARKET",
+       "posted_date": "2026-10-06",
+       "row": 41
+      },
+      {
+       "amount": -55.2,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "3ed0b5501a94e4dd1e1bc5340b506c2e60ebb292a2a1b01e6f4f98ab9809d584",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-10-07:0",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-10-07",
+       "row": 42
+      },
+      {
+       "amount": -65.0,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "55b955efaca0553925949742d401f1b785a79794208bbad59019e07c2ddba997",
+       "description": "VERIZON WIRELESS PAYMENT",
+       "external_id": "demo:demo-chk:2026-10-08:0",
+       "kind": "expense",
+       "merchant_key": "VERIZON WIRELESS PAYMENT",
+       "posted_date": "2026-10-08",
+       "row": 43
+      },
+      {
+       "amount": -43.07,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "9ac7608f5962d4fa73ec13b3740a0a9abdeafa67673071120c6c4a933bc774e0",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-10-08:1",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-10-08",
+       "row": 44
+      },
+      {
+       "amount": -92.04,
+       "category_id": "cat-groceries",
+       "category_source": "rule",
+       "dedupe_base": "6248c34bf82bf91a3949d6d9fc20508e5beef54f237a3dc8f097558e27aeaf6b",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-10-09:0",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-10-09",
+       "row": 45
+      },
+      {
+       "amount": -8.91,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "f22f46564896ab23f9a736dac5b96f7e698306f0e604353877c644443b2cf8d3",
+       "description": "STARBUCKS STORE 4411",
+       "external_id": "demo:demo-chk:2026-10-10:0",
+       "kind": "expense",
+       "merchant_key": "STARBUCKS STORE",
+       "posted_date": "2026-10-10",
+       "row": 46
+      },
+      {
+       "amount": -39.19,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "a900b5362ddde89412550a130874b8abc3e4af7b24fd96d33a7e0680ded056d9",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-10-10:1",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-10-10",
+       "row": 47
+      },
+      {
+       "amount": 2400.0,
+       "category_id": null,
+       "category_source": "none",
+       "dedupe_base": "7c3c547c0948697d52ec57f9c3cae775c838d04b2cc7cbba255d4a4ce609c5f0",
+       "description": "SAMPLE EMPLOYER PAYROLL",
+       "external_id": "demo:demo-chk:2026-10-11:0",
+       "kind": "income",
+       "merchant_key": "SAMPLE EMPLOYER PAYROLL",
+       "posted_date": "2026-10-11",
+       "row": 48
+      },
+      {
+       "amount": -88.38,
+       "category_id": "cat-groceries",
+       "category_source": "rule",
+       "dedupe_base": "734153130bee8120dd19f123e7066ed9068884e308ecc77f200fa9c25e6c66cb",
+       "description": "SAFEWAY #0123",
+       "external_id": "demo:demo-chk:2026-10-11:1",
+       "kind": "expense",
+       "merchant_key": "SAFEWAY",
+       "posted_date": "2026-10-11",
+       "row": 49
+      },
+      {
+       "amount": -42.77,
+       "category_id": "cat-transport",
+       "category_source": "seed",
+       "dedupe_base": "89c8713a055b1182924471255bee8ebd13eb0f1788d97fb075bcf0a6cbb0dd4d",
+       "description": "SHELL OIL #",
+       "external_id": "demo:demo-chk:2026-10-11:2",
+       "kind": "expense",
+       "merchant_key": "SHELL OIL",
+       "posted_date": "2026-10-11",
+       "row": 50
+      }
+     ],
+     "warnings": []
+    }
+   ],
+   "window": {
+    "end": "2026-10-11",
+    "start": "2026-09-12"
+   }
+  }
+ },
+ {
+  "name": "apply the second connection's sync",
+  "ok": {
+   "expenses_created": 0,
+   "expenses_linked": 0,
+   "imports": [
+    {
+     "balance": "recorded",
+     "file_hash": "421c0cd84c8b039876bdd81641f34dddb38b070f4e984128d4fd6dc7e6f6d364",
+     "import_id": "<id-14>",
+     "txn_duplicate": 34,
+     "txn_excluded": 0,
+     "txn_new": 13
+    },
+    {
+     "balance": "none",
+     "file_hash": "b9e87df6470a7d673964775e63030b7b1cf57bca2710ecba1dcebbb561e2d5af",
+     "import_id": "<id-15>",
+     "txn_duplicate": 39,
+     "txn_excluded": 0,
+     "txn_new": 12
+    }
+   ],
+   "pruned": 0,
+   "rules_saved": 0,
+   "skipped_files": []
+  }
+ },
+ {
+  "name": "probe counts before removing the second connection's data",
+  "ok": {
+   "bank_statement_imports": 4,
+   "budget_expenses": 0,
+   "import_transactions": 121,
+   "liabilities": 1,
+   "liability_balance_snapshots": 3,
+   "merchant_rules": 2,
+   "recurring_candidates": 0,
+   "smart_import_ledger": 77,
+   "smart_import_meta": 4
+  }
+ },
+ {
+  "name": "probe liabilities before removing the second connection's data",
+  "ok": [
+   {
+    "balance_as_of": "2026-10-11",
+    "current_balance": 1951.05,
+    "id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+    "snapshots": [
+     {
+      "balance": 1000.0,
+      "snapshot_date": "2026-09-01",
+      "source": "manual"
+     },
+     {
+      "balance": 2275.43,
+      "snapshot_date": "2026-10-04",
+      "source": "import"
+     },
+     {
+      "balance": 1951.05,
+      "snapshot_date": "2026-10-11",
+      "source": "import"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "name": "disconnect the second connection and remove its data",
+  "ok": {
+   "connection_id": "<id-13>",
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 1,
+    "transactions": 25
+   },
+   "imports_kept": 0,
+   "imports_undone": 2,
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "remove_data": true
+  }
+ },
+ {
+  "name": "probe counts after removing the data",
+  "ok": {
+   "bank_statement_imports": 2,
+   "budget_expenses": 0,
+   "import_transactions": 96,
+   "liabilities": 1,
+   "liability_balance_snapshots": 2,
+   "merchant_rules": 2,
+   "recurring_candidates": 0,
+   "smart_import_ledger": 2,
+   "smart_import_meta": 2
+  }
+ },
+ {
+  "name": "probe transactions per account after removing the data",
+  "ok": {
+   "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0": 52,
+   "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea": 44
+  }
+ },
+ {
+  "name": "probe liabilities after removing the data",
+  "ok": [
+   {
+    "balance_as_of": "2026-10-04",
+    "current_balance": 2275.43,
+    "id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+    "snapshots": [
+     {
+      "balance": 1000.0,
+      "snapshot_date": "2026-09-01",
+      "source": "manual"
+     },
+     {
+      "balance": 2275.43,
+      "snapshot_date": "2026-10-04",
+      "source": "import"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "name": "probe connections after removing the data",
+  "ok": {
+   "ids": [
+    "5f5f5f5f-0000-4000-8000-000000000001",
+    "5f5f5f5f-0000-4000-8000-000000000002"
+   ],
+   "secret_rows": 0
+  }
+ },
+ {
+  "name": "imports after removing the data",
+  "ok": [
+   {
+    "account_key": "acct:047ed60921c6c62d08574459a6989ae76685e0ac7ca90c6509d6afa6e1deb5b0",
+    "account_kind": "checking",
+    "account_label": null,
+    "account_last4": null,
+    "ai_provider": null,
+    "ai_used": 0,
+    "batch_id": "parity-sync-1",
+    "closing_balance": 3429.36,
+    "closing_balance_date": "2026-10-04",
+    "connection_id": "<id-1>",
+    "file_name": "Demo sync 2026-10-04",
+    "format": "connector",
+    "import_id": "<id-3>",
+    "imported_at": "<ts>",
+    "institution": "Demo Bank",
+    "liability_id": null,
+    "origin": "connector",
+    "parser": "connector:demo",
+    "period_end": "2026-10-04",
+    "period_start": "2026-09-05",
+    "txn_duplicate": 0,
+    "txn_excluded": 0,
+    "txn_new": 52
+   },
+   {
+    "account_key": "acct:f979fec19d92dbe5047bbc6ec232b193d86d10499286320b1d25435e212875ea",
+    "account_kind": "credit_card",
+    "account_label": null,
+    "account_last4": null,
+    "ai_provider": null,
+    "ai_used": 0,
+    "batch_id": "parity-sync-1",
+    "closing_balance": 2275.43,
+    "closing_balance_date": "2026-10-04",
+    "connection_id": "<id-1>",
+    "file_name": "Demo sync 2026-10-04",
+    "format": "connector",
+    "import_id": "<id-2>",
+    "imported_at": "<ts>",
+    "institution": "Demo Bank",
+    "liability_id": "0a0b0c0d-0e0f-4a1b-8c2d-3e4f5a6b7c8d",
+    "origin": "connector",
+    "parser": "connector:demo",
+    "period_end": "2026-10-04",
+    "period_start": "2026-09-05",
+    "txn_duplicate": 0,
+    "txn_excluded": 0,
+    "txn_new": 44
+   }
+  ]
+ },
+ {
+  "detail": "Import not found. It may have already been undone.",
+  "error": 404,
+  "error_type": "import_not_found",
+  "name": "undo an import of the removed connection"
+ },
+ {
+  "name": "undo an import of the plainly disconnected connection",
+  "ok": {
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 1,
+    "transactions": 44
+   },
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "undone": true
+  }
+ },
+ {
+  "name": "disconnect the stored connection at its limit",
+  "ok": {
+   "connection_id": "5f5f5f5f-0000-4000-8000-000000000001",
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 0,
+    "transactions": 0
+   },
+   "imports_kept": 0,
+   "imports_undone": 0,
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "remove_data": true
+  }
+ },
+ {
+  "name": "disconnect the stored connection with no credential",
+  "ok": {
+   "connection_id": "5f5f5f5f-0000-4000-8000-000000000002",
+   "deleted": {
+    "expenses": 0,
+    "recurring_candidates": 0,
+    "snapshots": 0,
+    "transactions": 0
+   },
+   "imports_kept": 0,
+   "imports_undone": 0,
+   "kept": [],
+   "reassigned": {
+    "transactions": 0
+   },
+   "remove_data": false
+  }
+ },
+ {
+  "name": "list after every disconnect",
+  "ok": []
+ },
+ {
+  "name": "probe requests at the end",
+  "ok": []
+ },
+ {
+  "name": "probe connections at the end",
+  "ok": {
+   "ids": [],
+   "secret_rows": 0
+  }
+ }
+]

@@ -13,6 +13,7 @@ export const HASH_C = 'c'.repeat(64);
 export const D1 = '2026-09-01';
 export const D2 = '2026-09-08';
 export const D3 = '2026-09-15';
+export const CONN_ID = '0f0e0d0c-0b0a-4908-8706-050403020100';
 
 export type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -115,6 +116,33 @@ export function addLiability(
       [crypto.randomUUID(), id, asOf, balance]
     );
   }
+}
+
+/** One sanitize-valid entry of the `connections` settings document. */
+export function connectionEntry(o: Row = {}): Row {
+  return {
+    provider: 'demo',
+    label: 'Demo',
+    created_at: '2026-10-01T09:00:00Z',
+    status: 'ok',
+    status_at: '2026-10-01T09:00:00Z',
+    last_synced_at: null,
+    first_sync_days: 90,
+    requests: [],
+    accounts: {},
+    ...o,
+  };
+}
+
+/** Write the raw `connections` row, as the connection store keeps it. */
+export function addConnections(db: ClientDatabase, items: Row): void {
+  db.execute("INSERT INTO app_settings (key, value, encrypted) VALUES ('connections', ?, 0)", [
+    JSON.stringify({ version: 1, items }),
+  ]);
+}
+
+export function addConnection(db: ClientDatabase, id: string = CONN_ID): void {
+  addConnections(db, { [id]: connectionEntry() });
 }
 
 export function addExpense(
