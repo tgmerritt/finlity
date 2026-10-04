@@ -8919,3 +8919,68 @@ body.on-settings #tab-settings {
     .smart-import-sent-items td { padding: 6px 8px; }
     .smart-import-bulk .btn { flex: 1 1 auto; }
 }
+
+/* Smart import wizard: Recurring, Review and Done */
+.smart-import-rec-tick {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 4px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    cursor: pointer;
+}
+.smart-import-rec-tick input { width: 18px; height: 18px; margin: 0; flex: none; cursor: pointer; }
+.smart-import-rec-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.5fr);
+    gap: 0 12px;
+    margin-top: 8px;
+}
+.smart-import-rec.is-off { background: var(--color-bg-secondary); }
+.smart-import-rec.is-off .smart-import-rec-grid { opacity: 0.7; }
+.smart-import-rec .smart-import-error { margin: 4px 0 0; }
+.smart-import-review { max-width: 520px; }
+.smart-import-review dd { text-align: right; font-weight: 600; }
+.smart-import-debts { display: grid; gap: 12px; margin: 0 0 12px; }
+.smart-import-debt-line {
+    padding: 12px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    background: var(--color-bg-elevated);
+    min-width: 0;
+}
+.smart-import-debt-line .smart-import-facts { margin: 0 0 4px; }
+.smart-import-debt-line .smart-import-hint { margin: 0; }
+.smart-import-summary {
+    margin: 0 0 16px;
+    padding: 12px 16px 12px 32px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+.smart-import-summary li::marker { color: var(--color-success); }
+.smart-import-undo-result { margin-top: 12px; color: var(--color-text-primary); }
+.smart-import-undo-result p { margin: 0 0 6px; }
+.smart-import-undo-result:focus { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+@media (max-width: 1024px) {
+    .smart-import-rec-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+@media (max-width: 768px) {
+    .smart-import-rec-tick { min-height: 44px; }
+    .smart-import-rec-tick input { width: 22px; height: 22px; }
+    .smart-import-review { max-width: none; }
+    .smart-import-actions .btn { flex: 1 1 auto; }
+}
+
+@media (max-width: 480px) {
+    .smart-import-rec-grid { grid-template-columns: 1fr; }
+    .smart-import-review { grid-template-columns: minmax(0, 1fr) auto; }
+    .smart-import-debt-line { padding: 12px; }
+    .smart-import-summary { padding: 12px 12px 12px 28px; }
+}

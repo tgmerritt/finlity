@@ -28,6 +28,12 @@ vi.mock('@/ui/toast', () => ({
   showInfo: vi.fn(),
 }));
 vi.mock('@/utils/debt-wizard-launcher', () => ({ openDebtWizardLazy: vi.fn() }));
+vi.mock('@/ui/tabs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/ui/tabs')>()),
+  showTab: vi.fn(),
+  getCurrentTab: vi.fn(() => 'dashboard'),
+}));
+vi.mock('@/pages/budget', () => ({ showBudgetTab: vi.fn(), loadBudgetTab: vi.fn() }));
 
 import { apiCall, uploadFileWithContext, ApiError } from '@/api/client';
 import { showToast } from '@/ui/toast';
@@ -35,15 +41,28 @@ import { closeDynamicModal } from '@/ui/modal';
 import { openDebtWizardLazy } from '@/utils/debt-wizard-launcher';
 import { openSmartImportWizard } from '@/features/smart-import';
 import { store } from '@/state/store';
-import { buildCategorizeRequest } from '@/utils/smart-import-state';
+import {
+  buildApplyRequest,
+  buildCategorizeRequest,
+  buildSettingsPatch,
+  recurringRequest,
+  reviewCounts,
+} from '@/utils/smart-import-state';
+import { on } from '@/state/events';
+import { getCurrentTab, showTab } from '@/ui/tabs';
+import { loadBudgetTab, showBudgetTab } from '@/pages/budget';
 import type {
   AnalyzeResponse,
+  ApplyRequest,
+  ApplyResponse,
   CategorizeRequest,
   CategorizeResponse,
   NormalizedStatement,
   PreviewResponse,
+  RecurringCandidateSuggestion,
   SmartImportAiStatus,
   SmartImportContext,
+  SmartImportUndoResponse,
 } from '@/types/api';
 
 const apiCallMock = vi.mocked(apiCall);
@@ -155,6 +174,10 @@ interface Setup {
   ) => AnalyzeResponse | Promise<AnalyzeResponse>;
   categorize?: (body: CategorizeRequest) => CategorizeResponse | Promise<CategorizeResponse>;
   settingsPut?: (body: unknown) => unknown;
+  expenses?: unknown[];
+  recurring?: (body: unknown) => unknown;
+  apply?: (body: unknown) => unknown;
+  undo?: (id: string) => unknown;
 }
 
 let calls: { url: string; options?: { method?: string; body?: unknown } }[] = [];
@@ -189,6 +212,21 @@ function setup(s: Setup = {}): void {
     if (url === '/api/smart-import/settings') {
       const body = (options as { body?: unknown } | undefined)?.body;
       return s.settingsPut ? s.settingsPut(body) : { ...context().settings, ...(body as object) };
+    }
+    if (url === '/api/budget/expenses') return s.expenses ?? [];
+    if (url === '/api/v2/smart-import/recurring') {
+      const body = (options as { body?: unknown } | undefined)?.body;
+      return s.recurring ? s.recurring(body) : { candidates: [] };
+    }
+    if (url === '/api/smart-import/apply') {
+      const body = (options as { body?: unknown } | undefined)?.body;
+      if (s.apply) return s.apply(body);
+      throw new ApiError(500, 'x');
+    }
+    if (url.startsWith('/api/smart-import/imports/')) {
+      const id = decodeURIComponent(url.slice('/api/smart-import/imports/'.length));
+      if (s.undo) return s.undo(id);
+      throw new ApiError(500, 'x');
     }
     return {};
   });
@@ -1990,6 +2028,711 @@ describe('smart import wizard', () => {
       next().click();
       await flush();
       expect(q('.smart-import-progress-short').textContent).toBe('4 of 5');
+    });
+  });
+
+  describe('recurring, review, apply and done', () => {
+    type Txn = NormalizedStatement['transactions'][number];
+    const txn = (row: number, over: Partial<Txn> = {}): Txn => ({
+      row,
+      posted_date: '2026-07-10',
+      amount: -10,
+      description: `ROW ${row}`,
+      merchant_key: `merchant ${row}`,
+      kind: 'expense',
+      category_id: null,
+      category_source: 'none',
+      external_id: null,
+      dedupe_base: `d${row}`,
+      ...over,
+    });
+
+    const checking = (): NormalizedStatement =>
+      statement({
+        file_hash: 'hash-chk',
+        file_name: 'checking.csv',
+        transactions: [
+          txn(0, {
+            description: 'NETFLIX.COM',
+            merchant_key: 'netflix',
+            amount: -15.49,
+            category_id: 'c1',
+            category_source: 'rule',
+          }),
+          txn(1, { description: 'SAFEWAY', merchant_key: 'safeway', amount: -62.18 }),
+          txn(2, {
+            description: 'GYM CLUB',
+            merchant_key: 'gym club',
+            amount: -40,
+            category_id: 'c2',
+            category_source: 'seed',
+          }),
+          txn(3, { description: 'OLD CHARGE', merchant_key: 'old charge', dedupe_base: 'dup' }),
+        ],
+      });
+
+    const card = (over: Partial<NormalizedStatement> = {}): NormalizedStatement =>
+      statement({
+        file_hash: 'hash-card',
+        file_name: 'card.ofx',
+        format: 'ofx',
+        parser: 'ofx',
+        account: { kind: 'credit_card', key: 'acct:cc', last4: '4321', institution: 'Sample Bank' },
+        closing_balance: { amount: 1200, as_of: '2026-09-30' },
+        transactions: [txn(0, { description: 'CAFE', merchant_key: 'cafe', amount: -5 })],
+        ...over,
+      });
+
+    const candidate = (
+      merchant_key: string,
+      over: Partial<RecurringCandidateSuggestion> = {}
+    ): RecurringCandidateSuggestion => ({
+      merchant_key,
+      name: merchant_key.toUpperCase(),
+      amount: 20,
+      frequency: 'monthly',
+      occurrences: 3,
+      last_date: '2026-09-10',
+      category_id: 'c2',
+      already_budgeted: false,
+      matched_expense_id: null,
+      ...over,
+    });
+
+    const candidates = (): RecurringCandidateSuggestion[] => [
+      candidate('netflix', {
+        name: 'Netflix',
+        amount: 15.49,
+        category_id: 'c1',
+        already_budgeted: true,
+        matched_expense_id: 'e1',
+      }),
+      candidate('gym club', { name: 'Gym Club', amount: 40 }),
+      candidate('safeway', { name: 'Safeway', amount: 62.18, category_id: null }),
+    ];
+
+    const expenses = [
+      {
+        id: 'e1',
+        name: 'Netflix',
+        amount: 15.49,
+        monthly_amount: 15.49,
+        frequency: 'monthly',
+        category_id: 'c1',
+        is_active: true,
+      },
+      {
+        id: 'e9',
+        name: 'Old gym',
+        amount: 30,
+        monthly_amount: 30,
+        frequency: 'monthly',
+        is_active: false,
+      },
+    ];
+
+    const applied = (over: Partial<ApplyResponse> = {}): ApplyResponse => ({
+      imports: [
+        {
+          import_id: 'imp-1',
+          file_hash: 'hash-chk',
+          txn_new: 3,
+          txn_duplicate: 1,
+          txn_excluded: 0,
+          balance: 'none',
+        },
+        {
+          import_id: 'imp-2',
+          file_hash: 'hash-card',
+          txn_new: 1,
+          txn_duplicate: 0,
+          txn_excluded: 0,
+          balance: 'recorded',
+        },
+      ],
+      skipped_files: [],
+      rules_saved: 1,
+      expenses_created: 1,
+      expenses_linked: 0,
+      pruned: 0,
+      ...over,
+    });
+
+    const undone = (over: Partial<SmartImportUndoResponse> = {}): SmartImportUndoResponse => ({
+      undone: true,
+      deleted: { transactions: 2, recurring_candidates: 1, expenses: 1, snapshots: 0 },
+      reassigned: { transactions: 0 },
+      kept: [],
+      ...over,
+    });
+
+    const writes = (): string[] =>
+      calls
+        .filter((c) => (c.options?.method ?? 'GET') !== 'GET')
+        .map((c) => `${c.options!.method} ${c.url}`);
+    const callsTo = (url: string) => calls.filter((c) => c.url === url);
+    const change = (
+      target: HTMLSelectElement | HTMLInputElement,
+      value: string | boolean
+    ): void => {
+      if (typeof value === 'boolean') (target as HTMLInputElement).checked = value;
+      else target.value = value;
+      target.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const typeInto = (target: HTMLInputElement, value: string): void => {
+      target.value = value;
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    const cardFor = (key: string): HTMLElement => q(`[data-candidate="${key}"]`);
+    const ctl = <T extends HTMLElement>(key: string, si: string): T =>
+      cardFor(key).querySelector<T>(`[data-si="${si}"]`)!;
+    const shortLabel = (): string => q('.smart-import-progress-short').textContent ?? '';
+
+    function base(s: Setup = {}): Setup {
+      return {
+        preview: { ...emptyPreview, existing_dedupe_keys: ['acct:abc|dup'] },
+        analyze: (file) => okAnswer(file.name.endsWith('.ofx') ? card() : checking()),
+        liabilities: [liability({ current_balance: 900, balance_as_of: '2026-08-31' })],
+        expenses,
+        recurring: () => ({ candidates: candidates() }),
+        apply: () => applied(),
+        undo: () => undone(),
+        ...s,
+      };
+    }
+
+    const twoFiles = (): File[] => [
+      csvFile('checking.csv'),
+      new File(['OFXHEADER'], 'card.ofx', { type: 'application/x-ofx' }),
+    ];
+
+    async function toRecurring(
+      s: Setup = {},
+      files: File[] = twoFiles()
+    ): Promise<ReturnType<typeof openSmartImportWizard>> {
+      setup(base(s));
+      const handle = await open();
+      await toAccounts(files);
+      next().click(); // to Categorize
+      await flush();
+      next().click(); // to Recurring
+      await flush();
+      return handle;
+    }
+
+    async function toReview(s: Setup = {}): Promise<ReturnType<typeof openSmartImportWizard>> {
+      const handle = await toRecurring(s);
+      change(ctl('safeway', 'rec-check'), false);
+      await flush();
+      next().click();
+      await flush();
+      return handle;
+    }
+
+    async function toDone(s: Setup = {}): Promise<ReturnType<typeof openSmartImportWizard>> {
+      const handle = await toReview(s);
+      q<HTMLButtonElement>('[data-si="apply"]').click();
+      await flush();
+      return handle;
+    }
+
+    let seen: string[] = [];
+    let offs: (() => void)[] = [];
+    beforeEach(() => {
+      seen = [];
+      offs = [on('liabilities:changed', (e) => seen.push(`liabilities:${e.reason}`))];
+      vi.mocked(showTab).mockReset();
+      vi.mocked(showBudgetTab).mockReset();
+      vi.mocked(loadBudgetTab).mockReset();
+      vi.mocked(loadBudgetTab).mockImplementation(async () => {
+        seen.push('budget:reload');
+      });
+      vi.mocked(getCurrentTab).mockReturnValue('budget');
+    });
+    afterEach(() => {
+      offs.forEach((off) => off());
+    });
+
+    describe('Recurring bills', () => {
+      it('asks for candidates with one recurring call built from the rows and active expenses', async () => {
+        const handle = await toRecurring();
+        expect(shortLabel()).toBe('4 of 5');
+        const rec = callsTo('/api/v2/smart-import/recurring');
+        expect(rec).toHaveLength(1);
+        expect(rec[0]!.options?.method).toBe('POST');
+        const active = [
+          {
+            id: 'e1',
+            name: 'Netflix',
+            amount: 15.49,
+            frequency: 'monthly',
+            category_id: 'c1',
+            is_active: true,
+          },
+        ];
+        expect(rec[0]!.options?.body).toEqual(
+          recurringRequest(handle.getState(), {
+            expenses: active,
+            categories: handle.getState().categories,
+          })
+        );
+      });
+
+      it('does not ask again on Back from Review or after an unchanged Categorize', async () => {
+        await toRecurring();
+        change(ctl('safeway', 'rec-check'), false);
+        await flush();
+        next().click();
+        await flush();
+        expect(shortLabel()).toBe('5 of 5');
+        back().click();
+        await flush();
+        expect(shortLabel()).toBe('4 of 5');
+        back().click();
+        await flush();
+        next().click();
+        await flush();
+        expect(shortLabel()).toBe('4 of 5');
+        expect(callsTo('/api/v2/smart-import/recurring')).toHaveLength(1);
+      });
+
+      it('keeps edits when coming back from Review', async () => {
+        const handle = await toRecurring();
+        typeInto(ctl<HTMLInputElement>('gym club', 'rec-name'), 'Gym membership');
+        await flush();
+        change(ctl('safeway', 'rec-check'), false);
+        next().click();
+        await flush();
+        back().click();
+        await flush();
+        expect(ctl<HTMLInputElement>('gym club', 'rec-name').value).toBe('Gym membership');
+        expect(handle.getState().recurring.find((c) => c.merchant_key === 'gym club')!.name).toBe(
+          'Gym membership'
+        );
+      });
+
+      it('starts an already budgeted bill unticked with its note', async () => {
+        await toRecurring();
+        expect(ctl<HTMLInputElement>('netflix', 'rec-check').checked).toBe(false);
+        expect(ctl<HTMLInputElement>('gym club', 'rec-check').checked).toBe(true);
+        expect(cardFor('netflix').querySelector('[data-si="rec-note"]')!.textContent).toMatch(
+          /already in your budget/i
+        );
+        expect(cardFor('gym club').querySelector('[data-si="rec-note"]')).toBeNull();
+      });
+
+      it('edits name, amount, frequency and category', async () => {
+        const handle = await toRecurring();
+        typeInto(ctl<HTMLInputElement>('gym club', 'rec-name'), 'Gym membership');
+        typeInto(ctl<HTMLInputElement>('gym club', 'rec-amount'), '42.5');
+        change(ctl('gym club', 'rec-frequency'), 'biweekly');
+        change(ctl('gym club', 'rec-category'), 'c1');
+        await flush();
+        const c = handle.getState().recurring.find((x) => x.merchant_key === 'gym club')!;
+        expect(c).toMatchObject({
+          name: 'Gym membership',
+          amount: 42.5,
+          frequency: 'biweekly',
+          category_id: 'c1',
+        });
+      });
+
+      it('needs a category on every ticked bill before Next', async () => {
+        await toRecurring();
+        expect(next().disabled).toBe(true);
+        expect(cardFor('safeway').querySelector('[data-si="rec-error"]')!.textContent).toMatch(
+          /category/i
+        );
+        change(ctl('safeway', 'rec-category'), 'c2');
+        await flush();
+        expect(next().disabled).toBe(false);
+        expect(cardFor('safeway').querySelector('[data-si="rec-error"]')).toBeNull();
+        change(ctl('safeway', 'rec-category'), '');
+        await flush();
+        expect(next().disabled).toBe(true);
+        change(ctl('safeway', 'rec-check'), false);
+        await flush();
+        expect(next().disabled).toBe(false);
+      });
+
+      it('needs a name and an amount above zero on a ticked bill', async () => {
+        await toRecurring();
+        change(ctl('safeway', 'rec-check'), false);
+        typeInto(ctl<HTMLInputElement>('gym club', 'rec-amount'), '0');
+        await flush();
+        expect(next().disabled).toBe(true);
+        typeInto(ctl<HTMLInputElement>('gym club', 'rec-amount'), '40');
+        typeInto(ctl<HTMLInputElement>('gym club', 'rec-name'), '   ');
+        await flush();
+        expect(next().disabled).toBe(true);
+        typeInto(ctl<HTMLInputElement>('gym club', 'rec-name'), 'Gym');
+        await flush();
+        expect(next().disabled).toBe(false);
+      });
+
+      it('maps ticks to create, link and reject in the apply body', async () => {
+        await toRecurring();
+        change(ctl('netflix', 'rec-check'), true);
+        change(ctl('safeway', 'rec-category'), 'c2');
+        change(ctl('safeway', 'rec-check'), false);
+        await flush();
+        next().click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="apply"]').click();
+        await flush();
+        const body = callsTo('/api/smart-import/apply')[0]!.options!.body as ApplyRequest;
+        const byKey = Object.fromEntries((body.recurring ?? []).map((r) => [r.merchant_key, r]));
+        expect(byKey['netflix']).toMatchObject({ decision: 'link', expense_id: 'e1' });
+        expect(byKey['gym club']).toMatchObject({ decision: 'create', category_id: 'c2' });
+        expect(byKey['safeway']).toMatchObject({ decision: 'reject' });
+      });
+
+      it('says so when nothing recurring was found, and lets the person go on', async () => {
+        await toRecurring({ recurring: () => ({ candidates: [] }) });
+        expect(q('[data-si="rec-empty"]').textContent).toMatch(/no recurring bills/i);
+        expect(next().disabled).toBe(false);
+      });
+
+      it('shows a fixed message when the check fails, and lets the person go on', async () => {
+        await toRecurring({
+          recurring: () => {
+            throw new ApiError(500, 'secret detail', { detail: 'secret detail' });
+          },
+        });
+        const msg = q('[data-si="rec-failed"]').textContent ?? '';
+        expect(msg).toMatch(/could not/i);
+        expect(modal().textContent).not.toContain('secret detail');
+        expect(next().disabled).toBe(false);
+      });
+
+      it('renders candidate names as text', async () => {
+        await toRecurring({
+          recurring: () => ({
+            candidates: [candidate('evil', { name: '<img src=x onerror=alert(1)>' })],
+          }),
+        });
+        expect(modal().querySelector('img')).toBeNull();
+        expect(ctl<HTMLInputElement>('evil', 'rec-name').value).toBe(
+          '<img src=x onerror=alert(1)>'
+        );
+      });
+    });
+
+    describe('Review', () => {
+      it('shows the counts from reviewCounts', async () => {
+        const handle = await toReview();
+        expect(shortLabel()).toBe('5 of 5');
+        const counts = reviewCounts(handle.getState());
+        const value = (k: string): string => q(`[data-count="${k}"]`).textContent ?? '';
+        expect(value('new')).toBe(String(counts.new));
+        expect(value('duplicates')).toBe(String(counts.duplicates));
+        expect(value('excluded')).toBe(String(counts.excluded));
+        expect(value('merchants_to_remember')).toBe(String(counts.merchants_to_remember));
+        expect(value('expenses_to_add')).toBe(String(counts.expenses_to_add));
+        expect(value('expenses_to_link')).toBe(String(counts.expenses_to_link));
+        expect(counts.new).toBe(4);
+        expect(counts.duplicates).toBe(1);
+        expect(counts.expenses_to_add).toBe(1);
+      });
+
+      it("shows each debt's balance before and after", async () => {
+        await toReview();
+        const debt = q('[data-debt="l1"]');
+        expect(debt.textContent).toContain('Sample Card');
+        expect(debt.querySelector('[data-si="debt-before"]')!.textContent).toBe('$900.00');
+        expect(debt.querySelector('[data-si="debt-after"]')!.textContent).toBe('$1,200.00');
+      });
+
+      it('keeps the current balance as "after" for an older statement', async () => {
+        await toReview({
+          liabilities: [liability({ current_balance: 900, balance_as_of: '2026-10-02' })],
+        });
+        const debt = q('[data-debt="l1"]');
+        expect(debt.querySelector('[data-si="debt-after"]')!.textContent).toBe('$900.00');
+        expect(debt.textContent).toMatch(/older/i);
+      });
+
+      it('says how many rows will be saved without a category', async () => {
+        const handle = await toReview();
+        // SAFEWAY on checking and CAFE on the card have no category.
+        expect(reviewCounts(handle.getState()).needs_review).toBe(2);
+        expect(q('[data-count="needs_review"]').textContent).toBe('2');
+        expect(modal().textContent).toMatch(/category can be changed later/);
+      });
+
+      it('Back returns to Recurring bills', async () => {
+        await toReview();
+        back().click();
+        await flush();
+        expect(shortLabel()).toBe('4 of 5');
+      });
+    });
+
+    describe('Apply', () => {
+      it('sends exactly one apply built by buildApplyRequest, even on a double click', async () => {
+        const handle = await toReview();
+        const expected = buildApplyRequest(handle.getState());
+        const btn = q<HTMLButtonElement>('[data-si="apply"]');
+        btn.click();
+        btn.click();
+        q<HTMLButtonElement>('[data-si="apply"]').click();
+        await flush();
+        const posts = callsTo('/api/smart-import/apply');
+        expect(posts).toHaveLength(1);
+        expect(posts[0]!.options?.method).toBe('POST');
+        expect(posts[0]!.options?.body).toEqual(expected);
+      });
+
+      it('disables the button while the apply is in flight', async () => {
+        let release: (v: unknown) => void = () => undefined;
+        await toReview({ apply: () => new Promise((r) => (release = r)) });
+        q<HTMLButtonElement>('[data-si="apply"]').click();
+        const btn = q<HTMLButtonElement>('[data-si="apply"]');
+        expect(btn.disabled).toBe(true);
+        expect(back().disabled).toBe(true);
+        release(applied());
+        await flush();
+        expect(q('[data-si="done-summary"]')).toBeTruthy();
+      });
+
+      it('PUTs the settings patch after a successful apply', async () => {
+        const handle = await toReview();
+        const expected = buildSettingsPatch(handle.getState(), context().settings);
+        q<HTMLButtonElement>('[data-si="apply"]').click();
+        await flush();
+        const order = writes();
+        expect(order.indexOf('POST /api/smart-import/apply')).toBeLessThan(
+          order.indexOf('PUT /api/smart-import/settings')
+        );
+        const put = callsTo('/api/smart-import/settings').find((c) => c.options?.method === 'PUT');
+        expect(put!.options!.body).toEqual(expected);
+      });
+
+      it('shows a soft warning when the settings save fails after the apply', async () => {
+        await toDone({
+          settingsPut: () => {
+            throw new ApiError(500, 'x');
+          },
+        });
+        expect(q('[data-si="done-summary"]')).toBeTruthy();
+        expect(q('[data-si="settings-warning"]').textContent).toMatch(/import is saved/i);
+      });
+
+      it('catches ApplyTooLargeError before sending anything', async () => {
+        const many = Array.from({ length: 13 }, (_, i) =>
+          statement({
+            file_hash: `hash-${i}`,
+            account: { kind: 'checking', key: `acct:${i}`, last4: null, institution: null },
+            transactions: [txn(0, { dedupe_base: `x${i}` })],
+          })
+        );
+        setup(base({ analyze: () => okAnswer(...many), recurring: () => ({ candidates: [] }) }));
+        await open();
+        await toAccounts([csvFile('big.csv')]);
+        next().click();
+        await flush();
+        next().click();
+        await flush();
+        next().click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="apply"]').click();
+        await flush();
+        expect(callsTo('/api/smart-import/apply')).toHaveLength(0);
+        expect(q('[data-si="apply-error"]').textContent).toMatch(/12 statements/);
+        expect(shortLabel()).toBe('5 of 5');
+      });
+
+      it('stays on Review with a fixed message when the apply fails', async () => {
+        await toReview({
+          apply: () => {
+            throw new ApiError(500, 'secret detail', { detail: 'secret detail' });
+          },
+        });
+        q<HTMLButtonElement>('[data-si="apply"]').click();
+        await flush();
+        expect(q('[data-si="apply-error"]').textContent).toMatch(/nothing was saved/i);
+        expect(modal().textContent).not.toContain('secret detail');
+        expect(q<HTMLButtonElement>('[data-si="apply"]').disabled).toBe(false);
+        expect(seen).toEqual([]);
+      });
+
+      it('refreshes the budget and debts after the apply', async () => {
+        await toDone();
+        expect(seen).toEqual(expect.arrayContaining(['liabilities:balance', 'budget:reload']));
+      });
+
+      it('leaves the Budget page to reload itself when it is not showing', async () => {
+        vi.mocked(getCurrentTab).mockReturnValue('debts');
+        await toDone();
+        expect(seen).toEqual(['liabilities:balance']);
+      });
+
+      it('writes nothing before Apply (steps 1 to 4 and Review)', async () => {
+        await toRecurring();
+        typeInto(ctl<HTMLInputElement>('gym club', 'rec-name'), 'Gym membership');
+        change(ctl('safeway', 'rec-category'), 'c2');
+        await flush();
+        next().click();
+        await flush();
+        back().click();
+        await flush();
+        next().click();
+        await flush();
+        expect(shortLabel()).toBe('5 of 5');
+        const allowed = ['POST /api/smart-import/preview', 'POST /api/v2/smart-import/recurring'];
+        expect(writes().length).toBeGreaterThan(0);
+        for (const w of writes()) expect(allowed).toContain(w);
+      });
+
+      it('closes without the discard prompt once applied', async () => {
+        await toDone();
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        await flush();
+        expect(document.getElementById('dynamic-modal')).toBeNull();
+      });
+    });
+
+    describe('Done', () => {
+      it('shows the summary, skipped files and balances that were not recorded', async () => {
+        await toDone({
+          apply: () =>
+            applied({
+              imports: [
+                {
+                  import_id: 'imp-2',
+                  file_hash: 'hash-card',
+                  txn_new: 1,
+                  txn_duplicate: 0,
+                  txn_excluded: 0,
+                  balance: 'skipped_existing',
+                },
+              ],
+              skipped_files: ['hash-chk'],
+            }),
+        });
+        expect(q('.smart-import-progress-short').textContent).toBe('Done');
+        const text = q('[data-si="done-summary"]').textContent ?? '';
+        expect(text).toContain('1 transaction saved');
+        expect(text).toContain('checking.csv');
+        expect(text).toMatch(/already imported/i);
+        expect(text).toMatch(/A balance for .* was already recorded/);
+      });
+
+      it('explains a future statement date and a credit balance', async () => {
+        await toDone({
+          apply: () =>
+            applied({
+              imports: [
+                {
+                  import_id: 'imp-2',
+                  file_hash: 'hash-card',
+                  txn_new: 1,
+                  txn_duplicate: 0,
+                  txn_excluded: 0,
+                  balance: 'skipped_future',
+                },
+              ],
+            }),
+        });
+        expect(q('[data-si="done-summary"]').textContent).toMatch(/in the future/i);
+      });
+
+      it('"See planned vs actual" opens Budget > Expenses and closes the wizard', async () => {
+        await toDone();
+        q<HTMLButtonElement>('[data-si="planned"]').click();
+        await flush();
+        expect(vi.mocked(showTab)).toHaveBeenCalledWith('budget');
+        expect(vi.mocked(showBudgetTab)).toHaveBeenCalledWith('expenses');
+        expect(document.getElementById('dynamic-modal')).toBeNull();
+      });
+    });
+
+    describe('Undo', () => {
+      it('asks first, listing what goes and that remembered merchants stay', async () => {
+        await toDone();
+        q<HTMLButtonElement>('[data-si="undo"]').click();
+        await flush();
+        const text = q('.smart-import-confirm-text').textContent ?? '';
+        expect(text).toContain('4 transactions');
+        expect(text).toContain('1 expense it added');
+        expect(text).toContain('1 debt balance');
+        expect(text).toContain('Remembered merchants stay.');
+        expect(writes().filter((w) => w.startsWith('DELETE'))).toEqual([]);
+        q<HTMLButtonElement>('[data-si="undo-cancel"]').click();
+        await flush();
+        expect(writes().filter((w) => w.startsWith('DELETE'))).toEqual([]);
+        expect(q('[data-si="undo"]')).toBeTruthy();
+      });
+
+      it('sends one DELETE per import id and shows kept and reassigned', async () => {
+        seen = [];
+        await toDone({
+          undo: (id) =>
+            id === 'imp-1'
+              ? undone({
+                  kept: [{ table: 'budget_expenses', id: 'x1', reason: 'edited' }],
+                  reassigned: { transactions: 2 },
+                })
+              : undone({
+                  deleted: { transactions: 1, recurring_candidates: 0, expenses: 0, snapshots: 1 },
+                  kept: [{ table: 'budget_expenses', id: 'x2', reason: 'linked_to_debt' }],
+                }),
+        });
+        seen = [];
+        q<HTMLButtonElement>('[data-si="undo"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="undo-confirm"]').click();
+        await flush();
+        expect(writes().filter((w) => w.startsWith('DELETE'))).toEqual([
+          'DELETE /api/smart-import/imports/imp-1',
+          'DELETE /api/smart-import/imports/imp-2',
+        ]);
+        const result = q('[data-si="undo-result"]').textContent ?? '';
+        expect(result).toContain('3 transactions');
+        expect(result).toMatch(/changed after the import/i);
+        expect(result).toMatch(/a debt links to it/i);
+        expect(result).toMatch(/2 transactions .*another import/i);
+        expect(result).toContain('Remembered merchants stay');
+        expect(modal().querySelector('[data-si="undo"]')).toBeNull();
+        expect(result).toContain('Removed 3 transactions, 1 expense and 1 debt balance.');
+        expect(modal().querySelector('[data-si="done-summary"]')).toBeNull();
+        expect(seen).toEqual(expect.arrayContaining(['liabilities:balance', 'budget:reload']));
+      });
+
+      it('reports a partial undo and offers the rest again', async () => {
+        await toDone({
+          undo: (id) => {
+            if (id === 'imp-2') throw new ApiError(500, 'x');
+            return undone();
+          },
+        });
+        q<HTMLButtonElement>('[data-si="undo"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="undo-confirm"]').click();
+        await flush();
+        expect(q('[data-si="undo-error"]').textContent).toMatch(/1 of 2/);
+        expect(q('[data-si="undo"]')).toBeTruthy();
+        q<HTMLButtonElement>('[data-si="undo"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="undo-confirm"]').click();
+        await flush();
+        const deletes = writes().filter((w) => w.startsWith('DELETE'));
+        expect(deletes).toEqual([
+          'DELETE /api/smart-import/imports/imp-1',
+          'DELETE /api/smart-import/imports/imp-2',
+          'DELETE /api/smart-import/imports/imp-2',
+        ]);
+      });
+    });
+
+    it('lays the recurring cards out for every breakpoint', () => {
+      const css = readFileSync(resolve(import.meta.dirname, '../../style.css'), 'utf8');
+      const start = css.indexOf('/* Smart import wizard: Recurring, Review and Done */');
+      expect(start).toBeGreaterThan(-1);
+      const block = css.slice(start);
+      expect(block).toMatch(/@media \(max-width: 1024px\)/);
+      expect(block).toMatch(/@media \(max-width: 768px\)/);
+      expect(block).toMatch(/@media \(max-width: 480px\)/);
     });
   });
 

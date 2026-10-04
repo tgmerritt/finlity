@@ -5,8 +5,13 @@
  */
 
 import { formatCurrency, formatDate } from '@/utils/format';
-import type { CategorizeRequest, SmartImportAccountKind, SmartImportTxnKind } from '@/types/api';
-import type { WizardRow, WizardStatement } from '@/utils/smart-import-state';
+import type {
+  CategorizeRequest,
+  SmartImportAccountKind,
+  SmartImportFrequency,
+  SmartImportTxnKind,
+} from '@/types/api';
+import type { ApplyTooLargeError, WizardRow, WizardStatement } from '@/utils/smart-import-state';
 
 export const ACCEPT = '.csv,.ofx,.qfx,.pdf';
 export const MAX_FILES = 12;
@@ -345,4 +350,65 @@ export function whatGetsSentPanel(
   details.appendChild(el('pre', 'smart-import-sent-json', JSON.stringify(request, null, 2)));
   panel.appendChild(details);
   return panel;
+}
+
+// ---------------------------------------------------------------- recurring, apply, undo
+
+export const FREQUENCY_CHOICES: readonly { value: SmartImportFrequency; label: string }[] = [
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Every two weeks' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'annual', label: 'Yearly' },
+];
+
+/** Fixed copy for a batch over a server cap; nothing was sent. */
+export function tooLargeText(error: ApplyTooLargeError): string {
+  const max = error.max.toLocaleString('en-US');
+  switch (error.limit) {
+    case 'statements':
+      return `One import can hold up to ${max} statements. Remove some files and try again.`;
+    case 'transactions':
+      return `One statement can hold up to ${max} transactions. Split the file and try again.`;
+    case 'rules':
+      return `Up to ${max} merchants can be remembered in one import. Untick some and try again.`;
+    default:
+      return `Up to ${max} recurring bills can be saved in one import. Untick some and try again.`;
+  }
+}
+
+/** Fixed copy for a failed Apply; the server's text is never shown. Apply is all or nothing. */
+export function applyErrorText(error: unknown): string {
+  const status = error instanceof Error && 'status' in error ? Number(error.status) : 0;
+  if (status === 403) return 'Saving is turned off on this site, so nothing was saved.';
+  if (status === 413 || status === 422) {
+    return 'The import was refused as too large or malformed, so nothing was saved.';
+  }
+  return 'The import could not be saved, so nothing was saved. Try again in a moment.';
+}
+
+const KEPT_NOUN: Record<string, string> = {
+  budget_expenses: 'expense',
+  liability_balance_snapshots: 'debt balance',
+};
+
+const KEPT_REASON: Record<string, [string, string]> = {
+  edited: ['it was changed after the import', 'they were changed after the import'],
+  linked_to_debt: ['a debt links to it', 'debts link to them'],
+  used_by_other_import: ['another import also uses it', 'other imports also use them'],
+};
+
+/** "Kept 1 expense: it was changed after the import." per table and reason. */
+export function keptLines(kept: readonly { table: string; reason: string }[]): string[] {
+  const groups = new Map<string, { table: string; reason: string; n: number }>();
+  for (const k of kept) {
+    const key = `${k.table}|${k.reason}`;
+    const g = groups.get(key) ?? { table: k.table, reason: k.reason, n: 0 };
+    g.n += 1;
+    groups.set(key, g);
+  }
+  return [...groups.values()].map(({ table, reason, n }) => {
+    const why = KEPT_REASON[reason] ?? ['it is still in use', 'they are still in use'];
+    return `Kept ${countText(n, KEPT_NOUN[table] ?? 'item')}: ${why[n === 1 ? 0 : 1]}.`;
+  });
 }
