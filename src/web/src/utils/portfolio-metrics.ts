@@ -435,17 +435,30 @@ function debtAttentionItems(
   }
 
   const linked = new Set(debts.map((d) => d.linked_position_id).filter(Boolean));
-  for (const p of input.positions) {
-    if (p.position_type !== 'real_estate' || linked.has(p.id)) continue;
-    const key = `property:${p.id}`;
-    if (dismissed?.has(key)) continue;
+  const unlinked = input.positions.filter(
+    (p) =>
+      p.position_type === 'real_estate' && !linked.has(p.id) && !dismissed?.has(`property:${p.id}`)
+  );
+  if (unlinked.length === 1) {
+    const p = unlinked[0]!;
     items.push({
       kind: 'property-unlinked',
       message: `Is ${p.name || p.ticker} financed?`,
       action: 'review-property',
       targetId: p.id,
-      dismissKey: key,
+      dismissKey: `property:${p.id}`,
     });
+  } else if (unlinked.length > 1) {
+    // One item for the group; its key changes when the set of properties does.
+    const key = `property:${unlinked.map((p) => p.id).join(',')}`;
+    if (!dismissed?.has(key)) {
+      items.push({
+        kind: 'property-unlinked',
+        message: `${unlinked.length} properties have no linked mortgage`,
+        action: 'review-property',
+        dismissKey: key,
+      });
+    }
   }
 
   for (const d of debts) {
@@ -530,7 +543,7 @@ export function heroModel(
     assets,
     debts,
     breakdown: `Assets ${formatCurrency(assets)} \u00b7 Debts ${formatCurrency(debts)}`,
-    // Debts do not move intraday, so only assets contribute; percent is against yesterday's net worth.
+    // Debts held constant; the day change is the assets' price move. Percent is against yesterday's net worth.
     dayChange: dayAssets && {
       amount: dayAssets.amount,
       pct:

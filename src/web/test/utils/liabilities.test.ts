@@ -83,6 +83,17 @@ describe('liabilityGroup', () => {
     expect(g.rows.map((r) => r.meta)).toEqual(['Mortgage', 'HELOC']);
   });
 
+  it('shows only the rate for an amortizing debt with no payoff date', () => {
+    const g = liabilityGroup(summary([debt({ payoff_date: null })]))!;
+    expect(g.rows[0]!.meta).toBe('6.25%');
+  });
+
+  it('never reports a negative zero', () => {
+    const g = liabilityGroup(summary([debt({ balance: 0 })]))!;
+    expect(Object.is(g.subtotal, -0)).toBe(false);
+    expect(Object.is(g.rows[0]!.balance, -0)).toBe(false);
+  });
+
   it('copy contains no em-dash', () => {
     const g = liabilityGroup(summary([debt({})]))!;
     expect(JSON.stringify(g)).not.toContain('\u2014');

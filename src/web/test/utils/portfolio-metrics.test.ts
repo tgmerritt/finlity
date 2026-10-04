@@ -581,6 +581,31 @@ describe('attentionItems with liabilities', () => {
     ]);
   });
 
+  it('aggregates several unlinked properties into one item', () => {
+    const cabin = pos({ id: 'p2', name: 'Cabin', position_type: 'real_estate' });
+    const args = {
+      ...base,
+      positions: [home, cabin],
+      accountCount: 1,
+      liabilitiesIncluded: true,
+      liabilities: [debt()],
+    };
+    const items = attentionItems(args);
+    expect(items).toEqual([
+      {
+        kind: 'property-unlinked',
+        message: '2 properties have no linked mortgage',
+        action: 'review-property',
+        dismissKey: 'property:p-home,p2',
+      },
+    ]);
+    // Dismissing one leaves a single, named item; dismissing the group hides it.
+    expect(
+      attentionItems({ ...args, dismissed: new Set(['property:p-home']) }).map((i) => i.message)
+    ).toEqual(['Is Cabin financed?']);
+    expect(attentionItems({ ...args, dismissed: new Set(['property:p-home,p2']) })).toEqual([]);
+  });
+
   it('honors dismissed property items and ignores them in a filtered view', () => {
     const args = { ...base, positions: [home], accountCount: 1, liabilities: [debt()] };
     expect(

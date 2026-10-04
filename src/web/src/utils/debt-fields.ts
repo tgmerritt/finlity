@@ -130,6 +130,26 @@ export function defaultsFor(type: LiabilityType): DebtDraft {
   };
 }
 
+/**
+ * Change a draft's type: fields the new type does not offer are cleared (a
+ * credit limit must not follow a card into an auto loan), and the term follows
+ * the new type's default unless the user typed their own.
+ */
+export function switchType(draft: DebtDraft, type: LiabilityType): DebtDraft {
+  const shown = new Set<string>(fieldsFor(type).map((x) => x.key));
+  const blank = defaultsFor(type);
+  const next: DebtDraft = { ...draft, liabilityType: type };
+  for (const key of Object.keys(blank) as (keyof DebtDraft)[]) {
+    if (key !== 'liabilityType' && !shown.has(key) && key !== 'linkedPositionId') {
+      (next[key] as string) = blank[key] as string;
+    }
+  }
+  if (shown.has('termMonths') && draft.termMonths === (DEFAULT_TERM[draft.liabilityType] ?? '')) {
+    next.termMonths = blank.termMonths;
+  }
+  return next;
+}
+
 export interface ParsedDebt {
   name: string;
   currentBalance: number;
@@ -150,6 +170,13 @@ export interface DraftValidation {
 
 const MAX_MONEY = 1e10;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** True for a real calendar day written YYYY-MM-DD. */
+function isRealDay(raw: string): boolean {
+  if (!ISO_DAY.test(raw)) return false;
+  const d = new Date(`${raw}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === raw;
+}
 
 function num(raw: string): number {
   const t = raw.replace(/[$,\s]/g, '');
@@ -186,7 +213,7 @@ export function validateDraft(draft: DebtDraft): DraftValidation {
     const pct = num(draft.aprPercent);
     if (!Number.isFinite(pct) || pct < 0 || pct > 100)
       errors.aprPercent = 'Enter a rate from 0 to 100';
-    else interestRate = pct / 100;
+    else interestRate = Number((pct / 100).toFixed(6));
   }
 
   let termMonths: number | null = null;
@@ -198,7 +225,7 @@ export function validateDraft(draft: DebtDraft): DraftValidation {
   }
 
   for (const key of ['nextPaymentDate', 'originationDate', 'maturityDate'] as const) {
-    if (draft[key] && !ISO_DAY.test(draft[key])) errors[key] = 'Use the date format YYYY-MM-DD';
+    if (draft[key] && !isRealDay(draft[key])) errors[key] = 'Use the date format YYYY-MM-DD';
   }
   if (
     !errors.maturityDate &&
@@ -246,7 +273,10 @@ type Optionals = Pick<
 /** Optional fields; blanks become null when `clear` is set (edits), else are omitted (creates). */
 function optionals(draft: DebtDraft, v: ParsedDebt, clear: boolean): Optionals {
   const out: Record<string, string | number | null> = {};
-  const put = (key: string, value: string | number | null): void => {
+  const shown = new Set<string>(fieldsFor(draft.liabilityType).map((x) => x.key));
+  const put = (key: string, value: string | number | null, field?: DebtFieldKey): void => {
+    // A field the type does not offer is treated as blank, whatever the draft holds.
+    if (field && !shown.has(field)) value = null;
     if (value !== null && value !== '') out[key] = value;
     else if (clear) out[key] = null;
   };
@@ -254,12 +284,12 @@ function optionals(draft: DebtDraft, v: ParsedDebt, clear: boolean): Optionals {
   put('interest_rate', v.interestRate);
   put('payment_amount', v.paymentAmount);
   put('next_payment_date', draft.nextPaymentDate);
-  put('escrow_amount', v.escrowAmount);
+  put('escrow_amount', v.escrowAmount, 'escrowAmount');
   put('original_principal', v.originalPrincipal);
   put('origination_date', draft.originationDate);
-  put('term_months', v.termMonths);
+  put('term_months', v.termMonths, 'termMonths');
   put('maturity_date', draft.maturityDate);
-  put('credit_limit', v.creditLimit);
+  put('credit_limit', v.creditLimit, 'creditLimit');
   put('entity_id', draft.entityId);
   put('linked_position_id', draft.linkedPositionId);
   put('notes', draft.notes.trim());

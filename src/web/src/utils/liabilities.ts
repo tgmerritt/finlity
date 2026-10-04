@@ -86,10 +86,10 @@ export function liabilityGroup(summary: PortfolioSummary): LiabilityGroup | null
   return {
     key: 'liabilities',
     label: 'Liabilities',
-    subtotal: -owed,
+    subtotal: -owed || 0,
     rows: [...debts]
       .sort((a, b) => b.balance - a.balance)
-      .map((d) => ({ id: d.id, name: d.name, balance: -d.balance, meta: metaFor(d) })),
+      .map((d) => ({ id: d.id, name: d.name, balance: -d.balance || 0, meta: metaFor(d) })),
     footer: { label: 'Net worth', value: summary.net_worth ?? summary.total_value - owed },
   };
 }

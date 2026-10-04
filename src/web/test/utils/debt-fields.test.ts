@@ -3,6 +3,7 @@ import {
   DEBT_TYPES,
   defaultsFor,
   fieldsFor,
+  switchType,
   toCreateInput,
   toUpdateInput,
   validateDraft,
@@ -97,6 +98,23 @@ describe('validateDraft', () => {
     ).toBeTruthy();
   });
 
+  it('rejects dates that are not on the calendar', () => {
+    expect(
+      validateDraft(draft({ nextPaymentDate: '2026-13-45' })).errors.nextPaymentDate
+    ).toBeTruthy();
+    expect(
+      validateDraft(draft({ originationDate: '2026-02-30' })).errors.originationDate
+    ).toBeTruthy();
+    expect(
+      validateDraft(draft({ originationDate: '2024-02-29' })).errors.originationDate
+    ).toBeUndefined();
+  });
+
+  it('rounds the APR decimal to 6 places', () => {
+    expect(validateDraft(draft({ aprPercent: '6.1234567' })).values?.interestRate).toBe(0.061235);
+    expect(validateDraft(draft({ aprPercent: '7.35' })).values?.interestRate).toBe(0.0735);
+  });
+
   it('errors contain no em-dash', () => {
     const r = validateDraft(
       draft({ name: '', currentBalance: 'x', aprPercent: '500', termMonths: '0' })
@@ -139,5 +157,35 @@ describe('toUpdateInput', () => {
     expect(input.lender).toBeNull();
     expect(input.interest_rate).toBeCloseTo(0.049, 10);
     expect('current_balance' in input).toBe(false);
+  });
+});
+
+describe('switchType', () => {
+  it('drops fields the new type does not have and keeps shared ones', () => {
+    const card = draft({
+      liabilityType: 'credit_card',
+      creditLimit: '15000',
+      termMonths: '',
+      name: 'Card',
+    });
+    const loan = switchType(card, 'auto_loan');
+    expect(loan.liabilityType).toBe('auto_loan');
+    expect(loan.creditLimit).toBe('');
+    expect(loan.name).toBe('Card');
+    expect(loan.termMonths).toBe('60');
+    const back = switchType({ ...loan, termMonths: '48', escrowAmount: '200' }, 'credit_card');
+    expect(back.termMonths).toBe('');
+    expect(back.escrowAmount).toBe('');
+  });
+
+  it('keeps a term the user typed and escrow only for mortgages', () => {
+    const d = switchType(draft({ liabilityType: 'auto_loan', termMonths: '48' }), 'personal_loan');
+    expect(d.termMonths).toBe('48');
+    expect(switchType(draft({ escrowAmount: '300' }), 'auto_loan').escrowAmount).toBe('');
+  });
+
+  it('does not let toCreateInput send fields of another type', () => {
+    const d = { ...draft({ liabilityType: 'auto_loan' }), creditLimit: '9000' };
+    expect(toCreateInput(d)).not.toHaveProperty('credit_limit');
   });
 });

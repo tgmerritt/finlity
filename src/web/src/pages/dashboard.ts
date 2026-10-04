@@ -612,21 +612,20 @@ async function renderAttention(positions: DashboardPosition[], gen: number): Pro
   });
 
   list.textContent = '';
-  if (items.length === 0) {
-    list.appendChild(h('li', 'attention-clear', 'All clear'));
-    return;
-  }
+  let shown = 0;
   for (const item of items) {
-    const li = h('li');
-    li.appendChild(h('span', 'attention-message', item.message));
     const action = ATTENTION_ACTIONS[item.action];
     if (!action) continue;
+    const li = h('li');
+    li.appendChild(h('span', 'attention-message', item.message));
     const btn = h('button', 'btn btn-secondary btn-sm', action.label);
     btn.type = 'button';
     btn.addEventListener('click', action.run);
     li.appendChild(btn);
     list.appendChild(li);
+    shown += 1;
   }
+  if (shown === 0) list.appendChild(h('li', 'attention-clear', 'All clear'));
 }
 
 /** Show Holdings filtered to a single account. */
