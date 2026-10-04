@@ -13,8 +13,15 @@ import {
   defaultRange,
   groupAccounts,
   attentionItems,
+  heroModel,
 } from '@/utils/portfolio-metrics';
-import type { AccountResponse, DashboardPosition, SnapshotHistory } from '@/types/api';
+import type {
+  AccountResponse,
+  DashboardLiability,
+  DashboardPosition,
+  SnapshotHistory,
+  DashboardData,
+} from '@/types/api';
 
 const pos = (over: Partial<DashboardPosition>): DashboardPosition =>
   ({
@@ -347,5 +354,306 @@ describe('attentionItems', () => {
       today,
     });
     expect(items).toEqual([]);
+  });
+});
+
+describe('groupAccounts property group', () => {
+  const acct = (over: Partial<AccountResponse>): AccountResponse =>
+    ({
+      id: 'a',
+      name: 'A',
+      account_type: 'taxable',
+      display_type: '',
+      brokerage: 'other',
+      value: 0,
+      cost_basis: null,
+      position_count: 0,
+      is_retirement: false,
+      ...over,
+    }) as AccountResponse;
+
+  it('puts property accounts in a Property group after Cash & savings', () => {
+    const groups = groupAccounts(
+      [
+        acct({ id: '1', name: 'Home', account_type: 'property', value: 600 }),
+        acct({ id: '2', name: 'Savings', account_type: 'hysa', value: 100 }),
+        acct({ id: '3', name: 'Brokerage', value: 300 }),
+        acct({ id: '4', name: 'Roth', account_type: 'roth_ira', is_retirement: true, value: 1 }),
+      ],
+      [],
+      1000
+    );
+    expect(groups.map((g) => g.key)).toEqual(['retirement', 'taxable', 'cash', 'property']);
+    expect(groups[3]!.label).toBe('Property');
+    expect(groups[3]!.rows[0]!.pctOfTotal).toBeCloseTo(60);
+    expect(groups[1]!.rows.map((r) => r.name)).toEqual(['Brokerage']);
+  });
+});
+
+describe('allocationVsTarget with property accounts', () => {
+  it('ignores positions in property accounts', () => {
+    const rows = allocationVsTarget(
+      [
+        pos({ ticker: 'VTI', value: 1000 }),
+        pos({
+          ticker: 'RE',
+          position_type: 'real_estate',
+          account_type: 'property',
+          value: 9000,
+        }),
+      ],
+      null
+    );
+    expect(rows.map((r) => r.cls)).toEqual(['stocks']);
+    expect(rows[0]!.actualPct).toBeCloseTo(100);
+  });
+});
+
+const debt = (over: Partial<DashboardLiability> = {}): DashboardLiability => ({
+  id: 'l1',
+  name: 'Mortgage',
+  liability_type: 'mortgage',
+  balance: 400,
+  interest_rate: 0.0625,
+  payment_amount: 3000,
+  payment_frequency: 'monthly',
+  payoff_date: '2052-07-01',
+  linked_position_id: null,
+  entity_id: null,
+  is_amortizing: true,
+  last_reported_date: '2026-09-30',
+  ...over,
+});
+
+const dashboard = (over: {
+  summary?: Partial<DashboardData['summary']>;
+  history?: SnapshotHistory[];
+  positions?: DashboardPosition[];
+}): Pick<DashboardData, 'summary' | 'history' | 'positions'> => ({
+  summary: {
+    total_value: 1000,
+    liabilities_included: true,
+    liabilities_total: 400,
+    net_worth: 600,
+    liabilities: [debt()],
+    ...over.summary,
+  } as DashboardData['summary'],
+  history: over.history ?? [],
+  positions: over.positions ?? [],
+});
+
+describe('heroModel', () => {
+  const nwSnap = (date: string, total: number, liabilities: number): SnapshotHistory =>
+    ({
+      date,
+      total,
+      retirement: 0,
+      taxable: total,
+      liabilities,
+      net_worth: total - liabilities,
+    }) as SnapshotHistory;
+
+  it('is portfolio mode without liabilities', () => {
+    const m = heroModel(
+      dashboard({
+        summary: {
+          liabilities_included: true,
+          liabilities_total: 0,
+          net_worth: 1000,
+          liabilities: [],
+        },
+        history: [snap('2026-09-01', 900), snap('2026-09-30', 1000)],
+      })
+    );
+    expect(m.mode).toBe('portfolio');
+    expect(m.label).toBe('Portfolio value');
+    expect(m.value).toBe(1000);
+    expect(m.breakdown).toBeNull();
+    expect(m.rangeChange!.amount).toBe(100);
+    expect(m.series.map((p) => p.value)).toEqual([900, 1000]);
+    expect(m.series[0]!.debts).toBeNull();
+  });
+
+  it('is portfolio mode when a view excludes liabilities', () => {
+    const m = heroModel(dashboard({ summary: { liabilities_included: false } }));
+    expect(m.mode).toBe('portfolio');
+    expect(m.value).toBe(1000);
+  });
+
+  it('is net worth mode with a breakdown and net worth series', () => {
+    const m = heroModel(
+      dashboard({ history: [nwSnap('2026-09-01', 900, 420), nwSnap('2026-09-30', 1000, 400)] })
+    );
+    expect(m.mode).toBe('net-worth');
+    expect(m.label).toBe('Net worth');
+    expect(m.value).toBe(600);
+    expect(m.breakdown).toBe('Assets $1,000.00 \u00b7 Debts $400.00');
+    expect(m.series).toEqual([
+      { date: '2026-09-01', value: 480, assets: 900, debts: 420 },
+      { date: '2026-09-30', value: 600, assets: 1000, debts: 400 },
+    ]);
+    expect(m.rangeChange!.amount).toBe(120);
+    expect(m.rangeChange!.pct).toBeCloseTo(25);
+  });
+
+  it('computes the day change from assets against yesterday net worth', () => {
+    const m = heroModel(
+      dashboard({ positions: [pos({ price: 100, previous_close: 90, shares: 10 })] })
+    );
+    // Assets up 100, so yesterday's net worth was 500.
+    expect(m.dayChange!.amount).toBeCloseTo(100);
+    expect(m.dayChange!.pct).toBeCloseTo(20);
+  });
+
+  it('drops percents when the base is not positive and allows negative net worth', () => {
+    const m = heroModel(
+      dashboard({
+        summary: { total_value: 100, liabilities_total: 400, net_worth: -300 },
+        positions: [pos({ price: 100, previous_close: 90, shares: 10 })],
+        history: [nwSnap('2026-09-01', 50, 400), nwSnap('2026-09-30', 100, 400)],
+      })
+    );
+    expect(m.value).toBe(-300);
+    expect(m.dayChange).toEqual({ amount: 100, pct: null });
+    expect(m.rangeChange).toEqual({ amount: 50, pct: null });
+  });
+
+  it('has no range change with fewer than two points', () => {
+    expect(
+      heroModel(dashboard({ history: [nwSnap('2026-09-30', 1000, 400)] })).rangeChange
+    ).toBeNull();
+  });
+});
+
+describe('attentionItems with liabilities', () => {
+  const today = new Date('2026-09-30T12:00:00Z');
+  const base = { staleTickers: 0, duplicateCount: 0, triggeredAlerts: [], today };
+  const home = pos({ id: 'p-home', ticker: 'RE', name: 'Home', position_type: 'real_estate' });
+
+  it('asks for debts when included, none exist and an account exists', () => {
+    const items = attentionItems({
+      ...base,
+      positions: [],
+      accountCount: 2,
+      liabilitiesIncluded: true,
+      liabilities: [],
+    });
+    expect(items).toEqual([
+      {
+        kind: 'add-debts',
+        message: 'Add your debts to see your net worth',
+        action: 'add-debts',
+        dismissKey: 'add-debts',
+      },
+    ]);
+  });
+
+  it('skips add-debts with no accounts, in a view, when dismissed or when debts exist', () => {
+    const args = {
+      ...base,
+      positions: [],
+      accountCount: 1,
+      liabilitiesIncluded: true,
+      liabilities: [],
+    };
+    expect(attentionItems({ ...args, accountCount: 0 })).toEqual([]);
+    expect(attentionItems({ ...args, liabilitiesIncluded: false })).toEqual([]);
+    expect(attentionItems({ ...args, dismissed: new Set(['add-debts']) })).toEqual([]);
+    expect(attentionItems({ ...args, liabilities: [debt()] })).toEqual([]);
+  });
+
+  it('flags a real estate position no debt links to, once per position', () => {
+    const items = attentionItems({
+      ...base,
+      positions: [home, pos({ id: 'p2', name: 'Cabin', position_type: 'real_estate' })],
+      accountCount: 1,
+      liabilitiesIncluded: true,
+      liabilities: [debt({ linked_position_id: 'p2' })],
+    });
+    expect(items).toEqual([
+      {
+        kind: 'property-unlinked',
+        message: 'Is Home financed?',
+        action: 'review-property',
+        targetId: 'p-home',
+        dismissKey: 'property:p-home',
+      },
+    ]);
+  });
+
+  it('aggregates several unlinked properties into one item', () => {
+    const cabin = pos({ id: 'p2', name: 'Cabin', position_type: 'real_estate' });
+    const args = {
+      ...base,
+      positions: [home, cabin],
+      accountCount: 1,
+      liabilitiesIncluded: true,
+      liabilities: [debt()],
+    };
+    const items = attentionItems(args);
+    expect(items).toEqual([
+      {
+        kind: 'property-unlinked',
+        message: '2 properties have no linked mortgage',
+        action: 'review-property',
+        dismissKey: 'property:p-home,p2',
+      },
+    ]);
+    // Dismissing one leaves a single, named item; dismissing the group hides it.
+    expect(
+      attentionItems({ ...args, dismissed: new Set(['property:p-home']) }).map((i) => i.message)
+    ).toEqual(['Is Cabin financed?']);
+    expect(attentionItems({ ...args, dismissed: new Set(['property:p-home,p2']) })).toEqual([]);
+  });
+
+  it('honors dismissed property items and ignores them in a filtered view', () => {
+    const args = { ...base, positions: [home], accountCount: 1, liabilities: [debt()] };
+    expect(
+      attentionItems({
+        ...args,
+        liabilitiesIncluded: true,
+        dismissed: new Set(['property:p-home']),
+      })
+    ).toEqual([]);
+    expect(attentionItems({ ...args, liabilitiesIncluded: false })).toEqual([]);
+  });
+
+  it('flags revolving balances not reported for more than 45 days', () => {
+    const card = debt({
+      id: 'c1',
+      name: 'Chase Sapphire',
+      liability_type: 'credit_card',
+      is_amortizing: false,
+      last_reported_date: '2026-08-10',
+    });
+    const fresh = debt({ id: 'c2', is_amortizing: false, last_reported_date: '2026-08-16' });
+    const oldLoan = debt({ id: 'm', last_reported_date: '2020-01-01' });
+    const items = attentionItems({
+      ...base,
+      positions: [],
+      accountCount: 1,
+      liabilitiesIncluded: true,
+      liabilities: [card, fresh, oldLoan],
+    });
+    expect(items).toEqual([
+      {
+        kind: 'stale-balance',
+        message: 'Update the Chase Sapphire balance',
+        action: 'update-balance',
+        targetId: 'c1',
+      },
+    ]);
+  });
+
+  it('new messages contain no em-dash', () => {
+    const items = attentionItems({
+      ...base,
+      positions: [home],
+      accountCount: 1,
+      liabilitiesIncluded: true,
+      liabilities: [],
+    });
+    expect(items.length).toBe(2);
+    expect(items.every((i) => !i.message.includes('\u2014'))).toBe(true);
   });
 });

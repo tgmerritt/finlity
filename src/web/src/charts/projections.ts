@@ -2,9 +2,18 @@
  * Projection chart rendering for Monte Carlo, tax burden, and account balances.
  */
 
-import { renderChart, getBaseLayout, getAxisConfig, chartPalette } from './plotly-utils';
+import {
+  ensureThemeUpdates,
+  renderChart,
+  getBaseLayout,
+  getAxisConfig,
+  chartPalette,
+} from './plotly-utils';
 import { getChartColors } from '@/state/theme';
 import { formatCurrency } from '@/utils/format';
+import { today } from '@/utils/clock';
+import { debtByYear, debtPayoffSummary, formatMonthYear } from '@/utils/liabilities';
+import type { LiabilityResponse } from '@/types/api';
 
 /**
  * Monte Carlo projection result from API.
@@ -85,7 +94,8 @@ function getHoverLabel(): Record<string, unknown> {
  */
 export async function displayProjectionResults(
   result: MonteCarloProjectionResult,
-  retirementAge: number
+  retirementAge: number,
+  liabilities: readonly LiabilityResponse[] = []
 ): Promise<void> {
   const resultsContainer = document.getElementById('projection-results');
   if (resultsContainer) {
@@ -114,8 +124,38 @@ export async function displayProjectionResults(
 
   const colors = getChartColors();
   const retirementIdx = result.ages.indexOf(retirementAge);
+  const now = today();
+  const firstAge = result.ages[0] ?? 0;
+  const payoff = debtPayoffSummary(liabilities, now, firstAge);
+  renderDebtPayoffCard(payoff);
+  const debtTrace: {
+    x: number[];
+    y: number[];
+    type: 'scatter';
+    mode: 'lines';
+    name: string;
+    line: { color: string; width: number; dash: string };
+  }[] = [];
+  if (payoff) {
+    const owed = debtByYear(
+      liabilities,
+      now,
+      Math.max(0, (result.ages.at(-1) ?? firstAge) - firstAge)
+    );
+    debtTrace.push({
+      x: result.ages,
+      y: result.median_values.map(
+        (v, i) => v - (owed[Math.max(0, Math.round((result.ages[i] ?? firstAge) - firstAge))] ?? 0)
+      ),
+      type: 'scatter',
+      mode: 'lines',
+      name: 'Median minus debt',
+      line: { color: chartPalette.purple, width: 2, dash: 'dash' },
+    });
+  }
 
   // Render Monte Carlo fan chart
+  ensureThemeUpdates('chart-projection');
   await renderChart(
     'chart-projection',
     [
@@ -167,13 +207,15 @@ export async function displayProjectionResults(
         fill: 'tonexty',
         fillcolor: 'rgba(239, 68, 68, 0.1)',
       },
+      ...debtTrace,
     ],
     {
       ...getBaseLayout(),
       margin: { t: 20, b: 40, l: 100, r: 20 },
       xaxis: {
         ...getAxisConfig(),
-        title: 'Age',
+        title: { text: 'Age', standoff: 15 },
+        automargin: true,
       },
       yaxis: {
         ...getAxisConfig(),
@@ -202,6 +244,60 @@ export async function displayProjectionResults(
   );
 }
 
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className: string,
+  text: string
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  node.className = className;
+  node.textContent = text;
+  return node;
+}
+
+/** Fill #debt-payoff-card from the summary, or hide it when there is none. */
+function renderDebtPayoffCard(summary: ReturnType<typeof debtPayoffSummary>): void {
+  const card = document.getElementById('debt-payoff-card');
+  if (!card) return;
+  card.textContent = '';
+  card.hidden = summary === null;
+  if (!summary) return;
+  const free = summary.debtFreeDate
+    ? `Debt-free by ${formatMonthYear(summary.debtFreeDate)}${summary.debtFreeAge === null ? '' : ` (age ${summary.debtFreeAge})`}`
+    : 'Debt-free: Not projected';
+  card.appendChild(el('h4', 'debt-payoff-title', free));
+  if (summary.debtFreeDate && summary.withoutPayoff > 0) {
+    const n = summary.withoutPayoff;
+    card.appendChild(
+      el(
+        'p',
+        'debt-payoff-sub',
+        `Excludes ${n} ${n === 1 ? 'debt' : 'debts'} without a payoff plan`
+      )
+    );
+  }
+  card.appendChild(
+    el('p', 'debt-payoff-sub', `${formatCurrency(summary.interestLeft)} of interest still to pay`)
+  );
+  const list = el('ul', 'debt-payoff-list', '');
+  for (const d of summary.debts) {
+    const li = el('li', 'debt-payoff-item', '');
+    li.appendChild(el('span', 'debt-payoff-name', d.name));
+    li.appendChild(
+      el(
+        'span',
+        'debt-payoff-date',
+        d.payoffDate ? formatMonthYear(d.payoffDate) : 'No payoff date'
+      )
+    );
+    list.appendChild(li);
+  }
+  card.appendChild(list);
+  card.appendChild(
+    el('p', 'debt-payoff-note', "Projections don't move paid-off payments into savings yet.")
+  );
+}
+
 /**
  * Render tax burden chart with stacked bars and effective rate line.
  * @param chartData - Tax burden data from API
@@ -212,6 +308,8 @@ export async function renderTaxBurdenChart(chartData: TaxBurdenChartData): Promi
   // Calculate max effective rate for y2 axis scaling
   const validRates = chartData.effective_rates.filter((r) => r > 0);
   const maxRate = validRates.length > 0 ? Math.max(...validRates, 30) : 30;
+
+  ensureThemeUpdates('tax-burden-chart');
 
   await renderChart(
     'tax-burden-chart',
@@ -252,7 +350,8 @@ export async function renderTaxBurdenChart(chartData: TaxBurdenChartData): Promi
       margin: { t: 20, r: 60, b: 60, l: 60 },
       xaxis: {
         ...getAxisConfig(),
-        title: 'Age',
+        title: { text: 'Age', standoff: 15 },
+        automargin: true,
       },
       yaxis: {
         ...getAxisConfig(),
@@ -280,6 +379,8 @@ export async function renderTaxBurdenChart(chartData: TaxBurdenChartData): Promi
  */
 export async function renderAccountBalanceChart(chartData: AccountBalanceChartData): Promise<void> {
   const colors = getChartColors();
+
+  ensureThemeUpdates('tax-balance-chart');
 
   await renderChart(
     'tax-balance-chart',
@@ -333,7 +434,8 @@ export async function renderAccountBalanceChart(chartData: AccountBalanceChartDa
       margin: { t: 20, r: 20, b: 60, l: 60 },
       xaxis: {
         ...getAxisConfig(),
-        title: 'Age',
+        title: { text: 'Age', standoff: 15 },
+        automargin: true,
       },
       yaxis: {
         ...getAxisConfig(),

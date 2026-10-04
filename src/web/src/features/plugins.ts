@@ -6,7 +6,7 @@
 import { apiCall, uploadFile, getBaseUrl } from '@/api/client';
 import { generateSignatureHeaders, isSigningRequired } from '@/state/session';
 import { showToast } from '@/ui/toast';
-import { closeModal, createDynamicModal } from '@/ui/modal';
+import { closeDynamicModal, createDynamicModal } from '@/ui/modal';
 import { getElementById, setVisible, clearElement, createSvgElement } from '@/utils/html';
 import { setStateView } from '@/ui/state-view';
 import { formatNumber } from '@/utils/format';
@@ -594,7 +594,7 @@ export async function showPluginSettings(pluginId: string): Promise<void> {
     cancelBtn.type = 'button';
     cancelBtn.className = 'btn btn-default';
     cancelBtn.textContent = 'Cancel';
-    cancelBtn.onclick = closeModal;
+    cancelBtn.onclick = closeDynamicModal;
     footer.appendChild(cancelBtn);
 
     const saveBtn = document.createElement('button');
@@ -648,7 +648,7 @@ export async function savePluginSettings(event: Event, pluginId: string): Promis
       body: { settings },
     });
 
-    closeModal();
+    closeDynamicModal();
     showToast('Settings saved', 'success');
   } catch (error) {
     console.error('Error saving plugin settings:', error);

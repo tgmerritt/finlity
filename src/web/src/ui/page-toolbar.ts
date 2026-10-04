@@ -13,6 +13,7 @@ export interface ToolbarState {
 const TOOLBAR_STATES: Record<TabName, ToolbarState> = {
   dashboard: { title: 'Dashboard', showView: true, showPerson: true },
   holdings: { title: 'Holdings', showView: true, showPerson: true },
+  debts: { title: 'Debts', showView: false, showPerson: true },
   analysis: { title: 'Analysis', showView: true, showPerson: true },
   projections: { title: 'Projections', showView: true, showPerson: true },
   budget: { title: 'Expenses & Income', showView: false, showPerson: true },

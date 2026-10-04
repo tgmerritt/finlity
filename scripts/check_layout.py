@@ -12,6 +12,7 @@ Requires Playwright: pip install playwright && playwright install chromium
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -20,7 +21,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 WIDTHS = (1440, 900, 390, 360)
 THEMES = ("light", "dark")
-EXTRA_TABS = ("holdings", "projections", "settings", "taxes", "analysis", "budget")
+EXTRA_TABS = ("holdings", "debts", "projections", "settings", "taxes", "analysis", "budget")
 
 CHECKS_JS = """
 () => {
@@ -183,16 +184,49 @@ def drawer_problems(page: Page, attempts: int = 3) -> list[str]:
     return problems
 
 
+# True once the dashboard is visible with data rendered and no loading overlay.
+# The hero fills in before the account list and the cards that load their own
+# data, so also require account rows and the on-track and attention cards.
+DASHBOARD_READY_JS = """() => {
+  const tab = document.getElementById('tab-dashboard');
+  if (!tab || getComputedStyle(tab).display === 'none') return false;
+  const hero = document.querySelector('#total-value');
+  const accountRows = document.querySelectorAll('#account-groups .account-row').length;
+  const onTrack = (document.getElementById('on-track-body')?.textContent || '').trim();
+  const attention = (document.getElementById('attention-list')?.textContent || '').trim();
+  const overlay = document.getElementById('loading-overlay');
+  const overlayHidden =
+    !overlay ||
+    (!overlay.classList.contains('visible') &&
+      (overlay.classList.contains('hidden') ||
+        getComputedStyle(overlay).display === 'none' ||
+        getComputedStyle(overlay).visibility === 'hidden'));
+  return (
+    !!hero &&
+    /\\$[1-9]/.test(hero.textContent || '') &&
+    accountRows > 0 &&
+    onTrack.length > 0 &&
+    attention.length > 0 &&
+    overlayHidden
+  );
+}"""
+
+
 def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) -> None:
     # Each new_page() is a fresh context, so the app boots as a first-time
-    # visitor. Boot always lands on the Dashboard and loads data, so no
-    # localStorage priming is needed.
+    # visitor. Boot always lands on the Dashboard and loads data. The theme is
+    # stored under the key the app reads ("theme", see state/theme.ts) before
+    # any page script runs, so charts render in the right theme the first time
+    # instead of being recolored after load.
+    page.add_init_script(f"localStorage.setItem('theme', {json.dumps(theme)})")
 
     # "load" rather than "networkidle": hosted mode keeps requests in flight
     # (CDN assets, background polling), so the network may never go idle.
     # Readiness is decided by the wait_for_function below.
     page.goto(base_url + "/", wait_until="load", timeout=60000)
-    page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
+    page.wait_for_function(
+        "t => document.documentElement.getAttribute('data-theme') === t", arg=theme, timeout=10000
+    )
 
     if hosted:
         # Hosted (browser storage) mode has no server-side database, so
@@ -211,39 +245,20 @@ def open_dashboard(page: Page, base_url: str, theme: str, hosted: bool = False) 
         else:
             browser_storage_button.click()
 
-    # Wait for the dashboard tab to actually be visible, for demo data to
-    # have loaded (the hero stat shows a non-zero dollar amount), and for the
-    # global loading overlay to be hidden, rather than relying on a fixed
-    # sleep. Without the overlay check, a screenshot or the layout checks
-    # below can run while "Loading data..." is still covering the page.
-    page.wait_for_function(
-        """() => {
-          const tab = document.getElementById('tab-dashboard');
-          if (!tab || getComputedStyle(tab).display === 'none') return false;
-          const hero = document.querySelector('#total-value');
-          // The hero fills in before the account list and the cards that load
-          // their own data, so also wait for account rows and the on-track and
-          // attention cards or screenshots can catch a half-rendered page.
-          const accountRows = document.querySelectorAll('#account-groups .account-row').length;
-          const onTrack = (document.getElementById('on-track-body')?.textContent || '').trim();
-          const attention = (document.getElementById('attention-list')?.textContent || '').trim();
-          const overlay = document.getElementById('loading-overlay');
-          const overlayHidden =
-            !overlay ||
-            overlay.classList.contains('hidden') ||
-            getComputedStyle(overlay).display === 'none' ||
-            getComputedStyle(overlay).visibility === 'hidden';
-          return (
-            !!hero &&
-            /\\$[1-9]/.test(hero.textContent || '') &&
-            accountRows > 0 &&
-            onTrack.length > 0 &&
-            attention.length > 0 &&
-            overlayHidden
-          );
-        }""",
-        timeout=45000,
-    )
+    # Wait for the dashboard tab to be visible, for demo data to have loaded
+    # (the hero value shows a dollar amount), and for the global loading overlay
+    # to be hidden, rather than relying on a fixed sleep.
+    page.wait_for_function(DASHBOARD_READY_JS, timeout=45000)
+    # The overlay is hidden before the first load starts and again between
+    # back-to-back loads (data, then a price refresh), so one passing sample can
+    # still precede a "Loading data..." screenshot. Require the ready state to
+    # hold across a pause, and wait again if the overlay came back.
+    for _ in range(10):
+        page.wait_for_timeout(700)
+        if page.evaluate(DASHBOARD_READY_JS):
+            return
+        page.wait_for_function(DASHBOARD_READY_JS, timeout=45000)
+    raise PlaywrightTimeoutError("dashboard never stayed ready (loading overlay kept returning)")
 
 
 def open_tab(page: Page, name: str, width: int) -> None:
@@ -282,7 +297,7 @@ def main() -> int:
     parser.add_argument(
         "--tabs",
         default="dashboard",
-        help="Comma-separated tabs to check (dashboard, holdings, projections, "
+        help="Comma-separated tabs to check (dashboard, holdings, debts, projections, "
         "settings, taxes, analysis, budget). The dashboard checks always run; each extra tab is opened "
         "through its nav button and checked for overflow. Default: dashboard.",
     )

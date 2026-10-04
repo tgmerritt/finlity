@@ -20,6 +20,7 @@ import {
   type TaxWithdrawalYear,
 } from '@/charts/projections';
 import { PHONE_MAX_WIDTH } from '@/charts/plotly-utils';
+import type { LiabilityResponse } from '@/types/api';
 
 /**
  * Retirement metrics response from API.
@@ -214,7 +215,17 @@ export async function runProjection(event: Event): Promise<void> {
       }
     );
 
-    await displayProjectionResults(result, params.retirement_age);
+    let debts: LiabilityResponse[] = [];
+    try {
+      const entityId = store.get('currentEntityId');
+      const url = entityId
+        ? `/api/liabilities?entity_id=${encodeURIComponent(entityId)}`
+        : '/api/liabilities';
+      debts = (await apiCall<LiabilityResponse[]>(url)) ?? [];
+    } catch (error) {
+      console.error('Error loading debts for projection:', (error as Error).name);
+    }
+    await displayProjectionResults(result, params.retirement_age, debts);
     collapseConfigPanelOnPhone('monte-carlo-config-panel');
     await loadRetirementMetrics();
   } catch (error) {

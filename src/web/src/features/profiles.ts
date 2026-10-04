@@ -150,6 +150,7 @@ export async function loadProfiles(): Promise<void> {
     const activeProfile = profiles?.find((p) => p.is_active);
     if (activeProfile) {
       currentProfileId = activeProfile.id;
+      store.set('activeProfileId', activeProfile.id);
       updateProfileDisplay(activeProfile);
     }
 
@@ -254,6 +255,7 @@ export async function switchProfile(profileId: string): Promise<void> {
 
     if (profile) {
       currentProfileId = profile.id;
+      store.set('activeProfileId', profile.id);
       updateProfileDisplay(profile);
 
       // Update dropdown to reflect new active profile

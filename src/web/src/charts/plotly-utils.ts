@@ -269,7 +269,18 @@ export async function updateChartLayout(
   // the plot), so a theme change must not reset it to the base value.
   const baseUpdates = getBaseLayout();
   delete baseUpdates.margin;
-  await Plotly.relayout(elementId, { ...baseUpdates, ...layoutUpdates });
+  // Axis colors are baked into each chart's layout, so recolor the axes it has.
+  const axisUpdates: Record<string, unknown> = {};
+  const gd = element as unknown as { layout?: Record<string, unknown> };
+  // Never plotted (or already purged): relayout would throw on a bare element.
+  if (!gd.layout) return;
+  for (const key of Object.keys(gd.layout ?? {})) {
+    if (!/^[xy]axis\d*$/.test(key)) continue;
+    for (const [prop, value] of Object.entries(getAxisConfig())) {
+      axisUpdates[`${key}.${prop}`] = value;
+    }
+  }
+  await Plotly.relayout(elementId, { ...baseUpdates, ...axisUpdates, ...layoutUpdates });
 }
 
 /**
@@ -292,6 +303,18 @@ export function registerChartForThemeUpdates(elementId: string): () => void {
   return onThemeChange(() => {
     updateChartLayout(elementId).catch(console.error);
   });
+}
+
+const themedCharts = new Map<string, () => void>();
+
+/**
+ * Register a chart for theme updates once; calling again for the same element
+ * is a no-op, so a chart that re-renders does not stack listeners.
+ */
+export function ensureThemeUpdates(elementId: string): void {
+  if (!themedCharts.has(elementId)) {
+    themedCharts.set(elementId, registerChartForThemeUpdates(elementId));
+  }
 }
 
 /**
