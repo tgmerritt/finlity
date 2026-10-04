@@ -294,31 +294,8 @@ export async function runAsyncApiCall<T>(
 }
 
 /**
- * Upload a file to the API via multipart/form-data.
- * Content-Type header is intentionally omitted to let the browser set the multipart boundary.
- * @param endpoint - API endpoint
- * @param file - File to upload
- * @param fieldName - Form field name (default: 'file')
- * @param timeout - Request timeout in ms (default: 120000 for large files)
- * @returns Response data
- * @throws ApiError on upload failure or timeout
- */
-export async function uploadFiles<T>(
-  endpoint: string,
-  files: File[],
-  fieldName = 'files',
-  timeout = 120000
-): Promise<T> {
-  const formData = new FormData();
-  for (const file of files) {
-    formData.append(fieldName, file);
-  }
-  return postForm<T>(endpoint, formData, timeout);
-}
-
-/**
  * Upload one file plus a JSON `context` string (multipart fields `file` and
- * `context`), signed like uploadFiles. Used by POST /api/v2/smart-import/analyze.
+ * `context`), signed like the other multipart posts. Used by POST /api/v2/smart-import/analyze.
  */
 export function uploadFileWithContext<T>(
   endpoint: string,

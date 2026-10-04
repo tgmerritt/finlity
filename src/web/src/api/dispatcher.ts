@@ -865,11 +865,14 @@ local('PUT', '/api/settings/config/{section}', (req, m) =>
 
 // ---- DISABLED: plugins ----
 
-disabled('GET', '/api/plugins', () => ({ plugins: [] }));
-disabled('GET', '/api/plugins/installed', () => ({ plugins: [] }));
+// Shapes mirror the server: GET /api/plugins returns a bare array, and
+// security/permissions returns { plugins, pending_count } (features/plugins.ts
+// calls .forEach / .pending_count on these).
+disabled('GET', '/api/plugins', () => []);
+disabled('GET', '/api/plugins/installed', () => ({ plugins: [], count: 0 }));
 disabled('GET', '/api/analysis/plugins', () => ({ plugins: [] }));
 disabled('GET', '/api/analysis/widgets', () => ({ widgets: [] }));
-disabled('GET', '/api/plugins/security/permissions', () => ({ permissions: [] }));
+disabled('GET', '/api/plugins/security/permissions', () => ({ plugins: [], pending_count: 0 }));
 disabled('*', '/api/plugins/**', () => {
   throw new LocalModeDisabledError('Plugins are disabled in hosted mode.');
 });
@@ -1080,7 +1083,10 @@ payload('POST', '/api/projections/fire', (req) => ({
   options: { method: 'POST', body: req.body },
 }));
 
-payload('POST', '/api/projections/account-balances-by-type', () => ({
+// v1 serves this as a GET (src/api/projections.py) and the Taxes page calls it
+// as a GET; v2 takes the portfolio payload via POST, so only the upstream
+// request is a POST.
+payload('GET', '/api/projections/account-balances-by-type', () => ({
   endpoint: '/api/v2/projections/account-balances-by-type',
   options: { method: 'POST', body: buildPortfolioPayload() },
 }));
