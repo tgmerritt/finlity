@@ -59,7 +59,6 @@ const KNOWN_MESSAGES: ReadonlySet<string> = new Set([
   'This position is already linked to a debt',
   'This position has tax lots and cannot be converted to a loan',
   'This position has no units to price',
-  'Expense is already linked to another debt',
   'Expense is already linked to another liability',
   'Date cannot be in the future',
   'A payment amount is required to create an expense',
@@ -276,10 +275,18 @@ export function openDebtConvert(
         debts: debtsTotal,
       };
     }
+    const debtList = Array.isArray(debts) ? debts : [];
+    // Refuse early with the server's own wording, before asking any questions.
+    if (debtList.some((d) => d.source === 'converted_position' && d.source_ref === positionId)) {
+      renderProblem('This position is already converted');
+      return;
+    }
+    if (debtList.some((d) => d.linked_position_id === positionId)) {
+      renderProblem('This position is already linked to a debt');
+      return;
+    }
     expenses = Array.isArray(list) ? list : [];
-    takenExpenseIds = new Set(
-      (Array.isArray(debts) ? debts : []).flatMap((d) => (d.expense_id ? [d.expense_id] : []))
-    );
+    takenExpenseIds = new Set(debtList.flatMap((d) => (d.expense_id ? [d.expense_id] : [])));
     state.homeValue = String(round2(position.market_value));
     renderQuestion();
   }
@@ -433,7 +440,14 @@ export function openDebtConvert(
       });
       group.appendChild(card);
     }
-    body.append(group, amounts);
+    // A form rebuilt on every render, so Enter handling cannot stack or leak into
+    // later steps (the step 2 form has its own).
+    const form = el('form', 'debt-form');
+    form.noValidate = true;
+    form.addEventListener('submit', (e) => e.preventDefault());
+    form.addEventListener('keydown', onEnter(goFromQuestion));
+    form.append(group, amounts);
+    body.appendChild(form);
     renderAmounts(amounts);
 
     const cancel = button('Cancel', 'btn btn-secondary', 'cancel');
@@ -442,7 +456,6 @@ export function openDebtConvert(
     next.disabled = state.mode === null;
     next.addEventListener('click', goFromQuestion);
     footerButtons(cancel, next);
-    body.addEventListener('keydown', onEnter(goFromQuestion));
     h.focus();
   }
 
@@ -650,6 +663,12 @@ export function openDebtConvert(
       });
       wrap.append(radio, el('span', undefined, label));
       host.appendChild(wrap);
+      if (mode === 'link' && !enabled) {
+        const hint = el('p', 'debt-field-hint debt-wizard-choice-hint', 'No unlinked expenses yet');
+        hint.id = 'debt-convert-link-hint';
+        radio.setAttribute('aria-describedby', hint.id);
+        host.appendChild(hint);
+      }
     }
     if (state.cash.mode === 'link') {
       const group = el('div', 'form-group');

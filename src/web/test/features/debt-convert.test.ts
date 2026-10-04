@@ -300,6 +300,76 @@ describe('conversion dialog: the confirm screen', () => {
   });
 });
 
+describe('conversion dialog: keyboard and early refusals', () => {
+  const enter = (el: Element): void => {
+    el.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    );
+  };
+
+  it('Enter on step 2 goes to the review, not back through step 1', async () => {
+    await open();
+    pickMode('equity');
+    set(input('balance'), '248000');
+    enter(input('balance'));
+    expect(heading()).toBe('Mortgage details');
+    set(field('paymentAmount'), '1980');
+    enter(field('paymentAmount'));
+    expect(heading()).toBe('Review the changes');
+  });
+
+  it('Back then Next twice does not stack Enter handlers', async () => {
+    await open();
+    pickMode('equity');
+    set(input('balance'), '248000');
+    for (let i = 0; i < 2; i++) {
+      btn('next').click();
+      btn('back').click();
+    }
+    btn('next').click();
+    const renders = vi.spyOn(modal().querySelector('.debt-wizard-step')!, 'appendChild');
+    enter(field('name'));
+    // One Enter validates once and moves on a single step.
+    expect(heading()).toBe('Review the changes');
+    expect(renders.mock.calls.filter((c) => (c[0] as HTMLElement).tagName === 'H3')).toHaveLength(
+      1
+    );
+  });
+
+  it('explains why linking an expense is unavailable', async () => {
+    await toConfirm('equity');
+    const radio = modal().querySelector<HTMLInputElement>('[data-cash-mode="link"]')!;
+    expect(radio.disabled).toBe(true);
+    const hint = document.getElementById(radio.getAttribute('aria-describedby')!)!;
+    expect(hint.textContent).toBe('No unlinked expenses yet');
+  });
+
+  it('refuses up front when the position is already converted', async () => {
+    const base = apiCallMock.getMockImplementation()!;
+    apiCallMock.mockImplementation(async (url: string, o?: { method?: string }) =>
+      url === '/api/liabilities'
+        ? [{ id: 'l9', source: 'converted_position', source_ref: 'pos1' }]
+        : base(url, o as never)
+    );
+    await open();
+    expect(modal().textContent).toContain('This position is already converted');
+    expect(modal().querySelector('[data-convert-mode]')).toBeNull();
+    expect(posts()).toHaveLength(0);
+  });
+
+  it('refuses up front when a debt already links the position', async () => {
+    const base = apiCallMock.getMockImplementation()!;
+    apiCallMock.mockImplementation(async (url: string, o?: { method?: string }) =>
+      url === '/api/liabilities'
+        ? [{ id: 'l9', source: 'manual', linked_position_id: 'pos1' }]
+        : base(url, o as never)
+    );
+    await open();
+    expect(modal().textContent).toContain('This position is already linked to a debt');
+    expect(modal().querySelector('[data-convert-mode]')).toBeNull();
+  });
+});
+
 describe('conversion dialog: Confirm', () => {
   it('sends one POST with the contract body for equity and emits the change events', async () => {
     const seen: string[] = [];
