@@ -18,6 +18,7 @@ import { loadRetirementMetrics } from '@/pages/projections';
 import { loadProfilesForSettings } from '@/features/profiles';
 import { loadPlugins, loadInstalledPlugins, loadPluginSecurity } from '@/features/plugins';
 import { loadEntities } from '@/features/entities';
+import type { MerchantRuleResponse, SmartImportSettings } from '@/types/api';
 
 /**
  * AI provider model from API.
@@ -1521,6 +1522,148 @@ export async function loadMonteCarloSettings(): Promise<void> {
   }
 }
 
+const SI = '/api/smart-import';
+const siEl = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+
+async function siSave(
+  patch: Partial<SmartImportSettings>,
+  undo: () => void,
+  done: string
+): Promise<void> {
+  try {
+    await apiCall(`${SI}/settings`, { method: 'PUT', body: JSON.stringify(patch) });
+    showToast(done, 'success');
+  } catch {
+    undo();
+    showToast('Could not save the setting', 'error');
+  }
+}
+
+async function siDeleteRule(id: string): Promise<void> {
+  if (!confirm('Forget this merchant? Future imports will no longer apply its category.')) return;
+  try {
+    await apiCall(`${SI}/rules/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    showToast('Remembered merchant deleted', 'success');
+  } catch {
+    showToast('Could not delete the merchant', 'error');
+  }
+  await siLoadRules();
+}
+
+function siRuleRow(rule: MerchantRuleResponse): HTMLElement {
+  const li = document.createElement('li');
+  li.className = 'si-rule';
+  const key = document.createElement('span');
+  key.className = 'si-rule-key';
+  key.textContent = rule.merchant_key;
+  const cat = document.createElement('span');
+  cat.className = 'si-rule-cat' + (rule.category_deleted ? ' is-deleted' : '');
+  cat.textContent = rule.category_deleted
+    ? 'category deleted'
+    : (rule.category_name ?? rule.kind ?? '');
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-secondary btn-sm';
+  btn.textContent = 'Delete';
+  btn.setAttribute('aria-label', `Delete remembered merchant ${rule.merchant_key}`);
+  btn.addEventListener('click', () => void siDeleteRule(rule.id));
+  li.append(key, cat, btn);
+  return li;
+}
+
+async function siLoadRules(): Promise<void> {
+  const list = siEl('si-rules-list');
+  let rules: MerchantRuleResponse[] = [];
+  try {
+    rules = await apiCall<MerchantRuleResponse[]>(`${SI}/rules`);
+  } catch {
+    list.replaceChildren(
+      Object.assign(document.createElement('li'), {
+        textContent: 'Could not load remembered merchants.',
+      })
+    );
+    return;
+  }
+  if (!rules.length) {
+    list.replaceChildren(
+      Object.assign(document.createElement('li'), {
+        className: 'si-empty',
+        textContent: 'No remembered merchants yet.',
+      })
+    );
+    return;
+  }
+  list.replaceChildren(...rules.map(siRuleRow));
+}
+
+async function siDeleteAll(): Promise<void> {
+  if (
+    !confirm('Delete all imported transactions? Imports, expenses and remembered merchants stay.')
+  )
+    return;
+  const status = siEl('si-delete-status');
+  try {
+    const r = await apiCall<{ deleted: number }>(`${SI}/transactions`, { method: 'DELETE' });
+    const msg = `Deleted ${r.deleted} imported transaction${r.deleted === 1 ? '' : 's'}.`;
+    status.textContent = msg;
+    showToast(msg, 'success');
+  } catch {
+    status.textContent = '';
+    showToast('Could not delete imported transactions', 'error');
+  }
+}
+
+/** Fill the Imported transactions section; the AI toggles exist in server mode only. */
+export async function loadSmartImportSettings(): Promise<void> {
+  const retention = siEl<HTMLSelectElement>('si-retention');
+  if (!retention) return;
+  const hosted = store.get('dataMode') === 'local';
+  siEl('si-ai-group').classList.toggle('hidden', hosted);
+  const boxes = {
+    ai_enabled: siEl<HTMLInputElement>('si-ai-enabled'),
+    pdf_ai_enabled: siEl<HTMLInputElement>('si-pdf-ai-enabled'),
+  };
+  try {
+    const s = await apiCall<SmartImportSettings>(`${SI}/settings`);
+    retention.value = String(s.retention_months);
+    boxes.ai_enabled.checked = s.ai_enabled;
+    boxes.pdf_ai_enabled.checked = s.pdf_ai_enabled;
+  } catch {
+    showToast('Could not load import settings', 'error');
+  }
+  if (!retention.dataset.bound) {
+    retention.dataset.bound = '1';
+    let last = retention.value;
+    retention.addEventListener('change', () => {
+      const prev = last;
+      last = retention.value;
+      void siSave(
+        { retention_months: Number(retention.value) as SmartImportSettings['retention_months'] },
+        () => {
+          retention.value = prev;
+          last = prev;
+        },
+        'Retention saved'
+      );
+    });
+    (Object.keys(boxes) as (keyof typeof boxes)[]).forEach((k) =>
+      boxes[k].addEventListener(
+        'change',
+        () =>
+          void siSave(
+            { [k]: boxes[k].checked },
+            () => {
+              boxes[k].checked = !boxes[k].checked;
+            },
+            'Setting saved'
+          )
+      )
+    );
+    siEl('si-delete-all').addEventListener('click', () => void siDeleteAll());
+  }
+  await siLoadRules();
+}
+
 /**
  * Initialize settings page.
  */
@@ -1591,6 +1734,7 @@ export function initSettings(): void {
       loadAssetClassTargets();
       loadMarketAssumptions();
       loadMonteCarloSettings();
+      void loadSmartImportSettings();
       loadPlugins();
       loadInstalledPlugins();
       loadPluginSecurity();

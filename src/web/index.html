@@ -1713,6 +1713,7 @@
                         <a class="settings-index-link" href="#settings-targets" data-section="settings-targets">Targets</a>
                         <a class="settings-index-link" href="#settings-assumptions" data-section="settings-assumptions">Assumptions</a>
                         <a class="settings-index-link" href="#settings-accounts-data" data-section="settings-accounts-data">Accounts &amp; data</a>
+                        <a class="settings-index-link" href="#settings-imported-transactions" data-section="settings-imported-transactions">Imported transactions</a>
                         <a class="settings-index-link" href="#settings-sources-ai" data-section="settings-sources-ai">Data sources &amp; AI</a>
                         <a class="settings-index-link" href="#settings-plugins" data-section="settings-plugins">Plugins</a>
                         <a class="settings-index-link" href="#settings-appearance" data-section="settings-appearance">Appearance</a>
@@ -2206,6 +2207,55 @@
                                 </div>
                             </div>
                         </section>
+                        <section class="settings-section" id="settings-imported-transactions">
+                            <h2 class="settings-section-heading"><button type="button" class="settings-section-header" id="settings-imported-transactions-header" aria-controls="settings-imported-transactions-body">Imported transactions</button></h2>
+                            <div class="settings-section-body" id="settings-imported-transactions-body">
+                                <div class="settings-grid">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h3>Imported transactions</h3>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="settings-description">Statement imports keep each transaction so spending totals and repeat bills can be found. Uploaded files are never kept.</p>
+                                        <div class="form-group">
+                                            <label for="si-retention">Keep transactions for</label>
+                                            <select id="si-retention">
+                                                <option value="12">12 months</option>
+                                                <option value="24" selected>24 months</option>
+                                                <option value="36">36 months</option>
+                                                <option value="0">Keep until deleted</option>
+                                            </select>
+                                            <small class="form-help">Older transactions are removed the next time an import is applied.</small>
+                                        </div>
+                                        <div id="si-ai-group" class="si-ai-group">
+                                            <label class="checkbox-label" for="si-ai-enabled">
+                                                <input type="checkbox" id="si-ai-enabled">
+                                                <span>AI suggestions for categories</span>
+                                            </label>
+                                            <label class="checkbox-label" for="si-pdf-ai-enabled">
+                                                <input type="checkbox" id="si-pdf-ai-enabled">
+                                                <span>AI for PDF statements that cannot be read</span>
+                                            </label>
+                                        </div>
+                                        <div class="section-actions si-delete-row">
+                                            <button type="button" class="btn btn-danger" id="si-delete-all">Delete all imported transactions</button>
+                                            <p id="si-delete-status" class="form-help" role="status"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h3>Remembered merchants</h3>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="settings-description">Categories chosen with Remember during an import. Deleting one only affects future imports.</p>
+                                        <ul id="si-rules-list" class="si-rules-list"></ul>
+                                    </div>
+                                </div>
+                                </div>
+                            </div>
+                        </section>
+
                         <section class="settings-section" id="settings-sources-ai">
                             <h2 class="settings-section-heading"><button type="button" class="settings-section-header" id="settings-sources-ai-header" aria-controls="settings-sources-ai-body">Data sources &amp; AI</button></h2>
                             <div class="settings-section-body" id="settings-sources-ai-body">
