@@ -288,6 +288,111 @@ describe('Debts page', () => {
     );
   });
 
+  it('drops a debts:open request for a debt hidden by the Person filter and says so', async () => {
+    mockList([MORTGAGE, AUTO]);
+    store.set('currentEntityId', 'p1');
+    initDebts();
+    emit({ type: 'debts:open', id: 'd1' });
+    await loadDebts();
+    expect(showToast).toHaveBeenCalledWith('This debt is hidden by the person filter', 'info');
+    expect(store.get('currentEntityId')).toBe('p1');
+    expect(document.querySelector('.debt-card--highlight')).toBeNull();
+    vi.mocked(showToast).mockClear();
+    await loadDebts();
+    expect(showToast).not.toHaveBeenCalled();
+  });
+
+  it('treats a non-array response as a load failure', async () => {
+    apiCallMock.mockResolvedValue({});
+    await loadDebts();
+    expect(text('#debts-list')).toContain('Could not load your debts');
+  });
+
+  it.each(['profile:switched', 'demo:toggled'] as const)(
+    'discards a response that predates %s and shows loading at once',
+    async (type) => {
+      mockList([MORTGAGE]);
+      await loadDebts();
+      let resolveOld: (v: LiabilityResponse[]) => void = () => undefined;
+      apiCallMock.mockImplementationOnce(
+        () => new Promise((res) => (resolveOld = res as typeof resolveOld))
+      );
+      initDebts();
+      const old = loadDebts();
+      mockList([AUTO]);
+      if (type === 'profile:switched') emit({ type, profileId: 'x' });
+      else emit({ type, demoMode: true });
+      expect(document.querySelector('.debt-card')).toBeNull();
+      expect(document.querySelector('#debts-list .state-view--loading')).not.toBeNull();
+      await vi.waitFor(() => expect(document.querySelector('[data-debt-id="d2"]')).not.toBeNull());
+      resolveOld([MORTGAGE]);
+      await old;
+      expect(document.querySelector('[data-debt-id="d1"]')).toBeNull();
+      expect(document.querySelector('[data-debt-id="d2"]')).not.toBeNull();
+    }
+  );
+
+  it('has a hidden Your debts heading, h3 card titles and a labelled summary', async () => {
+    mockList([MORTGAGE]);
+    await loadDebts();
+    expect(text('#debts-list h2.visually-hidden')).toBe('Your debts');
+    expect(document.querySelector('.debt-card h3.debt-card-name')?.textContent).toBe(
+      'Home mortgage'
+    );
+    const html = readFileSync(resolve(__dirname, '../../index.html'), 'utf8');
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    expect(doc.getElementById('debts-summary')?.getAttribute('aria-label')).toBeTruthy();
+  });
+
+  it('focuses the card and sets progressbar aria values', async () => {
+    mockList([MORTGAGE]);
+    initDebts();
+    await loadDebts();
+    emit({ type: 'debts:open', id: 'd1' });
+    const card = document.querySelector('[data-debt-id="d1"]') as HTMLElement;
+    expect(document.activeElement).toBe(card);
+    const bar = card.querySelector('[role="progressbar"]')!;
+    expect(bar.getAttribute('aria-valuemin')).toBe('0');
+    expect(bar.getAttribute('aria-valuemax')).toBe('100');
+    expect(bar.getAttribute('aria-valuenow')).toBe('25');
+    expect(bar.getAttribute('aria-label')).toBe('Home mortgage paid off');
+  });
+
+  it('keeps the highlight through a refresh already in flight, then clears it after 2.5s', async () => {
+    vi.useFakeTimers();
+    try {
+      mockList([MORTGAGE, AUTO]);
+      initDebts();
+      await loadDebts();
+      let resolveList: (v: LiabilityResponse[]) => void = () => undefined;
+      apiCallMock.mockImplementationOnce(
+        () => new Promise((res) => (resolveList = res as typeof resolveList))
+      );
+      const refresh = loadDebts();
+      emit({ type: 'debts:open', id: 'd2' });
+      const before = document.querySelector('[data-debt-id="d2"]');
+      expect(before?.classList.contains('debt-card--highlight')).toBe(true);
+      resolveList([MORTGAGE, AUTO]);
+      await refresh;
+      const card = document.querySelector('[data-debt-id="d2"]') as HTMLElement;
+      expect(card.classList.contains('debt-card--highlight')).toBe(true);
+      vi.advanceTimersByTime(2600);
+      expect(card.classList.contains('debt-card--highlight')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears the highlight on blur', async () => {
+    mockList([MORTGAGE]);
+    initDebts();
+    await loadDebts();
+    emit({ type: 'debts:open', id: 'd1' });
+    const card = document.querySelector('[data-debt-id="d1"]') as HTMLElement;
+    card.dispatchEvent(new Event('blur'));
+    expect(card.classList.contains('debt-card--highlight')).toBe(false);
+  });
+
   it('writes data with textContent only', async () => {
     mockList([debt({ name: '<img src=x onerror=alert(1)>' })]);
     await loadDebts();

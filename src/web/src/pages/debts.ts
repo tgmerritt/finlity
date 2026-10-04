@@ -8,6 +8,7 @@ import { apiCall } from '@/api/client';
 import { store, subscribe } from '@/state/store';
 import { on } from '@/state/events';
 import { onTabChange, getCurrentTab } from '@/ui/tabs';
+import { setStateView } from '@/ui/state-view';
 import { showToast } from '@/ui/toast';
 import { formatCurrency } from '@/utils/format';
 import { LIABILITY_TYPE_LABELS, formatApr, formatMonthYear } from '@/utils/liabilities';
@@ -108,7 +109,7 @@ function renderCard(d: LiabilityResponse): HTMLElement {
   card.appendChild(h('span', 'debt-card-type', LIABILITY_TYPE_LABELS[d.liability_type]));
   const top = h('div', 'debt-card-top');
   const title = h('div', 'debt-card-title');
-  title.appendChild(h('h4', 'debt-card-name', d.name));
+  title.appendChild(h('h3', 'debt-card-name', d.name));
   if (d.lender) title.appendChild(h('span', 'debt-card-lender', d.lender));
   top.appendChild(title);
   top.appendChild(h('span', 'debt-card-balance', formatCurrency(d.estimated_balance)));
@@ -182,7 +183,10 @@ function renderList(list: readonly LiabilityResponse[]): void {
     if (group.length === 0) continue;
     for (const d of group) grid.appendChild(renderCard(d));
   }
-  if (grid.childElementCount > 0) host.appendChild(grid);
+  if (grid.childElementCount > 0) {
+    host.appendChild(h('h2', 'visually-hidden', 'Your debts'));
+    host.appendChild(grid);
+  }
 
   const paid = list.filter((d) => !d.is_active);
   if (paid.length > 0) {
@@ -198,6 +202,8 @@ function renderList(list: readonly LiabilityResponse[]): void {
 let all: LiabilityResponse[] | null = null;
 let inflight: Promise<void> | null = null;
 let pendingId: string | null = null;
+/** Bumped on invalidate so a response from before it is discarded. */
+let generation = 0;
 
 function visible(): LiabilityResponse[] {
   const entityId = store.get('currentEntityId');
@@ -211,10 +217,22 @@ function render(fromLoad = false): void {
   applyPending(fromLoad);
 }
 
+const HIGHLIGHT_MS = 2500;
+let highlightTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearHighlight(): void {
+  if (highlightTimer) clearTimeout(highlightTimer);
+  highlightTimer = null;
+  document.querySelectorAll('.debt-card--highlight').forEach((el) => {
+    el.classList.remove('debt-card--highlight');
+  });
+}
+
 /**
  * Scroll to and highlight the requested debt once its card exists. While a
  * load is in flight the request is kept, because the fresh render replaces
- * the cards (and the highlight) that were on screen.
+ * the cards (and the highlight) that were on screen. After a completed load
+ * the request is dropped even if the card is missing.
  */
 function applyPending(fromLoad: boolean): void {
   if (!pendingId) return;
@@ -222,14 +240,24 @@ function applyPending(fromLoad: boolean): void {
   const card = Array.from(document.querySelectorAll<HTMLElement>('[data-debt-id]')).find(
     (el) => el.getAttribute('data-debt-id') === id
   );
-  if (!card) return;
+  if (!card) {
+    if (fromLoad) {
+      pendingId = null;
+      const known = (all ?? []).some((d) => d.id === id);
+      showToast(
+        known ? 'This debt is hidden by the person filter' : 'That debt was not found',
+        'info'
+      );
+    }
+    return;
+  }
   if (fromLoad || !inflight) pendingId = null;
-  document.querySelectorAll('.debt-card--highlight').forEach((el) => {
-    el.classList.remove('debt-card--highlight');
-  });
+  clearHighlight();
   const paidOff = card.closest('details');
   if (paidOff) paidOff.open = true;
   card.classList.add('debt-card--highlight');
+  highlightTimer = setTimeout(clearHighlight, HIGHLIGHT_MS);
+  card.addEventListener('blur', clearHighlight, { once: true });
   card.scrollIntoView({ block: 'center' });
   card.focus({ preventScroll: true });
 }
@@ -237,11 +265,16 @@ function applyPending(fromLoad: boolean): void {
 /** Fetch every liability (archived included) and render the page. */
 export function loadDebts(): Promise<void> {
   if (inflight) return inflight;
+  const myGeneration = generation;
   inflight = (async (): Promise<void> => {
     try {
-      all = await apiCall<LiabilityResponse[]>('/api/liabilities?include_archived=true');
+      const result = await apiCall<LiabilityResponse[]>('/api/liabilities?include_archived=true');
+      if (myGeneration !== generation) return;
+      if (!Array.isArray(result)) throw new TypeError('Unexpected liabilities response');
+      all = result;
       render(true);
     } catch (error) {
+      if (myGeneration !== generation) return;
       // Log the error type only: never balances, names or server detail.
       console.error('Debts load failed:', error instanceof Error ? error.name : 'error');
       all = null;
@@ -265,7 +298,7 @@ export function loadDebts(): Promise<void> {
         host.appendChild(box);
       }
     } finally {
-      inflight = null;
+      if (myGeneration === generation) inflight = null;
     }
   })();
   return inflight;
@@ -290,7 +323,14 @@ export function initDebts(): void {
   });
 
   const invalidate = (): void => {
+    generation += 1;
     all = null;
+    inflight = null;
+    pendingId = null;
+    clearHighlight();
+    const summary = document.getElementById('debts-summary');
+    if (summary) summary.textContent = '';
+    setStateView('#debts-list', { kind: 'loading', title: 'Loading debts' });
     if (getCurrentTab() === 'debts') loadDebts().catch(console.error);
   };
   on('profile:switched', invalidate);
