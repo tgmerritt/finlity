@@ -21,7 +21,10 @@ vi.mock('@/ui/tabs', () => ({
   getCurrentTab: vi.fn(() => 'debts'),
 }));
 
+vi.mock('@/utils/smart-import-launcher', () => ({ openSmartImportLazy: vi.fn() }));
+
 import { apiCall } from '@/api/client';
+import { openSmartImportLazy } from '@/utils/smart-import-launcher';
 import { showToast } from '@/ui/toast';
 import { onTabChange } from '@/ui/tabs';
 import { store } from '@/state/store';
@@ -238,6 +241,18 @@ describe('Debts page', () => {
     );
     expect(btn).toBeTruthy();
     expect(document.querySelector('.debt-card')).toBeNull();
+  });
+
+  it('has an Import statement button in the toolbar that opens the wizard on a credit card', async () => {
+    mockList([MORTGAGE]);
+    await loadDebts();
+    const btn = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('.debts-toolbar button')
+    ).find((b) => b.textContent === 'Import statement');
+    expect(btn).toBeTruthy();
+    expect(btn!.getAttribute('data-debts-action')).toBe('import');
+    btn!.click();
+    expect(openSmartImportLazy).toHaveBeenCalledWith({ preset: 'credit_card' });
   });
 
   it('shows a generic error instead of the server detail when loading fails', async () => {

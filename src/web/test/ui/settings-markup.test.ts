@@ -10,6 +10,7 @@ export const SECTIONS: Array<{ id: string; title: string; cards: string[] }> = [
   { id: 'settings-targets', title: 'Targets', cards: ['Asset Class Targets'] },
   { id: 'settings-assumptions', title: 'Assumptions', cards: ['Market Assumptions', 'Monte Carlo Settings'] },
   { id: 'settings-accounts-data', title: 'Accounts & data', cards: ['Account Management', 'Data Storage', 'Data Export', 'Demo Mode'] },
+  { id: 'settings-imported-transactions', title: 'Imported transactions', cards: ['Imported transactions', 'Remembered merchants'] },
   { id: 'settings-sources-ai', title: 'Data sources & AI', cards: ['Data Sources', 'AI Provider'] },
   { id: 'settings-plugins', title: 'Plugins', cards: ['Plugin Security', 'Plugin Marketplace', 'Plugins'] },
   { id: 'settings-appearance', title: 'Appearance', cards: ['Appearance'] },
@@ -38,9 +39,9 @@ describe('settings markup', () => {
     });
   });
 
-  it('keeps all 17 cards and no card outside a section', () => {
-    expect(document.querySelectorAll('#tab-settings .card').length).toBe(17);
-    expect(document.querySelectorAll('#tab-settings .settings-section .card').length).toBe(17);
+  it('keeps all 19 cards and no card outside a section', () => {
+    expect(document.querySelectorAll('#tab-settings .card').length).toBe(19);
+    expect(document.querySelectorAll('#tab-settings .settings-section .card').length).toBe(19);
   });
 
   it('has one index link per section', () => {

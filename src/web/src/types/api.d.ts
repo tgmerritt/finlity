@@ -929,3 +929,89 @@ export interface SpendingSummary {
   }[];
   totals: { actual_monthly: number; planned_monthly: number; difference: number };
 }
+
+// Smart import stateless routes (src/api/v2/smart_import.py).
+export interface NormalizedTransaction {
+  row: number;
+  posted_date: string;
+  amount: number;
+  description: string;
+  merchant_key: string;
+  kind: SmartImportTxnKind;
+  category_id: string | null;
+  category_source: 'rule' | 'seed' | 'none';
+  external_id: string | null;
+  dedupe_base: string;
+}
+
+export interface NormalizedStatement {
+  file_hash: string;
+  file_name: string;
+  origin: 'file' | 'sample' | 'connector';
+  format: 'csv' | 'ofx' | 'pdf' | 'connector';
+  parser: string;
+  account: {
+    kind: SmartImportAccountKind;
+    key: string | null;
+    last4: string | null;
+    institution: string | null;
+  };
+  period: { start: string | null; end: string | null };
+  closing_balance: { amount: number; as_of: string } | null;
+  extras: { minimum_payment?: number | null; payment_due?: string | null } | null;
+  warnings: string[];
+  transactions: NormalizedTransaction[];
+}
+
+export type AnalyzeResponse =
+  | { status: 'ok'; statements: NormalizedStatement[] }
+  | { status: 'needs_mapping'; headers: string[]; sample_rows: string[][] }
+  | { status: 'needs_ai_layout'; file_hash: string; line_count: number; lines: string[] };
+
+export interface CategorizeItem {
+  id: string;
+  merchant: string;
+  typical_amount: number;
+  direction: 'in' | 'out';
+  count: number;
+}
+
+/** Strict body of POST /api/smart-import/categorize (extra keys are rejected). */
+export interface CategorizeRequest {
+  categories: string[];
+  items: CategorizeItem[];
+  provider_id?: string;
+}
+
+export interface CategorizeResponse {
+  suggestions: {
+    id: string;
+    category: string | null;
+    kind: SmartImportTxnKind | null;
+    confidence: number;
+  }[];
+  provider: string;
+  model: string;
+}
+
+export interface RecurringCandidateSuggestion {
+  merchant_key: string;
+  name: string;
+  amount: number;
+  frequency: SmartImportFrequency;
+  occurrences: number;
+  last_date: string;
+  category_id: string | null;
+  already_budgeted: boolean;
+  matched_expense_id: string | null;
+}
+
+export interface SmartImportAiStatus {
+  ai_available: boolean;
+  pdf_ai_available: boolean;
+  ai_enabled: boolean;
+  pdf_ai_enabled: boolean;
+  provider: string | null;
+  model: string | null;
+  limits: Record<string, number>;
+}

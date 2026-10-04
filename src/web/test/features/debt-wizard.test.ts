@@ -118,6 +118,18 @@ describe('debt wizard', () => {
     expect(radio('mortgage').checked).toBe(false);
   });
 
+  it('starts on the details step with a prefill, and closing untouched does not prompt', () => {
+    const handle = openDebtWizard({
+      prefill: { liabilityType: 'credit_card', lender: 'Sample Bank', currentBalance: '1200.00' },
+    });
+    expect(modal().querySelector('.debt-wizard-progress')?.textContent).toBe('Step 2 of 4');
+    expect(field('lender').value).toBe('Sample Bank');
+    expect(field('currentBalance').value).toBe('1200.00');
+    escape();
+    expect(document.getElementById('dynamic-modal')).toBeNull();
+    handle.close();
+  });
+
   it('uses native radio inputs inside labels, in one group', () => {
     openDebtWizard({});
     const radios = modal().querySelectorAll<HTMLInputElement>(

@@ -175,6 +175,24 @@ describe('smart import AI payload routes', () => {
     expect(JSON.stringify(rewrite.options.body)).toBe(JSON.stringify(body));
   });
 
+  it.each(['/api/smart-import/categorize', '/api/smart-import/extract'])(
+    '%s keeps the caller timeout through the rewrite',
+    (path) => {
+      const rewrite = matchPayloadRoute(path, { method: 'POST', body: {}, timeout: 60_000 }) as {
+        options: { timeout?: number };
+      };
+      expect(rewrite.options.timeout).toBe(60_000);
+    }
+  );
+
+  it('adds no timeout when the caller set none', () => {
+    const rewrite = matchPayloadRoute('/api/smart-import/categorize', {
+      method: 'POST',
+      body: {},
+    }) as { options: { timeout?: number } };
+    expect('timeout' in rewrite.options).toBe(false);
+  });
+
   it('ai-status sends no body', () => {
     const rewrite = matchPayloadRoute('/api/smart-import/ai-status', { method: 'GET' }) as {
       options: { body?: unknown };
