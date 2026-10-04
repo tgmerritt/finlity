@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 from .base import (
     InferenceMessage,
@@ -70,14 +70,24 @@ class OpenAIProvider(InferenceProvider):
         ),
     ]
 
-    def __init__(self, db=None):
+    def __init__(
+        self,
+        db=None,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+    ):
         """Initialize OpenAI provider.
 
         Args:
             db: Optional database connection for secrets lookup
+            timeout: Optional per-request timeout in seconds for the SDK client.
+                Unset keeps the SDK default.
+            max_retries: Optional SDK retry count. Unset keeps the SDK default.
         """
         self._db = db
-        self._client = None
+        self._timeout = timeout
+        self._max_retries = max_retries
+        self._client: Any = None
         self._info = ProviderInfo(
             id="openai",
             display_name="OpenAI",
@@ -131,7 +141,12 @@ class OpenAIProvider(InferenceProvider):
             try:
                 from openai import OpenAI
 
-                self._client = OpenAI(api_key=api_key)
+                client_kwargs: dict = {"api_key": api_key}
+                if self._timeout is not None:
+                    client_kwargs["timeout"] = self._timeout
+                if self._max_retries is not None:
+                    client_kwargs["max_retries"] = self._max_retries
+                self._client = OpenAI(**client_kwargs)
             except ImportError:
                 raise InferenceProviderError(
                     "openai package not installed. Run: pip install openai"

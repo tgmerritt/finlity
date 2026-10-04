@@ -537,7 +537,7 @@ finlity/
 
 ## Deployment
 
-Finlity can optionally be deployed to Heroku as a container. See `docs/deployment/heroku.md` for details.
+Finlity can optionally be deployed to Heroku as a container. See `docs/deployment/heroku.md` for details. Smart import AI stays off on Heroku unless `SMART_IMPORT_AI_ENABLED` and an active rate limiter (`RATE_LIMIT_ENABLED=true` plus a `RATE_LIMIT_SECRET_KEY` of 32+ characters) are set; that page lists the full set.
 
 ## Contributing
 
