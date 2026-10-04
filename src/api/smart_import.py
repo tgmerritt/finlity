@@ -1,7 +1,8 @@
 """Server-mode smart import routes.
 
-For now only the three AI routes (the data-layer routes arrive with PR B). They
-use the provider registry with the profile's keys and honor the Settings
+The data-layer routes (context, preview, imports, rules, settings) are served by
+``src/smart_import/service.py``; static paths are declared before any ``{id}``
+route. The three AI routes use the provider registry with the profile's keys and honor the Settings
 provider choice (``provider_id``), and they require the profile's consent in
 the ``smart_import`` setting. In hosted mode the dispatcher rewrites them to
 their stateless ``/api/v2/smart-import/*`` twins.
@@ -22,9 +23,10 @@ features use, are left as they are; plugin providers are used as registered.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
 from src.api.dependencies import get_db
@@ -46,6 +48,7 @@ from src.services.providers.claude_provider import ClaudeProvider
 from src.services.providers.gemini_provider import GeminiProvider
 from src.services.providers.openai_provider import OpenAIProvider
 from src.services.session import is_multi_user_mode
+from src.smart_import import service
 from src.smart_import.ai_common import CLIENT_TIMEOUT_SECONDS
 from src.smart_import.env import on_heroku
 from src.smart_import.errors import SmartImportError
@@ -54,7 +57,7 @@ from src.smart_import.fake_ai import (
     fake_ai_blocked,
     fake_ai_enabled,
 )
-from src.smart_import.settings_store import read_settings
+from src.smart_import.settings_store import SettingsUpdate, read_settings
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +66,36 @@ router = APIRouter(
     tags=["smart-import"],
     route_class=SmartImportRoute,
 )
+
+
+ACCOUNT_KINDS = Literal["checking", "savings", "credit_card", "loan", "unknown"]
+MAX_PREVIEW_STATEMENTS = 12
+MAX_PREVIEW_KEYS = 10_000
+_HASH = r"^[A-Za-z0-9_-]{1,100}$"
+
+
+def check_demo_mode_write() -> None:
+    """Refuse writes on the protected hosted demo (centralised check)."""
+    from src.services.demo_mode import check_demo_data_protection
+
+    check_demo_data_protection()
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class PreviewStatement(_Strict):
+    file_hash: str = Field(pattern=_HASH)
+    account_key: Optional[str] = Field(default=None, max_length=200)
+    account_kind: ACCOUNT_KINDS
+    institution: Optional[str] = Field(default=None, max_length=120)
+    dedupe_keys: list[Annotated[str, Field(max_length=400)]] = Field(max_length=MAX_PREVIEW_KEYS)
+    merchant_keys: list[Annotated[str, Field(max_length=400)]] = Field(max_length=MAX_PREVIEW_KEYS)
+
+
+class PreviewRequest(_Strict):
+    statements: list[PreviewStatement] = Field(max_length=MAX_PREVIEW_STATEMENTS)
 
 
 # Built-in provider classes whose constructors take a client timeout.
@@ -171,3 +204,48 @@ async def ai_status(
         pdf_ai_enabled=settings["pdf_ai_enabled"],
         provider=provider,
     )
+
+
+# ---------------------------------------------------------------------------
+# Data layer: read side and settings. Plain ``def`` handlers run in the
+# threadpool; the service turns unexpected failures into fixed errors.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/context")
+def get_context(db: Database = Depends(get_db)) -> dict[str, Any]:
+    """Rules, categories, known accounts, remembered CSV layouts and settings."""
+    return service.get_context(db)
+
+
+@router.post("/preview")
+def preview(body: PreviewRequest, db: Database = Depends(get_db)) -> dict[str, Any]:
+    """Duplicate keys, prior files, liability suggestions and recurring history. Writes nothing."""
+    return service.preview(db, [s.model_dump() for s in body.statements])
+
+
+@router.get("/imports")
+def list_imports(db: Database = Depends(get_db)) -> list[dict[str, Any]]:
+    return service.list_imports(db)
+
+
+@router.get("/rules")
+def list_rules(db: Database = Depends(get_db)) -> list[dict[str, Any]]:
+    return service.list_rules(db)
+
+
+@router.delete("/rules/{rule_id}")
+def delete_rule(rule_id: str, db: Database = Depends(get_db)) -> dict[str, Any]:
+    check_demo_mode_write()
+    return service.delete_rule(db, rule_id)
+
+
+@router.get("/settings")
+def get_settings(db: Database = Depends(get_db)) -> dict[str, Any]:
+    return service.get_settings(db)
+
+
+@router.put("/settings")
+def put_settings(body: SettingsUpdate, db: Database = Depends(get_db)) -> dict[str, Any]:
+    check_demo_mode_write()
+    return service.put_settings(db, body)
