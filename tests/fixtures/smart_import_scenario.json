@@ -1,0 +1,2136 @@
+{
+ "today": "2026-10-04",
+ "setup": {
+  "categories": [
+   {
+    "id": "cat-groceries",
+    "name": "Groceries",
+    "sort_order": 0
+   },
+   {
+    "id": "cat-dining",
+    "name": "Dining",
+    "sort_order": 1
+   },
+   {
+    "id": "cat-debt",
+    "name": "Debt Payments",
+    "sort_order": 2
+   },
+   {
+    "id": "cat-other",
+    "name": "Other",
+    "sort_order": 3
+   }
+  ],
+  "liabilities": [
+   {
+    "id": "L-archived",
+    "name": "Alpha Card",
+    "liability_type": "credit_card",
+    "lender": "Sample Bank",
+    "current_balance": 0,
+    "balance_as_of": "2026-01-01",
+    "is_active": false
+   },
+   {
+    "id": "L-card",
+    "name": "Visa",
+    "liability_type": "credit_card",
+    "lender": "Sample Bank",
+    "current_balance": 500,
+    "balance_as_of": "2026-09-01",
+    "is_active": true
+   }
+  ],
+  "snapshots": [
+   {
+    "id": "S-manual",
+    "liability_id": "L-card",
+    "snapshot_date": "2026-09-01",
+    "balance": 500,
+    "source": "manual"
+   }
+  ],
+  "expenses": [
+   {
+    "id": "E-netflix",
+    "category_id": "cat-dining",
+    "name": "Netflix",
+    "amount": 15.49,
+    "frequency": "monthly",
+    "is_active": true
+   },
+   {
+    "id": "E-gym",
+    "category_id": "cat-other",
+    "name": "Gym",
+    "amount": 45,
+    "frequency": "monthly",
+    "is_active": false
+   }
+  ]
+ },
+ "steps": [
+  {
+   "name": "settings start at defaults",
+   "method": "GET",
+   "path": "/api/smart-import/settings"
+  },
+  {
+   "name": "put empty settings is a no-op",
+   "method": "PUT",
+   "path": "/api/smart-import/settings",
+   "body": {}
+  },
+  {
+   "name": "probe counts after empty put",
+   "probe": "counts"
+  },
+  {
+   "name": "put bad retention refused",
+   "method": "PUT",
+   "path": "/api/smart-import/settings",
+   "body": {
+    "retention_months": 7
+   }
+  },
+  {
+   "name": "put unknown settings key refused",
+   "method": "PUT",
+   "path": "/api/smart-import/settings",
+   "body": {
+    "theme": "dark"
+   }
+  },
+  {
+   "name": "put retention 12",
+   "method": "PUT",
+   "path": "/api/smart-import/settings",
+   "body": {
+    "retention_months": 12
+   }
+  },
+  {
+   "name": "context before any import",
+   "method": "GET",
+   "path": "/api/smart-import/context"
+  },
+  {
+   "name": "preview before any import",
+   "method": "POST",
+   "path": "/api/smart-import/preview",
+   "body": {
+    "statements": [
+     {
+      "file_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "account_key": "acct:chk",
+      "account_kind": "checking",
+      "institution": "Sample Bank",
+      "dedupe_keys": [
+       "acct:chk|CARD PAYMENT|2026-08-05|-500",
+       "acct:chk|GROCER|2026-07-10|-80",
+       "acct:chk|GROCER|2026-08-12|-95.5",
+       "acct:chk|GROCER|2026-08-20|20",
+       "acct:chk|MYSTERY SHOP|2026-08-22|-33.33",
+       "acct:chk|NETFLIX|2026-07-03|-15.49",
+       "acct:chk|NETFLIX|2026-08-03|-15.49",
+       "acct:chk|PAYROLL|2026-07-28|3000",
+       "acct:chk|PAYROLL|2026-08-28|3000",
+       "acct:chk|SKIPPED|2026-08-25|-9",
+       "acct:chk|SPOTIFY|2026-07-15|-10.99",
+       "acct:chk|SPOTIFY|2026-08-15|-10.99",
+       "acct:chk|TO SAVINGS|2026-08-06|-200",
+       "acct:chk|WATERCO|2026-07-20|-60"
+      ],
+      "merchant_keys": [
+       "CARD PAYMENT",
+       "GROCER",
+       "MYSTERY SHOP",
+       "NETFLIX",
+       "PAYROLL",
+       "SKIPPED",
+       "SPOTIFY",
+       "TO SAVINGS",
+       "WATERCO"
+      ]
+     },
+     {
+      "file_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "account_key": "acct:card",
+      "account_kind": "credit_card",
+      "institution": "Sample Bank",
+      "dedupe_keys": [
+       "acct:card|AIRLINE|2026-09-05|-400",
+       "acct:card|ANNUAL FEE|2026-09-20|-95",
+       "acct:card|BISTRO|2026-09-14|-42",
+       "acct:card|INTEREST CHARGE|2026-09-25|-12.34",
+       "acct:card|PAYMENT THANK YOU|2026-09-10|500"
+      ],
+      "merchant_keys": [
+       "AIRLINE",
+       "ANNUAL FEE",
+       "BISTRO",
+       "INTEREST CHARGE",
+       "PAYMENT THANK YOU"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "apply A and card statement",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "save": {
+    "A": "imports.0.import_id",
+    "C1": "imports.1.import_id"
+   },
+   "body": {
+    "batch_id": "batch-1",
+    "statements": [
+     {
+      "file_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2026-07-01",
+       "end": "2026-08-31"
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-07-03",
+        "amount": -15.49,
+        "description": "NETFLIX SYNTHETIC",
+        "merchant_key": "NETFLIX",
+        "kind": "expense",
+        "category_id": "cat-dining",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|NETFLIX|2026-07-03|-15.49",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-07-10",
+        "amount": -80,
+        "description": "GROCER SYNTHETIC",
+        "merchant_key": "GROCER",
+        "kind": "expense",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|GROCER|2026-07-10|-80",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-07-15",
+        "amount": -10.99,
+        "description": "SPOTIFY SYNTHETIC",
+        "merchant_key": "SPOTIFY",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|SPOTIFY|2026-07-15|-10.99",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-07-20",
+        "amount": -60,
+        "description": "WATERCO SYNTHETIC",
+        "merchant_key": "WATERCO",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|WATERCO|2026-07-20|-60",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-07-28",
+        "amount": 3000,
+        "description": "PAYROLL SYNTHETIC",
+        "merchant_key": "PAYROLL",
+        "kind": "income",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|PAYROLL|2026-07-28|3000",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-03",
+        "amount": -15.49,
+        "description": "NETFLIX SYNTHETIC",
+        "merchant_key": "NETFLIX",
+        "kind": "expense",
+        "category_id": "cat-dining",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|NETFLIX|2026-08-03|-15.49",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-12",
+        "amount": -95.5,
+        "description": "GROCER SYNTHETIC",
+        "merchant_key": "GROCER",
+        "kind": "expense",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|GROCER|2026-08-12|-95.5",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-15",
+        "amount": -10.99,
+        "description": "SPOTIFY SYNTHETIC",
+        "merchant_key": "SPOTIFY",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|SPOTIFY|2026-08-15|-10.99",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-28",
+        "amount": 3000,
+        "description": "PAYROLL SYNTHETIC",
+        "merchant_key": "PAYROLL",
+        "kind": "income",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|PAYROLL|2026-08-28|3000",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-05",
+        "amount": -500,
+        "description": "CARD PAYMENT SYNTHETIC",
+        "merchant_key": "CARD PAYMENT",
+        "kind": "payment",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|CARD PAYMENT|2026-08-05|-500",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-06",
+        "amount": -200,
+        "description": "TO SAVINGS SYNTHETIC",
+        "merchant_key": "TO SAVINGS",
+        "kind": "transfer",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|TO SAVINGS|2026-08-06|-200",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-20",
+        "amount": 20,
+        "description": "GROCER SYNTHETIC",
+        "merchant_key": "GROCER",
+        "kind": "refund",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|GROCER|2026-08-20|20",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-22",
+        "amount": -33.33,
+        "description": "MYSTERY SHOP SYNTHETIC",
+        "merchant_key": "MYSTERY SHOP",
+        "kind": "expense",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|MYSTERY SHOP|2026-08-22|-33.33",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-25",
+        "amount": -9,
+        "description": "SKIPPED SYNTHETIC",
+        "merchant_key": "SKIPPED",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|SKIPPED|2026-08-25|-9",
+        "excluded": true
+       }
+      ]
+     },
+     {
+      "file_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "file_name": "synthetic-card.ofx",
+      "origin": "file",
+      "format": "ofx",
+      "parser": "ofx",
+      "account": {
+       "kind": "credit_card",
+       "key": "acct:card",
+       "label": "Visa",
+       "last4": "5678",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2026-08-26",
+       "end": "2026-09-25"
+      },
+      "closing_balance": {
+       "amount": 640,
+       "as_of": "2026-09-25"
+      },
+      "liability_id": "L-card",
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-09-05",
+        "amount": -400,
+        "description": "AIRLINE SYNTHETIC",
+        "merchant_key": "AIRLINE",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:card|AIRLINE|2026-09-05|-400",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-10",
+        "amount": 500,
+        "description": "PAYMENT THANK YOU SYNTHETIC",
+        "merchant_key": "PAYMENT THANK YOU",
+        "kind": "payment",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:card|PAYMENT THANK YOU|2026-09-10|500",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-14",
+        "amount": -42,
+        "description": "BISTRO SYNTHETIC",
+        "merchant_key": "BISTRO",
+        "kind": "expense",
+        "category_id": "cat-dining",
+        "category_source": "rule",
+        "dedupe_key": "acct:card|BISTRO|2026-09-14|-42",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-20",
+        "amount": -95,
+        "description": "ANNUAL FEE SYNTHETIC",
+        "merchant_key": "ANNUAL FEE",
+        "kind": "fee",
+        "category_id": "cat-debt",
+        "category_source": "rule",
+        "dedupe_key": "acct:card|ANNUAL FEE|2026-09-20|-95",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-25",
+        "amount": -12.34,
+        "description": "INTEREST CHARGE SYNTHETIC",
+        "merchant_key": "INTEREST CHARGE",
+        "kind": "interest",
+        "category_id": "cat-debt",
+        "category_source": "rule",
+        "dedupe_key": "acct:card|INTEREST CHARGE|2026-09-25|-12.34",
+        "excluded": false
+       }
+      ]
+     }
+    ],
+    "rules": [
+     {
+      "merchant_key": "NETFLIX",
+      "category_id": "cat-dining",
+      "kind": "expense",
+      "source": "user"
+     },
+     {
+      "merchant_key": "GROCER",
+      "category_id": "cat-groceries",
+      "kind": "expense",
+      "source": "import"
+     },
+     {
+      "merchant_key": "PAYROLL",
+      "category_id": null,
+      "kind": "income",
+      "source": "user"
+     }
+    ],
+    "recurring": [
+     {
+      "merchant_key": "NETFLIX",
+      "name": "Netflix",
+      "amount": 15.49,
+      "frequency": "monthly",
+      "category_id": "cat-dining",
+      "occurrences": 2,
+      "file_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "decision": "link",
+      "expense_id": "E-netflix"
+     },
+     {
+      "merchant_key": "SPOTIFY",
+      "name": "Spotify",
+      "amount": 10.99,
+      "frequency": "monthly",
+      "category_id": "cat-other",
+      "occurrences": 2,
+      "file_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "decision": "create"
+     },
+     {
+      "merchant_key": "WATERCO",
+      "name": "Water Co",
+      "amount": 60,
+      "frequency": "quarterly",
+      "category_id": "cat-other",
+      "occurrences": 1,
+      "file_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "decision": "create"
+     },
+     {
+      "merchant_key": "PAYROLL",
+      "name": "Payroll",
+      "amount": 3000,
+      "frequency": "monthly",
+      "category_id": "cat-other",
+      "occurrences": 2,
+      "file_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "decision": "reject"
+     }
+    ]
+   }
+  },
+  {
+   "name": "probe counts after apply A",
+   "probe": "counts"
+  },
+  {
+   "name": "probe imports_raw after apply A",
+   "probe": "imports_raw"
+  },
+  {
+   "name": "probe transactions after apply A",
+   "probe": "transactions"
+  },
+  {
+   "name": "probe rules after apply A",
+   "probe": "rules"
+  },
+  {
+   "name": "probe expenses after apply A",
+   "probe": "expenses"
+  },
+  {
+   "name": "probe candidates after apply A",
+   "probe": "candidates"
+  },
+  {
+   "name": "probe liabilities after apply A",
+   "probe": "liabilities"
+  },
+  {
+   "name": "probe ledger after apply A",
+   "probe": "ledger"
+  },
+  {
+   "name": "preview after apply A",
+   "method": "POST",
+   "path": "/api/smart-import/preview",
+   "body": {
+    "statements": [
+     {
+      "file_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "account_key": "acct:chk",
+      "account_kind": "checking",
+      "institution": "Sample Bank",
+      "dedupe_keys": [
+       "acct:chk|CARD PAYMENT|2026-08-05|-500",
+       "acct:chk|GROCER|2026-07-10|-80",
+       "acct:chk|GROCER|2026-08-12|-95.5",
+       "acct:chk|GROCER|2026-08-20|20",
+       "acct:chk|MYSTERY SHOP|2026-08-22|-33.33",
+       "acct:chk|NETFLIX|2026-07-03|-15.49",
+       "acct:chk|NETFLIX|2026-08-03|-15.49",
+       "acct:chk|PAYROLL|2026-07-28|3000",
+       "acct:chk|PAYROLL|2026-08-28|3000",
+       "acct:chk|SKIPPED|2026-08-25|-9",
+       "acct:chk|SPOTIFY|2026-07-15|-10.99",
+       "acct:chk|SPOTIFY|2026-08-15|-10.99",
+       "acct:chk|TO SAVINGS|2026-08-06|-200",
+       "acct:chk|WATERCO|2026-07-20|-60"
+      ],
+      "merchant_keys": [
+       "CARD PAYMENT",
+       "GROCER",
+       "MYSTERY SHOP",
+       "NETFLIX",
+       "PAYROLL",
+       "SKIPPED",
+       "SPOTIFY",
+       "TO SAVINGS",
+       "WATERCO"
+      ]
+     },
+     {
+      "file_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "account_key": "acct:card",
+      "account_kind": "credit_card",
+      "institution": "Sample Bank",
+      "dedupe_keys": [
+       "acct:card|AIRLINE|2026-09-05|-400",
+       "acct:card|ANNUAL FEE|2026-09-20|-95",
+       "acct:card|BISTRO|2026-09-14|-42",
+       "acct:card|INTEREST CHARGE|2026-09-25|-12.34",
+       "acct:card|PAYMENT THANK YOU|2026-09-10|500"
+      ],
+      "merchant_keys": [
+       "AIRLINE",
+       "ANNUAL FEE",
+       "BISTRO",
+       "INTEREST CHARGE",
+       "PAYMENT THANK YOU"
+      ]
+     },
+     {
+      "file_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "account_key": "acct:chk",
+      "account_kind": "checking",
+      "institution": "Sample Bank",
+      "dedupe_keys": [
+       "acct:chk|CARD PAYMENT|2026-08-05|-500",
+       "acct:chk|GROCER|2026-08-12|-95.5",
+       "acct:chk|GROCER|2026-08-20|20",
+       "acct:chk|GROCER|2026-09-12|-70.25",
+       "acct:chk|GYMCLUB|2026-09-18|-45",
+       "acct:chk|MYSTERY SHOP|2026-08-22|-33.33",
+       "acct:chk|NETFLIX|2026-08-03|-15.49",
+       "acct:chk|NETFLIX|2026-09-03|-15.49",
+       "acct:chk|PAYROLL|2026-08-28|3000",
+       "acct:chk|PAYROLL|2026-09-28|3000",
+       "acct:chk|SPOTIFY|2026-08-15|-10.99",
+       "acct:chk|SPOTIFY|2026-09-15|-10.99",
+       "acct:chk|TO SAVINGS|2026-08-06|-200"
+      ],
+      "merchant_keys": [
+       "CARD PAYMENT",
+       "GROCER",
+       "GYMCLUB",
+       "MYSTERY SHOP",
+       "NETFLIX",
+       "PAYROLL",
+       "SPOTIFY",
+       "TO SAVINGS"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "re-apply same batch is skipped by file hash",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-1",
+    "statements": [
+     {
+      "file_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2026-07-01",
+       "end": "2026-08-31"
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-07-03",
+        "amount": -15.49,
+        "description": "NETFLIX SYNTHETIC",
+        "merchant_key": "NETFLIX",
+        "kind": "expense",
+        "category_id": "cat-dining",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|NETFLIX|2026-07-03|-15.49",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-07-10",
+        "amount": -80,
+        "description": "GROCER SYNTHETIC",
+        "merchant_key": "GROCER",
+        "kind": "expense",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|GROCER|2026-07-10|-80",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-07-15",
+        "amount": -10.99,
+        "description": "SPOTIFY SYNTHETIC",
+        "merchant_key": "SPOTIFY",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|SPOTIFY|2026-07-15|-10.99",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-07-20",
+        "amount": -60,
+        "description": "WATERCO SYNTHETIC",
+        "merchant_key": "WATERCO",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|WATERCO|2026-07-20|-60",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-07-28",
+        "amount": 3000,
+        "description": "PAYROLL SYNTHETIC",
+        "merchant_key": "PAYROLL",
+        "kind": "income",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|PAYROLL|2026-07-28|3000",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-03",
+        "amount": -15.49,
+        "description": "NETFLIX SYNTHETIC",
+        "merchant_key": "NETFLIX",
+        "kind": "expense",
+        "category_id": "cat-dining",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|NETFLIX|2026-08-03|-15.49",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-12",
+        "amount": -95.5,
+        "description": "GROCER SYNTHETIC",
+        "merchant_key": "GROCER",
+        "kind": "expense",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|GROCER|2026-08-12|-95.5",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-15",
+        "amount": -10.99,
+        "description": "SPOTIFY SYNTHETIC",
+        "merchant_key": "SPOTIFY",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|SPOTIFY|2026-08-15|-10.99",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-28",
+        "amount": 3000,
+        "description": "PAYROLL SYNTHETIC",
+        "merchant_key": "PAYROLL",
+        "kind": "income",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|PAYROLL|2026-08-28|3000",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-05",
+        "amount": -500,
+        "description": "CARD PAYMENT SYNTHETIC",
+        "merchant_key": "CARD PAYMENT",
+        "kind": "payment",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|CARD PAYMENT|2026-08-05|-500",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-06",
+        "amount": -200,
+        "description": "TO SAVINGS SYNTHETIC",
+        "merchant_key": "TO SAVINGS",
+        "kind": "transfer",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|TO SAVINGS|2026-08-06|-200",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-20",
+        "amount": 20,
+        "description": "GROCER SYNTHETIC",
+        "merchant_key": "GROCER",
+        "kind": "refund",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|GROCER|2026-08-20|20",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-22",
+        "amount": -33.33,
+        "description": "MYSTERY SHOP SYNTHETIC",
+        "merchant_key": "MYSTERY SHOP",
+        "kind": "expense",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|MYSTERY SHOP|2026-08-22|-33.33",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-25",
+        "amount": -9,
+        "description": "SKIPPED SYNTHETIC",
+        "merchant_key": "SKIPPED",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|SKIPPED|2026-08-25|-9",
+        "excluded": true
+       }
+      ]
+     },
+     {
+      "file_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "file_name": "synthetic-card.ofx",
+      "origin": "file",
+      "format": "ofx",
+      "parser": "ofx",
+      "account": {
+       "kind": "credit_card",
+       "key": "acct:card",
+       "label": "Visa",
+       "last4": "5678",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2026-08-26",
+       "end": "2026-09-25"
+      },
+      "closing_balance": {
+       "amount": 640,
+       "as_of": "2026-09-25"
+      },
+      "liability_id": "L-card",
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-09-05",
+        "amount": -400,
+        "description": "AIRLINE SYNTHETIC",
+        "merchant_key": "AIRLINE",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:card|AIRLINE|2026-09-05|-400",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-10",
+        "amount": 500,
+        "description": "PAYMENT THANK YOU SYNTHETIC",
+        "merchant_key": "PAYMENT THANK YOU",
+        "kind": "payment",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:card|PAYMENT THANK YOU|2026-09-10|500",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-14",
+        "amount": -42,
+        "description": "BISTRO SYNTHETIC",
+        "merchant_key": "BISTRO",
+        "kind": "expense",
+        "category_id": "cat-dining",
+        "category_source": "rule",
+        "dedupe_key": "acct:card|BISTRO|2026-09-14|-42",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-20",
+        "amount": -95,
+        "description": "ANNUAL FEE SYNTHETIC",
+        "merchant_key": "ANNUAL FEE",
+        "kind": "fee",
+        "category_id": "cat-debt",
+        "category_source": "rule",
+        "dedupe_key": "acct:card|ANNUAL FEE|2026-09-20|-95",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-25",
+        "amount": -12.34,
+        "description": "INTEREST CHARGE SYNTHETIC",
+        "merchant_key": "INTEREST CHARGE",
+        "kind": "interest",
+        "category_id": "cat-debt",
+        "category_source": "rule",
+        "dedupe_key": "acct:card|INTEREST CHARGE|2026-09-25|-12.34",
+        "excluded": false
+       }
+      ]
+     }
+    ],
+    "rules": [
+     {
+      "merchant_key": "NETFLIX",
+      "category_id": "cat-dining",
+      "kind": "expense",
+      "source": "user"
+     },
+     {
+      "merchant_key": "GROCER",
+      "category_id": "cat-groceries",
+      "kind": "expense",
+      "source": "import"
+     },
+     {
+      "merchant_key": "PAYROLL",
+      "category_id": null,
+      "kind": "income",
+      "source": "user"
+     }
+    ],
+    "recurring": [
+     {
+      "merchant_key": "NETFLIX",
+      "name": "Netflix",
+      "amount": 15.49,
+      "frequency": "monthly",
+      "category_id": "cat-dining",
+      "occurrences": 2,
+      "file_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "decision": "link",
+      "expense_id": "E-netflix"
+     },
+     {
+      "merchant_key": "SPOTIFY",
+      "name": "Spotify",
+      "amount": 10.99,
+      "frequency": "monthly",
+      "category_id": "cat-other",
+      "occurrences": 2,
+      "file_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "decision": "create"
+     },
+     {
+      "merchant_key": "WATERCO",
+      "name": "Water Co",
+      "amount": 60,
+      "frequency": "quarterly",
+      "category_id": "cat-other",
+      "occurrences": 1,
+      "file_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "decision": "create"
+     },
+     {
+      "merchant_key": "PAYROLL",
+      "name": "Payroll",
+      "amount": 3000,
+      "frequency": "monthly",
+      "category_id": "cat-other",
+      "occurrences": 2,
+      "file_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "decision": "reject"
+     }
+    ]
+   }
+  },
+  {
+   "name": "probe counts after re-apply",
+   "probe": "counts"
+  },
+  {
+   "name": "apply overlapping B",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "save": {
+    "B": "imports.0.import_id"
+   },
+   "body": {
+    "batch_id": "batch-3",
+    "statements": [
+     {
+      "file_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2026-08-01",
+       "end": "2026-09-30"
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-08-03",
+        "amount": -15.49,
+        "description": "NETFLIX SYNTHETIC",
+        "merchant_key": "NETFLIX",
+        "kind": "expense",
+        "category_id": "cat-dining",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|NETFLIX|2026-08-03|-15.49",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-12",
+        "amount": -95.5,
+        "description": "GROCER SYNTHETIC",
+        "merchant_key": "GROCER",
+        "kind": "expense",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|GROCER|2026-08-12|-95.5",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-15",
+        "amount": -10.99,
+        "description": "SPOTIFY SYNTHETIC",
+        "merchant_key": "SPOTIFY",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|SPOTIFY|2026-08-15|-10.99",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-28",
+        "amount": 3000,
+        "description": "PAYROLL SYNTHETIC",
+        "merchant_key": "PAYROLL",
+        "kind": "income",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|PAYROLL|2026-08-28|3000",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-05",
+        "amount": -500,
+        "description": "CARD PAYMENT SYNTHETIC",
+        "merchant_key": "CARD PAYMENT",
+        "kind": "payment",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|CARD PAYMENT|2026-08-05|-500",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-06",
+        "amount": -200,
+        "description": "TO SAVINGS SYNTHETIC",
+        "merchant_key": "TO SAVINGS",
+        "kind": "transfer",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|TO SAVINGS|2026-08-06|-200",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-20",
+        "amount": 20,
+        "description": "GROCER SYNTHETIC",
+        "merchant_key": "GROCER",
+        "kind": "refund",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|GROCER|2026-08-20|20",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-08-22",
+        "amount": -33.33,
+        "description": "MYSTERY SHOP SYNTHETIC",
+        "merchant_key": "MYSTERY SHOP",
+        "kind": "expense",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|MYSTERY SHOP|2026-08-22|-33.33",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-03",
+        "amount": -15.49,
+        "description": "NETFLIX SYNTHETIC",
+        "merchant_key": "NETFLIX",
+        "kind": "expense",
+        "category_id": "cat-dining",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|NETFLIX|2026-09-03|-15.49",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-03",
+        "amount": -15.49,
+        "description": "NETFLIX SYNTHETIC",
+        "merchant_key": "NETFLIX",
+        "kind": "expense",
+        "category_id": "cat-dining",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|NETFLIX|2026-09-03|-15.49",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-12",
+        "amount": -70.25,
+        "description": "GROCER SYNTHETIC",
+        "merchant_key": "GROCER",
+        "kind": "expense",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|GROCER|2026-09-12|-70.25",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-15",
+        "amount": -10.99,
+        "description": "SPOTIFY SYNTHETIC",
+        "merchant_key": "SPOTIFY",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|SPOTIFY|2026-09-15|-10.99",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-18",
+        "amount": -45,
+        "description": "GYMCLUB SYNTHETIC",
+        "merchant_key": "GYMCLUB",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|GYMCLUB|2026-09-18|-45",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-28",
+        "amount": 3000,
+        "description": "PAYROLL SYNTHETIC",
+        "merchant_key": "PAYROLL",
+        "kind": "income",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|PAYROLL|2026-09-28|3000",
+        "excluded": false
+       }
+      ]
+     }
+    ],
+    "rules": [
+     {
+      "merchant_key": "NETFLIX",
+      "category_id": "cat-dining",
+      "kind": "expense",
+      "source": "ai"
+     },
+     {
+      "merchant_key": "GYMCLUB",
+      "category_id": "cat-other",
+      "kind": "expense",
+      "source": "import"
+     }
+    ],
+    "recurring": []
+   }
+  },
+  {
+   "name": "probe counts after apply B",
+   "probe": "counts"
+  },
+  {
+   "name": "probe transactions after apply B",
+   "probe": "transactions"
+  },
+  {
+   "name": "probe rules after apply B",
+   "probe": "rules"
+  },
+  {
+   "name": "probe ledger after apply B",
+   "probe": "ledger"
+  },
+  {
+   "name": "imports after apply B",
+   "method": "GET",
+   "path": "/api/smart-import/imports"
+  },
+  {
+   "name": "apply one file with two statements (hash split)",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "save": {
+    "D0": "imports.0.import_id",
+    "D1": "imports.1.import_id"
+   },
+   "body": {
+    "batch_id": "batch-4",
+    "statements": [
+     {
+      "file_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "file_name": "synthetic-sav.ofx",
+      "origin": "file",
+      "format": "ofx",
+      "parser": "ofx",
+      "account": {
+       "kind": "savings",
+       "key": "acct:sav",
+       "label": "Savings",
+       "last4": "9012",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-09-06",
+        "amount": 200,
+        "description": "FROM CHECKING SYNTHETIC",
+        "merchant_key": "FROM CHECKING",
+        "kind": "transfer",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:sav|FROM CHECKING|2026-09-06|200",
+        "excluded": false
+       },
+       {
+        "posted_date": "2026-09-30",
+        "amount": 1.25,
+        "description": "INTEREST PAID SYNTHETIC",
+        "merchant_key": "INTEREST PAID",
+        "kind": "income",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:sav|INTEREST PAID|2026-09-30|1.25",
+        "excluded": false
+       }
+      ]
+     },
+     {
+      "file_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "file_name": "synthetic-card.ofx",
+      "origin": "file",
+      "format": "ofx",
+      "parser": "ofx",
+      "account": {
+       "kind": "credit_card",
+       "key": "acct:card",
+       "label": "Visa",
+       "last4": "5678",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": {
+       "amount": 700,
+       "as_of": "2026-09-01"
+      },
+      "liability_id": "L-card",
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-08-30",
+        "amount": -25,
+        "description": "BOOKSHOP SYNTHETIC",
+        "merchant_key": "BOOKSHOP",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:card|BOOKSHOP|2026-08-30|-25",
+        "excluded": false
+       }
+      ]
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "probe imports_raw after hash split",
+   "probe": "imports_raw"
+  },
+  {
+   "name": "imports after hash split",
+   "method": "GET",
+   "path": "/api/smart-import/imports"
+  },
+  {
+   "name": "preview finds both statements of the split file",
+   "method": "POST",
+   "path": "/api/smart-import/preview",
+   "body": {
+    "statements": [
+     {
+      "file_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "account_key": "acct:card",
+      "account_kind": "credit_card",
+      "institution": "Sample Bank",
+      "dedupe_keys": [],
+      "merchant_keys": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "apply snapshots: older day, negative, future, no debt",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-5",
+    "statements": [
+     {
+      "file_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "file_name": "synthetic-card.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "credit_card",
+       "key": "acct:card",
+       "label": "Visa",
+       "last4": "5678",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": {
+       "amount": 600,
+       "as_of": "2026-08-25"
+      },
+      "liability_id": "L-card",
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-08-20",
+        "amount": -55,
+        "description": "HARDWARE SYNTHETIC",
+        "merchant_key": "HARDWARE",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:card|HARDWARE|2026-08-20|-55",
+        "excluded": false
+       }
+      ]
+     },
+     {
+      "file_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "file_name": "synthetic-card.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "credit_card",
+       "key": "acct:card",
+       "label": "Visa",
+       "last4": "5678",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": {
+       "amount": -20,
+       "as_of": "2026-09-20"
+      },
+      "liability_id": "L-card",
+      "ai_used": false,
+      "transactions": []
+     },
+     {
+      "file_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "file_name": "synthetic-card.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "credit_card",
+       "key": "acct:card",
+       "label": "Visa",
+       "last4": "5678",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": {
+       "amount": 300,
+       "as_of": "2026-10-10"
+      },
+      "liability_id": "L-card",
+      "ai_used": false,
+      "transactions": []
+     },
+     {
+      "file_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "file_name": "synthetic-chk2.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk2",
+       "label": "Bills",
+       "last4": "4321",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": {
+       "amount": 1000,
+       "as_of": "2026-09-30"
+      },
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": []
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "probe liabilities after snapshots",
+   "probe": "liabilities"
+  },
+  {
+   "name": "probe ledger after snapshots",
+   "probe": "ledger"
+  },
+  {
+   "name": "link to an inactive expense is refused",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-6",
+    "statements": [
+     {
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-09-29",
+        "amount": -45,
+        "description": "GYMCLUB SYNTHETIC",
+        "merchant_key": "GYMCLUB",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:chk|GYMCLUB|2026-09-29|-45",
+        "excluded": false
+       }
+      ]
+     }
+    ],
+    "rules": [],
+    "recurring": [
+     {
+      "merchant_key": "GYMCLUB",
+      "name": "Gym",
+      "amount": 45,
+      "frequency": "monthly",
+      "category_id": "cat-other",
+      "occurrences": 2,
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "decision": "link",
+      "expense_id": "E-gym"
+     }
+    ]
+   }
+  },
+  {
+   "name": "probe counts after refused link",
+   "probe": "counts"
+  },
+  {
+   "name": "apply with unknown rule category",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-6",
+    "statements": [
+     {
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": []
+     }
+    ],
+    "rules": [
+     {
+      "merchant_key": "GYMCLUB",
+      "category_id": "cat-missing",
+      "kind": "expense"
+     }
+    ],
+    "recurring": []
+   }
+  },
+  {
+   "name": "apply with unknown liability",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-6",
+    "statements": [
+     {
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "file_name": "synthetic-card.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "credit_card",
+       "key": "acct:card",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": {
+       "amount": 1,
+       "as_of": "2026-09-01"
+      },
+      "liability_id": "L-missing",
+      "ai_used": false,
+      "transactions": []
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "apply with a bad date",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-6",
+    "statements": [
+     {
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-9-29",
+        "amount": -1,
+        "description": "X SYNTHETIC",
+        "merchant_key": "X",
+        "kind": "expense",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|X|2026-09-29|-1",
+        "excluded": false
+       }
+      ]
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "apply with an extra key",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-6",
+    "statements": [],
+    "rules": [],
+    "recurring": [],
+    "extra": true
+   }
+  },
+  {
+   "name": "apply with a string ai_confidence",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-6",
+    "statements": [
+     {
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2026-09-29",
+        "amount": -1,
+        "description": "X SYNTHETIC",
+        "merchant_key": "X",
+        "kind": "expense",
+        "category_id": null,
+        "category_source": "none",
+        "dedupe_key": "acct:chk|X|2026-09-29|-1",
+        "excluded": false,
+        "ai_confidence": "0.5"
+       }
+      ]
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "apply with a string recurring amount",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-6",
+    "statements": [
+     {
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": []
+     }
+    ],
+    "rules": [],
+    "recurring": [
+     {
+      "merchant_key": "GYMCLUB",
+      "name": "Gym",
+      "amount": "45",
+      "frequency": "monthly",
+      "category_id": "cat-other",
+      "occurrences": 2,
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "decision": "create"
+     }
+    ]
+   }
+  },
+  {
+   "name": "apply with string occurrences",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-6",
+    "statements": [
+     {
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "file_name": "synthetic-chk.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:chk",
+       "label": "Main",
+       "last4": "1234",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": null,
+       "end": null
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": []
+     }
+    ],
+    "rules": [],
+    "recurring": [
+     {
+      "merchant_key": "GYMCLUB",
+      "name": "Gym",
+      "amount": 45,
+      "frequency": "monthly",
+      "category_id": "cat-other",
+      "occurrences": "2",
+      "file_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+      "decision": "create"
+     }
+    ]
+   }
+  },
+  {
+   "name": "preview with a bad hash",
+   "method": "POST",
+   "path": "/api/smart-import/preview",
+   "body": {
+    "statements": [
+     {
+      "file_hash": "not a hash",
+      "account_key": null,
+      "account_kind": "checking",
+      "institution": null,
+      "dedupe_keys": [],
+      "merchant_keys": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "probe counts after refused requests",
+   "probe": "counts"
+  },
+  {
+   "name": "context after imports",
+   "method": "GET",
+   "path": "/api/smart-import/context"
+  },
+  {
+   "name": "spending summary three months",
+   "method": "GET",
+   "path": "/api/budget/spending-summary?months=3"
+  },
+  {
+   "name": "spending summary for another entity",
+   "method": "GET",
+   "path": "/api/budget/spending-summary?months=3&entity_id=ent-other"
+  },
+  {
+   "name": "spending summary bad months",
+   "method": "GET",
+   "path": "/api/budget/spending-summary?months=0"
+  },
+  {
+   "name": "spending summary unknown query",
+   "method": "GET",
+   "path": "/api/budget/spending-summary?months=3&foo=1"
+  },
+  {
+   "name": "edit the created Spotify expense",
+   "db": "edit_expense",
+   "expense_name": "Spotify",
+   "amount": 11.99
+  },
+  {
+   "name": "undo A hands its overlap to B",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/{A}"
+  },
+  {
+   "name": "probe counts after undo A",
+   "probe": "counts"
+  },
+  {
+   "name": "probe imports_raw after undo A",
+   "probe": "imports_raw"
+  },
+  {
+   "name": "probe transactions after undo A",
+   "probe": "transactions"
+  },
+  {
+   "name": "probe expenses after undo A",
+   "probe": "expenses"
+  },
+  {
+   "name": "probe candidates after undo A",
+   "probe": "candidates"
+  },
+  {
+   "name": "probe ledger after undo A",
+   "probe": "ledger"
+  },
+  {
+   "name": "imports after undo A",
+   "method": "GET",
+   "path": "/api/smart-import/imports"
+  },
+  {
+   "name": "undo card statement restores the balance",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/{C1}"
+  },
+  {
+   "name": "probe liabilities after undo card",
+   "probe": "liabilities"
+  },
+  {
+   "name": "spending summary after undo A and card",
+   "method": "GET",
+   "path": "/api/budget/spending-summary?months=3"
+  },
+  {
+   "name": "undo B",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/{B}"
+  },
+  {
+   "name": "probe counts after undo B",
+   "probe": "counts"
+  },
+  {
+   "name": "probe transactions after undo B",
+   "probe": "transactions"
+  },
+  {
+   "name": "probe rules after undo B",
+   "probe": "rules"
+  },
+  {
+   "name": "probe expenses after undo B",
+   "probe": "expenses"
+  },
+  {
+   "name": "undo B again",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/{B}"
+  },
+  {
+   "name": "undo an unknown import",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/no-such-import"
+  },
+  {
+   "name": "insert a legacy statement import",
+   "db": "insert_legacy_import",
+   "id": "legacy-1",
+   "content_hash": "legacy-hash",
+   "file_name": "legacy.csv"
+  },
+  {
+   "name": "undo a legacy import",
+   "method": "DELETE",
+   "path": "/api/smart-import/imports/legacy-1"
+  },
+  {
+   "name": "preview sees the legacy file",
+   "method": "POST",
+   "path": "/api/smart-import/preview",
+   "body": {
+    "statements": [
+     {
+      "file_hash": "legacy-hash",
+      "account_key": null,
+      "account_kind": "checking",
+      "institution": null,
+      "dedupe_keys": [],
+      "merchant_keys": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "apply prunes old rows except the sample",
+   "method": "POST",
+   "path": "/api/smart-import/apply",
+   "body": {
+    "batch_id": "batch-7",
+    "statements": [
+     {
+      "file_hash": "4444444444444444444444444444444444444444444444444444444444444444",
+      "file_name": "synthetic-old.csv",
+      "origin": "file",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:old",
+       "label": "Old",
+       "last4": "1111",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2025-05-01",
+       "end": "2025-11-30"
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2025-06-10",
+        "amount": -10,
+        "description": "OLDSHOP SYNTHETIC",
+        "merchant_key": "OLDSHOP",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:old|OLDSHOP|2025-06-10|-10",
+        "excluded": false
+       },
+       {
+        "posted_date": "2025-06-11",
+        "amount": -11,
+        "description": "OLDSHOP SYNTHETIC",
+        "merchant_key": "OLDSHOP",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:old|OLDSHOP|2025-06-11|-11",
+        "excluded": false
+       },
+       {
+        "posted_date": "2025-11-15",
+        "amount": -5,
+        "description": "RECENTSHOP SYNTHETIC",
+        "merchant_key": "RECENTSHOP",
+        "kind": "expense",
+        "category_id": "cat-other",
+        "category_source": "rule",
+        "dedupe_key": "acct:old|RECENTSHOP|2025-11-15|-5",
+        "excluded": false
+       }
+      ]
+     },
+     {
+      "file_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "file_name": "synthetic-sample.csv",
+      "origin": "sample",
+      "format": "csv",
+      "parser": "csv",
+      "account": {
+       "kind": "checking",
+       "key": "acct:sample",
+       "label": "Sample",
+       "last4": "0000",
+       "institution": "Sample Bank"
+      },
+      "period": {
+       "start": "2025-06-01",
+       "end": "2025-06-30"
+      },
+      "closing_balance": null,
+      "liability_id": null,
+      "ai_used": false,
+      "transactions": [
+       {
+        "posted_date": "2025-06-12",
+        "amount": -12,
+        "description": "SAMPLESHOP SYNTHETIC",
+        "merchant_key": "SAMPLESHOP",
+        "kind": "expense",
+        "category_id": "cat-groceries",
+        "category_source": "rule",
+        "dedupe_key": "acct:sample|SAMPLESHOP|2025-06-12|-12",
+        "excluded": false
+       }
+      ]
+     }
+    ],
+    "rules": [],
+    "recurring": []
+   }
+  },
+  {
+   "name": "probe transactions after prune",
+   "probe": "transactions"
+  },
+  {
+   "name": "spending summary after prune",
+   "method": "GET",
+   "path": "/api/budget/spending-summary?months=24"
+  },
+  {
+   "name": "delete all imported transactions",
+   "method": "DELETE",
+   "path": "/api/smart-import/transactions"
+  },
+  {
+   "name": "probe counts after delete all",
+   "probe": "counts"
+  },
+  {
+   "name": "probe transactions after delete all",
+   "probe": "transactions"
+  },
+  {
+   "name": "spending summary after delete all",
+   "method": "GET",
+   "path": "/api/budget/spending-summary?months=24"
+  },
+  {
+   "name": "rules list",
+   "method": "GET",
+   "path": "/api/smart-import/rules",
+   "save": {
+    "R0": "0.id"
+   }
+  },
+  {
+   "name": "delete first rule",
+   "method": "DELETE",
+   "path": "/api/smart-import/rules/{R0}"
+  },
+  {
+   "name": "delete first rule again",
+   "method": "DELETE",
+   "path": "/api/smart-import/rules/{R0}"
+  },
+  {
+   "name": "rules after delete",
+   "method": "GET",
+   "path": "/api/smart-import/rules"
+  },
+  {
+   "name": "put ai and account label",
+   "method": "PUT",
+   "path": "/api/smart-import/settings",
+   "body": {
+    "ai_enabled": true,
+    "accounts": {
+     "acct:sav": "Rainy Day"
+    }
+   }
+  },
+  {
+   "name": "put empty settings keeps everything",
+   "method": "PUT",
+   "path": "/api/smart-import/settings",
+   "body": {}
+  },
+  {
+   "name": "settings at the end",
+   "method": "GET",
+   "path": "/api/smart-import/settings"
+  },
+  {
+   "name": "context at the end",
+   "method": "GET",
+   "path": "/api/smart-import/context"
+  },
+  {
+   "name": "probe counts at the end",
+   "probe": "counts"
+  }
+ ]
+}

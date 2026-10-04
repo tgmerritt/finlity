@@ -529,7 +529,13 @@ def test_smart_import_core_imports_no_database_or_xml():
     # ``python -m src.main``, costing about 1.3s and the whole app per upload.
     # Keyed on the path under src/smart_import, so a same-named file elsewhere
     # in the package gets no exception.
-    allowed = {("parsers/pdf_parser.py", "subprocess")}
+    # service.py is the data layer (B2): the only module here that touches the
+    # database, imported by src/api/smart_import.py and never by the stateless
+    # parsers or the v2 routes (their forbid_database tests enforce that).
+    allowed = {
+        ("parsers/pdf_parser.py", "subprocess"),
+        ("service.py", "sqlalchemy"),
+    }
     for path in root.rglob("*.py"):
         rel = path.relative_to(root).as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"))

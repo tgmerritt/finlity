@@ -14,7 +14,12 @@
 
 import type { ClientDatabase } from './client-database';
 import * as liabilities from './local-liabilities';
+import * as smartImport from './local-smart-import';
 import type {
+  ApplyResponse,
+  SmartImportTransactionsDeleted,
+  SmartImportUndoResponse,
+  SpendingSummary,
   ConvertPositionInput,
   ConvertPositionResult,
   CreateLiabilityInput,
@@ -25,6 +30,12 @@ import type {
   RecordBalanceInput,
   RevertConversionResult,
   UpdateLiabilityInput,
+  MerchantRuleResponse,
+  PreviewResponse,
+  SmartImportContext,
+  SmartImportDeleted,
+  SmartImportSettings,
+  SmartImportSummary,
 } from '@/types/api';
 
 // =====================================================================
@@ -2266,6 +2277,65 @@ export class LocalAPI {
   /** POST /api/liabilities/{id}/revert-conversion */
   revertConversion(id: string): RevertConversionResult {
     return liabilities.revertConversion(this.db, id);
+  }
+
+  // ===================================================================
+  // Smart import: read side and settings (see local-smart-import.ts)
+  // ===================================================================
+
+  /** GET /api/smart-import/context */
+  getSmartImportContext(): SmartImportContext {
+    return smartImport.getSmartImportContext(this.db);
+  }
+
+  /** POST /api/smart-import/preview */
+  previewSmartImport(input: unknown): PreviewResponse {
+    return smartImport.previewSmartImport(this.db, input);
+  }
+
+  /** GET /api/smart-import/imports */
+  getSmartImports(): SmartImportSummary[] {
+    return smartImport.getSmartImports(this.db);
+  }
+
+  /** GET /api/smart-import/rules */
+  getMerchantRules(): MerchantRuleResponse[] {
+    return smartImport.getMerchantRules(this.db);
+  }
+
+  /** DELETE /api/smart-import/rules/{id} */
+  deleteMerchantRule(id: string): SmartImportDeleted {
+    return smartImport.deleteMerchantRule(this.db, id);
+  }
+
+  /** POST /api/smart-import/apply */
+  applySmartImport(input: unknown): ApplyResponse {
+    return smartImport.applySmartImport(this.db, input);
+  }
+
+  /** DELETE /api/smart-import/imports/{id} */
+  undoSmartImport(id: string): SmartImportUndoResponse {
+    return smartImport.undoSmartImport(this.db, id);
+  }
+
+  /** DELETE /api/smart-import/transactions */
+  deleteSmartImportTransactions(): SmartImportTransactionsDeleted {
+    return smartImport.deleteSmartImportTransactions(this.db);
+  }
+
+  /** GET /api/budget/spending-summary */
+  getSpendingSummary(months?: unknown, entityId?: unknown): SpendingSummary {
+    return smartImport.getSpendingSummary(this.db, months, entityId);
+  }
+
+  /** GET /api/smart-import/settings */
+  getSmartImportSettings(): SmartImportSettings {
+    return smartImport.getSmartImportSettings(this.db);
+  }
+
+  /** PUT /api/smart-import/settings */
+  putSmartImportSettings(input: unknown): SmartImportSettings {
+    return smartImport.putSmartImportSettings(this.db, input);
   }
 
   /** PUT /api/budget/expenses/{id} */

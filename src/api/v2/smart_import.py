@@ -61,11 +61,11 @@ def _error(exc: SmartImportError) -> JSONResponse:
 
 
 def _needs_counted_body(request: Request) -> bool:
-    """A POST with no usable Content-Length (chunked) whose body FastAPI reads.
+    """A POST or PUT with no usable Content-Length (chunked) whose body FastAPI reads.
 
     Multipart uploads (analyze) stream through their own, smaller cap.
     """
-    if request.method != "POST":
+    if request.method not in ("POST", "PUT"):
         return False
     content_type = request.headers.get("content-type", "").lower()
     return not content_type.startswith("multipart/form-data")
