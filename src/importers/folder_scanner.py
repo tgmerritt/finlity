@@ -930,10 +930,24 @@ class FolderScanner:
         return {"success": success, "skipped": skipped, "failed": failed}
 
     def _update_position_prices(self, ticker: str, price: float) -> None:
-        """Update all positions with this ticker to use the given price."""
+        """Update all positions with this ticker to use the given price.
+
+        Real estate rows (ticker RE or position_type real_estate) carry a
+        user-entered value, which a conversion to a mortgage may have set, so a
+        price refresh never touches them.
+        """
+        if ticker.upper() == "RE":
+            return
         with self.db.get_session() as session:
+            from sqlalchemy import or_
+
             from src.database.models import Position
-            positions = session.query(Position).filter_by(ticker=ticker).all()
+            positions = (
+                session.query(Position)
+                .filter(Position.ticker == ticker)
+                .filter(or_(Position.position_type.is_(None), Position.position_type != "real_estate"))
+                .all()
+            )
             for pos in positions:
                 pos.current_price = price  # type: ignore[assignment]
             session.commit()

@@ -21,6 +21,7 @@ interface Step {
   path?: string;
   body?: unknown;
   save?: string;
+  save_home?: string;
   probe?: string;
   db?: string;
   id?: string;
@@ -214,7 +215,14 @@ function dbOp(step: Step): void {
       clientDB.execute('DELETE FROM budget_expense_categories');
       break;
     case 'insert': {
-      if (!['positions', 'budget_expense_categories'].includes(step.table!)) {
+      const tables = [
+        'accounts',
+        'positions',
+        'position_lots',
+        'budget_expenses',
+        'budget_expense_categories',
+      ];
+      if (!tables.includes(step.table!)) {
         throw new Error(`unknown table ${String(step.table)}`);
       }
       const cols = Object.keys(step.row!);
@@ -224,6 +232,14 @@ function dbOp(step: Step): void {
       );
       break;
     }
+    case 'delete_account':
+      clientDB.execute('DELETE FROM accounts WHERE id = ?', [step.id]);
+      break;
+    case 'retype_property_accounts':
+      clientDB.execute(
+        "UPDATE accounts SET account_type = 'taxable' WHERE account_type = 'property'"
+      );
+      break;
     case 'set_price':
       clientDB.execute('UPDATE positions SET current_price = ? WHERE id = ?', [
         step.price,
@@ -233,6 +249,18 @@ function dbOp(step: Step): void {
     default:
       throw new Error(`unknown db op ${String(step.db)}`);
   }
+}
+
+/** Replace "{alias}" string values in a request body with saved ids. */
+function substitute(value: unknown, aliases: Record<string, string>): unknown {
+  if (Array.isArray(value)) return value.map((v) => substitute(v, aliases));
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, substitute(v, aliases)])
+    );
+  }
+  const match = typeof value === 'string' ? /^\{(\w+)\}$/.exec(value) : null;
+  return match ? aliases[match[1]!] : value;
 }
 
 function runScenario(): Result[] {
@@ -251,11 +279,16 @@ function runScenario(): Result[] {
     }
     const endpoint = step.path!.replace(/\{(\w+)\}/g, (_m, k: string) => aliases[k]!);
     try {
-      const body = tryLocalRoute(endpoint, { method: step.method, body: step.body }) as {
+      const body = tryLocalRoute(endpoint, {
+        method: step.method,
+        body: substitute(step.body, aliases),
+      }) as {
         id?: string;
         liability?: { id: string };
+        created?: { position_id: string };
       };
       if (step.save) aliases[step.save] = body.id ?? body.liability!.id;
+      if (step.save_home) aliases[step.save_home] = body.created!.position_id;
       results.push({ name: step.name, ok: norm(JSON.parse(JSON.stringify(body))) });
     } catch (e) {
       if (!(e instanceof LocalHttpError)) throw e;

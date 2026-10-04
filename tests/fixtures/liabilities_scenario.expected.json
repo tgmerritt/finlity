@@ -4437,5 +4437,1131 @@
       "positions": 7,
       "snapshots": 15
     }
+  },
+  {
+    "name": "add an expense to link",
+    "ok": "done"
+  },
+  {
+    "name": "convert with a linked expense",
+    "ok": {
+      "created": {
+        "account_id": null,
+        "expense_id": null,
+        "position_id": null
+      },
+      "liability": {
+        "balance_as_of": "2026-10-01",
+        "closed_date": null,
+        "created_at": "<ts>",
+        "credit_limit": null,
+        "current_balance": 200000.0,
+        "entity_id": null,
+        "escrow_amount": 250.0,
+        "estimated_balance": 200000.0,
+        "expense": {
+          "id": "exp-h",
+          "monthly_amount": 1400.0,
+          "name": "House payment"
+        },
+        "expense_id": "exp-h",
+        "expense_missing": false,
+        "id": "<id-31>",
+        "interest_rate": 0.065,
+        "is_active": true,
+        "is_amortizing": true,
+        "last_reported_date": "2026-10-01",
+        "lender": "Second Bank",
+        "liability_type": "mortgage",
+        "linked_position": {
+          "id": "pos-h1",
+          "name": "Cottage",
+          "value": 300000.0
+        },
+        "linked_position_id": "pos-h1",
+        "linked_position_missing": false,
+        "maturity_date": null,
+        "monthly_cash_flow": 1750.0,
+        "monthly_payment": 1500.0,
+        "name": "Mortgage",
+        "next_payment_date": "2026-11-01",
+        "notes": null,
+        "original_principal": null,
+        "origination_date": null,
+        "payment_amount": 1500.0,
+        "payment_frequency": "monthly",
+        "payoff_date": "2046-08-01",
+        "periods_remaining": 238,
+        "source": "converted_position",
+        "source_ref": "pos-h1",
+        "term_months": null,
+        "total_interest_remaining": 155680.41,
+        "updated_at": "<ts>"
+      },
+      "position": {
+        "id": "pos-h1",
+        "name": "Cottage",
+        "value": 300000.0
+      }
+    }
+  },
+  {
+    "name": "expenses after link conversion",
+    "ok": [
+      {
+        "amount": 1400.0,
+        "category": "Housing",
+        "end_date": null,
+        "frequency": "monthly",
+        "interest_portion": 1083.33,
+        "is_mortgage": true,
+        "name": "House payment",
+        "principal_portion": 416.67
+      }
+    ]
+  },
+  {
+    "name": "payment change syncs the linked expense",
+    "ok": {
+      "balance_as_of": "2026-10-01",
+      "closed_date": null,
+      "created_at": "<ts>",
+      "credit_limit": null,
+      "current_balance": 200000.0,
+      "entity_id": null,
+      "escrow_amount": 250.0,
+      "estimated_balance": 200000.0,
+      "expense": {
+        "id": "exp-h",
+        "monthly_amount": 1950.0,
+        "name": "House payment"
+      },
+      "expense_id": "exp-h",
+      "expense_missing": false,
+      "id": "<id-31>",
+      "interest_rate": 0.065,
+      "is_active": true,
+      "is_amortizing": true,
+      "last_reported_date": "2026-10-01",
+      "lender": "Second Bank",
+      "liability_type": "mortgage",
+      "linked_position": {
+        "id": "pos-h1",
+        "name": "Cottage",
+        "value": 300000.0
+      },
+      "linked_position_id": "pos-h1",
+      "linked_position_missing": false,
+      "maturity_date": null,
+      "monthly_cash_flow": 1950.0,
+      "monthly_payment": 1700.0,
+      "name": "Mortgage",
+      "next_payment_date": "2026-11-01",
+      "notes": null,
+      "original_principal": null,
+      "origination_date": null,
+      "payment_amount": 1700.0,
+      "payment_frequency": "monthly",
+      "payoff_date": "2042-06-01",
+      "periods_remaining": 188,
+      "source": "converted_position",
+      "source_ref": "pos-h1",
+      "term_months": null,
+      "total_interest_remaining": 119119.33,
+      "updated_at": "<ts>"
+    }
+  },
+  {
+    "name": "expenses after sync",
+    "ok": [
+      {
+        "amount": 1950.0,
+        "category": "Housing",
+        "end_date": "2042-06-01",
+        "frequency": "monthly",
+        "interest_portion": 1083.33,
+        "is_mortgage": true,
+        "name": "House payment",
+        "principal_portion": 616.67
+      }
+    ]
+  },
+  {
+    "name": "revert the linked conversion",
+    "ok": {
+      "reverted": true
+    }
+  },
+  {
+    "name": "expenses after linked revert",
+    "ok": [
+      {
+        "amount": 1400.0,
+        "category": "Housing",
+        "end_date": null,
+        "frequency": "monthly",
+        "interest_portion": null,
+        "is_mortgage": false,
+        "name": "House payment",
+        "principal_portion": null
+      }
+    ]
+  },
+  {
+    "name": "convert with a linked expense again",
+    "ok": {
+      "created": {
+        "account_id": null,
+        "expense_id": null,
+        "position_id": null
+      },
+      "liability": {
+        "balance_as_of": "2026-10-01",
+        "closed_date": null,
+        "created_at": "<ts>",
+        "credit_limit": null,
+        "current_balance": 200000.0,
+        "entity_id": null,
+        "escrow_amount": 250.0,
+        "estimated_balance": 200000.0,
+        "expense": {
+          "id": "exp-h",
+          "monthly_amount": 1400.0,
+          "name": "House payment"
+        },
+        "expense_id": "exp-h",
+        "expense_missing": false,
+        "id": "<id-32>",
+        "interest_rate": 0.065,
+        "is_active": true,
+        "is_amortizing": true,
+        "last_reported_date": "2026-10-01",
+        "lender": "Second Bank",
+        "liability_type": "mortgage",
+        "linked_position": {
+          "id": "pos-h1",
+          "name": "Cottage",
+          "value": 300000.0
+        },
+        "linked_position_id": "pos-h1",
+        "linked_position_missing": false,
+        "maturity_date": null,
+        "monthly_cash_flow": 1750.0,
+        "monthly_payment": 1500.0,
+        "name": "Mortgage",
+        "next_payment_date": "2026-11-01",
+        "notes": null,
+        "original_principal": null,
+        "origination_date": null,
+        "payment_amount": 1500.0,
+        "payment_frequency": "monthly",
+        "payoff_date": "2046-08-01",
+        "periods_remaining": 238,
+        "source": "converted_position",
+        "source_ref": "pos-h1",
+        "term_months": null,
+        "total_interest_remaining": 155680.41,
+        "updated_at": "<ts>"
+      },
+      "position": {
+        "id": "pos-h1",
+        "name": "Cottage",
+        "value": 300000.0
+      }
+    }
+  },
+  {
+    "name": "add a second expense",
+    "ok": "done"
+  },
+  {
+    "name": "relink the conversion to the second expense",
+    "ok": {
+      "balance_as_of": "2026-10-01",
+      "closed_date": null,
+      "created_at": "<ts>",
+      "credit_limit": null,
+      "current_balance": 200000.0,
+      "entity_id": null,
+      "escrow_amount": 250.0,
+      "estimated_balance": 200000.0,
+      "expense": {
+        "id": "exp-h2",
+        "monthly_amount": 900.0,
+        "name": "Second payment"
+      },
+      "expense_id": "exp-h2",
+      "expense_missing": false,
+      "id": "<id-32>",
+      "interest_rate": 0.065,
+      "is_active": true,
+      "is_amortizing": true,
+      "last_reported_date": "2026-10-01",
+      "lender": "Second Bank",
+      "liability_type": "mortgage",
+      "linked_position": {
+        "id": "pos-h1",
+        "name": "Cottage",
+        "value": 300000.0
+      },
+      "linked_position_id": "pos-h1",
+      "linked_position_missing": false,
+      "maturity_date": null,
+      "monthly_cash_flow": 1750.0,
+      "monthly_payment": 1500.0,
+      "name": "Mortgage",
+      "next_payment_date": "2026-11-01",
+      "notes": null,
+      "original_principal": null,
+      "origination_date": null,
+      "payment_amount": 1500.0,
+      "payment_frequency": "monthly",
+      "payoff_date": "2046-08-01",
+      "periods_remaining": 238,
+      "source": "converted_position",
+      "source_ref": "pos-h1",
+      "term_months": null,
+      "total_interest_remaining": 155680.41,
+      "updated_at": "<ts>"
+    }
+  },
+  {
+    "name": "revert after relinking",
+    "ok": {
+      "reverted": true
+    }
+  },
+  {
+    "name": "expenses after relinked revert",
+    "ok": [
+      {
+        "amount": 1400.0,
+        "category": "Housing",
+        "end_date": null,
+        "frequency": "monthly",
+        "interest_portion": 1083.33,
+        "is_mortgage": true,
+        "name": "House payment",
+        "principal_portion": 416.67
+      },
+      {
+        "amount": 900.0,
+        "category": "Housing",
+        "end_date": null,
+        "frequency": "monthly",
+        "interest_portion": 1083.33,
+        "is_mortgage": true,
+        "name": "Second payment",
+        "principal_portion": 416.67
+      }
+    ]
+  },
+  {
+    "name": "add a tax lot",
+    "ok": "done"
+  },
+  {
+    "detail": "This position has tax lots and cannot be converted to a loan",
+    "error": 409,
+    "name": "loan conversion refused for a position with lots"
+  },
+  {
+    "name": "link a debt to the cottage",
+    "ok": {
+      "balance_as_of": "2026-10-01",
+      "closed_date": null,
+      "created_at": "<ts>",
+      "credit_limit": null,
+      "current_balance": 10000.0,
+      "entity_id": null,
+      "escrow_amount": null,
+      "estimated_balance": 10000.0,
+      "expense": null,
+      "expense_id": null,
+      "expense_missing": false,
+      "id": "<id-33>",
+      "interest_rate": null,
+      "is_active": true,
+      "is_amortizing": false,
+      "last_reported_date": "2026-10-01",
+      "lender": null,
+      "liability_type": "heloc",
+      "linked_position": {
+        "id": "pos-h1",
+        "name": "Cottage",
+        "value": 300000.0
+      },
+      "linked_position_id": "pos-h1",
+      "linked_position_missing": false,
+      "maturity_date": null,
+      "monthly_cash_flow": 0.0,
+      "monthly_payment": 0.0,
+      "name": "Cottage line",
+      "next_payment_date": null,
+      "notes": null,
+      "original_principal": null,
+      "origination_date": null,
+      "payment_amount": null,
+      "payment_frequency": "monthly",
+      "payoff_date": null,
+      "periods_remaining": null,
+      "source": "manual",
+      "source_ref": null,
+      "term_months": null,
+      "total_interest_remaining": null,
+      "updated_at": "<ts>"
+    }
+  },
+  {
+    "detail": "This position is already linked to a debt",
+    "error": 409,
+    "name": "conversion refused for a position linked to a debt"
+  },
+  {
+    "name": "retire the property accounts",
+    "ok": "done"
+  },
+  {
+    "name": "accounts before creating one",
+    "ok": [
+      {
+        "account_type": "taxable",
+        "entity_id": null,
+        "name": "Brokerage"
+      },
+      {
+        "account_type": "taxable",
+        "entity_id": null,
+        "name": "Real estate"
+      }
+    ]
+  },
+  {
+    "name": "convert the loan with a home in a new account",
+    "ok": {
+      "created": {
+        "account_id": "<id-34>",
+        "expense_id": null,
+        "position_id": "<id-35>"
+      },
+      "liability": {
+        "balance_as_of": "2026-10-01",
+        "closed_date": null,
+        "created_at": "<ts>",
+        "credit_limit": null,
+        "current_balance": 180000.0,
+        "entity_id": null,
+        "escrow_amount": 250.0,
+        "estimated_balance": 180000.0,
+        "expense": null,
+        "expense_id": null,
+        "expense_missing": false,
+        "id": "<id-36>",
+        "interest_rate": 0.065,
+        "is_active": true,
+        "is_amortizing": true,
+        "last_reported_date": "2026-10-01",
+        "lender": "Second Bank",
+        "liability_type": "mortgage",
+        "linked_position": {
+          "id": "<id-35>",
+          "name": "Condo two",
+          "value": 400000.0
+        },
+        "linked_position_id": "<id-35>",
+        "linked_position_missing": false,
+        "maturity_date": null,
+        "monthly_cash_flow": 1750.0,
+        "monthly_payment": 1500.0,
+        "name": "Mortgage",
+        "next_payment_date": "2026-11-01",
+        "notes": null,
+        "original_principal": null,
+        "origination_date": null,
+        "payment_amount": 1500.0,
+        "payment_frequency": "monthly",
+        "payoff_date": "2043-01-01",
+        "periods_remaining": 195,
+        "source": "converted_position",
+        "source_ref": "pos-h3",
+        "term_months": null,
+        "total_interest_remaining": 111507.54,
+        "updated_at": "<ts>"
+      },
+      "position": null
+    }
+  },
+  {
+    "name": "accounts after the account was created",
+    "ok": [
+      {
+        "account_type": "taxable",
+        "entity_id": null,
+        "name": "Brokerage"
+      },
+      {
+        "account_type": "taxable",
+        "entity_id": null,
+        "name": "Real estate"
+      },
+      {
+        "account_type": "property",
+        "entity_id": null,
+        "name": "Real estate"
+      }
+    ]
+  },
+  {
+    "name": "a later debt adds a home to that account",
+    "ok": {
+      "balance_as_of": "2026-10-01",
+      "closed_date": null,
+      "created_at": "<ts>",
+      "credit_limit": null,
+      "current_balance": 1000.0,
+      "entity_id": null,
+      "escrow_amount": null,
+      "estimated_balance": 1000.0,
+      "expense": null,
+      "expense_id": null,
+      "expense_missing": false,
+      "id": "<id-37>",
+      "interest_rate": null,
+      "is_active": true,
+      "is_amortizing": false,
+      "last_reported_date": "2026-10-01",
+      "lender": null,
+      "liability_type": "other",
+      "linked_position": {
+        "id": "<id-38>",
+        "name": "Shed",
+        "value": 5000.0
+      },
+      "linked_position_id": "<id-38>",
+      "linked_position_missing": false,
+      "maturity_date": null,
+      "monthly_cash_flow": 0.0,
+      "monthly_payment": 0.0,
+      "name": "Shed loan",
+      "next_payment_date": null,
+      "notes": null,
+      "original_principal": null,
+      "origination_date": null,
+      "payment_amount": null,
+      "payment_frequency": "monthly",
+      "payoff_date": null,
+      "periods_remaining": null,
+      "source": "manual",
+      "source_ref": null,
+      "term_months": null,
+      "total_interest_remaining": null,
+      "updated_at": "<ts>"
+    }
+  },
+  {
+    "name": "revert keeps the account holding a later position",
+    "ok": {
+      "reverted": true
+    }
+  },
+  {
+    "name": "accounts after revert with a later position",
+    "ok": [
+      {
+        "account_type": "taxable",
+        "entity_id": null,
+        "name": "Brokerage"
+      },
+      {
+        "account_type": "taxable",
+        "entity_id": null,
+        "name": "Real estate"
+      },
+      {
+        "account_type": "property",
+        "entity_id": null,
+        "name": "Real estate"
+      }
+    ]
+  },
+  {
+    "name": "positions after revert with a later position",
+    "ok": [
+      {
+        "account": "Real estate",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 150000.0,
+        "name": "Cabin",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": -180000.0,
+        "name": "Condo loan",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 300000.0,
+        "name": "Cottage",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Real estate",
+        "asset_class": "alternative",
+        "cost_basis": 500000.0,
+        "current_price": 700000.0,
+        "name": "Main St",
+        "position_type": "real_estate",
+        "purchase_date": "2015-06-01",
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Real estate",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 5000.0,
+        "name": "Shed",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 90000.0,
+        "name": "Spare lot",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "equity",
+        "cost_basis": null,
+        "current_price": 330.0,
+        "name": "Total Market",
+        "position_type": "equity",
+        "purchase_date": null,
+        "shares": 10.0,
+        "ticker": "VTI"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 655000.0,
+        "name": "Townhouse",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      }
+    ]
+  },
+  {
+    "name": "convert the loan with a home again",
+    "ok": {
+      "created": {
+        "account_id": null,
+        "expense_id": null,
+        "position_id": "<id-39>"
+      },
+      "liability": {
+        "balance_as_of": "2026-10-01",
+        "closed_date": null,
+        "created_at": "<ts>",
+        "credit_limit": null,
+        "current_balance": 180000.0,
+        "entity_id": null,
+        "escrow_amount": 250.0,
+        "estimated_balance": 180000.0,
+        "expense": null,
+        "expense_id": null,
+        "expense_missing": false,
+        "id": "<id-40>",
+        "interest_rate": 0.065,
+        "is_active": true,
+        "is_amortizing": true,
+        "last_reported_date": "2026-10-01",
+        "lender": "Second Bank",
+        "liability_type": "mortgage",
+        "linked_position": {
+          "id": "<id-39>",
+          "name": "Condo three",
+          "value": 410000.0
+        },
+        "linked_position_id": "<id-39>",
+        "linked_position_missing": false,
+        "maturity_date": null,
+        "monthly_cash_flow": 1750.0,
+        "monthly_payment": 1500.0,
+        "name": "Mortgage",
+        "next_payment_date": "2026-11-01",
+        "notes": null,
+        "original_principal": null,
+        "origination_date": null,
+        "payment_amount": 1500.0,
+        "payment_frequency": "monthly",
+        "payoff_date": "2043-01-01",
+        "periods_remaining": 195,
+        "source": "converted_position",
+        "source_ref": "pos-h3",
+        "term_months": null,
+        "total_interest_remaining": 111507.54,
+        "updated_at": "<ts>"
+      },
+      "position": null
+    }
+  },
+  {
+    "name": "another debt links the new home",
+    "ok": {
+      "balance_as_of": "2026-10-01",
+      "closed_date": null,
+      "created_at": "<ts>",
+      "credit_limit": null,
+      "current_balance": 20000.0,
+      "entity_id": null,
+      "escrow_amount": null,
+      "estimated_balance": 20000.0,
+      "expense": null,
+      "expense_id": null,
+      "expense_missing": false,
+      "id": "<id-41>",
+      "interest_rate": null,
+      "is_active": true,
+      "is_amortizing": false,
+      "last_reported_date": "2026-10-01",
+      "lender": null,
+      "liability_type": "heloc",
+      "linked_position": {
+        "id": "<id-39>",
+        "name": "Condo three",
+        "value": 410000.0
+      },
+      "linked_position_id": "<id-39>",
+      "linked_position_missing": false,
+      "maturity_date": null,
+      "monthly_cash_flow": 0.0,
+      "monthly_payment": 0.0,
+      "name": "Condo line",
+      "next_payment_date": null,
+      "notes": null,
+      "original_principal": null,
+      "origination_date": null,
+      "payment_amount": null,
+      "payment_frequency": "monthly",
+      "payoff_date": null,
+      "periods_remaining": null,
+      "source": "manual",
+      "source_ref": null,
+      "term_months": null,
+      "total_interest_remaining": null,
+      "updated_at": "<ts>"
+    }
+  },
+  {
+    "name": "revert keeps a home another debt links",
+    "ok": {
+      "reverted": true
+    }
+  },
+  {
+    "name": "positions after revert with a linked home",
+    "ok": [
+      {
+        "account": "Real estate",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 150000.0,
+        "name": "Cabin",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": -180000.0,
+        "name": "Condo loan",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Real estate",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 410000.0,
+        "name": "Condo three",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 300000.0,
+        "name": "Cottage",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Real estate",
+        "asset_class": "alternative",
+        "cost_basis": 500000.0,
+        "current_price": 700000.0,
+        "name": "Main St",
+        "position_type": "real_estate",
+        "purchase_date": "2015-06-01",
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Real estate",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 5000.0,
+        "name": "Shed",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 90000.0,
+        "name": "Spare lot",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "equity",
+        "cost_basis": null,
+        "current_price": 330.0,
+        "name": "Total Market",
+        "position_type": "equity",
+        "purchase_date": null,
+        "shares": 10.0,
+        "ticker": "VTI"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 655000.0,
+        "name": "Townhouse",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      }
+    ]
+  },
+  {
+    "name": "the other debt still links the home",
+    "ok": {
+      "balance_as_of": "2026-10-01",
+      "closed_date": null,
+      "created_at": "<ts>",
+      "credit_limit": null,
+      "current_balance": 20000.0,
+      "entity_id": null,
+      "escrow_amount": null,
+      "estimated_balance": 20000.0,
+      "expense": null,
+      "expense_id": null,
+      "expense_missing": false,
+      "id": "<id-41>",
+      "interest_rate": null,
+      "is_active": true,
+      "is_amortizing": false,
+      "last_reported_date": "2026-10-01",
+      "lender": null,
+      "liability_type": "heloc",
+      "linked_position": {
+        "id": "<id-39>",
+        "name": "Condo three",
+        "value": 410000.0
+      },
+      "linked_position_id": "<id-39>",
+      "linked_position_missing": false,
+      "maturity_date": null,
+      "monthly_cash_flow": 0.0,
+      "monthly_payment": 0.0,
+      "name": "Condo line",
+      "next_payment_date": null,
+      "notes": null,
+      "original_principal": null,
+      "origination_date": null,
+      "payment_amount": null,
+      "payment_frequency": "monthly",
+      "payoff_date": null,
+      "periods_remaining": null,
+      "source": "manual",
+      "source_ref": null,
+      "term_months": null,
+      "total_interest_remaining": null,
+      "updated_at": "<ts>"
+    }
+  },
+  {
+    "name": "add another account",
+    "ok": "done"
+  },
+  {
+    "name": "add a plot",
+    "ok": "done"
+  },
+  {
+    "name": "convert the plot as a loan",
+    "ok": {
+      "created": {
+        "account_id": null,
+        "expense_id": null,
+        "position_id": null
+      },
+      "liability": {
+        "balance_as_of": "2026-10-01",
+        "closed_date": null,
+        "created_at": "<ts>",
+        "credit_limit": null,
+        "current_balance": 120000.0,
+        "entity_id": null,
+        "escrow_amount": 250.0,
+        "estimated_balance": 120000.0,
+        "expense": null,
+        "expense_id": null,
+        "expense_missing": false,
+        "id": "<id-42>",
+        "interest_rate": 0.065,
+        "is_active": true,
+        "is_amortizing": true,
+        "last_reported_date": "2026-10-01",
+        "lender": "Second Bank",
+        "liability_type": "mortgage",
+        "linked_position": null,
+        "linked_position_id": null,
+        "linked_position_missing": false,
+        "maturity_date": null,
+        "monthly_cash_flow": 1750.0,
+        "monthly_payment": 1500.0,
+        "name": "Mortgage",
+        "next_payment_date": "2026-11-01",
+        "notes": null,
+        "original_principal": null,
+        "origination_date": null,
+        "payment_amount": 1500.0,
+        "payment_frequency": "monthly",
+        "payoff_date": "2035-08-01",
+        "periods_remaining": 106,
+        "source": "converted_position",
+        "source_ref": "pos-h5",
+        "term_months": null,
+        "total_interest_remaining": 37713.99,
+        "updated_at": "<ts>"
+      },
+      "position": null
+    }
+  },
+  {
+    "name": "delete the plot's account",
+    "ok": "done"
+  },
+  {
+    "detail": "The account that held this position no longer exists",
+    "error": 409,
+    "name": "loan revert refused once the account is gone"
+  },
+  {
+    "name": "final accounts after conversions",
+    "ok": [
+      {
+        "account_type": "taxable",
+        "entity_id": null,
+        "name": "Brokerage"
+      },
+      {
+        "account_type": "taxable",
+        "entity_id": null,
+        "name": "Real estate"
+      },
+      {
+        "account_type": "property",
+        "entity_id": null,
+        "name": "Real estate"
+      }
+    ]
+  },
+  {
+    "name": "final expenses after conversions",
+    "ok": [
+      {
+        "amount": 1400.0,
+        "category": "Housing",
+        "end_date": null,
+        "frequency": "monthly",
+        "interest_portion": 1083.33,
+        "is_mortgage": true,
+        "name": "House payment",
+        "principal_portion": 416.67
+      },
+      {
+        "amount": 900.0,
+        "category": "Housing",
+        "end_date": null,
+        "frequency": "monthly",
+        "interest_portion": 1083.33,
+        "is_mortgage": true,
+        "name": "Second payment",
+        "principal_portion": 416.67
+      }
+    ]
+  },
+  {
+    "name": "final positions after conversions",
+    "ok": [
+      {
+        "account": "Real estate",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 150000.0,
+        "name": "Cabin",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": -180000.0,
+        "name": "Condo loan",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Real estate",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 410000.0,
+        "name": "Condo three",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 300000.0,
+        "name": "Cottage",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Real estate",
+        "asset_class": "alternative",
+        "cost_basis": 500000.0,
+        "current_price": 700000.0,
+        "name": "Main St",
+        "position_type": "real_estate",
+        "purchase_date": "2015-06-01",
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Real estate",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 5000.0,
+        "name": "Shed",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 90000.0,
+        "name": "Spare lot",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "equity",
+        "cost_basis": null,
+        "current_price": 330.0,
+        "name": "Total Market",
+        "position_type": "equity",
+        "purchase_date": null,
+        "shares": 10.0,
+        "ticker": "VTI"
+      },
+      {
+        "account": "Brokerage",
+        "asset_class": "alternative",
+        "cost_basis": null,
+        "current_price": 655000.0,
+        "name": "Townhouse",
+        "position_type": "real_estate",
+        "purchase_date": null,
+        "shares": 1.0,
+        "ticker": "RE"
+      }
+    ]
+  },
+  {
+    "name": "final counts after conversions",
+    "ok": {
+      "accounts": 3,
+      "categories": 1,
+      "expenses": 2,
+      "liabilities": 16,
+      "positions": 9,
+      "snapshots": 19
+    }
   }
 ]

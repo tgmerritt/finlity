@@ -571,3 +571,93 @@ def test_no_money_or_names_in_logs(client, db, caplog):
     text = "\n".join(r.getMessage() for r in caplog.records)
     for secret in ("248000", "612000", "860000", "700001", "1980", "SecretHouse", "First Bank", "Home"):
         assert secret not in text
+
+
+# ---------------------------------------------------------------------------
+# Review fixes: linked expense restore, double counting, shared homes, prices
+# ---------------------------------------------------------------------------
+
+
+def test_revert_restores_linked_expense_after_a_sync(client, db, db_path):
+    exp_id = seed_expense(db)
+    before = hashes(db_path)
+    lid = convert(client, "property_value", cash_flow={"mode": "link", "expense_id": exp_id}).json()["liability"]["id"]
+    assert client.put(f"/api/liabilities/{lid}", json={"payment_amount": 2100}).status_code == 200
+    synced = raw_row(db_path, "budget_expenses", exp_id)
+    assert synced["amount"] == 2100 and synced["end_date"] is not None
+    detail = source_detail(db, lid)["linked_expense"]
+    assert detail["amount"] == 1500 and detail["frequency"] == "monthly" and detail["end_date"] is None
+    assert client.post(f"/api/liabilities/{lid}/revert-conversion").status_code == 200
+    assert hashes(db_path) == before
+
+
+def test_revert_keeps_expense_relinked_away(client, db, db_path):
+    exp_a = seed_expense(db, name="Mortgage A")
+    exp_b = seed_expense(db, name="Mortgage B")
+    lid = convert(client, "property_value", cash_flow={"mode": "link", "expense_id": exp_a}).json()["liability"]["id"]
+    assert client.put(f"/api/liabilities/{lid}", json={"expense_id": exp_b}).status_code == 200
+    kept = raw_row(db_path, "budget_expenses", exp_a)
+    assert client.post(f"/api/liabilities/{lid}/revert-conversion").status_code == 200
+    assert raw_row(db_path, "budget_expenses", exp_a) == kept
+
+
+def test_revert_keeps_expense_another_debt_links(client, db, db_path):
+    exp_id = seed_expense(db)
+    lid = convert(client, "property_value", cash_flow={"mode": "link", "expense_id": exp_id}).json()["liability"]["id"]
+    other = client.post("/api/liabilities", json={"name": "Card", "liability_type": "credit_card", "current_balance": 5})
+    with db.get_session() as s:
+        s.get(Liability, other.json()["id"]).expense_id = exp_id
+        s.commit()
+    kept = raw_row(db_path, "budget_expenses", exp_id)
+    assert client.post(f"/api/liabilities/{lid}/revert-conversion").status_code == 200
+    assert raw_row(db_path, "budget_expenses", exp_id) == kept
+
+
+@pytest.mark.parametrize("mode", ["property_value", "equity", "loan"])
+def test_convert_refuses_a_position_already_linked_to_a_debt(client, db, db_path, mode):
+    linked = client.post(
+        "/api/liabilities",
+        json={"name": "HELOC", "liability_type": "heloc", "current_balance": 5, "linked_position_id": "pos-re"},
+    )
+    assert linked.status_code == 201
+    snapshot = (hashes(db_path), counts(db))
+    r = convert(client, mode)
+    assert r.status_code == 409 and r.json()["detail"] == "This position is already linked to a debt"
+    assert (hashes(db_path), counts(db)) == snapshot
+
+
+def test_revert_keeps_created_home_another_debt_links(client, db):
+    created = convert(client, "loan", add_home={"name": "Our house", "value": 700000}).json()
+    home = created["created"]["position_id"]
+    heloc = client.post(
+        "/api/liabilities",
+        json={"name": "HELOC", "liability_type": "heloc", "current_balance": 5, "property": {"mode": "link", "position_id": home}},
+    )
+    assert heloc.status_code == 201
+    assert client.post(f"/api/liabilities/{created['liability']['id']}/revert-conversion").status_code == 200
+    with db.get_session() as s:
+        assert s.get(Position, home) is not None
+        assert s.get(Account, created["created"]["account_id"]) is not None
+        assert s.get(Position, "pos-re") is not None
+    assert client.get(f"/api/liabilities/{heloc.json()['id']}").json()["linked_position"]["id"] == home
+
+
+def test_price_refresh_leaves_real_estate_rows_unchanged(db, db_path, tmp_path):
+    from src.importers.folder_scanner import FolderScanner
+
+    with db.get_session() as s:
+        s.add(Position(id="pos-z-eq", account_id="acct-b", ticker="ZHOME", shares=1.0, current_price=10.0))
+        s.add(
+            Position(
+                id="pos-z-re", account_id="acct-b", ticker="ZHOME", shares=1.0, current_price=500000.0,
+                position_type="real_estate",
+            )
+        )
+        s.add(Position(id="pos-re-untyped", account_id="acct-b", ticker="RE", shares=1.0, current_price=90000.0))
+        s.commit()
+    estate = [raw_row(db_path, "positions", i) for i in ("pos-re", "pos-z-re", "pos-re-untyped")]
+    scanner = FolderScanner(db, import_folder=str(tmp_path), use_plugins=False)
+    scanner._update_position_prices("ZHOME", 12.5)
+    scanner._update_position_prices("RE", 1.0)
+    assert [raw_row(db_path, "positions", i) for i in ("pos-re", "pos-z-re", "pos-re-untyped")] == estate
+    assert raw_row(db_path, "positions", "pos-z-eq")["current_price"] == 12.5

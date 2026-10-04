@@ -536,7 +536,18 @@ def get_history(db: Database, liability_id: str) -> dict[str, Any]:
 
 CONVERTED = "converted_position"
 _POSITION_COLUMNS = text("PRAGMA table_info(positions)")
-_EXPENSE_SPLIT = ("id", "is_mortgage", "principal_portion", "interest_portion", "updated_at")
+# What a cash_flow link can change on an existing expense (the mortgage split at
+# link time, then amount, frequency and end date through a later sync).
+_EXPENSE_RESTORE = (
+    "id",
+    "amount",
+    "frequency",
+    "end_date",
+    "is_mortgage",
+    "principal_portion",
+    "interest_portion",
+    "updated_at",
+)
 
 
 def _position_columns(session: Any) -> list[str]:
@@ -605,7 +616,7 @@ def convert_position(db: Database, data: dict[str, Any]) -> dict[str, Any]:
     cash_flow = data.get("cash_flow")
     fields["balance_as_of"] = fields.get("balance_as_of") or today
     _check_not_future(fields["balance_as_of"], today)
-    with db.get_session() as session, _write(session, "convert"):
+    with db.get_session() as session, _write(session, "convert", position_id):
         before = _raw_position(session, position_id)
         if before is None:
             raise LiabilityError(404, "Position not found")
@@ -613,6 +624,8 @@ def convert_position(db: Database, data: dict[str, Any]) -> dict[str, Any]:
             raise LiabilityError(409, "Only real estate positions can be converted")
         if session.query(Liability).filter_by(source=CONVERTED, source_ref=position_id).first() is not None:
             raise LiabilityError(409, "This position is already converted")
+        if session.query(Liability).filter(Liability.linked_position_id == position_id).first() is not None:
+            raise LiabilityError(409, "This position is already linked to a debt")
         created: dict[str, Optional[str]] = {"account_id": None, "position_id": None, "expense_id": None}
         detail: dict[str, Any] = {"mode": mode, "position_before": before, "created": created}
         linked: Optional[str] = position_id
@@ -639,7 +652,7 @@ def convert_position(db: Database, data: dict[str, Any]) -> dict[str, Any]:
                 if not had_account:
                     created["account_id"] = _raw_position(session, linked)["account_id"]  # type: ignore[index]
         if cash_flow and cash_flow["mode"] == "link":
-            expenses = _raw_table("budget_expenses", _EXPENSE_SPLIT)
+            expenses = _raw_table("budget_expenses", _EXPENSE_RESTORE)
             found = session.execute(select(expenses).where(expenses.c.id == cash_flow["expense_id"])).mappings().first()
             detail["linked_expense"] = dict(found) if found else None
         fields.update(
@@ -699,7 +712,7 @@ def revert_conversion(db: Database, liability_id: str) -> dict[str, Any]:
                 if session.get(Account, before.get("account_id")) is None:
                     raise LiabilityError(409, "The account that held this position no longer exists")
                 session.execute(insert(_raw_table("positions", before)).values(**before))
-            _restore_expense_split(session, detail.get("linked_expense"))
+            _restore_linked_expense(session, row, detail.get("linked_expense"))
             _delete_created(session, detail["created"], liability_id)
             session.query(LiabilityBalanceSnapshot).filter_by(liability_id=liability_id).delete()
             session.delete(row)
@@ -708,20 +721,30 @@ def revert_conversion(db: Database, liability_id: str) -> dict[str, Any]:
             return {"reverted": True}
 
 
-def _restore_expense_split(session: Any, before: Any) -> None:
-    """Put back the mortgage flag and split a cash_flow link overwrote, if the expense still exists."""
+def _restore_linked_expense(session: Any, row: Liability, before: Any) -> None:
+    """Put back an expense a cash_flow link (and later syncs) changed.
+
+    Skipped, keeping the expense as it is now, when this debt no longer links
+    that expense or another debt links it: the later link owns its values.
+    """
     if not isinstance(before, dict) or not before.get("id"):
         return
-    expenses = _raw_table("budget_expenses", _EXPENSE_SPLIT)
-    values = {k: before.get(k) for k in _EXPENSE_SPLIT if k != "id"}
-    session.execute(update(expenses).where(expenses.c.id == before["id"]).values(**values))
+    expense_id = before["id"]
+    if row.expense_id != expense_id:
+        return
+    others = session.query(Liability).filter(Liability.expense_id == expense_id, Liability.id != row.id)
+    if others.first() is not None:
+        return
+    expenses = _raw_table("budget_expenses", _EXPENSE_RESTORE)
+    values = {k: before.get(k) for k in _EXPENSE_RESTORE if k != "id"}
+    session.execute(update(expenses).where(expenses.c.id == expense_id).values(**values))
 
 
 def _delete_created(session: Any, created: dict[str, Any], liability_id: str) -> None:
     """Delete what the conversion created and that still exists.
 
-    The expense is kept if another liability now links it, and the account is
-    kept if it holds positions added after the conversion.
+    The expense is kept if another liability now links it, the home position
+    if another liability links it, and the account while it holds positions.
     """
     expense_id = created.get("expense_id")
     if expense_id:
@@ -732,7 +755,10 @@ def _delete_created(session: Any, created: dict[str, Any], liability_id: str) ->
     position_id = created.get("position_id")
     if position_id:
         position = session.get(Position, position_id)
-        if position is not None:
+        linked_elsewhere = session.query(Liability).filter(
+            Liability.linked_position_id == position_id, Liability.id != liability_id
+        )
+        if position is not None and linked_elsewhere.first() is None:
             session.delete(position)
     session.flush()
     account_id = created.get("account_id")

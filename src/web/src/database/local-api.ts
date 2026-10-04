@@ -1948,11 +1948,14 @@ export class LocalAPI {
            year_low = excluded.year_low, last_updated = excluded.last_updated`,
         [ticker, p.price, p.previous_close ?? null, p.year_high ?? null, p.year_low ?? null, now]
       );
-      this.db.execute('UPDATE positions SET current_price = ?, updated_at = ? WHERE ticker = ?', [
-        p.price,
-        now,
-        ticker,
-      ]);
+      // Real estate rows carry a user-entered value (possibly set by a mortgage
+      // conversion), so a price refresh never touches them.
+      if (ticker === 'RE') continue;
+      this.db.execute(
+        `UPDATE positions SET current_price = ?, updated_at = ?
+         WHERE ticker = ? AND COALESCE(position_type, '') != 'real_estate'`,
+        [p.price, now, ticker]
+      );
     }
     return { updated: prices.length };
   }

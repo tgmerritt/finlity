@@ -1323,6 +1323,372 @@
   {
    "name": "counts after reverts",
    "probe": "counts"
+  },
+  {
+   "name": "add an expense to link",
+   "db": "insert",
+   "table": "budget_expenses",
+   "row": {
+    "id": "exp-h",
+    "category_id": "cat-home",
+    "name": "House payment",
+    "amount": 1400,
+    "frequency": "monthly"
+   }
+  },
+  {
+   "name": "convert with a linked expense",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "save": "conv_link",
+   "body": {
+    "position_id": "pos-h1",
+    "mode": "property_value",
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250,
+     "current_balance": 200000
+    },
+    "cash_flow": {
+     "mode": "link",
+     "expense_id": "exp-h"
+    }
+   }
+  },
+  {
+   "name": "expenses after link conversion",
+   "probe": "expenses"
+  },
+  {
+   "name": "payment change syncs the linked expense",
+   "method": "PUT",
+   "path": "/api/liabilities/{conv_link}",
+   "body": {
+    "payment_amount": 1700
+   }
+  },
+  {
+   "name": "expenses after sync",
+   "probe": "expenses"
+  },
+  {
+   "name": "revert the linked conversion",
+   "method": "POST",
+   "path": "/api/liabilities/{conv_link}/revert-conversion"
+  },
+  {
+   "name": "expenses after linked revert",
+   "probe": "expenses"
+  },
+  {
+   "name": "convert with a linked expense again",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "save": "conv_link2",
+   "body": {
+    "position_id": "pos-h1",
+    "mode": "property_value",
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250,
+     "current_balance": 200000
+    },
+    "cash_flow": {
+     "mode": "link",
+     "expense_id": "exp-h"
+    }
+   }
+  },
+  {
+   "name": "add a second expense",
+   "db": "insert",
+   "table": "budget_expenses",
+   "row": {
+    "id": "exp-h2",
+    "category_id": "cat-home",
+    "name": "Second payment",
+    "amount": 900,
+    "frequency": "monthly"
+   }
+  },
+  {
+   "name": "relink the conversion to the second expense",
+   "method": "PUT",
+   "path": "/api/liabilities/{conv_link2}",
+   "body": {
+    "expense_id": "exp-h2"
+   }
+  },
+  {
+   "name": "revert after relinking",
+   "method": "POST",
+   "path": "/api/liabilities/{conv_link2}/revert-conversion"
+  },
+  {
+   "name": "expenses after relinked revert",
+   "probe": "expenses"
+  },
+  {
+   "name": "add a tax lot",
+   "db": "insert",
+   "table": "position_lots",
+   "row": {
+    "id": "lot-h4",
+    "position_id": "pos-h4",
+    "purchase_date": "2020-01-01",
+    "shares": 1,
+    "cost_basis": 80000
+   }
+  },
+  {
+   "name": "loan conversion refused for a position with lots",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "body": {
+    "position_id": "pos-h4",
+    "mode": "loan",
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250
+    }
+   }
+  },
+  {
+   "name": "link a debt to the cottage",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "save": "cottage_line",
+   "body": {
+    "name": "Cottage line",
+    "liability_type": "heloc",
+    "current_balance": 10000,
+    "balance_as_of": "2026-10-01",
+    "linked_position_id": "pos-h1"
+   }
+  },
+  {
+   "name": "conversion refused for a position linked to a debt",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "body": {
+    "position_id": "pos-h1",
+    "mode": "equity",
+    "home_value": 350000,
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250,
+     "current_balance": 1
+    }
+   }
+  },
+  {
+   "name": "retire the property accounts",
+   "db": "retype_property_accounts"
+  },
+  {
+   "name": "accounts before creating one",
+   "probe": "accounts"
+  },
+  {
+   "name": "convert the loan with a home in a new account",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "save": "conv_loan2",
+   "body": {
+    "position_id": "pos-h3",
+    "mode": "loan",
+    "add_home": {
+     "name": "Condo two",
+     "value": 400000
+    },
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250
+    }
+   }
+  },
+  {
+   "name": "accounts after the account was created",
+   "probe": "accounts"
+  },
+  {
+   "name": "a later debt adds a home to that account",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "save": "shed",
+   "body": {
+    "name": "Shed loan",
+    "liability_type": "other",
+    "current_balance": 1000,
+    "balance_as_of": "2026-10-01",
+    "property": {
+     "mode": "create",
+     "name": "Shed",
+     "value": 5000
+    }
+   }
+  },
+  {
+   "name": "revert keeps the account holding a later position",
+   "method": "POST",
+   "path": "/api/liabilities/{conv_loan2}/revert-conversion"
+  },
+  {
+   "name": "accounts after revert with a later position",
+   "probe": "accounts"
+  },
+  {
+   "name": "positions after revert with a later position",
+   "probe": "positions"
+  },
+  {
+   "name": "convert the loan with a home again",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "save": "conv_loan3",
+   "save_home": "home3",
+   "body": {
+    "position_id": "pos-h3",
+    "mode": "loan",
+    "add_home": {
+     "name": "Condo three",
+     "value": 410000
+    },
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250
+    }
+   }
+  },
+  {
+   "name": "another debt links the new home",
+   "method": "POST",
+   "path": "/api/liabilities",
+   "save": "condo_line",
+   "body": {
+    "name": "Condo line",
+    "liability_type": "heloc",
+    "current_balance": 20000,
+    "balance_as_of": "2026-10-01",
+    "property": {
+     "mode": "link",
+     "position_id": "{home3}"
+    }
+   }
+  },
+  {
+   "name": "revert keeps a home another debt links",
+   "method": "POST",
+   "path": "/api/liabilities/{conv_loan3}/revert-conversion"
+  },
+  {
+   "name": "positions after revert with a linked home",
+   "probe": "positions"
+  },
+  {
+   "name": "the other debt still links the home",
+   "method": "GET",
+   "path": "/api/liabilities/{condo_line}"
+  },
+  {
+   "name": "add another account",
+   "db": "insert",
+   "table": "accounts",
+   "row": {
+    "id": "acct-2",
+    "name": "Old brokerage",
+    "account_type": "taxable"
+   }
+  },
+  {
+   "name": "add a plot",
+   "db": "insert",
+   "table": "positions",
+   "row": {
+    "id": "pos-h5",
+    "account_id": "acct-2",
+    "ticker": "RE",
+    "name": "Beach plot",
+    "shares": 1,
+    "current_price": -120000,
+    "position_type": "real_estate",
+    "asset_class": "alternative"
+   }
+  },
+  {
+   "name": "convert the plot as a loan",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "save": "conv_loan4",
+   "body": {
+    "position_id": "pos-h5",
+    "mode": "loan",
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250
+    }
+   }
+  },
+  {
+   "name": "delete the plot's account",
+   "db": "delete_account",
+   "id": "acct-2"
+  },
+  {
+   "name": "loan revert refused once the account is gone",
+   "method": "POST",
+   "path": "/api/liabilities/{conv_loan4}/revert-conversion"
+  },
+  {
+   "name": "final accounts after conversions",
+   "probe": "accounts"
+  },
+  {
+   "name": "final expenses after conversions",
+   "probe": "expenses"
+  },
+  {
+   "name": "final positions after conversions",
+   "probe": "positions"
+  },
+  {
+   "name": "final counts after conversions",
+   "probe": "counts"
   }
  ]
 }

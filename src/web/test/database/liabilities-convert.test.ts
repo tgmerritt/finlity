@@ -142,12 +142,12 @@ function detailOf(id: string): Result {
   return JSON.parse(r.source_detail) as Result;
 }
 
-function seedExpense(amount = 1500): string {
+function seedExpense(amount = 1500, id = 'exp-m'): string {
   db.execute(
-    "INSERT INTO budget_expenses (id, category_id, name, amount, frequency) VALUES ('exp-m', 'cat-Housing', 'Mortgage', ?, 'monthly')",
-    [amount]
+    "INSERT INTO budget_expenses (id, category_id, name, amount, frequency) VALUES (?, 'cat-Housing', 'Mortgage', ?, 'monthly')",
+    [id, amount]
   );
-  return 'exp-m';
+  return id;
 }
 
 describe('property_value mode', () => {
@@ -531,6 +531,111 @@ describe('revert', () => {
     for (const secret of ['248000', 'SecretHouse']) expect(text).not.toContain(secret);
     vi.restoreAllMocks();
     expect(state()).toBe(before);
+  });
+});
+
+describe('review fixes', () => {
+  it.each(['create', 'convert'])(
+    '%s: a failing result builder persists nothing (fixed 500)',
+    (which) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const real = db.query.bind(db);
+      vi.spyOn(db, 'query').mockImplementation(((sql: string, params?: unknown[]) => {
+        if (
+          sql.startsWith('SELECT snapshot_date, balance, source FROM liability_balance_snapshots')
+        )
+          throw new Error('boom');
+        return real(sql, params);
+      }) as typeof db.query);
+      const before = state();
+      const err = errorOf(() =>
+        which === 'create'
+          ? api.createLiability({ name: 'Card', liability_type: 'credit_card', current_balance: 5 })
+          : convert('equity')
+      );
+      expect(err?.status).toBe(500);
+      vi.restoreAllMocks();
+      expect(state()).toBe(before);
+    }
+  );
+
+  it('revert restores a linked expense after a sync', () => {
+    const expId = seedExpense();
+    const before = hashes();
+    const id = convert('property_value', { cash_flow: { mode: 'link', expense_id: expId } })[
+      'liability'
+    ].id as string;
+    api.updateLiability(id, { payment_amount: 2100 });
+    const synced = row('budget_expenses', expId)!;
+    expect(synced['amount']).toBe(2100);
+    expect(synced['end_date']).not.toBeNull();
+    const linked = detailOf(id)['linked_expense'];
+    expect(linked.amount).toBe(1500);
+    expect(linked.frequency).toBe('monthly');
+    expect(linked.end_date).toBeNull();
+    revert(id);
+    expect(hashes()).toEqual(before);
+  });
+
+  it('revert keeps an expense the debt was relinked away from', () => {
+    const a = seedExpense(1500, 'exp-a');
+    const b = seedExpense(1600, 'exp-b');
+    const id = convert('property_value', { cash_flow: { mode: 'link', expense_id: a } })[
+      'liability'
+    ].id as string;
+    api.updateLiability(id, { expense_id: b });
+    const kept = row('budget_expenses', a);
+    revert(id);
+    expect(row('budget_expenses', a)).toEqual(kept);
+  });
+
+  it('revert keeps an expense another debt links', () => {
+    const expId = seedExpense();
+    const id = convert('property_value', { cash_flow: { mode: 'link', expense_id: expId } })[
+      'liability'
+    ].id as string;
+    const other = api.createLiability({
+      name: 'Card',
+      liability_type: 'credit_card',
+      current_balance: 5,
+    }).id;
+    db.execute('UPDATE liabilities SET expense_id = ? WHERE id = ?', [expId, other]);
+    const kept = row('budget_expenses', expId);
+    revert(id);
+    expect(row('budget_expenses', expId)).toEqual(kept);
+  });
+
+  it.each(['property_value', 'equity', 'loan'])(
+    '%s: refuses a position already linked to a debt',
+    (mode) => {
+      api.createLiability({
+        name: 'HELOC',
+        liability_type: 'heloc',
+        current_balance: 5,
+        linked_position_id: 'pos-re',
+      });
+      const before = state();
+      const err = errorOf(() => convert(mode));
+      expect(err?.status).toBe(409);
+      expect(err?.message).toBe('This position is already linked to a debt');
+      expect(state()).toBe(before);
+    }
+  );
+
+  it('revert keeps a created home another debt links', () => {
+    const res = convert('loan', { add_home: { name: 'Our house', value: 700000 } });
+    const home = res['created'].position_id as string;
+    const heloc = api.createLiability({
+      name: 'HELOC',
+      liability_type: 'heloc',
+      current_balance: 5,
+      property: { mode: 'link', position_id: home },
+    });
+    revert(res['liability'].id);
+    expect(row('positions', home)).toBeDefined();
+    expect(row('accounts', res['created'].account_id)).toBeDefined();
+    expect(row('positions', 'pos-re')).toBeDefined();
+    expect(api.getLiability(heloc.id).linked_position?.id).toBe(home);
   });
 });
 

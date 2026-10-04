@@ -83,4 +83,31 @@ describe('LocalAPI prices', () => {
     expect(status.fresh_tickers).toBe(1);
     expect(status.stale_tickers).toBe(0);
   });
+
+  it('applyPriceUpdates leaves real estate rows unchanged', async () => {
+    await setup();
+    const account = api.createAccount({ name: 'Taxable', account_type: 'taxable' });
+    db.execute(
+      `INSERT INTO positions (id, account_id, ticker, shares, current_price, position_type) VALUES
+       ('z-eq', ?, 'ZHOME', 1, 10, 'equity'),
+       ('z-re', ?, 'ZHOME', 1, 500000, 'real_estate'),
+       ('re-untyped', ?, 'RE', 1, 90000, NULL)`,
+      [account.id, account.id, account.id]
+    );
+    const estate = (): unknown[] =>
+      db.query("SELECT * FROM positions WHERE id IN ('z-re', 're-untyped') ORDER BY id");
+    const before = estate();
+
+    api.applyPriceUpdates([
+      { ticker: 'zhome', price: 12.5 },
+      { ticker: 'RE', price: 1 },
+    ]);
+
+    expect(estate()).toEqual(before);
+    expect(
+      db.query<{ current_price: number }>(
+        "SELECT current_price FROM positions WHERE id = 'z-eq'"
+      )[0]?.current_price
+    ).toBe(12.5);
+  });
 });

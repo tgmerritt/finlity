@@ -432,8 +432,9 @@ function serialize(db: ClientDatabase, row: LiabilityRow, today: string): Liabil
 // ---------------------------------------------------------------------------
 
 /**
- * SAVEPOINT, run `body`, RELEASE, then build the result; any failure rolls back
- * to the savepoint only, so a caller's open transaction survives (nest-safe).
+ * SAVEPOINT, run `body`, build the result, then RELEASE; any failure (the
+ * result builder included) rolls back to the savepoint only, so nothing is
+ * kept and a caller's open transaction survives (nest-safe).
  * Request problems (LocalHttpError) pass through; anything else becomes a
  * fixed 500 so no SQL error text (which can carry values) ever escapes or is logged.
  */
@@ -447,8 +448,9 @@ function write<T>(
   try {
     db.execute('SAVEPOINT liab');
     body();
+    const value = result();
     db.execute('RELEASE liab');
-    return result();
+    return value;
   } catch (error) {
     try {
       db.execute('ROLLBACK TO liab');
@@ -963,7 +965,18 @@ export function getLiabilityHistory(db: ClientDatabase, id: string): LiabilityHi
 
 const CONVERTED = 'converted_position';
 const MODES = ['property_value', 'equity', 'loan'];
-const EXPENSE_SPLIT = ['id', 'is_mortgage', 'principal_portion', 'interest_portion', 'updated_at'];
+// What a cash_flow link can change on an existing expense (the mortgage split at
+// link time, then amount, frequency and end date through a later sync).
+const EXPENSE_RESTORE = [
+  'id',
+  'amount',
+  'frequency',
+  'end_date',
+  'is_mortgage',
+  'principal_portion',
+  'interest_portion',
+  'updated_at',
+];
 const MORTGAGE_RULES: Record<string, [Check, boolean]> = {
   name: SHARED['name']!,
   lender: SHARED['lender']!,
@@ -1071,7 +1084,7 @@ export function convertPosition(
   return write(
     db,
     'convert',
-    id,
+    positionId,
     () => {
       const before = rawPosition(db, positionId);
       if (!before) throw new LocalHttpError(404, 'Position not found');
@@ -1084,6 +1097,12 @@ export function convertPosition(
         ]).length
       ) {
         throw new LocalHttpError(409, 'This position is already converted');
+      }
+      if (
+        db.query('SELECT 1 FROM liabilities WHERE linked_position_id = ? LIMIT 1', [positionId])
+          .length
+      ) {
+        throw new LocalHttpError(409, 'This position is already linked to a debt');
       }
       const detail: ConversionDetail = { mode, position_before: before, created };
       const data: Raw = { ...mortgage, name: mortgage['name'] ?? 'Mortgage' };
@@ -1124,7 +1143,7 @@ export function convertPosition(
       }
       if (cashFlow?.mode === 'link') {
         detail.linked_expense =
-          db.query<Raw>(`SELECT ${EXPENSE_SPLIT.join(', ')} FROM budget_expenses WHERE id = ?`, [
+          db.query<Raw>(`SELECT ${EXPENSE_RESTORE.join(', ')} FROM budget_expenses WHERE id = ?`, [
             cashFlow.expense_id,
           ])[0] ?? null;
       }
@@ -1222,19 +1241,7 @@ export function revertConversion(db: ClientDatabase, id: string): RevertConversi
           columns.map((c) => before[c] ?? null)
         );
       }
-      const linked = detail.linked_expense;
-      if (isObj(linked) && linked['id']) {
-        db.execute(
-          'UPDATE budget_expenses SET is_mortgage = ?, principal_portion = ?, interest_portion = ?, updated_at = ? WHERE id = ?',
-          [
-            linked['is_mortgage'] ?? null,
-            linked['principal_portion'] ?? null,
-            linked['interest_portion'] ?? null,
-            linked['updated_at'] ?? null,
-            linked['id'],
-          ]
-        );
-      }
+      restoreLinkedExpense(db, row, detail.linked_expense);
       deleteCreated(db, detail.created, id);
       db.execute('DELETE FROM liability_balance_snapshots WHERE liability_id = ?', [id]);
       db.execute('DELETE FROM liabilities WHERE id = ?', [id]);
@@ -1243,7 +1250,38 @@ export function revertConversion(db: ClientDatabase, id: string): RevertConversi
   );
 }
 
-/** Delete what the conversion created and still exists (see service._delete_created). */
+/**
+ * Put back an expense a cash_flow link (and later syncs) changed, unless this
+ * debt no longer links it or another debt does (see service._restore_linked_expense).
+ */
+function restoreLinkedExpense(
+  db: ClientDatabase,
+  row: LiabilityRow,
+  before: Raw | null | undefined
+): void {
+  if (!isObj(before) || !before['id']) return;
+  const expenseId = before['id'] as string;
+  if (row.expense_id !== expenseId) return;
+  if (
+    db.query('SELECT 1 FROM liabilities WHERE expense_id = ? AND id != ? LIMIT 1', [
+      expenseId,
+      row.id,
+    ]).length
+  ) {
+    return;
+  }
+  const columns = EXPENSE_RESTORE.filter((c) => c !== 'id');
+  db.execute(
+    `UPDATE budget_expenses SET ${columns.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
+    [...columns.map((c) => before[c] ?? null), expenseId]
+  );
+}
+
+/**
+ * Delete what the conversion created and still exists (see service._delete_created):
+ * the home position is kept while another debt links it, the account while it
+ * holds positions.
+ */
 function deleteCreated(db: ClientDatabase, created: ConversionDetail['created'], id: string): void {
   if (
     created.expense_id &&
@@ -1254,7 +1292,13 @@ function deleteCreated(db: ClientDatabase, created: ConversionDetail['created'],
   ) {
     db.execute('DELETE FROM budget_expenses WHERE id = ?', [created.expense_id]);
   }
-  if (created.position_id) {
+  if (
+    created.position_id &&
+    !db.query('SELECT 1 FROM liabilities WHERE linked_position_id = ? AND id != ? LIMIT 1', [
+      created.position_id,
+      id,
+    ]).length
+  ) {
     db.execute('DELETE FROM position_lots WHERE position_id = ?', [created.position_id]);
     db.execute('DELETE FROM positions WHERE id = ?', [created.position_id]);
   }
