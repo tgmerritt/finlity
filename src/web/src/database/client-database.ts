@@ -790,9 +790,10 @@ export class ClientDatabase {
       CREATE UNIQUE INDEX IF NOT EXISTS ux_liability_snapshot_day
         ON liability_balance_snapshots(liability_id, snapshot_date);
 
-      -- Smart import: soft references, calendar dates 'YYYY-MM-DD'.
+      -- Smart import: soft references, calendar dates 'YYYY-MM-DD', length
+      -- CHECKs guard against unmasked text. Mirrors the server models.
       CREATE TABLE IF NOT EXISTS smart_import_meta (
-        import_id TEXT PRIMARY KEY,
+        import_id TEXT NOT NULL PRIMARY KEY,
         batch_id TEXT NOT NULL,
         origin TEXT NOT NULL,
         format TEXT NOT NULL,
@@ -800,13 +801,14 @@ export class ClientDatabase {
         account_kind TEXT NOT NULL,
         account_key TEXT,
         account_label TEXT,
-        account_last4 TEXT,
+        account_last4 TEXT CHECK (account_last4 IS NULL OR length(account_last4) <= 4),
         institution TEXT,
         period_start TEXT CHECK (length(period_start) = 10),
         period_end TEXT CHECK (length(period_end) = 10),
         closing_balance REAL,
         closing_balance_date TEXT CHECK (length(closing_balance_date) = 10),
         liability_id TEXT,
+        connection_id TEXT,
         txn_new INTEGER NOT NULL DEFAULT 0,
         txn_duplicate INTEGER NOT NULL DEFAULT 0,
         txn_excluded INTEGER NOT NULL DEFAULT 0,
@@ -816,14 +818,14 @@ export class ClientDatabase {
       );
 
       CREATE TABLE IF NOT EXISTS import_transactions (
-        id TEXT PRIMARY KEY,
+        id TEXT NOT NULL PRIMARY KEY,
         import_id TEXT NOT NULL,
         entity_id TEXT,
-        account_key TEXT,
+        account_key TEXT NOT NULL,
         posted_date TEXT NOT NULL CHECK (length(posted_date) = 10),
         amount REAL NOT NULL,
-        description TEXT NOT NULL,
-        merchant_key TEXT NOT NULL,
+        description TEXT NOT NULL CHECK (description IS NULL OR length(description) <= 120),
+        merchant_key TEXT NOT NULL CHECK (merchant_key IS NULL OR length(merchant_key) <= 120),
         kind TEXT NOT NULL,
         category_id TEXT,
         category_source TEXT NOT NULL,
@@ -839,11 +841,13 @@ export class ClientDatabase {
       CREATE UNIQUE INDEX IF NOT EXISTS ux_import_txn_dedupe ON import_transactions(dedupe_key);
 
       CREATE TABLE IF NOT EXISTS merchant_rules (
-        id TEXT PRIMARY KEY,
-        merchant_key TEXT NOT NULL,
+        id TEXT NOT NULL PRIMARY KEY,
+        merchant_key TEXT NOT NULL CHECK (merchant_key IS NULL OR length(merchant_key) <= 120),
         category_id TEXT,
         kind TEXT,
         hits INTEGER NOT NULL DEFAULT 0,
+        source TEXT NOT NULL DEFAULT 'user' CHECK (source IN ('user', 'import', 'ai', 'connector')),
+        last_import_id TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
@@ -851,7 +855,7 @@ export class ClientDatabase {
       CREATE UNIQUE INDEX IF NOT EXISTS ux_merchant_rule_key ON merchant_rules(merchant_key);
 
       CREATE TABLE IF NOT EXISTS smart_import_ledger (
-        id TEXT PRIMARY KEY,
+        id TEXT NOT NULL PRIMARY KEY,
         import_id TEXT NOT NULL,
         action TEXT NOT NULL,
         target_table TEXT NOT NULL,

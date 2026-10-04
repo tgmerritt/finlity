@@ -31,30 +31,41 @@ REUSED_TABLES = ("bank_statement_imports", "recurring_candidates")
 WRITE_RE = re.compile(r"^\s*(ALTER|DROP|UPDATE|DELETE|INSERT)\b", re.IGNORECASE)
 CREATE_RE = re.compile(r"^\s*CREATE\b", re.IGNORECASE)
 
-# Written out by hand; src/web/test/database/smart-import-schema.test.ts holds
-# the same lists, so the two schemas are compared through these literals.
-META_COLUMNS = [
-    "import_id", "batch_id", "origin", "format", "parser", "account_kind",
-    "account_key", "account_label", "account_last4", "institution",
-    "period_start", "period_end", "closing_balance", "closing_balance_date",
-    "liability_id", "txn_new", "txn_duplicate", "txn_excluded", "ai_used",
-    "ai_provider", "created_at",
+# Written out by hand as (name, notnull, default as PRAGMA table_info reports
+# it); src/web/test/database/smart-import-schema.test.ts holds the same
+# literals, so nullability and default drift fail on both paths.
+NOW = "CURRENT_TIMESTAMP"
+META_SPEC = [
+    ("import_id", 1, None), ("batch_id", 1, None), ("origin", 1, None), ("format", 1, None),
+    ("parser", 1, None), ("account_kind", 1, None), ("account_key", 0, None),
+    ("account_label", 0, None), ("account_last4", 0, None), ("institution", 0, None),
+    ("period_start", 0, None), ("period_end", 0, None), ("closing_balance", 0, None),
+    ("closing_balance_date", 0, None), ("liability_id", 0, None), ("connection_id", 0, None),
+    ("txn_new", 1, "0"), ("txn_duplicate", 1, "0"), ("txn_excluded", 1, "0"), ("ai_used", 1, "0"),
+    ("ai_provider", 0, None), ("created_at", 0, NOW),
 ]
-TXN_COLUMNS = [
-    "id", "import_id", "entity_id", "account_key", "posted_date", "amount",
-    "description", "merchant_key", "kind", "category_id", "category_source",
-    "ai_confidence", "external_id", "dedupe_key", "created_at",
+TXN_SPEC = [
+    ("id", 1, None), ("import_id", 1, None), ("entity_id", 0, None), ("account_key", 1, None),
+    ("posted_date", 1, None), ("amount", 1, None), ("description", 1, None),
+    ("merchant_key", 1, None), ("kind", 1, None), ("category_id", 0, None),
+    ("category_source", 1, None), ("ai_confidence", 0, None), ("external_id", 0, None),
+    ("dedupe_key", 1, None), ("created_at", 0, NOW),
 ]
-RULE_COLUMNS = ["id", "merchant_key", "category_id", "kind", "hits", "created_at", "updated_at"]
-LEDGER_COLUMNS = [
-    "id", "import_id", "action", "target_table", "target_id", "before_json",
-    "after_json", "created_at",
+RULE_SPEC = [
+    ("id", 1, None), ("merchant_key", 1, None), ("category_id", 0, None), ("kind", 0, None),
+    ("hits", 1, "0"), ("source", 1, "'user'"), ("last_import_id", 0, None),
+    ("created_at", 0, NOW), ("updated_at", 0, NOW),
 ]
-COLUMNS = {
-    "smart_import_meta": META_COLUMNS,
-    "import_transactions": TXN_COLUMNS,
-    "merchant_rules": RULE_COLUMNS,
-    "smart_import_ledger": LEDGER_COLUMNS,
+LEDGER_SPEC = [
+    ("id", 1, None), ("import_id", 1, None), ("action", 1, None), ("target_table", 1, None),
+    ("target_id", 1, None), ("before_json", 0, None), ("after_json", 0, None),
+    ("created_at", 0, NOW),
+]
+SPECS = {
+    "smart_import_meta": META_SPEC,
+    "import_transactions": TXN_SPEC,
+    "merchant_rules": RULE_SPEC,
+    "smart_import_ledger": LEDGER_SPEC,
 }
 MODELS = {
     "smart_import_meta": SmartImportMeta,
@@ -207,13 +218,14 @@ def test_indexes_exist_by_name(pre_upgrade_copy: Path):
         con.close()
 
 
-def test_new_table_columns_match_models(pre_upgrade_copy: Path):
+def test_new_table_columns_nullability_and_defaults_match_models(pre_upgrade_copy: Path):
     _open_recorded(pre_upgrade_copy)
     con = sqlite3.connect(pre_upgrade_copy)
     try:
-        for table, expected in COLUMNS.items():
-            assert [r[1] for r in con.execute(f"PRAGMA table_info({table})")] == expected, table
-            assert [c.name for c in MODELS[table].__table__.columns] == expected, table
+        for table, spec in SPECS.items():
+            got = [(r[1], r[3], r[4]) for r in con.execute(f"PRAGMA table_info({table})")]
+            assert got == spec, table
+            assert [c.name for c in MODELS[table].__table__.columns] == [c[0] for c in spec], table
     finally:
         con.close()
 
@@ -266,7 +278,7 @@ def test_unique_dedupe_key_and_merchant_key(pre_upgrade_copy: Path):
         with db.SessionLocal() as session:
             def txn(tid: str) -> ImportTransaction:
                 return ImportTransaction(
-                    id=tid, import_id="imp1", posted_date=date(2026, 10, 1), amount=-4.5,
+                    id=tid, import_id="imp1", account_key="acct:x", posted_date=date(2026, 10, 1), amount=-4.5,
                     description="COFFEE", merchant_key="COFFEE", kind="expense",
                     category_source="none", dedupe_key="acct:x|abc",
                 )
@@ -298,7 +310,7 @@ def test_rows_roundtrip_with_calendar_days_and_defaults(pre_upgrade_copy: Path):
                 closing_balance_date=date(2026, 9, 30),
             ))
             session.add(ImportTransaction(
-                id="t1", import_id="imp1", posted_date=date(2026, 9, 2), amount=-12.5,
+                id="t1", import_id="imp1", account_key="label:checking", posted_date=date(2026, 9, 2), amount=-12.5,
                 description="X", merchant_key="X", kind="expense", category_source="seed",
                 dedupe_key="label:checking|d1",
             ))
@@ -317,7 +329,61 @@ def test_rows_roundtrip_with_calendar_days_and_defaults(pre_upgrade_copy: Path):
             "txn_excluded, ai_used FROM smart_import_meta"
         ).fetchone() == ("2026-07-01", "2026-09-30", "2026-09-30", 0, 0, 0, 0)
         assert con.execute("SELECT posted_date FROM import_transactions").fetchone() == ("2026-09-02",)
-        assert con.execute("SELECT hits FROM merchant_rules").fetchone() == (0,)
+        assert con.execute("SELECT hits, source FROM merchant_rules").fetchone() == (0, "user")
         assert con.execute("SELECT created_at IS NOT NULL FROM smart_import_ledger").fetchone() == (1,)
     finally:
         con.close()
+
+
+def _insert_raw(path: Path, sql: str, params: tuple) -> None:
+    con = sqlite3.connect(path)
+    try:
+        con.execute(sql, params)
+        con.commit()
+    finally:
+        con.close()
+
+
+TXN_INSERT = (
+    "INSERT INTO import_transactions (id, import_id, account_key, posted_date, amount, description, "
+    "merchant_key, kind, category_source, dedupe_key) VALUES (?, 'imp1', 'acct:x', '2026-10-01', -1, ?, ?, "
+    "'expense', 'none', ?)"
+)
+META_INSERT = (
+    "INSERT INTO smart_import_meta (import_id, batch_id, origin, format, parser, account_kind, "
+    "account_last4) VALUES (?, 'b1', 'file', 'csv', 'csv', 'checking', ?)"
+)
+RULE_INSERT = "INSERT INTO merchant_rules (id, merchant_key, source) VALUES (?, ?, ?)"
+
+
+def test_masking_guard_checks(pre_upgrade_copy: Path):
+    _open_recorded(pre_upgrade_copy)
+    _insert_raw(pre_upgrade_copy, TXN_INSERT, ("t1", "D" * 120, "M" * 120, "k1"))
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        _insert_raw(pre_upgrade_copy, TXN_INSERT, ("t2", "D" * 121, "M", "k2"))
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        _insert_raw(pre_upgrade_copy, TXN_INSERT, ("t3", "D", "M" * 121, "k3"))
+    with pytest.raises(sqlite3.IntegrityError, match="NOT NULL"):
+        _insert_raw(
+            pre_upgrade_copy,
+            TXN_INSERT.replace("'acct:x'", "NULL"),
+            ("t4", "D", "M", "k4"),
+        )
+    _insert_raw(pre_upgrade_copy, META_INSERT, ("imp1", "1234"))
+    _insert_raw(pre_upgrade_copy, META_INSERT, ("imp2", None))
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        _insert_raw(pre_upgrade_copy, META_INSERT, ("imp3", "12345"))
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        _insert_raw(pre_upgrade_copy, RULE_INSERT, ("r0", "M" * 121, "user"))
+
+
+@pytest.mark.parametrize("source", ["user", "import", "ai", "connector"])
+def test_rule_source_accepts_known_values(pre_upgrade_copy: Path, source: str):
+    _open_recorded(pre_upgrade_copy)
+    _insert_raw(pre_upgrade_copy, RULE_INSERT, ("r1", "COFFEE", source))
+
+
+def test_rule_source_rejects_unknown_value(pre_upgrade_copy: Path):
+    _open_recorded(pre_upgrade_copy)
+    with pytest.raises(sqlite3.IntegrityError, match="CHECK"):
+        _insert_raw(pre_upgrade_copy, RULE_INSERT, ("r1", "COFFEE", "seed"))
