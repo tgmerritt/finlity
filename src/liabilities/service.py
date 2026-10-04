@@ -4,10 +4,15 @@ Logging rule: never log balances, payments, names or lenders. Only ids and
 exception types appear in log records.
 """
 
+import json
 import logging
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
-from typing import Any, Iterator, Optional
+from typing import Any, Iterable, Iterator, Optional
+
+from sqlalchemy import column as sa_column
+from sqlalchemy import delete, insert, select, text, update
+from sqlalchemy import table as sa_table
 
 from src.database import Database
 from src.database.models import (
@@ -18,6 +23,7 @@ from src.database.models import (
     Liability,
     LiabilityBalanceSnapshot,
     Position,
+    PositionLot,
 )
 from src.liabilities import clock
 from src.liabilities.amortization import (
@@ -371,6 +377,27 @@ def get_liability(db: Database, liability_id: str) -> dict[str, Any]:
         return _serialize(session, row, today)
 
 
+def _insert_liability(session: Any, data: dict[str, Any], cash_flow: Optional[dict[str, Any]], today: date) -> Liability:
+    """Insert the liability, its first snapshot and the optional cash flow instruction (create and convert)."""
+    row = Liability(**data)
+    session.add(row)
+    session.flush()
+    session.add(
+        LiabilityBalanceSnapshot(
+            liability_id=row.id, snapshot_date=row.balance_as_of, balance=row.current_balance, source=row.source
+        )
+    )
+    session.flush()
+    if cash_flow and cash_flow["mode"] == "create":
+        row.expense_id = _create_expense(session, row, cash_flow.get("category_id"), today).id
+    elif cash_flow and cash_flow["mode"] == "link":
+        expense = _check_expense_free(session, cash_flow["expense_id"], None)
+        row.expense_id = expense.id
+        if row.liability_type == "mortgage":
+            apply_expense_values(session, expense, row, today, set_amount=False)
+    return row
+
+
 def create_liability(db: Database, data: dict[str, Any]) -> dict[str, Any]:
     """Create the liability, its first snapshot and the optional property and expense, atomically."""
     today = clock.today()
@@ -382,24 +409,9 @@ def create_liability(db: Database, data: dict[str, Any]) -> dict[str, Any]:
     if data.get("is_amortizing") is None:
         data["is_amortizing"] = _default_amortizing(data["liability_type"], data.get("term_months"))
     with db.get_session() as session, _write(session, "create"):
-        row = Liability(**data)
         if prop:
-            row.linked_position_id = _apply_property(session, prop)
-        session.add(row)
-        session.flush()
-        session.add(
-            LiabilityBalanceSnapshot(
-                liability_id=row.id, snapshot_date=row.balance_as_of, balance=row.current_balance, source=row.source
-            )
-        )
-        session.flush()
-        if cash_flow and cash_flow["mode"] == "create":
-            row.expense_id = _create_expense(session, row, cash_flow.get("category_id"), today).id
-        elif cash_flow and cash_flow["mode"] == "link":
-            expense = _check_expense_free(session, cash_flow["expense_id"], None)
-            row.expense_id = expense.id
-            if row.liability_type == "mortgage":
-                apply_expense_values(session, expense, row, today, set_amount=False)
+            data["linked_position_id"] = _apply_property(session, prop)
+        row = _insert_liability(session, data, cash_flow, today)
         session.commit()
         logger.info("Liability created id=%s", row.id)
         return _serialize(session, row, today)
@@ -512,6 +524,222 @@ def get_history(db: Database, liability_id: str) -> dict[str, Any]:
         dates.append(today)
         series = [{"date": d.isoformat(), "balance": _money(balance_at(base, snaps, d))} for d in dates]
         return {"liability_id": liability_id, "reported": reported, "series": series}
+
+
+# ---------------------------------------------------------------------------
+# Conversion of an existing real estate position (design section 8, decision 17)
+#
+# Position rows are read and written through untyped table constructs, so values
+# travel exactly as SQLite stores them (no DateTime parsing or re-formatting and
+# no `onupdate` timestamp): a restored row is byte for byte the original.
+# ---------------------------------------------------------------------------
+
+CONVERTED = "converted_position"
+_POSITION_COLUMNS = text("PRAGMA table_info(positions)")
+_EXPENSE_SPLIT = ("id", "is_mortgage", "principal_portion", "interest_portion", "updated_at")
+
+
+def _position_columns(session: Any) -> list[str]:
+    return [str(r[1]) for r in session.execute(_POSITION_COLUMNS)]
+
+
+def _raw_table(name: str, columns: Iterable[str]) -> Any:
+    return sa_table(name, *(sa_column(c) for c in columns))
+
+
+def _raw_position(session: Any, position_id: str) -> Optional[dict[str, Any]]:
+    positions = _raw_table("positions", _position_columns(session))
+    found = session.execute(select(positions).where(positions.c.id == position_id)).mappings().first()
+    return dict(found) if found else None
+
+
+def _raw_value(row: dict[str, Any]) -> float:
+    """Market value as Position.market_value computes it."""
+    if row.get("current_price") and row.get("shares"):
+        return float(row["shares"] * row["current_price"] * float(row.get("contract_multiplier") or 1))
+    return 0.0
+
+
+def _set_price(session: Any, position_id: str, price: Any) -> None:
+    positions = _raw_table("positions", ("id", "current_price"))
+    session.execute(update(positions).where(positions.c.id == position_id).values(current_price=price))
+
+
+def _position_view(session: Any, position_id: str) -> Optional[dict[str, Any]]:
+    row = _raw_position(session, position_id)
+    if row is None:
+        return None
+    return {"id": row["id"], "name": row.get("name"), "value": _money(_raw_value(row))}
+
+
+def _is_real_estate(row: dict[str, Any]) -> bool:
+    return row.get("position_type") == "real_estate" or row.get("ticker") == "RE"
+
+
+def _load_detail(row: Liability) -> dict[str, Any]:
+    refuse = LiabilityError(409, "This conversion cannot be undone")
+    try:
+        detail = json.loads(str(row.source_detail or ""))
+    except ValueError:
+        raise refuse from None
+    if not isinstance(detail, dict) or detail.get("mode") not in ("property_value", "equity", "loan"):
+        raise refuse
+    before = detail.get("position_before")
+    if not isinstance(before, dict) or not before.get("id") or not isinstance(detail.get("created"), dict):
+        raise refuse
+    return detail
+
+
+def convert_position(db: Database, data: dict[str, Any]) -> dict[str, Any]:
+    """Turn an existing real estate position into a mortgage, in one transaction.
+
+    property_value leaves the position untouched; equity sets only its
+    current_price so its value becomes home_value; loan deletes the position
+    (optionally adding a new home). source_detail records the original row and
+    everything created, which revert_conversion uses to undo it exactly.
+    """
+    today = clock.today()
+    position_id: str = data["position_id"]
+    mode: str = data["mode"]
+    fields = dict(data["mortgage"])
+    cash_flow = data.get("cash_flow")
+    fields["balance_as_of"] = fields.get("balance_as_of") or today
+    _check_not_future(fields["balance_as_of"], today)
+    with db.get_session() as session, _write(session, "convert"):
+        before = _raw_position(session, position_id)
+        if before is None:
+            raise LiabilityError(404, "Position not found")
+        if not _is_real_estate(before):
+            raise LiabilityError(409, "Only real estate positions can be converted")
+        if session.query(Liability).filter_by(source=CONVERTED, source_ref=position_id).first() is not None:
+            raise LiabilityError(409, "This position is already converted")
+        created: dict[str, Optional[str]] = {"account_id": None, "position_id": None, "expense_id": None}
+        detail: dict[str, Any] = {"mode": mode, "position_before": before, "created": created}
+        linked: Optional[str] = position_id
+        if mode == "equity":
+            units = float(before.get("shares") or 0) * float(before.get("contract_multiplier") or 1)
+            if units == 0:
+                raise LiabilityError(409, "This position has no units to price")
+            new_price = data["home_value"] / units
+            _set_price(session, position_id, new_price)
+            detail["set_current_price"] = new_price
+        elif mode == "loan":
+            if session.query(PositionLot).filter_by(position_id=position_id).first() is not None:
+                raise LiabilityError(409, "This position has tax lots and cannot be converted to a loan")
+            if fields.get("current_balance") is None:
+                fields["current_balance"] = round(abs(_raw_value(before)), 2)
+            positions = _raw_table("positions", ("id",))
+            session.execute(delete(positions).where(positions.c.id == position_id))
+            linked = None
+            add_home = data.get("add_home")
+            if add_home:
+                had_account = session.query(Account).filter_by(account_type="property").first() is not None
+                linked = _apply_property(session, {"mode": "create", **add_home})
+                created["position_id"] = linked
+                if not had_account:
+                    created["account_id"] = _raw_position(session, linked)["account_id"]  # type: ignore[index]
+        if cash_flow and cash_flow["mode"] == "link":
+            expenses = _raw_table("budget_expenses", _EXPENSE_SPLIT)
+            found = session.execute(select(expenses).where(expenses.c.id == cash_flow["expense_id"])).mappings().first()
+            detail["linked_expense"] = dict(found) if found else None
+        fields.update(
+            liability_type="mortgage",
+            is_amortizing=True,
+            linked_position_id=linked,
+            source=CONVERTED,
+            source_ref=position_id,
+        )
+        row = _insert_liability(session, fields, cash_flow, today)
+        if cash_flow and cash_flow["mode"] == "create":
+            created["expense_id"] = str(row.expense_id)
+        row.source_detail = json.dumps(detail)  # type: ignore[assignment]
+        session.flush()
+        # Build the response before committing, so a failure here still rolls everything back.
+        result = {
+            "liability": _serialize(session, row, today),
+            "position": None if mode == "loan" else _position_view(session, position_id),
+            "created": created,
+        }
+        session.commit()
+        logger.info("Position converted id=%s liability=%s mode=%s", position_id, row.id, mode)
+        return result
+
+
+def revert_conversion(db: Database, liability_id: str) -> dict[str, Any]:
+    """Undo a conversion exactly, or refuse (409) without changing anything.
+
+    Post-conversion edit rule: equity refuses when the position is gone or its
+    current_price is no longer the converted price (edits to other columns are
+    kept); loan refuses when a row with the original id exists again or its
+    account is gone; property_value never touched the position, so later edits
+    to it are kept. Created rows already removed by the user are skipped.
+    """
+    with db.get_session() as session:
+        row = session.get(Liability, liability_id)
+        if row is None:
+            raise _not_found()
+        if row.source != CONVERTED:
+            raise LiabilityError(409, "Only converted debts can be undone")
+        with _write(session, "revert", liability_id):
+            detail = _load_detail(row)
+            before = detail["position_before"]
+            position_id = str(before["id"])
+            current = _raw_position(session, position_id)
+            if detail["mode"] == "equity":
+                if current is None:
+                    raise LiabilityError(409, "The property was removed after the conversion, so it cannot be undone")
+                if current.get("current_price") != detail.get("set_current_price"):
+                    raise LiabilityError(409, "The property value changed after the conversion, so it cannot be undone")
+                _set_price(session, position_id, before.get("current_price"))
+            elif detail["mode"] == "loan":
+                if current is not None:
+                    raise LiabilityError(409, "The original position already exists")
+                if not set(before) <= set(_position_columns(session)):
+                    raise LiabilityError(409, "This conversion cannot be undone")
+                if session.get(Account, before.get("account_id")) is None:
+                    raise LiabilityError(409, "The account that held this position no longer exists")
+                session.execute(insert(_raw_table("positions", before)).values(**before))
+            _restore_expense_split(session, detail.get("linked_expense"))
+            _delete_created(session, detail["created"], liability_id)
+            session.query(LiabilityBalanceSnapshot).filter_by(liability_id=liability_id).delete()
+            session.delete(row)
+            session.commit()
+            logger.info("Conversion reverted id=%s", liability_id)
+            return {"reverted": True}
+
+
+def _restore_expense_split(session: Any, before: Any) -> None:
+    """Put back the mortgage flag and split a cash_flow link overwrote, if the expense still exists."""
+    if not isinstance(before, dict) or not before.get("id"):
+        return
+    expenses = _raw_table("budget_expenses", _EXPENSE_SPLIT)
+    values = {k: before.get(k) for k in _EXPENSE_SPLIT if k != "id"}
+    session.execute(update(expenses).where(expenses.c.id == before["id"]).values(**values))
+
+
+def _delete_created(session: Any, created: dict[str, Any], liability_id: str) -> None:
+    """Delete what the conversion created and that still exists.
+
+    The expense is kept if another liability now links it, and the account is
+    kept if it holds positions added after the conversion.
+    """
+    expense_id = created.get("expense_id")
+    if expense_id:
+        expense = session.get(BudgetExpense, expense_id)
+        others = session.query(Liability).filter(Liability.expense_id == expense_id, Liability.id != liability_id)
+        if expense is not None and others.first() is None:
+            session.delete(expense)
+    position_id = created.get("position_id")
+    if position_id:
+        position = session.get(Position, position_id)
+        if position is not None:
+            session.delete(position)
+    session.flush()
+    account_id = created.get("account_id")
+    if account_id:
+        account = session.get(Account, account_id)
+        if account is not None and session.query(Position).filter_by(account_id=account_id).first() is None:
+            session.delete(account)
 
 
 # ---------------------------------------------------------------------------

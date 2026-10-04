@@ -26,12 +26,15 @@ import {
   type BalanceSnapshot,
 } from '@/utils/amortization';
 import type {
+  ConvertPositionInput,
+  ConvertPositionResult,
   CreateLiabilityInput,
   DashboardLiabilities,
   DeleteLiabilityResult,
   LiabilityHistoryResponse,
   LiabilityResponse,
   RecordBalanceInput,
+  RevertConversionResult,
   UpdateLiabilityInput,
 } from '@/types/api';
 
@@ -686,57 +689,93 @@ export function createLiability(
       const positionId = property
         ? applyProperty(db, property)
         : (val('linked_position_id') as string | null);
-      db.execute(
-        `INSERT INTO liabilities (id, entity_id, name, liability_type, lender, current_balance, balance_as_of, interest_rate,
-           payment_amount, payment_frequency, next_payment_date, escrow_amount, original_principal, origination_date, term_months,
-           maturity_date, credit_limit, is_amortizing, linked_position_id, source, is_active, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-        [
-          id,
-          val('entity_id'),
-          data['name'],
-          type,
-          val('lender'),
-          data['current_balance'],
+      insertLiability(
+        db,
+        id,
+        data,
+        {
           balanceAsOf,
-          val('interest_rate'),
-          val('payment_amount'),
-          data['payment_frequency'] ?? 'monthly',
-          val('next_payment_date'),
-          val('escrow_amount'),
-          val('original_principal'),
-          val('origination_date'),
-          val('term_months'),
-          val('maturity_date'),
-          val('credit_limit'),
-          isAmortizing ? 1 : 0,
-          positionId,
-          data['source'] ?? 'manual',
-          val('notes'),
-        ]
+          isAmortizing,
+          linkedPositionId: positionId,
+          source: (data['source'] as string | undefined) ?? 'manual',
+          sourceRef: null,
+        },
+        cashFlow,
+        today
       );
-      db.execute(
-        'INSERT INTO liability_balance_snapshots (id, liability_id, snapshot_date, balance, source) VALUES (?, ?, ?, ?, ?)',
-        [crypto.randomUUID(), id, balanceAsOf, data['current_balance'], data['source'] ?? 'manual']
-      );
-      if (cashFlow?.mode === 'create') {
-        const expenseId = createExpense(db, getRow(db, id)!, cashFlow.category_id, today);
-        db.execute(
-          'UPDATE liabilities SET expense_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-          [expenseId, id]
-        );
-      } else if (cashFlow?.mode === 'link') {
-        checkExpenseFree(db, cashFlow.expense_id!, null);
-        db.execute(
-          'UPDATE liabilities SET expense_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-          [cashFlow.expense_id, id]
-        );
-        if (type === 'mortgage')
-          applyExpenseValues(db, cashFlow.expense_id!, getRow(db, id)!, today, false);
-      }
     },
     () => serialize(db, getRow(db, id)!, today)
   );
+}
+
+interface InsertExtras {
+  balanceAsOf: string;
+  isAmortizing: boolean;
+  linkedPositionId: string | null;
+  source: string;
+  sourceRef: string | null;
+}
+
+/** Insert the liability, its first snapshot and the optional cash flow instruction (create and convert). */
+function insertLiability(
+  db: ClientDatabase,
+  id: string,
+  data: Raw,
+  extras: InsertExtras,
+  cashFlow: CashFlowInstruction | null,
+  today: string
+): void {
+  const val = (key: string): unknown => data[key] ?? null;
+  const type = data['liability_type'] as string;
+  db.execute(
+    `INSERT INTO liabilities (id, entity_id, name, liability_type, lender, current_balance, balance_as_of, interest_rate,
+       payment_amount, payment_frequency, next_payment_date, escrow_amount, original_principal, origination_date, term_months,
+       maturity_date, credit_limit, is_amortizing, linked_position_id, source, source_ref, is_active, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+    [
+      id,
+      val('entity_id'),
+      data['name'],
+      type,
+      val('lender'),
+      data['current_balance'],
+      extras.balanceAsOf,
+      val('interest_rate'),
+      val('payment_amount'),
+      data['payment_frequency'] ?? 'monthly',
+      val('next_payment_date'),
+      val('escrow_amount'),
+      val('original_principal'),
+      val('origination_date'),
+      val('term_months'),
+      val('maturity_date'),
+      val('credit_limit'),
+      extras.isAmortizing ? 1 : 0,
+      extras.linkedPositionId,
+      extras.source,
+      extras.sourceRef,
+      val('notes'),
+    ]
+  );
+  db.execute(
+    'INSERT INTO liability_balance_snapshots (id, liability_id, snapshot_date, balance, source) VALUES (?, ?, ?, ?, ?)',
+    [crypto.randomUUID(), id, extras.balanceAsOf, data['current_balance'], extras.source]
+  );
+  if (cashFlow?.mode === 'create') {
+    const expenseId = createExpense(db, getRow(db, id)!, cashFlow.category_id, today);
+    db.execute(
+      'UPDATE liabilities SET expense_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [expenseId, id]
+    );
+  } else if (cashFlow?.mode === 'link') {
+    checkExpenseFree(db, cashFlow.expense_id!, null);
+    db.execute(
+      'UPDATE liabilities SET expense_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [cashFlow.expense_id, id]
+    );
+    if (type === 'mortgage')
+      applyExpenseValues(db, cashFlow.expense_id!, getRow(db, id)!, today, false);
+  }
 }
 
 export function updateLiability(
@@ -911,6 +950,320 @@ export function getLiabilityHistory(db: ClientDatabase, id: string): LiabilityHi
     source: null,
   }));
   return { liability_id: id, reported, series };
+}
+
+// ---------------------------------------------------------------------------
+// Conversion of an existing real estate position (mirror of
+// service.convert_position / revert_conversion; design section 8).
+//
+// Position rows are read with SELECT * and written back value for value, and
+// these UPDATEs deliberately leave positions.updated_at alone, so a restored
+// row is exactly the original.
+// ---------------------------------------------------------------------------
+
+const CONVERTED = 'converted_position';
+const MODES = ['property_value', 'equity', 'loan'];
+const EXPENSE_SPLIT = ['id', 'is_mortgage', 'principal_portion', 'interest_portion', 'updated_at'];
+const MORTGAGE_RULES: Record<string, [Check, boolean]> = {
+  name: SHARED['name']!,
+  lender: SHARED['lender']!,
+  current_balance: [money, true],
+  balance_as_of: [isDay, true],
+  interest_rate: SHARED['interest_rate']!,
+  payment_amount: SHARED['payment_amount']!,
+  payment_frequency: SHARED['payment_frequency']!,
+  next_payment_date: SHARED['next_payment_date']!,
+  escrow_amount: SHARED['escrow_amount']!,
+  original_principal: SHARED['original_principal']!,
+  origination_date: SHARED['origination_date']!,
+  term_months: SHARED['term_months']!,
+  maturity_date: SHARED['maturity_date']!,
+  entity_id: SHARED['entity_id']!,
+  notes: SHARED['notes']!,
+};
+
+type PositionRow = Record<string, unknown> & { id: string };
+
+interface ConversionDetail {
+  mode: string;
+  position_before: PositionRow;
+  set_current_price?: number;
+  linked_expense?: Raw | null;
+  created: { account_id: string | null; position_id: string | null; expense_id: string | null };
+}
+
+function rawPosition(db: ClientDatabase, id: string): PositionRow | undefined {
+  return db.query<PositionRow>('SELECT * FROM positions WHERE id = ?', [id])[0];
+}
+
+/** Market value as the positions code computes it. */
+function rawValue(row: Raw): number {
+  const price = row['current_price'] as number | null;
+  const shares = row['shares'] as number | null;
+  if (!price || !shares) return 0;
+  return shares * price * ((row['contract_multiplier'] as number | null) || 1);
+}
+
+function positionView(
+  db: ClientDatabase,
+  id: string
+): { id: string; name: string | null; value: number } | null {
+  const row = rawPosition(db, id);
+  if (!row) return null;
+  return { id: row.id, name: (row['name'] as string | null) ?? null, value: round2(rawValue(row)) };
+}
+
+const isRealEstate = (row: Raw): boolean =>
+  row['position_type'] === 'real_estate' || row['ticker'] === 'RE';
+
+function checkConvert(raw: unknown): {
+  positionId: string;
+  mode: string;
+  homeValue: number | null;
+  addHome: PropertyInstruction | null;
+  mortgage: Raw;
+  cashFlow: CashFlowInstruction | null;
+} {
+  const body = exactKeys(
+    raw,
+    ['position_id', 'mode', 'home_value', 'add_home', 'mortgage', 'cash_flow'],
+    ['position_id', 'mode', 'mortgage']
+  );
+  if (!text(1, 64)(body['position_id']) || !oneOf(MODES)(body['mode'])) throw invalid();
+  if (!isObj(body['mortgage'])) throw invalid();
+  const mortgage = checkFields(body['mortgage'], MORTGAGE_RULES);
+  const homeValue = body['home_value'] ?? null;
+  if (homeValue !== null && !money(homeValue)) throw invalid();
+  const addHome =
+    body['add_home'] == null
+      ? null
+      : checkProperty({ ...(body['add_home'] as Raw), mode: 'create' });
+  if (isObj(body['add_home']) && 'mode' in body['add_home']) throw invalid();
+  const mode = body['mode'] as string;
+  if ((mode === 'equity') !== (homeValue !== null)) throw invalid();
+  if (addHome && mode !== 'loan') throw invalid();
+  if (mode !== 'loan' && mortgage['current_balance'] == null) throw invalid();
+  return {
+    positionId: body['position_id'] as string,
+    mode,
+    homeValue: homeValue as number | null,
+    addHome,
+    mortgage,
+    cashFlow: body['cash_flow'] == null ? null : checkCashFlow(body['cash_flow']),
+  };
+}
+
+export function convertPosition(
+  db: ClientDatabase,
+  input: ConvertPositionInput
+): ConvertPositionResult {
+  const { positionId, mode, homeValue, addHome, mortgage, cashFlow } = checkConvert(input);
+  const today = clockToday();
+  const balanceAsOf = (mortgage['balance_as_of'] as string | null | undefined) || today;
+  if (balanceAsOf > today) throw new LocalHttpError(422, 'Date cannot be in the future');
+  const id = crypto.randomUUID();
+  const created: ConversionDetail['created'] = {
+    account_id: null,
+    position_id: null,
+    expense_id: null,
+  };
+
+  return write(
+    db,
+    'convert',
+    id,
+    () => {
+      const before = rawPosition(db, positionId);
+      if (!before) throw new LocalHttpError(404, 'Position not found');
+      if (!isRealEstate(before))
+        throw new LocalHttpError(409, 'Only real estate positions can be converted');
+      if (
+        db.query('SELECT 1 FROM liabilities WHERE source = ? AND source_ref = ? LIMIT 1', [
+          CONVERTED,
+          positionId,
+        ]).length
+      ) {
+        throw new LocalHttpError(409, 'This position is already converted');
+      }
+      const detail: ConversionDetail = { mode, position_before: before, created };
+      const data: Raw = { ...mortgage, name: mortgage['name'] ?? 'Mortgage' };
+      let linked: string | null = positionId;
+      if (mode === 'equity') {
+        const units =
+          Number(before['shares'] || 0) * Number((before['contract_multiplier'] as number) || 1);
+        if (units === 0) throw new LocalHttpError(409, 'This position has no units to price');
+        const price = homeValue! / units;
+        db.execute('UPDATE positions SET current_price = ? WHERE id = ?', [price, positionId]);
+        detail.set_current_price = price;
+      } else if (mode === 'loan') {
+        if (
+          db.query('SELECT 1 FROM position_lots WHERE position_id = ? LIMIT 1', [positionId]).length
+        ) {
+          throw new LocalHttpError(
+            409,
+            'This position has tax lots and cannot be converted to a loan'
+          );
+        }
+        if (data['current_balance'] == null)
+          data['current_balance'] = round2(Math.abs(rawValue(before)));
+        db.execute('DELETE FROM positions WHERE id = ?', [positionId]);
+        linked = null;
+        if (addHome) {
+          const hadAccount = db.query(
+            "SELECT 1 FROM accounts WHERE account_type = 'property' LIMIT 1"
+          ).length;
+          linked = applyProperty(db, addHome);
+          created.position_id = linked;
+          if (!hadAccount) {
+            created.account_id = db.query<{ account_id: string }>(
+              'SELECT account_id FROM positions WHERE id = ?',
+              [linked]
+            )[0]!.account_id;
+          }
+        }
+      }
+      if (cashFlow?.mode === 'link') {
+        detail.linked_expense =
+          db.query<Raw>(`SELECT ${EXPENSE_SPLIT.join(', ')} FROM budget_expenses WHERE id = ?`, [
+            cashFlow.expense_id,
+          ])[0] ?? null;
+      }
+      data['liability_type'] = 'mortgage';
+      insertLiability(
+        db,
+        id,
+        data,
+        {
+          balanceAsOf,
+          isAmortizing: true,
+          linkedPositionId: linked,
+          source: CONVERTED,
+          sourceRef: positionId,
+        },
+        cashFlow,
+        today
+      );
+      if (cashFlow?.mode === 'create') created.expense_id = getRow(db, id)!.expense_id;
+      db.execute('UPDATE liabilities SET source_detail = ? WHERE id = ?', [
+        JSON.stringify(detail),
+        id,
+      ]);
+    },
+    () => ({
+      liability: serialize(db, getRow(db, id)!, today),
+      position: mode === 'loan' ? null : positionView(db, positionId),
+      created,
+    })
+  );
+}
+
+function loadDetail(raw: string | null): ConversionDetail {
+  const refuse = new LocalHttpError(409, 'This conversion cannot be undone');
+  let detail: unknown;
+  try {
+    detail = JSON.parse(raw ?? '');
+  } catch {
+    throw refuse;
+  }
+  if (!isObj(detail) || !MODES.includes(detail['mode'] as string)) throw refuse;
+  const before = detail['position_before'];
+  if (!isObj(before) || !before['id'] || !isObj(detail['created'])) throw refuse;
+  return detail as unknown as ConversionDetail;
+}
+
+/**
+ * Undo a conversion exactly, or refuse (409) without changing anything. The
+ * post-conversion edit rule is the server's: see service.revert_conversion.
+ */
+export function revertConversion(db: ClientDatabase, id: string): RevertConversionResult {
+  const row = db.query<LiabilityRow & { source_detail: string | null }>(
+    'SELECT * FROM liabilities WHERE id = ?',
+    [id]
+  )[0];
+  if (!row) throw notFound();
+  if (row.source !== CONVERTED) throw new LocalHttpError(409, 'Only converted debts can be undone');
+
+  return write(
+    db,
+    'revert',
+    id,
+    () => {
+      const detail = loadDetail(row.source_detail);
+      const before = detail.position_before;
+      const current = rawPosition(db, String(before.id));
+      if (detail.mode === 'equity') {
+        if (!current)
+          throw new LocalHttpError(
+            409,
+            'The property was removed after the conversion, so it cannot be undone'
+          );
+        if (current['current_price'] !== detail.set_current_price)
+          throw new LocalHttpError(
+            409,
+            'The property value changed after the conversion, so it cannot be undone'
+          );
+        db.execute('UPDATE positions SET current_price = ? WHERE id = ?', [
+          before['current_price'] ?? null,
+          before.id,
+        ]);
+      } else if (detail.mode === 'loan') {
+        if (current) throw new LocalHttpError(409, 'The original position already exists');
+        const known = new Set(
+          db.query<{ name: string }>('PRAGMA table_info(positions)').map((c) => c.name)
+        );
+        const columns = Object.keys(before);
+        if (!columns.every((c) => known.has(c)))
+          throw new LocalHttpError(409, 'This conversion cannot be undone');
+        if (!db.query('SELECT 1 FROM accounts WHERE id = ?', [before['account_id']]).length)
+          throw new LocalHttpError(409, 'The account that held this position no longer exists');
+        // Column names come from the table's own schema (checked above), never from input.
+        db.execute(
+          `INSERT INTO positions (${columns.map((c) => `"${c}"`).join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+          columns.map((c) => before[c] ?? null)
+        );
+      }
+      const linked = detail.linked_expense;
+      if (isObj(linked) && linked['id']) {
+        db.execute(
+          'UPDATE budget_expenses SET is_mortgage = ?, principal_portion = ?, interest_portion = ?, updated_at = ? WHERE id = ?',
+          [
+            linked['is_mortgage'] ?? null,
+            linked['principal_portion'] ?? null,
+            linked['interest_portion'] ?? null,
+            linked['updated_at'] ?? null,
+            linked['id'],
+          ]
+        );
+      }
+      deleteCreated(db, detail.created, id);
+      db.execute('DELETE FROM liability_balance_snapshots WHERE liability_id = ?', [id]);
+      db.execute('DELETE FROM liabilities WHERE id = ?', [id]);
+    },
+    () => ({ reverted: true })
+  );
+}
+
+/** Delete what the conversion created and still exists (see service._delete_created). */
+function deleteCreated(db: ClientDatabase, created: ConversionDetail['created'], id: string): void {
+  if (
+    created.expense_id &&
+    !db.query('SELECT 1 FROM liabilities WHERE expense_id = ? AND id != ? LIMIT 1', [
+      created.expense_id,
+      id,
+    ]).length
+  ) {
+    db.execute('DELETE FROM budget_expenses WHERE id = ?', [created.expense_id]);
+  }
+  if (created.position_id) {
+    db.execute('DELETE FROM position_lots WHERE position_id = ?', [created.position_id]);
+    db.execute('DELETE FROM positions WHERE id = ?', [created.position_id]);
+  }
+  if (
+    created.account_id &&
+    !db.query('SELECT 1 FROM positions WHERE account_id = ? LIMIT 1', [created.account_id]).length
+  ) {
+    db.execute('DELETE FROM accounts WHERE id = ?', [created.account_id]);
+  }
 }
 
 // ---------------------------------------------------------------------------

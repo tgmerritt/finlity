@@ -15,12 +15,15 @@
 import type { ClientDatabase } from './client-database';
 import * as liabilities from './local-liabilities';
 import type {
+  ConvertPositionInput,
+  ConvertPositionResult,
   CreateLiabilityInput,
   DashboardLiabilities,
   DeleteLiabilityResult,
   LiabilityHistoryResponse,
   LiabilityResponse,
   RecordBalanceInput,
+  RevertConversionResult,
   UpdateLiabilityInput,
 } from '@/types/api';
 
@@ -2250,6 +2253,16 @@ export class LocalAPI {
   /** POST /api/liabilities/{id}/balance */
   recordLiabilityBalance(id: string, input: RecordBalanceInput): LiabilityResponse {
     return liabilities.recordLiabilityBalance(this.db, id, input);
+  }
+
+  /** POST /api/liabilities/convert-position */
+  convertPosition(input: ConvertPositionInput): ConvertPositionResult {
+    return liabilities.convertPosition(this.db, input);
+  }
+
+  /** POST /api/liabilities/{id}/revert-conversion */
+  revertConversion(id: string): RevertConversionResult {
+    return liabilities.revertConversion(this.db, id);
   }
 
   /** PUT /api/budget/expenses/{id} */

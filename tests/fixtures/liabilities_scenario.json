@@ -948,6 +948,381 @@
   {
    "name": "counts with no categories",
    "probe": "counts"
+  },
+  {
+   "name": "add a housing category again",
+   "db": "insert",
+   "table": "budget_expense_categories",
+   "row": {
+    "id": "cat-home",
+    "name": "Housing",
+    "sort_order": 0
+   }
+  },
+  {
+   "name": "add position Cottage",
+   "db": "insert",
+   "table": "positions",
+   "row": {
+    "id": "pos-h1",
+    "account_id": "acct-1",
+    "ticker": "RE",
+    "name": "Cottage",
+    "shares": 1,
+    "current_price": 300000,
+    "position_type": "real_estate",
+    "asset_class": "alternative"
+   }
+  },
+  {
+   "name": "add position Townhouse",
+   "db": "insert",
+   "table": "positions",
+   "row": {
+    "id": "pos-h2",
+    "account_id": "acct-1",
+    "ticker": "RE",
+    "name": "Townhouse",
+    "shares": 1,
+    "current_price": 500000,
+    "position_type": "real_estate",
+    "asset_class": "alternative"
+   }
+  },
+  {
+   "name": "add position Condo loan",
+   "db": "insert",
+   "table": "positions",
+   "row": {
+    "id": "pos-h3",
+    "account_id": "acct-1",
+    "ticker": "RE",
+    "name": "Condo loan",
+    "shares": 1,
+    "current_price": -180000,
+    "position_type": "real_estate",
+    "asset_class": "alternative"
+   }
+  },
+  {
+   "name": "add position Spare lot",
+   "db": "insert",
+   "table": "positions",
+   "row": {
+    "id": "pos-h4",
+    "account_id": "acct-1",
+    "ticker": "RE",
+    "name": "Spare lot",
+    "shares": 1,
+    "current_price": 90000,
+    "position_type": "real_estate",
+    "asset_class": "alternative"
+   }
+  },
+  {
+   "name": "convert as the home's value with an expense",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "save": "conv_pv",
+   "body": {
+    "position_id": "pos-h1",
+    "mode": "property_value",
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250,
+     "current_balance": 200000
+    },
+    "cash_flow": {
+     "mode": "create"
+    }
+   }
+  },
+  {
+   "name": "positions after property value conversion",
+   "probe": "positions"
+  },
+  {
+   "name": "expenses after property value conversion",
+   "probe": "expenses"
+  },
+  {
+   "name": "convert the same position again",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "body": {
+    "position_id": "pos-h1",
+    "mode": "equity",
+    "home_value": 400000,
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250,
+     "current_balance": 1
+    }
+   }
+  },
+  {
+   "name": "convert as equity",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "save": "conv_eq",
+   "body": {
+    "position_id": "pos-h2",
+    "mode": "equity",
+    "home_value": 650000,
+    "mortgage": {
+     "name": "Townhouse loan",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250,
+     "current_balance": 150000
+    }
+   }
+  },
+  {
+   "name": "positions after equity conversion",
+   "probe": "positions"
+  },
+  {
+   "name": "convert as the loan itself with a new home",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "save": "conv_loan",
+   "body": {
+    "position_id": "pos-h3",
+    "mode": "loan",
+    "add_home": {
+     "name": "Condo",
+     "value": 420000,
+     "cost_basis": 350000,
+     "purchase_date": "2019-04-01"
+    },
+    "mortgage": {
+     "name": "Condo loan",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250
+    }
+   }
+  },
+  {
+   "name": "positions after loan conversion",
+   "probe": "positions"
+  },
+  {
+   "name": "accounts after loan conversion",
+   "probe": "accounts"
+  },
+  {
+   "name": "counts after conversions",
+   "probe": "counts"
+  },
+  {
+   "name": "failed loan conversion rolls back",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "body": {
+    "position_id": "pos-h4",
+    "mode": "loan",
+    "add_home": {
+     "name": "Ghost",
+     "value": 1
+    },
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250
+    },
+    "cash_flow": {
+     "mode": "link",
+     "expense_id": "nope"
+    }
+   }
+  },
+  {
+   "name": "positions unchanged by the failed conversion",
+   "probe": "positions"
+  },
+  {
+   "name": "convert a non real estate position",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "body": {
+    "position_id": "pos-vti",
+    "mode": "property_value",
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250,
+     "current_balance": 1
+    }
+   }
+  },
+  {
+   "name": "convert an unknown position",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "body": {
+    "position_id": "nope",
+    "mode": "property_value",
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250,
+     "current_balance": 1
+    }
+   }
+  },
+  {
+   "name": "equity without a home value",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "body": {
+    "position_id": "pos-h4",
+    "mode": "equity",
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250,
+     "current_balance": 1
+    }
+   }
+  },
+  {
+   "name": "add_home outside loan mode",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "body": {
+    "position_id": "pos-h4",
+    "mode": "property_value",
+    "add_home": {
+     "name": "x",
+     "value": 1
+    },
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250,
+     "current_balance": 1
+    }
+   }
+  },
+  {
+   "name": "revert a liability that is not a conversion",
+   "method": "POST",
+   "path": "/api/liabilities/{other}/revert-conversion"
+  },
+  {
+   "name": "revert the equity conversion",
+   "method": "POST",
+   "path": "/api/liabilities/{conv_eq}/revert-conversion"
+  },
+  {
+   "name": "positions after equity revert",
+   "probe": "positions"
+  },
+  {
+   "name": "revert the loan conversion",
+   "method": "POST",
+   "path": "/api/liabilities/{conv_loan}/revert-conversion"
+  },
+  {
+   "name": "positions after loan revert",
+   "probe": "positions"
+  },
+  {
+   "name": "convert as equity again",
+   "method": "POST",
+   "path": "/api/liabilities/convert-position",
+   "save": "conv_eq2",
+   "body": {
+    "position_id": "pos-h2",
+    "mode": "equity",
+    "home_value": 640000,
+    "mortgage": {
+     "name": "Mortgage",
+     "lender": "Second Bank",
+     "balance_as_of": "2026-10-01",
+     "interest_rate": 0.065,
+     "payment_amount": 1500,
+     "next_payment_date": "2026-11-01",
+     "escrow_amount": 250,
+     "current_balance": 140000
+    }
+   }
+  },
+  {
+   "name": "owner edits the converted price",
+   "db": "set_price",
+   "id": "pos-h2",
+   "price": 655000
+  },
+  {
+   "name": "revert refuses after the price edit",
+   "method": "POST",
+   "path": "/api/liabilities/{conv_eq2}/revert-conversion"
+  },
+  {
+   "name": "revert the property value conversion",
+   "method": "POST",
+   "path": "/api/liabilities/{conv_pv}/revert-conversion"
+  },
+  {
+   "name": "expenses after property value revert",
+   "probe": "expenses"
+  },
+  {
+   "name": "revert it again",
+   "method": "POST",
+   "path": "/api/liabilities/{conv_pv}/revert-conversion"
+  },
+  {
+   "name": "revert an unknown liability",
+   "method": "POST",
+   "path": "/api/liabilities/nope/revert-conversion"
+  },
+  {
+   "name": "positions after reverts",
+   "probe": "positions"
+  },
+  {
+   "name": "counts after reverts",
+   "probe": "counts"
   }
  ]
 }

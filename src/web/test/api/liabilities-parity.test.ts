@@ -25,6 +25,9 @@ interface Step {
   db?: string;
   id?: string;
   to?: string;
+  table?: string;
+  row?: Record<string, unknown>;
+  price?: number;
 }
 interface Scenario {
   today: string;
@@ -56,15 +59,25 @@ const expected = JSON.parse(
   fs.readFileSync(path.join(FIXTURES, 'liabilities_scenario.expected.json'), 'utf8')
 ) as Result[];
 
-const ID_KEYS = new Set(['id', 'liability_id', 'linked_position_id', 'expense_id', 'position_id']);
+const ID_KEYS = new Set([
+  'id',
+  'liability_id',
+  'linked_position_id',
+  'expense_id',
+  'position_id',
+  'account_id',
+]);
 const TIMESTAMP_KEYS = new Set(['created_at', 'updated_at']);
 const EXACT_NUMBER_KEYS = new Set(['interest_rate', 'periods_remaining']);
 
 function makeNormalizer(): (value: unknown, key?: string) => unknown {
   const fixed = new Set<string>(
-    [...scenario.setup.accounts, ...scenario.setup.positions, ...scenario.setup.expenses].map((r) =>
-      String(r['id'])
-    )
+    [
+      ...scenario.setup.accounts,
+      ...scenario.setup.positions,
+      ...scenario.setup.expenses,
+      ...scenario.steps.filter((s) => s.db === 'insert').map((s) => s.row!),
+    ].map((r) => String(r['id']))
   );
   const seen = new Map<string, string>();
   const norm = (value: unknown, key = ''): unknown => {
@@ -200,6 +213,23 @@ function dbOp(step: Step): void {
     case 'delete_all_categories':
       clientDB.execute('DELETE FROM budget_expense_categories');
       break;
+    case 'insert': {
+      if (!['positions', 'budget_expense_categories'].includes(step.table!)) {
+        throw new Error(`unknown table ${String(step.table)}`);
+      }
+      const cols = Object.keys(step.row!);
+      clientDB.execute(
+        `INSERT INTO ${step.table!} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+        cols.map((c) => step.row![c])
+      );
+      break;
+    }
+    case 'set_price':
+      clientDB.execute('UPDATE positions SET current_price = ? WHERE id = ?', [
+        step.price,
+        step.id,
+      ]);
+      break;
     default:
       throw new Error(`unknown db op ${String(step.db)}`);
   }
@@ -223,8 +253,9 @@ function runScenario(): Result[] {
     try {
       const body = tryLocalRoute(endpoint, { method: step.method, body: step.body }) as {
         id?: string;
+        liability?: { id: string };
       };
-      if (step.save) aliases[step.save] = body.id!;
+      if (step.save) aliases[step.save] = body.id ?? body.liability!.id;
       results.push({ name: step.name, ok: norm(JSON.parse(JSON.stringify(body))) });
     } catch (e) {
       if (!(e instanceof LocalHttpError)) throw e;

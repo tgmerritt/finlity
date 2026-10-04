@@ -28,14 +28,15 @@ from src.main import app
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 SCENARIO = json.loads((FIXTURES / "liabilities_scenario.json").read_text())
 EXPECTED_PATH = FIXTURES / "liabilities_scenario.expected.json"
-ID_KEYS = {"id", "liability_id", "linked_position_id", "expense_id", "position_id"}
+ID_KEYS = {"id", "liability_id", "linked_position_id", "expense_id", "position_id", "account_id"}
 TIMESTAMP_KEYS = {"created_at", "updated_at"}
 EXACT_NUMBER_KEYS = {"interest_rate", "periods_remaining"}
 
 
 def _fixed_ids() -> set[str]:
     setup = SCENARIO["setup"]
-    return {row["id"] for key in ("accounts", "positions", "expenses") for row in setup[key]}
+    fixed = {row["id"] for key in ("accounts", "positions", "expenses") for row in setup[key]}
+    return fixed | {step["row"]["id"] for step in SCENARIO["steps"] if step.get("db") == "insert"}
 
 
 class Normalizer:
@@ -140,6 +141,11 @@ def _db_op(db: Database, step: dict) -> None:
             s.query(BudgetExpense).delete()
         elif op == "delete_all_categories":
             s.query(BudgetExpenseCategory).delete()
+        elif op == "insert":
+            model = {"positions": Position, "budget_expense_categories": BudgetExpenseCategory}[step["table"]]
+            s.add(model(**step["row"]))
+        elif op == "set_price":
+            s.get(Position, step["id"]).current_price = step["price"]
         else:
             raise AssertionError(op)
         s.commit()
@@ -171,7 +177,7 @@ def run_scenario(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[dict[s
                 continue
             body = resp.json()
             if "save" in step:
-                aliases[step["save"]] = body["id"]
+                aliases[step["save"]] = body["id"] if "id" in body else body["liability"]["id"]
             results.append({"name": step["name"], "ok": norm(body)})
     finally:
         app.dependency_overrides.pop(get_db, None)
