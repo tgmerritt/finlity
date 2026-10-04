@@ -1,7 +1,9 @@
 /**
- * Smart import wizard: Upload (1), Accounts (2), then Categorize, Recurring
+ * Smart import wizard: Upload (1), Accounts (2), Categorize (3), then Recurring
  * bills and Review (added by later tasks). Nothing is written to the data layer
- * here; the only POST besides the analyze uploads is the read-only preview.
+ * here: the POSTs besides the analyze uploads are the read-only preview and the
+ * AI calls, and the one write is the server-mode AI consent (`ai_enabled`),
+ * saved only when the person agrees to it.
  *
  * Statement text, file names and account labels are user data: everything goes
  * into the DOM with textContent or element properties.
@@ -15,6 +17,7 @@ import { createDynamicModal, closeDynamicModal } from '@/ui/modal';
 import { showToast } from '@/ui/toast';
 import { store } from '@/state/store';
 import { openDebtWizardLazy } from '@/utils/debt-wizard-launcher';
+import { formatCurrency, formatDate } from '@/utils/format';
 import {
   ACCEPT,
   KIND_CHOICES,
@@ -23,13 +26,16 @@ import {
   MAX_FILES,
   MAX_FILE_BYTES,
   MAX_LABEL_CHARS,
+  PAGE_ROWS,
   PRIVACY_LINE,
   STEP_LABELS,
+  TXN_KIND_CHOICES,
   WARNING_COPY,
   analyzeErrorText,
   analyzeErrorType,
   balanceText,
   button,
+  categorizeErrorText,
   countText,
   el,
   errorTypeOf,
@@ -37,35 +43,50 @@ import {
   field,
   guessMapping,
   isDebtKind,
+  isSpendingKind,
   mappingComplete,
   periodText,
   select,
+  sourceChipText,
+  whatGetsSentPanel,
 } from '@/utils/smart-import-render';
 import {
+  acceptAllSuggestions,
   addFile,
+  applyCategorizeResponse,
   applyPreview,
+  buildCategorizeRequest,
   buildAnalyzeContext,
   buildPreviewRequest,
   accountKey,
   createWizardState,
+  filterRows,
   layoutFor,
   markFileError,
   mergeAnalyze,
+  needsReview,
   setAiProvider,
+  setCategory,
+  setExcluded,
   setFileMapping,
   setFileOptions,
+  setKind,
   setStatement,
+  type RowFilter,
   type WizardFile,
+  type WizardRow,
   type WizardState,
   type WizardStatement,
 } from '@/utils/smart-import-state';
 import type {
   AnalyzeResponse,
+  CategorizeResponse,
   LiabilityResponse,
   PreviewResponse,
   SmartImportAccountKind,
   SmartImportAiStatus,
   SmartImportContext,
+  SmartImportTxnKind,
 } from '@/types/api';
 import sampleCsv from '@/samples/sample-checking.csv?raw';
 import sampleOfx from '@/samples/sample-card.ofx?raw';
@@ -88,6 +109,8 @@ export interface SmartImportHandle {
 const SAMPLE_CHECKING_NAME = 'sample-checking.csv';
 const SAMPLE_CHECKING_LABEL = 'Sample checking';
 const ALLOWED_EXT = /\.(csv|ofx|qfx|pdf)$/i;
+/** Per categorize chunk: the provider call is bounded server side, well under this. */
+const AI_TIMEOUT_MS = 60_000;
 
 const FALLBACK_AI: SmartImportAiStatus = {
   ai_available: false,
@@ -450,7 +473,14 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       step === 1 ? 'cancel' : 'back'
     );
     const right = button('Next', 'btn btn-primary', 'next');
-    right.disabled = step === 1 ? !canLeaveUpload() : step === 2 ? !canLeaveAccounts() : true;
+    right.disabled =
+      step === 1
+        ? !canLeaveUpload()
+        : step === 2
+          ? !canLeaveAccounts()
+          : step === 3
+            ? aiBusy
+            : true;
     left.addEventListener('click', () => {
       if (step === 1) requestClose();
       else void goTo(step - 1);
@@ -464,12 +494,14 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     if (!modal || !modal.isConnected) return;
     if (step === 1) renderFileList();
     if (step === 2) renderAccountCards();
+    if (step === 3) renderCategorizeParts();
     renderFooter();
   }
 
   async function goTo(n: number): Promise<void> {
     if (n === 1) renderUpload();
     else if (n === 2) await renderAccounts();
+    else if (n === 3) renderCategorize();
     else renderComingNext(n);
   }
 
@@ -493,8 +525,10 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
         state = setStatement(st(), s.id, { liability_id: value || null });
         debtTouched.add(s.id);
       }
-      renderComingNext(3);
+      renderCategorize();
+      return;
     }
+    if (step === 3 && !aiBusy) renderComingNext(4);
   }
 
   // ---- step 1: upload --------------------------------------------------
@@ -1129,6 +1163,615 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       sending.delete(fileId);
     }
     if (step === 2 && modal?.isConnected) renderAccountCards();
+  }
+
+  // ---- step 3: categorize ------------------------------------------------
+
+  /** Server mode keeps a per-profile AI consent; hosted mode has none to ask for. */
+  const isHosted = (): boolean => store.get('dataMode') === 'local';
+
+  let filter: RowFilter = 'all';
+  /** The rows in view, fixed when the filter is chosen so an edit never makes a row jump away. */
+  let viewIds: string[] = [];
+  let shown = PAGE_ROWS;
+  const selected = new Set<string>();
+  let activeRow: string | null = null;
+  /**
+   * The latest category or kind change. "Remember" is on by default; turning it
+   * off replays the change on the state from before it, without remembering.
+   * Any other edit ends the offer.
+   */
+  let lastEdit: {
+    before: WizardState;
+    redo: (s: WizardState, remember: boolean) => WizardState;
+    label: string;
+    remember: boolean;
+  } | null = null;
+  let aiOpen = false;
+  let aiBusy = false;
+  let aiNote: { text: string; error: boolean } | null = null;
+
+  let catFilters: HTMLElement | null = null;
+  let catAi: HTMLElement | null = null;
+  let catBody: HTMLTableSectionElement | null = null;
+  let catHeadBox: HTMLInputElement | null = null;
+  let catMore: HTMLElement | null = null;
+  let catBulk: HTMLElement | null = null;
+
+  const rowById = (): Map<string, WizardRow> => new Map(st().rows.map((r) => [r.id, r]));
+
+  function setFilter(next: RowFilter): void {
+    filter = next;
+    viewIds = filterRows(st(), next).map((r) => r.id);
+    shown = PAGE_ROWS;
+    selected.clear();
+    activeRow = null;
+  }
+
+  function renderCategorize(): void {
+    if (!state) return;
+    const h = setStep(3, 'Categorize transactions');
+    body.appendChild(
+      el(
+        'p',
+        'smart-import-lead',
+        'Check the category of each transaction. Nothing is saved until you apply the import.'
+      )
+    );
+    setFilter(filterRows(st(), 'review').length > 0 ? 'review' : 'all');
+    lastEdit = null;
+    aiOpen = false;
+    aiNote = null;
+
+    catAi = el('div', 'smart-import-ai');
+    catFilters = el('div', 'smart-import-filters');
+    catFilters.setAttribute('role', 'group');
+    catFilters.setAttribute('aria-label', 'Show');
+
+    const wrap = el('div', 'smart-import-table-wrap');
+    const table = el('table', 'smart-import-table');
+    const head = el('tr');
+    const all = el('input');
+    all.type = 'checkbox';
+    all.setAttribute('data-si', 'select-all');
+    all.setAttribute('aria-label', 'Select every row in this list');
+    all.addEventListener('change', () => {
+      if (all.checked) for (const id of viewIds) selected.add(id);
+      else selected.clear();
+      lastEdit = null;
+      renderCategorizeParts();
+    });
+    catHeadBox = all;
+    const first = el('th', 'smart-import-col-check');
+    first.appendChild(all);
+    head.appendChild(first);
+    for (const [label, cls] of [
+      ['Date', 'date'],
+      ['Description', 'desc'],
+      ['Amount', 'amount'],
+      ['Category', 'category'],
+      ['Kind', 'kind'],
+      ['Source', 'source'],
+    ] as const) {
+      const th = el('th', `smart-import-col-${cls}`, label);
+      th.scope = 'col';
+      head.appendChild(th);
+    }
+    table.appendChild(el('thead')).appendChild(head);
+    catBody = el('tbody');
+    catBody.addEventListener('change', onTableChange);
+    catBody.addEventListener('keydown', onTableKey);
+    catBody.addEventListener('focusin', onTableFocus);
+    table.appendChild(catBody);
+    wrap.appendChild(table);
+
+    catMore = el('div', 'smart-import-more');
+    catBulk = el('div', 'smart-import-bulk');
+    catBulk.setAttribute('role', 'region');
+    catBulk.setAttribute('aria-label', 'Change selected rows');
+
+    body.append(catAi, catFilters, wrap, catMore, catBulk);
+    renderCategorizeParts();
+    h.focus();
+  }
+
+  /** Redraw the step from state, keeping focus on the same control. */
+  function renderCategorizeParts(): void {
+    if (!catBody || !state || step !== 3) return;
+    const active = document.activeElement;
+    const focusRow = active instanceof HTMLElement ? active.closest('tr')?.dataset.row : undefined;
+    const focusSi =
+      active instanceof HTMLElement && active.closest('.smart-import-step')
+        ? active.getAttribute('data-si')
+        : null;
+    const onRow = active instanceof HTMLElement && active.classList.contains('smart-import-row');
+
+    renderCatFilters();
+    renderCatAi();
+    renderCatRows();
+    renderCatBulk();
+    renderFooter();
+
+    let target: HTMLElement | null = null;
+    if (focusRow) {
+      const tr = Array.from(catBody.rows).find((r) => r.dataset.row === focusRow) ?? null;
+      target =
+        onRow || !focusSi ? tr : (tr?.querySelector<HTMLElement>(`[data-si="${focusSi}"]`) ?? tr);
+    } else if (focusSi) {
+      target = body.querySelector<HTMLElement>(`[data-si="${focusSi}"]`);
+    }
+    if (target && target !== document.activeElement) target.focus();
+  }
+
+  function renderCatFilters(): void {
+    if (!catFilters) return;
+    catFilters.textContent = '';
+    const filters: [RowFilter, string][] = [
+      ['review', 'Needs review'],
+      ['all', 'All'],
+      ['duplicates', 'Duplicates'],
+      ['excluded', 'Excluded'],
+    ];
+    for (const [value, label] of filters) {
+      const b = button(
+        `${label} (${filterRows(st(), value).length.toLocaleString('en-US')})`,
+        'smart-import-filter',
+        'filter'
+      );
+      b.setAttribute('data-filter', value);
+      b.setAttribute('aria-pressed', String(filter === value));
+      b.addEventListener('click', () => {
+        setFilter(value);
+        renderCategorizeParts();
+      });
+      catFilters.appendChild(b);
+    }
+  }
+
+  function categoryOptions(): { value: string; label: string }[] {
+    return [
+      { value: '', label: 'Uncategorized' },
+      ...st().categories.map((c) => ({ value: c.id, label: c.name })),
+    ];
+  }
+
+  function renderCatRows(): void {
+    if (!catBody || !catMore || !catHeadBox) return;
+    catBody.textContent = '';
+    const rows = rowById();
+    const view = viewIds.map((id) => rows.get(id)).filter((r): r is WizardRow => !!r);
+    const page = view.slice(0, shown);
+    if (activeRow === null || !page.some((r) => r.id === activeRow))
+      activeRow = page[0]?.id ?? null;
+    const cats = categoryOptions();
+    for (const r of page) catBody.appendChild(rowEl(r, cats));
+    if (page.length === 0) {
+      const tr = el('tr', 'smart-import-empty');
+      const td = el('td', undefined, 'No transactions in this list.');
+      td.colSpan = 7;
+      tr.appendChild(td);
+      catBody.appendChild(tr);
+    }
+    catHeadBox.checked = view.length > 0 && view.every((r) => selected.has(r.id));
+    catHeadBox.indeterminate = !catHeadBox.checked && view.some((r) => selected.has(r.id));
+
+    catMore.textContent = '';
+    if (view.length > shown) {
+      catMore.appendChild(
+        el(
+          'span',
+          'smart-import-hint',
+          `Showing ${shown.toLocaleString('en-US')} of ${view.length.toLocaleString('en-US')}`
+        )
+      );
+      const more = button('Show more', 'btn btn-secondary btn-sm', 'show-more');
+      more.addEventListener('click', () => {
+        shown += PAGE_ROWS;
+        renderCategorizeParts();
+      });
+      catMore.appendChild(more);
+    }
+  }
+
+  function rowEl(r: WizardRow, cats: { value: string; label: string }[]): HTMLTableRowElement {
+    const classes = ['smart-import-row'];
+    if (r.excluded) classes.push('is-excluded');
+    if (r.duplicate) classes.push('is-duplicate');
+    const tr = el('tr', classes.join(' '));
+    tr.dataset.row = r.id;
+    tr.tabIndex = r.id === activeRow ? 0 : -1;
+    tr.setAttribute('aria-selected', String(selected.has(r.id)));
+
+    const check = el('input');
+    check.type = 'checkbox';
+    check.tabIndex = -1;
+    check.checked = selected.has(r.id);
+    check.setAttribute('data-si', 'row-select');
+    check.setAttribute('aria-label', `Select ${r.description}`);
+    const cCheck = el('td', 'smart-import-col-check');
+    cCheck.appendChild(check);
+
+    const cDate = el('td', 'smart-import-col-date', formatDate(r.posted_date));
+
+    const cDesc = el('td', 'smart-import-col-desc');
+    cDesc.appendChild(el('span', 'smart-import-desc-text', r.description));
+    if (r.duplicate) cDesc.appendChild(el('span', 'smart-import-badge', 'Duplicate'));
+    if (r.excluded) cDesc.appendChild(el('span', 'smart-import-badge is-muted', 'Excluded'));
+
+    const cAmount = el(
+      'td',
+      `smart-import-col-amount${r.amount > 0 ? ' is-in' : ''}`,
+      formatCurrency(r.amount)
+    );
+
+    const spending = isSpendingKind(r.kind);
+    const cat = select(
+      spending ? cats : [{ value: '', label: 'No category' }],
+      spending ? (r.category_id ?? '') : '',
+      { 'data-si': 'category', 'aria-label': `Category for ${r.description}` }
+    );
+    cat.disabled = !spending;
+    const cCat = el('td', 'smart-import-col-category');
+    cCat.appendChild(cat);
+
+    const kind = select(TXN_KIND_CHOICES, r.kind, {
+      'data-si': 'kind',
+      'aria-label': `Kind for ${r.description}`,
+    });
+    const cKind = el('td', 'smart-import-col-kind');
+    cKind.appendChild(kind);
+
+    const cSource = el('td', 'smart-import-col-source');
+    const chip = sourceChipText(r);
+    if (chip) {
+      const c = el('span', `smart-import-chip is-${r.category_source}`, chip);
+      if (needsReview(r)) c.classList.add('is-review');
+      cSource.appendChild(c);
+    }
+
+    tr.append(cCheck, cDate, cDesc, cAmount, cCat, cKind, cSource);
+    return tr;
+  }
+
+  function toggleRow(id: string, on: boolean): void {
+    if (on) selected.add(id);
+    else selected.delete(id);
+  }
+
+  function onTableChange(event: Event): void {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
+    const rowId = target.closest('tr')?.dataset.row;
+    const row = rowId ? rowById().get(rowId) : undefined;
+    if (!row) return;
+    const si = target.getAttribute('data-si');
+    if (si === 'row-select' && target instanceof HTMLInputElement) {
+      toggleRow(row.id, target.checked);
+      activeRow = row.id;
+    } else if (si === 'category') {
+      const value = target.value || null;
+      edit((s, remember) => setCategory(s, [row.id], value, remember), row.merchant_key);
+    } else if (si === 'kind') {
+      const value = target.value as SmartImportTxnKind;
+      edit((s, remember) => setKind(s, [row.id], value, remember), row.merchant_key);
+    }
+    renderCategorizeParts();
+  }
+
+  /** Apply a category or kind change, remembered by default, and offer to un-remember it. */
+  function edit(redo: (s: WizardState, remember: boolean) => WizardState, label: string): void {
+    const before = st();
+    state = redo(before, true);
+    lastEdit = { before, redo, label, remember: true };
+  }
+
+  /** A change that is not offered "Remember" (exclude, accept, AI) ends the offer. */
+  function plainEdit(next: WizardState): void {
+    state = next;
+    lastEdit = null;
+  }
+
+  function onTableFocus(event: FocusEvent): void {
+    const tr = event.target instanceof Element ? event.target.closest('tr') : null;
+    const id = tr?.dataset.row;
+    if (!tr || !id || id === activeRow || !catBody) return;
+    for (const r of Array.from(catBody.rows)) r.tabIndex = r === tr ? 0 : -1;
+    activeRow = id;
+  }
+
+  function onTableKey(event: KeyboardEvent): void {
+    const tr = event.target;
+    if (!(tr instanceof HTMLTableRowElement) || !tr.dataset.row || !catBody) return;
+    const rows = Array.from(catBody.rows).filter((r) => r.dataset.row);
+    const i = rows.indexOf(tr);
+    let to: HTMLTableRowElement | undefined;
+    if (event.key === 'ArrowDown') to = rows[i + 1];
+    else if (event.key === 'ArrowUp') to = rows[i - 1];
+    else if (event.key === 'Home') to = rows[0];
+    else if (event.key === 'End') to = rows[rows.length - 1];
+    else if (event.key === ' ' || event.key === 'Spacebar') {
+      event.preventDefault();
+      const id = tr.dataset.row;
+      toggleRow(id, !selected.has(id));
+      lastEdit = null;
+      renderCategorizeParts();
+      return;
+    } else return;
+    event.preventDefault();
+    if (to) {
+      tr.tabIndex = -1;
+      to.tabIndex = 0;
+      activeRow = to.dataset.row ?? null;
+      to.focus();
+    }
+  }
+
+  function renderCatBulk(): void {
+    if (!catBulk) return;
+    catBulk.textContent = '';
+    if (lastEdit) {
+      const last = lastEdit;
+      const label = el('label', 'smart-import-remember');
+      const box = el('input');
+      box.type = 'checkbox';
+      box.checked = last.remember;
+      box.setAttribute('data-si', 'remember');
+      box.addEventListener('change', () => {
+        state = last.redo(last.before, box.checked);
+        last.remember = box.checked;
+        renderCategorizeParts();
+      });
+      label.append(box, el('span', undefined, `Remember for all ${last.label}`));
+      catBulk.appendChild(label);
+    }
+
+    const rows = rowById();
+    const ids = [...selected].filter((id) => rows.has(id));
+    const none = ids.length === 0;
+    catBulk.classList.toggle('is-empty', none);
+    const controls = el('div', 'smart-import-bulk-controls');
+    controls.appendChild(
+      el(
+        'span',
+        'smart-import-bulk-count',
+        none
+          ? 'Select rows to change them together'
+          : `${ids.length.toLocaleString('en-US')} selected`
+      )
+    );
+
+    const bulkCat = select(
+      [{ value: '', label: 'Set category' }, ...categoryOptions().slice(1)],
+      '',
+      {
+        'data-si': 'bulk-category',
+        'aria-label': 'Set the category of the selected rows',
+      }
+    );
+    bulkCat.disabled = none;
+    bulkCat.addEventListener('change', () => {
+      if (!bulkCat.value) return;
+      const value = bulkCat.value;
+      const merchants = new Set(ids.map((id) => rows.get(id)!.merchant_key));
+      edit(
+        (s, remember) => setCategory(s, ids, value, remember),
+        merchants.size === 1 ? [...merchants][0]! : `${merchants.size} merchants`
+      );
+      renderCategorizeParts();
+    });
+
+    const bulkKind = select([{ value: '', label: 'Set kind' }, ...TXN_KIND_CHOICES], '', {
+      'data-si': 'bulk-kind',
+      'aria-label': 'Set the kind of the selected rows',
+    });
+    bulkKind.disabled = none;
+    bulkKind.addEventListener('change', () => {
+      if (!bulkKind.value) return;
+      const value = bulkKind.value as SmartImportTxnKind;
+      const merchants = new Set(ids.map((id) => rows.get(id)!.merchant_key));
+      edit(
+        (s, remember) => setKind(s, ids, value, remember),
+        merchants.size === 1 ? [...merchants][0]! : `${merchants.size} merchants`
+      );
+      renderCategorizeParts();
+    });
+
+    const allExcluded = !none && ids.every((id) => rows.get(id)!.excluded);
+    const exclude = button(
+      allExcluded ? 'Include' : 'Exclude',
+      'btn btn-secondary btn-sm',
+      'bulk-exclude'
+    );
+    exclude.disabled = none;
+    exclude.addEventListener('click', () => {
+      plainEdit(setExcluded(st(), ids, !allExcluded));
+      renderCategorizeParts();
+    });
+
+    const clear = button('Clear', 'btn btn-secondary btn-sm', 'bulk-clear');
+    clear.disabled = none;
+    clear.addEventListener('click', () => {
+      selected.clear();
+      renderCategorizeParts();
+    });
+
+    const pending = st().rows.some((r) => r.category_source === 'ai' && !r.reviewed);
+    const accept = button('Accept all suggestions', 'btn btn-secondary btn-sm', 'bulk-accept');
+    accept.disabled = !pending;
+    accept.addEventListener('click', () => {
+      plainEdit(acceptAllSuggestions(st()));
+      renderCategorizeParts();
+    });
+
+    controls.append(bulkCat, bulkKind, exclude, clear, accept);
+    catBulk.appendChild(controls);
+  }
+
+  // ---- AI suggestions ------------------------------------------------------
+
+  /** Server mode asks once; the answer is the profile's `ai_enabled` from ai-status. */
+  const needsConsent = (): boolean => !isHosted() && !ai.ai_enabled;
+
+  function renderCatAi(): void {
+    if (!catAi) return;
+    catAi.textContent = '';
+    if (!ai.ai_available) {
+      // Hosted: the operator decides; there is nothing the person can turn on.
+      if (!isHosted()) {
+        catAi.appendChild(
+          el(
+            'p',
+            'smart-import-hint',
+            'AI suggestions are off. An AI provider can be set up in Settings; until then, use the bulk tools below.'
+          )
+        );
+      }
+      return;
+    }
+    const { request, chunks } = buildCategorizeRequest(st(), st().categories);
+    const row = el('div', 'smart-import-actions');
+    const suggest = button(
+      aiBusy ? 'Asking for suggestions...' : 'Suggest with AI',
+      'btn btn-secondary btn-sm',
+      'ai-suggest'
+    );
+    suggest.disabled = aiBusy || chunks.length === 0;
+    suggest.setAttribute('aria-expanded', String(aiOpen));
+    suggest.addEventListener('click', () => {
+      aiOpen = !aiOpen;
+      aiNote = null;
+      renderCategorizeParts();
+    });
+    row.appendChild(suggest);
+    if (chunks.length === 0) {
+      row.appendChild(
+        el(
+          'span',
+          'smart-import-note-inline',
+          request.items.length === 0
+            ? 'Every merchant that could be sent already has a category.'
+            : 'Add a budget category first.'
+        )
+      );
+    }
+    catAi.appendChild(row);
+
+    if (aiNote) {
+      const note = el('p', aiNote.error ? 'smart-import-error' : 'smart-import-hint', aiNote.text);
+      note.setAttribute('role', aiNote.error ? 'alert' : 'status');
+      catAi.appendChild(note);
+    }
+    if (!aiOpen || chunks.length === 0) return;
+
+    const panel = whatGetsSentPanel(
+      request,
+      ai.provider ?? 'the AI provider',
+      ai.model ?? 'default'
+    );
+    const actions = el('div', 'smart-import-actions');
+    const merchants = countText(request.items.length, 'merchant');
+    if (needsConsent()) {
+      panel.appendChild(el('h4', 'smart-import-subtitle', 'Turn on AI suggestions?'));
+      panel.appendChild(
+        el(
+          'p',
+          'smart-import-hint',
+          `Each time you ask, the lines above are sent to ${ai.provider ?? 'the AI provider'}. This can be turned off again in Settings.`
+        )
+      );
+      const agree = button(`Turn on and send ${merchants}`, 'btn btn-primary btn-sm', 'ai-consent');
+      agree.disabled = aiBusy;
+      agree.addEventListener('click', () => void suggestWithAi(true));
+      const no = button('Not now', 'btn btn-secondary btn-sm', 'ai-cancel');
+      no.addEventListener('click', closeAiPanel);
+      actions.append(agree, no);
+    } else {
+      const send = button(`Send ${merchants}`, 'btn btn-primary btn-sm', 'ai-send');
+      send.disabled = aiBusy;
+      send.addEventListener('click', () => void suggestWithAi(false));
+      const cancel = button('Cancel', 'btn btn-secondary btn-sm', 'ai-cancel');
+      cancel.addEventListener('click', closeAiPanel);
+      actions.append(send, cancel);
+    }
+    panel.appendChild(actions);
+    catAi.appendChild(panel);
+  }
+
+  function closeAiPanel(): void {
+    aiOpen = false;
+    renderCategorizeParts();
+    body.querySelector<HTMLElement>('[data-si="ai-suggest"]')?.focus();
+  }
+
+  /**
+   * Save consent first when asked (and send nothing if that fails), then post
+   * every chunk. Suggestions are applied only when all chunks answered, so a
+   * failure leaves every row as it was.
+   */
+  async function suggestWithAi(consent: boolean): Promise<void> {
+    if (aiBusy || !state) return;
+    aiBusy = true;
+    aiNote = null;
+    renderCategorizeParts();
+    try {
+      if (consent) {
+        try {
+          await apiCall('/api/smart-import/settings', {
+            method: 'PUT',
+            body: { ai_enabled: true },
+          });
+          ai = { ...ai, ai_enabled: true };
+        } catch (error) {
+          console.error('AI consent save failed:', error instanceof Error ? error.name : 'error');
+          aiNote = { text: 'The setting could not be saved, so nothing was sent.', error: true };
+          return;
+        }
+      }
+      const { chunks } = buildCategorizeRequest(st(), st().categories);
+      const suggestions: CategorizeResponse['suggestions'] = [];
+      let provider = ai.provider ?? '';
+      let model = ai.model ?? '';
+      for (const chunk of chunks) {
+        const answer = await apiCall<CategorizeResponse>('/api/smart-import/categorize', {
+          method: 'POST',
+          body: chunk,
+          timeout: AI_TIMEOUT_MS,
+        });
+        suggestions.push(...(Array.isArray(answer.suggestions) ? answer.suggestions : []));
+        provider = answer.provider;
+        model = answer.model;
+      }
+      const sent = chunks.reduce((n, c) => n + c.items.length, 0);
+      const before = new Set(
+        st()
+          .rows.filter((r) => r.category_source === 'ai')
+          .map((r) => r.merchant_key)
+      );
+      plainEdit(applyCategorizeResponse(st(), { suggestions, provider, model }));
+      const got = new Set(
+        st()
+          .rows.filter((r) => r.category_source === 'ai' && !before.has(r.merchant_key))
+          .map((r) => r.merchant_key)
+      ).size;
+      aiOpen = false;
+      aiNote = {
+        text: `Suggestions came back for ${got.toLocaleString('en-US')} of ${countText(sent, 'merchant')}. Rows below 80% confidence stay in Needs review.`,
+        error: false,
+      };
+      setFilter(filter);
+    } catch (error) {
+      const status = error instanceof ApiError ? error.status : 0;
+      const type = error instanceof ApiError ? errorTypeOf(error.data) : undefined;
+      console.error('AI suggestions failed:', error instanceof Error ? error.name : 'error');
+      if (!isHosted() && (status === 403 || type === 'ai_not_enabled')) {
+        // Consent was withdrawn elsewhere: ask again next time.
+        ai = { ...ai, ai_enabled: false };
+      }
+      aiNote = { text: categorizeErrorText(status, type), error: true };
+    } finally {
+      aiBusy = false;
+      if (step === 3 && modal?.isConnected) renderCategorizeParts();
+    }
   }
 
   // ---- later steps -------------------------------------------------------

@@ -34,8 +34,12 @@ import { showToast } from '@/ui/toast';
 import { closeDynamicModal } from '@/ui/modal';
 import { openDebtWizardLazy } from '@/utils/debt-wizard-launcher';
 import { openSmartImportWizard } from '@/features/smart-import';
+import { store } from '@/state/store';
+import { buildCategorizeRequest } from '@/utils/smart-import-state';
 import type {
   AnalyzeResponse,
+  CategorizeRequest,
+  CategorizeResponse,
   NormalizedStatement,
   PreviewResponse,
   SmartImportAiStatus,
@@ -149,6 +153,8 @@ interface Setup {
     file: File,
     ctx: Record<string, unknown>
   ) => AnalyzeResponse | Promise<AnalyzeResponse>;
+  categorize?: (body: CategorizeRequest) => CategorizeResponse | Promise<CategorizeResponse>;
+  settingsPut?: (body: unknown) => unknown;
 }
 
 let calls: { url: string; options?: { method?: string; body?: unknown } }[] = [];
@@ -175,6 +181,15 @@ function setup(s: Setup = {}): void {
     }
     if (url === '/api/smart-import/preview') return s.preview ?? emptyPreview;
     if (url === '/api/liabilities') return s.liabilities ?? [];
+    if (url === '/api/smart-import/categorize') {
+      const body = (options as { body?: unknown } | undefined)?.body as CategorizeRequest;
+      if (s.categorize) return s.categorize(body);
+      throw new ApiError(503, 'x', { error_type: 'ai_unavailable' });
+    }
+    if (url === '/api/smart-import/settings') {
+      const body = (options as { body?: unknown } | undefined)?.body;
+      return s.settingsPut ? s.settingsPut(body) : { ...context().settings, ...(body as object) };
+    }
     return {};
   });
   uploadMock.mockImplementation(async (_url: string, file: File, ctx: unknown) => {
@@ -1070,6 +1085,643 @@ describe('smart import wizard', () => {
       await open();
       await toAccounts([csvFile('a.pdf')]);
       expect(modal().querySelector('[data-si="send-lines"]')).toBeNull();
+    });
+  });
+
+  describe('categorize step', () => {
+    type Txn = NormalizedStatement['transactions'][number];
+    const txn = (row: number, over: Partial<Txn> = {}): Txn => ({
+      row,
+      posted_date: '2026-07-10',
+      amount: -10,
+      description: `ROW ${row}`,
+      merchant_key: `merchant ${row}`,
+      kind: 'expense',
+      category_id: null,
+      category_source: 'none',
+      external_id: null,
+      dedupe_base: `d${row}`,
+      ...over,
+    });
+
+    /** Rule row, two uncategorized SAFEWAY rows, income, a seed row, a duplicate. */
+    const mixed = (): Txn[] => [
+      txn(0, {
+        description: 'NETFLIX.COM',
+        merchant_key: 'netflix',
+        amount: -15.49,
+        category_id: 'c1',
+        category_source: 'rule',
+      }),
+      txn(1, { description: 'SAFEWAY #1', merchant_key: 'safeway', amount: -62.18 }),
+      txn(2, { description: 'SAFEWAY #2', merchant_key: 'safeway', amount: -40 }),
+      txn(3, {
+        description: 'PAYROLL',
+        merchant_key: 'payroll',
+        amount: 2400,
+        kind: 'income',
+      }),
+      txn(4, {
+        description: 'TRADER JOES',
+        merchant_key: 'trader joes',
+        amount: -47.3,
+        category_id: 'c2',
+        category_source: 'seed',
+      }),
+      txn(5, {
+        description: 'OLD CHARGE',
+        merchant_key: 'old charge',
+        amount: -9,
+        dedupe_base: 'dup',
+      }),
+    ];
+
+    const aiOn: Partial<SmartImportAiStatus> = {
+      ai_available: true,
+      ai_enabled: true,
+      provider: 'Fake AI',
+      model: 'fake-model-1',
+    };
+
+    async function toCategorize(
+      transactions: Txn[] = mixed(),
+      s: Setup = {}
+    ): Promise<ReturnType<typeof openSmartImportWizard>> {
+      setup({
+        preview: { ...emptyPreview, existing_dedupe_keys: ['acct:abc|dup'] },
+        analyze: (file) => okAnswer(statement({ file_name: file.name, transactions })),
+        ...s,
+      });
+      const handle = await open();
+      await toAccounts();
+      next().click();
+      await flush();
+      return handle;
+    }
+
+    const rowEls = (): HTMLElement[] => qa('tbody .smart-import-row');
+    const rowFor = (desc: string): HTMLElement =>
+      rowEls().find((r) => r.querySelector('.smart-import-desc-text')?.textContent === desc)!;
+    const filterBtn = (f: string): HTMLButtonElement =>
+      q<HTMLButtonElement>(`[data-si="filter"][data-filter="${f}"]`);
+    const change = (
+      target: HTMLSelectElement | HTMLInputElement,
+      value: string | boolean
+    ): void => {
+      if (typeof value === 'boolean') (target as HTMLInputElement).checked = value;
+      else target.value = value;
+      target.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const writes = (): string[] =>
+      calls
+        .filter((c) => (c.options?.method ?? 'GET') !== 'GET')
+        .map((c) => `${c.options!.method} ${c.url}`);
+
+    afterEach(() => {
+      store.set('dataMode', 'server');
+    });
+
+    it('opens on Next from Accounts as "3 of 5" with the table columns', async () => {
+      await toCategorize();
+      expect(q('.smart-import-progress-short').textContent).toBe('3 of 5');
+      expect(q('.smart-import-heading').textContent).toBe('Categorize transactions');
+      const heads = qa('.smart-import-table thead th').map((th) => th.textContent);
+      expect(heads.slice(1)).toEqual([
+        'Date',
+        'Description',
+        'Amount',
+        'Category',
+        'Kind',
+        'Source',
+      ]);
+      expect(q('.smart-import-table thead input[type="checkbox"]')).not.toBeNull();
+    });
+
+    it('defaults to "Needs review" when any row needs it, and counts each filter', async () => {
+      await toCategorize();
+      expect(filterBtn('review').getAttribute('aria-pressed')).toBe('true');
+      expect(filterBtn('review').textContent).toBe('Needs review (2)');
+      expect(filterBtn('all').textContent).toBe('All (6)');
+      expect(filterBtn('duplicates').textContent).toBe('Duplicates (1)');
+      expect(filterBtn('excluded').textContent).toBe('Excluded (0)');
+      expect(rowEls().map((r) => r.querySelector('.smart-import-desc-text')!.textContent)).toEqual([
+        'SAFEWAY #1',
+        'SAFEWAY #2',
+      ]);
+    });
+
+    it('defaults to "All" when nothing needs review', async () => {
+      await toCategorize([mixed()[0]!, mixed()[3]!]);
+      expect(filterBtn('all').getAttribute('aria-pressed')).toBe('true');
+      expect(rowEls()).toHaveLength(2);
+    });
+
+    it('shows source chips (Rule, Built-in) and the duplicate badge', async () => {
+      await toCategorize();
+      filterBtn('all').click();
+      await flush();
+      expect(rowFor('NETFLIX.COM').querySelector('.smart-import-chip')!.textContent).toBe('Rule');
+      expect(rowFor('TRADER JOES').querySelector('.smart-import-chip')!.textContent).toBe(
+        'Built-in'
+      );
+      expect(rowFor('OLD CHARGE').querySelector('.smart-import-badge')!.textContent).toBe(
+        'Duplicate'
+      );
+      expect(rowFor('NETFLIX.COM').querySelector('.smart-import-badge')).toBeNull();
+      filterBtn('duplicates').click();
+      await flush();
+      expect(rowEls()).toHaveLength(1);
+    });
+
+    it('has no category for income rows', async () => {
+      await toCategorize();
+      filterBtn('all').click();
+      await flush();
+      const sel = rowFor('PAYROLL').querySelector<HTMLSelectElement>('[data-si="category"]')!;
+      expect(sel.disabled).toBe(true);
+    });
+
+    it('changing a category offers "Remember for all <merchant>", checked, and updates the other rows', async () => {
+      const handle = await toCategorize();
+      const sel = rowFor('SAFEWAY #1').querySelector<HTMLSelectElement>('[data-si="category"]')!;
+      change(sel, 'c2');
+      await flush();
+      const rows = handle.getState().rows;
+      expect(rows.find((r) => r.description === 'SAFEWAY #2')!.category_id).toBe('c2');
+      expect(rows.find((r) => r.description === 'SAFEWAY #1')!.category_source).toBe('user');
+      const remember = q<HTMLInputElement>('[data-si="remember"]');
+      expect(remember.checked).toBe(true);
+      expect(remember.closest('label')!.textContent).toContain('Remember for all safeway');
+      expect(handle.getState().remembered.safeway).toEqual({ category_id: 'c2' });
+      // Both rows stay in view (no jump) and show "You".
+      expect(rowEls()).toHaveLength(2);
+      expect(rowFor('SAFEWAY #2').querySelector('.smart-import-chip')!.textContent).toBe('You');
+      expect(
+        rowFor('SAFEWAY #2').querySelector<HTMLSelectElement>('[data-si="category"]')!.value
+      ).toBe('c2');
+    });
+
+    it('unticking "Remember" keeps the change on that row only and forgets the merchant', async () => {
+      const handle = await toCategorize();
+      change(rowFor('SAFEWAY #1').querySelector<HTMLSelectElement>('[data-si="category"]')!, 'c2');
+      await flush();
+      change(q<HTMLInputElement>('[data-si="remember"]'), false);
+      await flush();
+      const rows = handle.getState().rows;
+      expect(rows.find((r) => r.description === 'SAFEWAY #1')!.category_id).toBe('c2');
+      expect(rows.find((r) => r.description === 'SAFEWAY #2')!.category_id).toBeNull();
+      expect(handle.getState().remembered).toEqual({});
+      expect(q<HTMLInputElement>('[data-si="remember"]').checked).toBe(false);
+    });
+
+    it('changing a kind offers "Remember" too', async () => {
+      const handle = await toCategorize();
+      change(
+        rowFor('SAFEWAY #1').querySelector<HTMLSelectElement>('[data-si="kind"]')!,
+        'transfer'
+      );
+      await flush();
+      expect(handle.getState().rows.find((r) => r.description === 'SAFEWAY #2')!.kind).toBe(
+        'transfer'
+      );
+      expect(q<HTMLInputElement>('[data-si="remember"]').checked).toBe(true);
+    });
+
+    describe('selection and the bulk bar', () => {
+      const tick = (desc: string): void =>
+        change(rowFor(desc).querySelector<HTMLInputElement>('[data-si="row-select"]')!, true);
+
+      it('is sticky and disabled until rows are selected', async () => {
+        await toCategorize();
+        const bar = q('.smart-import-bulk');
+        expect(bar).not.toBeNull();
+        expect(q<HTMLSelectElement>('[data-si="bulk-category"]').disabled).toBe(true);
+        expect(q<HTMLSelectElement>('[data-si="bulk-kind"]').disabled).toBe(true);
+        expect(q<HTMLButtonElement>('[data-si="bulk-exclude"]').disabled).toBe(true);
+        tick('SAFEWAY #1');
+        await flush();
+        expect(q('.smart-import-bulk-count').textContent).toBe('1 selected');
+        expect(q<HTMLSelectElement>('[data-si="bulk-category"]').disabled).toBe(false);
+      });
+
+      it('sets a category on the selected rows', async () => {
+        const handle = await toCategorize();
+        filterBtn('all').click();
+        await flush();
+        tick('SAFEWAY #1');
+        tick('PAYROLL');
+        await flush();
+        change(q<HTMLSelectElement>('[data-si="bulk-category"]'), 'c1');
+        await flush();
+        const rows = handle.getState().rows;
+        expect(rows.find((r) => r.description === 'SAFEWAY #1')!.category_id).toBe('c1');
+        // Income takes no category.
+        expect(rows.find((r) => r.description === 'PAYROLL')!.category_id).toBeNull();
+      });
+
+      it('sets a kind on the selected rows', async () => {
+        const handle = await toCategorize();
+        tick('SAFEWAY #1');
+        await flush();
+        change(q<HTMLSelectElement>('[data-si="bulk-kind"]'), 'fee');
+        await flush();
+        expect(handle.getState().rows.find((r) => r.description === 'SAFEWAY #1')!.kind).toBe(
+          'fee'
+        );
+      });
+
+      it('excludes the selected rows, then includes them again', async () => {
+        const handle = await toCategorize();
+        tick('SAFEWAY #1');
+        await flush();
+        q<HTMLButtonElement>('[data-si="bulk-exclude"]').click();
+        await flush();
+        expect(handle.getState().rows.find((r) => r.description === 'SAFEWAY #1')!.excluded).toBe(
+          true
+        );
+        expect(filterBtn('excluded').textContent).toBe('Excluded (1)');
+        expect(rowFor('SAFEWAY #1').classList.contains('is-excluded')).toBe(true);
+        expect(q('[data-si="bulk-exclude"]').textContent).toBe('Include');
+        q<HTMLButtonElement>('[data-si="bulk-exclude"]').click();
+        await flush();
+        expect(handle.getState().rows.find((r) => r.description === 'SAFEWAY #1')!.excluded).toBe(
+          false
+        );
+      });
+
+      it('selects every row in the list from the header checkbox', async () => {
+        await toCategorize();
+        change(q<HTMLInputElement>('.smart-import-table thead input[type="checkbox"]'), true);
+        await flush();
+        expect(q('.smart-import-bulk-count').textContent).toBe('2 selected');
+      });
+
+      it('"Accept all suggestions" confirms low-confidence AI rows', async () => {
+        const handle = await toCategorize(mixed(), {
+          ai: aiOn,
+          categorize: (body) => ({
+            suggestions: body.items.map((i) => ({
+              id: i.id,
+              category: 'Groceries',
+              kind: null,
+              confidence: 0.5,
+            })),
+            provider: 'Fake AI',
+            model: 'fake-model-1',
+          }),
+        });
+        q<HTMLButtonElement>('[data-si="ai-suggest"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="ai-send"]').click();
+        await flush();
+        expect(filterBtn('review').textContent).toBe('Needs review (2)');
+        const accept = q<HTMLButtonElement>('[data-si="bulk-accept"]');
+        expect(accept.disabled).toBe(false);
+        accept.click();
+        await flush();
+        expect(filterBtn('review').textContent).toBe('Needs review (0)');
+        expect(handle.getState().rows.filter((r) => r.category_source === 'ai')).toHaveLength(2);
+      });
+    });
+
+    describe('AI suggestions', () => {
+      it('hides "Suggest with AI" when ai-status says it is unavailable, even with consent saved', async () => {
+        await toCategorize(mixed(), {
+          ctx: context({ settings: { ...context().settings, ai_enabled: true } }),
+          ai: { ai_available: false, ai_enabled: true },
+        });
+        expect(modal().querySelector('[data-si="ai-suggest"]')).toBeNull();
+        expect(modal().textContent).toContain('AI suggestions are off');
+      });
+
+      it('shows nothing about AI in hosted mode when it is unavailable', async () => {
+        store.set('dataMode', 'local');
+        await toCategorize();
+        expect(modal().querySelector('[data-si="ai-suggest"]')).toBeNull();
+        expect(modal().textContent).not.toContain('AI suggestions are off');
+      });
+
+      it('"What gets sent" renders exactly the request, plus provider and model', async () => {
+        const handle = await toCategorize(mixed(), { ai: aiOn });
+        q<HTMLButtonElement>('[data-si="ai-suggest"]').click();
+        await flush();
+        const state = handle.getState();
+        const { request } = buildCategorizeRequest(state, state.categories);
+        expect(request.items.length).toBeGreaterThan(0);
+        const panel = q('[data-si="ai-panel"]');
+        expect(JSON.parse(panel.querySelector('.smart-import-sent-json')!.textContent!)).toEqual(
+          request
+        );
+        const shown = Array.from(panel.querySelectorAll('.smart-import-sent-items tbody tr')).map(
+          (tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent)
+        );
+        expect(shown).toEqual(
+          request.items.map((i) => [
+            i.merchant,
+            `$${i.typical_amount.toLocaleString('en-US')}`,
+            i.direction === 'in' ? 'Money in' : 'Money out',
+            String(i.count),
+          ])
+        );
+        expect(
+          Array.from(panel.querySelectorAll('.smart-import-sent-categories li')).map(
+            (li) => li.textContent
+          )
+        ).toEqual(request.categories);
+        expect(panel.querySelector('[data-si="ai-provider"]')!.textContent).toBe('Fake AI');
+        expect(panel.querySelector('[data-si="ai-model"]')!.textContent).toBe('fake-model-1');
+        expect(panel.textContent).toContain('does not store or log');
+      });
+
+      it('sends one request per 60 merchants and applies the suggestions', async () => {
+        const many = Array.from({ length: 70 }, (_, i) =>
+          txn(i, { description: `SHOP ${i}`, merchant_key: `shop number ${i}` })
+        );
+        const bodies: CategorizeRequest[] = [];
+        const handle = await toCategorize(many, {
+          ai: aiOn,
+          categorize: (body) => {
+            bodies.push(body);
+            return {
+              suggestions: body.items.map((i) => ({
+                id: i.id,
+                category: 'Groceries',
+                kind: null,
+                confidence: 0.92,
+              })),
+              provider: 'Fake AI',
+              model: 'fake-model-1',
+            };
+          },
+        });
+        q<HTMLButtonElement>('[data-si="ai-suggest"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="ai-send"]').click();
+        await flush();
+        const state0 = handle.getState();
+        expect(bodies.map((b) => b.items.length)).toEqual([60, 10]);
+        expect(state0.rows.every((r) => r.category_id === 'c2' && r.category_source === 'ai')).toBe(
+          true
+        );
+        filterBtn('all').click();
+        await flush();
+        expect(rowEls()[0]!.querySelector('.smart-import-chip')!.textContent).toBe('AI 92%');
+        expect(writes()).toEqual([
+          'POST /api/smart-import/preview',
+          'POST /api/smart-import/categorize',
+          'POST /api/smart-import/categorize',
+        ]);
+      });
+
+      it('asks for consent on first use in server mode, then saves ai_enabled and sends', async () => {
+        const puts: unknown[] = [];
+        await toCategorize(mixed(), {
+          ai: { ...aiOn, ai_enabled: false },
+          settingsPut: (body) => {
+            puts.push(body);
+            return { ...context().settings, ai_enabled: true };
+          },
+          categorize: (body) => ({
+            suggestions: body.items.map((i) => ({
+              id: i.id,
+              category: 'Groceries',
+              kind: null,
+              confidence: 0.9,
+            })),
+            provider: 'Fake AI',
+            model: 'fake-model-1',
+          }),
+        });
+        q<HTMLButtonElement>('[data-si="ai-suggest"]').click();
+        await flush();
+        expect(modal().querySelector('[data-si="ai-send"]')).toBeNull();
+        expect(q('[data-si="ai-panel"]').textContent).toContain('Turn on AI suggestions?');
+        q<HTMLButtonElement>('[data-si="ai-consent"]').click();
+        await flush();
+        expect(puts).toEqual([{ ai_enabled: true }]);
+        expect(writes()).toEqual([
+          'POST /api/smart-import/preview',
+          'PUT /api/smart-import/settings',
+          'POST /api/smart-import/categorize',
+        ]);
+      });
+
+      it('writes nothing when consent is declined', async () => {
+        await toCategorize(mixed(), { ai: { ...aiOn, ai_enabled: false } });
+        q<HTMLButtonElement>('[data-si="ai-suggest"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="ai-cancel"]').click();
+        await flush();
+        expect(modal().querySelector('[data-si="ai-panel"]')).toBeNull();
+        expect(writes()).toEqual(['POST /api/smart-import/preview']);
+      });
+
+      it('does not send when saving consent fails', async () => {
+        await toCategorize(mixed(), {
+          ai: { ...aiOn, ai_enabled: false },
+          settingsPut: () => {
+            throw new ApiError(500, 'secret detail');
+          },
+        });
+        q<HTMLButtonElement>('[data-si="ai-suggest"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="ai-consent"]').click();
+        await flush();
+        expect(writes()).toEqual([
+          'POST /api/smart-import/preview',
+          'PUT /api/smart-import/settings',
+        ]);
+        expect(modal().textContent).not.toContain('secret detail');
+        expect(q('.smart-import-ai .smart-import-error').textContent).toContain('nothing was sent');
+      });
+
+      it('never asks for consent or writes settings in hosted mode', async () => {
+        store.set('dataMode', 'local');
+        await toCategorize(mixed(), {
+          ai: { ...aiOn, ai_enabled: false },
+          categorize: (body) => ({
+            suggestions: body.items.map((i) => ({
+              id: i.id,
+              category: null,
+              kind: null,
+              confidence: 0,
+            })),
+            provider: 'Fake AI',
+            model: 'fake-model-1',
+          }),
+        });
+        q<HTMLButtonElement>('[data-si="ai-suggest"]').click();
+        await flush();
+        expect(modal().querySelector('[data-si="ai-consent"]')).toBeNull();
+        q<HTMLButtonElement>('[data-si="ai-send"]').click();
+        await flush();
+        expect(writes()).toEqual([
+          'POST /api/smart-import/preview',
+          'POST /api/smart-import/categorize',
+        ]);
+      });
+
+      for (const [status, errorType] of [
+        [503, 'ai_unavailable'],
+        [502, 'ai_bad_response'],
+      ] as const) {
+        it(`shows a fixed message on ${status} and leaves the rows untouched`, async () => {
+          const handle = await toCategorize(mixed(), {
+            ai: aiOn,
+            categorize: () => {
+              throw new ApiError(status, 'server detail text', {
+                error_type: errorType,
+                detail: 'server detail text',
+              });
+            },
+          });
+          const before = structuredClone(handle.getState().rows);
+          q<HTMLButtonElement>('[data-si="ai-suggest"]').click();
+          await flush();
+          q<HTMLButtonElement>('[data-si="ai-send"]').click();
+          await flush();
+          expect(handle.getState().rows).toEqual(before);
+          const alert = q('.smart-import-ai .smart-import-error');
+          expect(alert.getAttribute('role')).toBe('alert');
+          expect(alert.textContent).toContain('Your rows are unchanged.');
+          expect(modal().textContent).not.toContain('server detail text');
+        });
+      }
+
+      it('leaves rows untouched when a later chunk fails', async () => {
+        const many = Array.from({ length: 70 }, (_, i) =>
+          txn(i, { description: `SHOP ${i}`, merchant_key: `shop number ${i}` })
+        );
+        let n = 0;
+        const handle = await toCategorize(many, {
+          ai: aiOn,
+          categorize: (body) => {
+            if (++n === 2) throw new ApiError(502, 'x', { error_type: 'ai_provider_error' });
+            return {
+              suggestions: body.items.map((i) => ({
+                id: i.id,
+                category: 'Groceries',
+                kind: null,
+                confidence: 0.9,
+              })),
+              provider: 'Fake AI',
+              model: 'fake-model-1',
+            };
+          },
+        });
+        const before = structuredClone(handle.getState().rows);
+        q<HTMLButtonElement>('[data-si="ai-suggest"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="ai-send"]').click();
+        await flush();
+        expect(handle.getState().rows).toEqual(before);
+      });
+
+      it('disables Suggest when no merchant is left to send', async () => {
+        await toCategorize([mixed()[0]!, mixed()[3]!], { ai: aiOn });
+        expect(q<HTMLButtonElement>('[data-si="ai-suggest"]').disabled).toBe(true);
+      });
+    });
+
+    it('renders 200 rows at a time with "Show more"', async () => {
+      const many = Array.from({ length: 450 }, (_, i) =>
+        txn(i, { description: `SHOP ${i}`, merchant_key: `shop number ${i}` })
+      );
+      await toCategorize(many);
+      expect(rowEls()).toHaveLength(200);
+      const more = q<HTMLButtonElement>('[data-si="show-more"]');
+      expect(q('.smart-import-more').textContent).toContain('Showing 200 of 450');
+      more.click();
+      await flush();
+      expect(rowEls()).toHaveLength(400);
+      q<HTMLButtonElement>('[data-si="show-more"]').click();
+      await flush();
+      expect(rowEls()).toHaveLength(450);
+      expect(modal().querySelector('[data-si="show-more"]')).toBeNull();
+    });
+
+    it('moves between rows with the arrow keys and toggles selection with space', async () => {
+      await toCategorize();
+      const [first, second] = rowEls();
+      expect(first!.tabIndex).toBe(0);
+      expect(second!.tabIndex).toBe(-1);
+      first!.focus();
+      first!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(document.activeElement).toBe(rowEls()[1]);
+      const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+      rowEls()[1]!.dispatchEvent(space);
+      await flush();
+      expect(space.defaultPrevented).toBe(true);
+      expect(rowEls()[1]!.querySelector<HTMLInputElement>('[data-si="row-select"]')!.checked).toBe(
+        true
+      );
+      expect(rowEls()[1]!.getAttribute('aria-selected')).toBe('true');
+      expect(document.activeElement).toBe(rowEls()[1]);
+      rowEls()[1]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      expect(document.activeElement).toBe(rowEls()[0]);
+    });
+
+    it('leaves the arrow keys alone inside a select', async () => {
+      await toCategorize();
+      const sel = rowEls()[0]!.querySelector<HTMLSelectElement>('[data-si="category"]')!;
+      sel.focus();
+      const ev = new KeyboardEvent('keydown', {
+        key: 'ArrowDown',
+        bubbles: true,
+        cancelable: true,
+      });
+      sel.dispatchEvent(ev);
+      expect(ev.defaultPrevented).toBe(false);
+      expect(document.activeElement).toBe(sel);
+    });
+
+    it('turns the table into a card list on phones', () => {
+      const css = readFileSync(resolve(import.meta.dirname, '../../style.css'), 'utf8');
+      const start = css.indexOf('/* Smart import wizard: Categorize step */');
+      expect(start).toBeGreaterThan(-1);
+      const phone = css.slice(css.indexOf('@media (max-width: 768px)', start));
+      const block = phone.slice(0, phone.indexOf('\n}\n'));
+      expect(block).toMatch(/\.smart-import-table thead\s*\{[^}]*display:\s*none/);
+      expect(block).toMatch(/\.smart-import-table \.smart-import-row\s*\{[^}]*display:\s*grid/);
+    });
+
+    it('writes nothing to the data layer while editing', async () => {
+      await toCategorize();
+      change(rowFor('SAFEWAY #1').querySelector<HTMLSelectElement>('[data-si="category"]')!, 'c2');
+      await flush();
+      change(rowFor('SAFEWAY #1').querySelector<HTMLInputElement>('[data-si="row-select"]')!, true);
+      await flush();
+      q<HTMLButtonElement>('[data-si="bulk-exclude"]').click();
+      filterBtn('all').click();
+      await flush();
+      expect(writes()).toEqual(['POST /api/smart-import/preview']);
+    });
+
+    it('renders descriptions and merchants as text', async () => {
+      const evil = '<img src=x onerror=alert(1)>';
+      await toCategorize([txn(0, { description: evil, merchant_key: 'evil <b>shop</b>' })], {
+        ai: aiOn,
+      });
+      expect(modal().querySelector('img, b')).toBeNull();
+      expect(rowFor(evil)).toBeDefined();
+      q<HTMLButtonElement>('[data-si="ai-suggest"]').click();
+      await flush();
+      expect(modal().querySelector('img, b')).toBeNull();
+      expect(q('[data-si="ai-panel"]').textContent).toContain('evil <b>shop</b>');
+    });
+
+    it('Back returns to Accounts and Next moves on to step 4', async () => {
+      await toCategorize();
+      back().click();
+      await flush();
+      expect(q('.smart-import-progress-short').textContent).toBe('2 of 5');
+      next().click();
+      await flush();
+      expect(q('.smart-import-progress-short').textContent).toBe('3 of 5');
+      expect(next().disabled).toBe(false);
+      next().click();
+      await flush();
+      expect(q('.smart-import-progress-short').textContent).toBe('4 of 5');
     });
   });
 

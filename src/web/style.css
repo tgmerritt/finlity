@@ -8685,3 +8685,230 @@ body.on-settings #tab-settings {
     .smart-import-facts { grid-template-columns: 1fr; gap: 0; }
     .smart-import-facts dd { margin-bottom: 6px; }
 }
+
+/* Smart import wizard: Categorize step */
+.smart-import-ai { margin: 0 0 12px; }
+.smart-import-ai .smart-import-actions { margin: 0 0 8px; }
+.smart-import-sent {
+    margin: 8px 0 0;
+    padding: 12px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    background: var(--color-bg-elevated);
+}
+.smart-import-sent strong { color: var(--color-text-primary); }
+.smart-import-sent-scroll {
+    max-height: 240px;
+    overflow: auto;
+    margin: 8px 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+}
+.smart-import-sent-items { width: 100%; border-collapse: collapse; font-size: 13px; }
+.smart-import-sent-items th,
+.smart-import-sent-items td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+    color: var(--color-text-primary);
+    overflow-wrap: break-word;
+}
+.smart-import-sent-items th { position: sticky; top: 0; background: var(--color-bg-secondary); font-weight: 600; overflow-wrap: normal; }
+.smart-import-sent-items td:nth-child(2),
+.smart-import-sent-items td:nth-child(4) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.smart-import-sent-categories { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; padding: 0; list-style: none; }
+.smart-import-sent-categories li {
+    padding: 2px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--color-text-primary);
+}
+.smart-import-sent-details { margin: 0 0 8px; }
+.smart-import-sent-details summary { cursor: pointer; font-size: 13px; color: var(--color-primary); }
+.smart-import-sent-json {
+    max-height: 200px;
+    overflow: auto;
+    margin: 8px 0 0;
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.smart-import-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.smart-import-filter {
+    padding: 6px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+.smart-import-filter[aria-pressed="true"] { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.smart-import-filter:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.smart-import-table-wrap { overflow-x: auto; border: 1px solid var(--color-border); border-radius: var(--border-radius-sm); }
+.smart-import-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.smart-import-table th {
+    padding: 8px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    white-space: nowrap;
+}
+.smart-import-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+    vertical-align: middle;
+}
+.smart-import-table tbody tr:last-child td { border-bottom: 0; }
+.smart-import-table select,
+.smart-import-bulk select {
+    padding: 5px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-container);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+}
+.smart-import-table select:focus,
+.smart-import-bulk select:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-bg); }
+.smart-import-table select { width: 100%; max-width: 180px; }
+.smart-import-table select:disabled { opacity: 0.6; cursor: not-allowed; }
+.smart-import-row:focus { outline: none; }
+.smart-import-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.smart-import-table tbody tr.smart-import-row[aria-selected="true"] td { background: var(--color-primary-bg); }
+.smart-import-row.is-excluded td,
+.smart-import-row.is-duplicate td { color: var(--color-text-secondary); }
+.smart-import-row.is-excluded .smart-import-desc-text { text-decoration: line-through; }
+.smart-import-col-check { width: 36px; }
+.smart-import-col-check input { width: 18px; height: 18px; margin: 0; cursor: pointer; }
+.smart-import-col-date { white-space: nowrap; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+.smart-import-col-desc { min-width: 160px; overflow-wrap: anywhere; }
+.smart-import-table th.smart-import-col-amount,
+.smart-import-col-amount { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.smart-import-col-amount.is-in { color: var(--color-success); }
+.smart-import-empty td { padding: 16px; text-align: center; color: var(--color-text-secondary); }
+.smart-import-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--color-warning-bg);
+    color: var(--color-text-primary);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.smart-import-badge.is-muted { border: 1px solid var(--color-border); background: var(--color-bg-secondary); color: var(--color-text-secondary); }
+.smart-import-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.smart-import-chip.is-ai { border-color: var(--color-primary); background: var(--color-primary-bg); }
+.smart-import-chip.is-user { border-color: var(--color-success); background: var(--color-success-bg); }
+.smart-import-chip.is-review { border-color: var(--color-warning); background: var(--color-warning-bg); }
+.smart-import-more { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 12px 0 0; }
+.smart-import-more:empty { display: none; }
+.smart-import-bulk {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    display: grid;
+    gap: 8px;
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-elevated);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.12);
+}
+.smart-import-bulk-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.smart-import-bulk-count { margin-right: auto; font-size: 13px; color: var(--color-text-secondary); }
+.smart-import-bulk select { width: auto; max-width: 180px; }
+.smart-import-bulk select:disabled,
+.smart-import-bulk .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.smart-import-remember { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-text-primary); overflow-wrap: anywhere; cursor: pointer; }
+.smart-import-remember input { width: 18px; height: 18px; margin: 0; flex: none; }
+
+@media (max-width: 1024px) {
+    .smart-import-table select { max-width: 150px; }
+}
+
+@media (max-width: 768px) {
+    .smart-import-filter { min-height: 44px; }
+    .smart-import-table-wrap { overflow: visible; border: 0; border-radius: 0; }
+    .smart-import-table,
+    .smart-import-table tbody { display: block; }
+    .smart-import-table thead { display: none; }
+    .smart-import-table .smart-import-row {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr) auto;
+        grid-template-areas:
+            "check desc amount"
+            "check category source"
+            "check date kind";
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 8px;
+        padding: 12px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius-sm);
+        background: var(--color-bg-elevated);
+    }
+    .smart-import-table tbody tr.smart-import-row td,
+    .smart-import-table tbody tr.smart-import-row[aria-selected="true"] td { display: block; padding: 0; border: 0; background: none; min-width: 0; }
+    .smart-import-table .smart-import-row[aria-selected="true"] { background: var(--color-primary-bg); border-color: var(--color-primary); }
+    .smart-import-row .smart-import-col-check { grid-area: check; align-self: start; width: auto; }
+    .smart-import-row .smart-import-col-check input { width: 22px; height: 22px; }
+    .smart-import-row .smart-import-col-desc { grid-area: desc; font-weight: 600; }
+    .smart-import-row .smart-import-col-amount { grid-area: amount; }
+    .smart-import-row .smart-import-col-category { grid-area: category; }
+    .smart-import-row .smart-import-col-source { grid-area: source; justify-self: end; }
+    .smart-import-row .smart-import-col-date { grid-area: date; font-size: 13px; }
+    .smart-import-row .smart-import-col-kind { grid-area: kind; justify-self: end; }
+    .smart-import-table select { max-width: none; min-height: 44px; font-size: 16px; }
+    .smart-import-row .smart-import-col-kind select { width: auto; }
+    .smart-import-empty { display: block; }
+    .smart-import-empty td { display: block; }
+    .smart-import-bulk select { flex: 1 1 140px; max-width: none; min-height: 44px; font-size: 16px; }
+    .smart-import-bulk .btn { min-height: 44px; font-size: 14px; }
+    .smart-import-bulk-count { flex-basis: 100%; }
+    .smart-import-bulk.is-empty select,
+    .smart-import-bulk.is-empty .btn:disabled { display: none; }
+    .smart-import-remember { min-height: 44px; }
+}
+
+@media (max-width: 480px) {
+    .smart-import-table .smart-import-row {
+        grid-template-columns: 28px minmax(0, 1fr) auto;
+        grid-template-areas:
+            "check desc amount"
+            "check category category"
+            "check date date"
+            "check kind source";
+    }
+    .smart-import-row .smart-import-col-kind { justify-self: start; }
+    .smart-import-sent { padding: 12px; }
+    .smart-import-sent-items th,
+    .smart-import-sent-items td { padding: 6px 8px; }
+    .smart-import-bulk .btn { flex: 1 1 auto; }
+}

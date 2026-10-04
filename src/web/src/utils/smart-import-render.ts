@@ -5,8 +5,8 @@
  */
 
 import { formatCurrency, formatDate } from '@/utils/format';
-import type { SmartImportAccountKind } from '@/types/api';
-import type { WizardStatement } from '@/utils/smart-import-state';
+import type { CategorizeRequest, SmartImportAccountKind, SmartImportTxnKind } from '@/types/api';
+import type { WizardRow, WizardStatement } from '@/utils/smart-import-state';
 
 export const ACCEPT = '.csv,.ofx,.qfx,.pdf';
 export const MAX_FILES = 12;
@@ -218,4 +218,121 @@ export function guessMapping(headers: readonly string[]): Record<string, string>
 export function mappingComplete(mapping: Record<string, string>): boolean {
   const has = (k: string): boolean => !!mapping[k];
   return has('date') && has('description') && (has('amount') || (has('debit') && has('credit')));
+}
+
+// ---------------------------------------------------------------- categorize
+
+export const PAGE_ROWS = 200;
+
+export const TXN_KIND_CHOICES: readonly { value: SmartImportTxnKind; label: string }[] = [
+  { value: 'expense', label: 'Expense' },
+  { value: 'refund', label: 'Refund' },
+  { value: 'fee', label: 'Fee' },
+  { value: 'interest', label: 'Interest' },
+  { value: 'income', label: 'Income' },
+  { value: 'transfer', label: 'Transfer' },
+  { value: 'payment', label: 'Payment' },
+];
+
+/** Kinds that carry a category (design 6.1); the others are not spending. */
+export function isSpendingKind(kind: SmartImportTxnKind): boolean {
+  return kind === 'expense' || kind === 'fee' || kind === 'interest' || kind === 'refund';
+}
+
+/** The source chip: Rule, Built-in, AI with its percent, You; none for an empty row. */
+export function sourceChipText(row: Pick<WizardRow, 'category_source' | 'ai_confidence'>): string {
+  switch (row.category_source) {
+    case 'rule':
+      return 'Rule';
+    case 'seed':
+      return 'Built-in';
+    case 'ai':
+      return `AI ${Math.round((row.ai_confidence ?? 0) * 100)}%`;
+    case 'user':
+      return 'You';
+    default:
+      return '';
+  }
+}
+
+/** Fixed copy for a failed categorize call; the server's text is never shown. */
+export function categorizeErrorText(status: number, errorType?: string): string {
+  if (errorType === 'ai_not_enabled') status = 403;
+  else if (errorType === 'ai_unavailable') status = 503;
+  if (status === 403) return 'AI suggestions are turned off. Your rows are unchanged.';
+  if (status === 503) return 'AI suggestions are not available right now. Your rows are unchanged.';
+  return 'The AI service could not suggest categories this time. Your rows are unchanged.';
+}
+
+/**
+ * The "What gets sent" disclosure (design 6.2). It renders the request object it
+ * is given and nothing else, as a readable table and as the exact JSON, so it
+ * cannot drift from what is posted.
+ */
+export function whatGetsSentPanel(
+  request: CategorizeRequest,
+  provider: string,
+  model: string
+): HTMLElement {
+  const panel = el('section', 'smart-import-sent');
+  panel.setAttribute('data-si', 'ai-panel');
+  panel.setAttribute('aria-label', 'What gets sent');
+  panel.appendChild(el('h4', 'smart-import-card-title', 'What gets sent'));
+
+  const to = el('p', 'smart-import-hint');
+  to.append(
+    'Sent to ',
+    el('strong', undefined, provider),
+    ' (model ',
+    el('span', undefined, model),
+    '). Finlity’s server passes it on and does not store or log it.'
+  );
+  to.querySelector('strong')!.setAttribute('data-si', 'ai-provider');
+  to.querySelector('span')!.setAttribute('data-si', 'ai-model');
+  panel.appendChild(to);
+  panel.appendChild(
+    el(
+      'p',
+      'smart-import-hint',
+      'One line per merchant that has no category yet: the merchant as read from the statement, a typical amount rounded to whole dollars, money in or out, and how many times it appears. No dates, descriptions, balances, account details or file names are sent.'
+    )
+  );
+
+  const wrap = el('div', 'smart-import-sent-scroll');
+  const table = el('table', 'smart-import-sent-items');
+  const head = el('tr');
+  for (const h of ['Merchant', 'Typical amount', 'Direction', 'Count']) {
+    const th = el('th', undefined, h);
+    th.scope = 'col';
+    head.appendChild(th);
+  }
+  table.appendChild(el('thead')).appendChild(head);
+  const tbody = el('tbody');
+  for (const item of request.items) {
+    const tr = el('tr');
+    tr.setAttribute('data-id', item.id);
+    tr.append(
+      el('td', undefined, item.merchant),
+      el('td', undefined, `$${item.typical_amount.toLocaleString('en-US')}`),
+      el('td', undefined, item.direction === 'in' ? 'Money in' : 'Money out'),
+      el('td', undefined, String(item.count))
+    );
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  panel.appendChild(wrap);
+
+  panel.appendChild(
+    el('p', 'smart-import-hint', 'Your category names are sent so the AI can choose from them:')
+  );
+  const cats = el('ul', 'smart-import-sent-categories');
+  for (const name of request.categories) cats.appendChild(el('li', undefined, name));
+  panel.appendChild(cats);
+
+  const details = el('details', 'smart-import-sent-details');
+  details.appendChild(el('summary', undefined, 'Show the exact request'));
+  details.appendChild(el('pre', 'smart-import-sent-json', JSON.stringify(request, null, 2)));
+  panel.appendChild(details);
+  return panel;
 }
