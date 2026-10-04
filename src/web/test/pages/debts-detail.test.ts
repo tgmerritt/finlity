@@ -416,16 +416,17 @@ describe('Debts page actions', () => {
     expect(calls('DELETE')).toHaveLength(0);
   });
 
-  it('opens the plain add form from the Add button and from the empty state', async () => {
+  it('opens the wizard from the Add button and from the empty state', async () => {
     setup([debt({})]);
     await loadDebts();
     buttonIn(document.getElementById('debts-list')!, 'Add a debt').click();
-    expect(modal().querySelector('h2')?.textContent).toBe('Add a debt');
+    await vi.waitFor(() => expect(modal().classList.contains('debt-wizard-modal')).toBe(true));
+    expect(modal().querySelectorAll('[data-debt-type]')).toHaveLength(7);
     closeDynamicModal();
     setup([]);
     await loadDebts();
     buttonIn(document.getElementById('debts-list')!, 'Add a debt').click();
-    expect(modal().querySelector('h2')?.textContent).toBe('Add a debt');
+    await vi.waitFor(() => expect(modal().classList.contains('debt-wizard-modal')).toBe(true));
   });
 
   it('opens the edit form from a card', async () => {

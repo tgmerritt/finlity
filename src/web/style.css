@@ -7072,6 +7072,20 @@ th.sortable.sort-desc .sort-icon::after {
     font-variant-numeric: tabular-nums;
     color: var(--color-text-primary);
 }
+.account-group-link {
+    margin-top: 8px;
+    padding: 8px 0;
+    min-height: 36px;
+    background: none;
+    border: 0;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-primary);
+    cursor: pointer;
+    text-align: left;
+}
+.account-group-link:hover { text-decoration: underline; }
 .attention-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .account-row:hover { background: var(--color-bg-spotlight); }
 .account-row-name { overflow-wrap: anywhere; }
@@ -8389,4 +8403,36 @@ body.on-settings #tab-settings {
 
 @media (max-width: 480px) {
     .debt-wizard-types { grid-template-columns: 1fr; }
+}
+
+/* Debt wizard: review and success */
+.debt-review-grid { margin: 0 0 12px; display: grid; gap: 0; }
+.debt-review-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+    font-variant-numeric: tabular-nums;
+}
+.debt-review-row dt { color: var(--color-text-secondary); margin: 0; }
+.debt-review-row dd { margin: 0; color: var(--color-text-primary); font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.debt-review-spark { margin: 0 0 16px; color: var(--color-primary); }
+.debt-review-spark-svg { display: block; width: 100%; height: 48px; }
+.debt-review-spark-svg polyline { stroke: currentColor; }
+.debt-review-warning {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-error);
+    border-radius: 6px;
+    color: var(--color-error);
+    font-size: 14px;
+    line-height: 1.4;
+}
+.debt-wizard-success { margin: 0; color: var(--color-text-primary); line-height: 1.5; overflow-wrap: anywhere; }
+.debt-wizard-cashflow .form-group select { width: 100%; box-sizing: border-box; min-height: 40px; }
+
+@media (max-width: 768px) {
+    .debt-wizard-cashflow .form-group select { font-size: 16px; min-height: 44px; }
+    .debt-wizard-footer .btn { white-space: normal; }
 }

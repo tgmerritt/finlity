@@ -15,6 +15,7 @@ import {
   submitOnEnter,
 } from '@/features/debt-form';
 import { store, subscribe } from '@/state/store';
+import { openDebtWizardLazy } from '@/utils/debt-wizard-launcher';
 import { on, emit } from '@/state/events';
 import { createDynamicModal, closeDynamicModal } from '@/ui/modal';
 import { onThemeChange } from '@/state/theme';
@@ -291,9 +292,12 @@ function find(id: string): LiabilityResponse | undefined {
   return (all ?? []).find((d) => d.id === id);
 }
 
-/** PR C swaps the plain form for the wizard here. */
+/**
+ * Adding goes through the wizard; Edit keeps the plain form. The wizard emits
+ * liabilities:changed itself, which reloads this page and the dashboard.
+ */
 function openAdd(): void {
-  openDebtForm({ entities: store.get('entities'), onSaved: () => afterWrite('added') });
+  void openDebtWizardLazy();
 }
 
 function openEdit(d: LiabilityResponse, reopen = false): void {

@@ -1,24 +1,45 @@
 /**
- * Guided "Add a debt" wizard: pick a type (step 1), then answer that type's
- * questions (step 2). Review and save (steps 3 and 4) hook in through
- * `onDetails`. Field rendering, defaults and validation come from the shared
- * debt modules; this file owns the steps, footer and discard prompt.
+ * Guided "Add a debt" wizard: pick a type (1), answer that type's questions
+ * (2), review the payoff picture and choose how it reaches Cash flow (3), then
+ * save with one POST /api/liabilities and offer another (4). Field rendering,
+ * defaults and validation come from the shared debt modules; this file owns the
+ * steps, footer and discard prompt.
  *
  * All values go into the DOM with textContent or element properties.
  */
 
 import { apiCall } from '@/api/client';
 import { createDynamicModal, closeDynamicModal } from '@/ui/modal';
-import { applyFieldErrors, buildDebtFields, type DebtFieldsHandle } from '@/features/debt-form';
+import { emit } from '@/state/events';
+import { withSubmitGuard } from '@/ui/with-submit-guard';
+import {
+  applyFieldErrors,
+  buildDebtFields,
+  debtErrorMessage,
+  showFormError,
+  type DebtFieldsHandle,
+} from '@/features/debt-form';
+import { today } from '@/utils/clock';
+import { formatCurrency, formatDate } from '@/utils/format';
 import {
   DEBT_TYPES,
   defaultsFor,
   switchType,
+  toCreateInput,
   validateDraft,
   type DebtDraft,
 } from '@/utils/debt-fields';
+import { effectivePayment, reviewDebt, suggestExpense, type DebtReview } from '@/utils/debt-review';
 import { LIABILITY_TYPE_LABELS } from '@/utils/liabilities';
-import type { Entity, LiabilityType, PositionResponse } from '@/types/api';
+import type {
+  CreateLiabilityInput,
+  Entity,
+  Expense,
+  LiabilityFrequency,
+  LiabilityResponse,
+  LiabilityType,
+  PositionResponse,
+} from '@/types/api';
 
 const STEP_COUNT = 4;
 
@@ -65,6 +86,8 @@ export interface OpenDebtWizardOptions {
   entities?: readonly Entity[];
   /** Called with the validated details when the person presses Next on step 2. */
   onDetails?: (state: WizardState) => void;
+  /** Called after the debt is saved, with the server's response. */
+  onSaved?: (saved: LiabilityResponse) => void | Promise<void>;
   /**
    * Reserved for the conversion dialog: called with a tracked home's position id
    * when the person chooses "Already tracking this home? Pick it" in the mortgage
@@ -78,6 +101,16 @@ export interface DebtWizardHandle {
   /** Close the wizard without the discard prompt and remove its listeners. */
   close: () => void;
 }
+
+export type CashMode = 'create' | 'link' | 'none';
+
+const FREQUENCY_WORD: Record<LiabilityFrequency, string> = {
+  weekly: 'week',
+  biweekly: '2 weeks',
+  monthly: 'month',
+  quarterly: 'quarter',
+  annual: 'year',
+};
 
 const blankHome = (): WizardHome => ({
   mode: 'add',
@@ -137,6 +170,13 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
   let homeTouched = false;
   let positions: PositionResponse[] | null = null;
   let positionsFailed = false;
+  let saved = false;
+  let cash: { mode: CashMode; expenseId: string } = { mode: 'none', expenseId: '' };
+  let cashTouched = false;
+  let paidInFull = true;
+  let expenses: Expense[] | null = null;
+  let takenExpenseIds = new Set<string>();
+  let expensesLoad: Promise<void> | null = null;
   let positionsLoad: Promise<void> | null = null;
 
   const shell = el('div', 'debt-wizard');
@@ -158,7 +198,7 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
 
   /** Anything typed beyond choosing a type. */
   const isDirty = (): boolean => {
-    if (chosen === null) return false;
+    if (chosen === null || saved) return false;
     syncFromDom();
     const base = defaultsFor(chosen);
     const changed = (Object.keys(base) as (keyof DebtDraft)[]).some(
@@ -266,17 +306,34 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
 
   function renderFooter(): void {
     footer.textContent = '';
+    if (state.step === 4) {
+      const another = button('Add another debt', 'btn btn-secondary', 'another');
+      const done = button('Done', 'btn btn-primary', 'done');
+      another.addEventListener('click', startOver);
+      done.addEventListener('click', () => {
+        detach();
+        closeDynamicModal();
+      });
+      footer.append(another, done);
+      return;
+    }
     const left =
       state.step === 1
         ? button('Cancel', 'btn btn-secondary', 'cancel')
         : button('Back', 'btn btn-secondary', 'back');
-    const right = button('Next', 'btn btn-primary', 'next');
+    const right =
+      state.step === 3
+        ? button('Save debt', 'btn btn-primary', 'save')
+        : button('Next', 'btn btn-primary', 'next');
     right.disabled = state.step === 1 && chosen === null;
     left.addEventListener('click', () => {
       if (state.step === 1) requestClose();
       else goBack();
     });
-    right.addEventListener('click', goNext);
+    right.addEventListener('click', () => {
+      if (state.step === 3) void save(right);
+      else goNext();
+    });
     footer.append(left, right);
   }
 
@@ -505,7 +562,27 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
       syncFromDom();
       fields = null;
       renderTypeStep();
+    } else if (state.step === 3) {
+      renderDetailsStep();
     }
+  }
+
+  function startOver(): void {
+    chosen = null;
+    fields = null;
+    saved = false;
+    homeTouched = false;
+    positions = null;
+    positionsLoad = null;
+    positionsFailed = false;
+    cash = { mode: 'none', expenseId: '' };
+    cashTouched = false;
+    paidInFull = true;
+    expenses = null;
+    expensesLoad = null;
+    state.draft = defaultsFor('mortgage');
+    state.home = blankHome();
+    renderTypeStep();
   }
 
   function goNext(): void {
@@ -527,12 +604,310 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
       };
     }
     options.onDetails?.(state);
+    renderReviewStep();
+  }
+
+  // ---- step 3: review -------------------------------------------------
+
+  function loadExpenses(): Promise<void> {
+    expensesLoad ??= (async (): Promise<void> => {
+      try {
+        const [list, debts] = await Promise.all([
+          apiCall<Expense[]>('/api/budget/expenses'),
+          apiCall<LiabilityResponse[]>('/api/liabilities').catch(() => [] as LiabilityResponse[]),
+        ]);
+        expenses = Array.isArray(list) ? list : [];
+        takenExpenseIds = new Set(
+          (Array.isArray(debts) ? debts : []).flatMap((d) => (d.expense_id ? [d.expense_id] : []))
+        );
+      } catch (error) {
+        console.error('Expenses load failed:', error instanceof Error ? error.name : 'error');
+        expenses = [];
+      }
+    })();
+    return expensesLoad;
+  }
+
+  const freeExpenses = (): Expense[] =>
+    (expenses ?? []).filter((e) => e.is_active !== false && !takenExpenseIds.has(e.id));
+
+  function row(grid: HTMLElement, label: string, value: string): void {
+    const wrap = el('div', 'debt-review-row');
+    wrap.append(el('dt', undefined, label), el('dd', undefined, value));
+    grid.appendChild(wrap);
+  }
+
+  function sparkline(balances: number[]): SVGSVGElement {
+    const ns = 'http://www.w3.org/2000/svg';
+    const w = 300;
+    const hgt = 48;
+    const max = Math.max(...balances, 1);
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${w} ${hgt}`);
+    svg.setAttribute('class', 'debt-review-spark-svg');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.setAttribute('aria-hidden', 'true');
+    const points = balances
+      .map((b, i) => {
+        const x = (i / Math.max(1, balances.length - 1)) * w;
+        const y = hgt - 2 - (b / max) * (hgt - 4);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(' ');
+    const line = document.createElementNS(ns, 'polyline');
+    line.setAttribute('points', points);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(line);
+    return svg;
+  }
+
+  function monthlyOf(review: DebtReview): number | null {
+    return review.monthlyCashFlow;
+  }
+
+  /** The cash flow choice: radios plus an expense picker, rendered once expenses are known. */
+  function renderCash(host: HTMLElement, review: DebtReview): void {
+    host.textContent = '';
+    host.appendChild(el('legend', 'debt-wizard-legend', 'Cash flow'));
+    const type = state.draft.liabilityType;
+    const monthly = monthlyOf(review);
+    if (type === 'credit_card') {
+      const row = el('label', 'debt-wizard-choice');
+      const box = el('input');
+      box.type = 'checkbox';
+      box.checked = paidInFull;
+      box.setAttribute('data-wizard', 'paid-in-full');
+      box.addEventListener('change', () => {
+        paidInFull = box.checked;
+        cashTouched = false;
+        renderCash(host, review);
+      });
+      row.append(box, el('span', undefined, 'I pay this card in full each month'));
+      host.appendChild(row);
+      if (paidInFull) {
+        cash = { mode: 'none', expenseId: '' };
+        host.appendChild(
+          el(
+            'p',
+            'debt-field-hint',
+            'Your spending is already in your budget, so nothing is added to Cash flow.'
+          )
+        );
+        return;
+      }
+    }
+    if (expenses === null) {
+      host.appendChild(el('p', 'debt-field-hint', 'Checking your budget...'));
+      return;
+    }
+    if (monthly === null) {
+      cash = { mode: 'none', expenseId: '' };
+      host.appendChild(
+        el(
+          'p',
+          'debt-field-hint',
+          'Add a payment on the previous step to include this debt in Cash flow.'
+        )
+      );
+      return;
+    }
+    const free = freeExpenses();
+    const suggestion = suggestExpense(free, type, monthly);
+    if (!cashTouched) {
+      cash = suggestion
+        ? { mode: 'link', expenseId: suggestion.id }
+        : { mode: 'create', expenseId: '' };
+    }
+    if (cash.mode === 'link' && !cash.expenseId) cash.expenseId = (suggestion ?? free[0])?.id ?? '';
+    const choices: [CashMode, string, boolean][] = [
+      ['create', `Add ${formatCurrency(monthly)} a month to Cash flow`, true],
+      ['link', 'Link an expense I already track', free.length > 0],
+      ['none', 'Do not add this to Cash flow', true],
+    ];
+    for (const [mode, label, enabled] of choices) {
+      const wrap = el('label', 'debt-wizard-choice');
+      const radio = el('input');
+      radio.type = 'radio';
+      radio.name = 'debt-cash-mode';
+      radio.setAttribute('data-cash-mode', mode);
+      radio.checked = cash.mode === mode;
+      radio.disabled = !enabled;
+      radio.addEventListener('change', () => {
+        cash.mode = mode;
+        cashTouched = true;
+        renderCash(host, review);
+        host.querySelector<HTMLElement>(`[data-cash-mode="${mode}"]`)?.focus();
+      });
+      wrap.append(radio, el('span', undefined, label));
+      host.appendChild(wrap);
+    }
+    if (cash.mode === 'link') {
+      const group = el('div', 'form-group');
+      const l = el('label', undefined, 'Expense');
+      l.htmlFor = 'debt-field-cashExpenseId';
+      const select = el('select');
+      select.id = 'debt-field-cashExpenseId';
+      select.setAttribute('data-debt-field', 'cashExpenseId');
+      for (const e of free) {
+        const o = el(
+          'option',
+          undefined,
+          `${e.name} (${formatCurrency(e.monthly_amount)} a month)`
+        );
+        o.value = e.id;
+        select.appendChild(o);
+      }
+      select.value = cash.expenseId;
+      select.addEventListener('change', () => {
+        cash.expenseId = select.value;
+        cashTouched = true;
+      });
+      group.append(l, select);
+      host.appendChild(group);
+    }
+  }
+
+  function renderReviewStep(): void {
+    const review = reviewDebt(state.draft, today());
+    const h = setStep(3, 'Review your debt');
+    const wrap = el('div', 'debt-review');
+    const grid = el('dl', 'debt-review-grid');
+    const freq = state.draft.paymentFrequency;
+    row(grid, 'Balance', formatCurrency(Number(state.draft.currentBalance.replace(/[$,\s]/g, ''))));
+    if (review.payment !== null) {
+      row(
+        grid,
+        'Payment',
+        `${formatCurrency(review.payment)} per ${FREQUENCY_WORD[freq]}${review.paymentCalculated ? ' (calculated)' : ''}`
+      );
+    }
+    if (review.projected && !review.neverPaysOff) {
+      const fmt = (v: number | null): string => formatCurrency(v ?? 0);
+      row(
+        grid,
+        'Payoff date',
+        formatDate(review.payoffDate, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          timeZone: 'UTC',
+        })
+      );
+      row(grid, 'Payments left', String(review.paymentsLeft ?? 0));
+      row(grid, 'Total interest left', fmt(review.totalInterestLeft));
+      row(
+        grid,
+        'Paid this year',
+        `${formatCurrency(review.yearPrincipal)} principal, ${formatCurrency(review.yearInterest)} interest`
+      );
+    }
+    wrap.appendChild(grid);
+    if (review.neverPaysOff) {
+      const warn = el(
+        'p',
+        'debt-review-warning',
+        'At this payment the debt never pays off: the payment does not cover the interest. Go back and raise the payment or shorten the term.'
+      );
+      warn.setAttribute('role', 'alert');
+      wrap.appendChild(warn);
+    } else if (!review.projected) {
+      wrap.appendChild(
+        el(
+          'p',
+          'debt-field-hint',
+          'Add a payment and a term to see a payoff estimate. This debt still counts against your net worth.'
+        )
+      );
+    }
+    if (review.balances.length >= 2) {
+      const spark = el('div', 'debt-review-spark');
+      spark.appendChild(sparkline(review.balances));
+      wrap.appendChild(spark);
+    }
+    const cashHost = el('fieldset', 'debt-wizard-home debt-wizard-cashflow');
+    wrap.appendChild(cashHost);
+    body.appendChild(wrap);
+    const save = footer.querySelector<HTMLButtonElement>('[data-wizard="save"]');
+    if (save) save.disabled = review.neverPaysOff;
+    renderCash(cashHost, review);
+    if (expenses === null) {
+      void loadExpenses().then(() => {
+        if (cashHost.isConnected) renderCash(cashHost, review);
+      });
+    }
+    h.focus();
+  }
+
+  // ---- step 3 to 4: save ----------------------------------------------
+
+  const parseMoney = (raw: string): number => Number(raw.replace(/[$,\s]/g, ''));
+
+  function buildInput(): CreateLiabilityInput | null {
+    const draft = { ...state.draft };
+    const { payment } = effectivePayment(draft);
+    if (payment !== null && draft.paymentAmount.trim() === '')
+      draft.paymentAmount = String(payment);
+    const base = toCreateInput(draft);
+    if (!base) return null;
+    const input: CreateLiabilityInput = { ...base, source: 'wizard' };
+    if (draft.liabilityType === 'mortgage') {
+      const home = state.home;
+      if (home.mode === 'pick' && home.positionId) {
+        input.property = { mode: 'link', position_id: home.positionId };
+      } else if (home.mode === 'add') {
+        input.property = {
+          mode: 'create',
+          name: home.name.trim(),
+          value: parseMoney(home.value),
+          ...(home.purchasePrice.trim() ? { cost_basis: parseMoney(home.purchasePrice) } : {}),
+          ...(home.purchaseDate ? { purchase_date: home.purchaseDate } : {}),
+        };
+      }
+      // The property block links the home itself.
+      if (input.property) delete input.linked_position_id;
+    }
+    const noFlow = draft.liabilityType === 'credit_card' && paidInFull;
+    if (noFlow || cash.mode === 'none') input.cash_flow = { mode: 'none' };
+    else if (cash.mode === 'link' && cash.expenseId) {
+      input.cash_flow = { mode: 'link', expense_id: cash.expenseId };
+    } else if (cash.mode === 'create') input.cash_flow = { mode: 'create' };
+    else input.cash_flow = { mode: 'none' };
+    return input;
+  }
+
+  async function save(btn: HTMLButtonElement): Promise<void> {
+    const input = buildInput();
+    if (!input) return;
+    try {
+      const result = await withSubmitGuard(btn, 'Saving...', () =>
+        apiCall<LiabilityResponse>('/api/liabilities', { method: 'POST', body: input })
+      );
+      saved = true;
+      emit({ type: 'liabilities:changed', reason: 'added' });
+      await options.onSaved?.(result);
+      renderSuccess(result);
+    } catch (error) {
+      console.error('Debt save failed:', error instanceof Error ? error.name : 'error');
+      showFormError(body, debtErrorMessage(error));
+    }
+  }
+
+  // ---- step 4: success ------------------------------------------------
+
+  function renderSuccess(result: LiabilityResponse): void {
+    const h = setStep(4, 'Debt added');
+    const text = el('p', 'debt-wizard-success');
+    text.textContent = `${result.name || 'Your debt'} is saved and now counts against your net worth.`;
+    body.appendChild(text);
+    h.focus();
   }
 
   renderTypeStep();
   return {
     modal,
-    close: () => {
+    close: (): void => {
       detach();
       closeDynamicModal();
     },

@@ -27,7 +27,8 @@ vi.mock('@/ui/toast', () => ({
   showInfo: vi.fn(),
 }));
 
-import { apiCall } from '@/api/client';
+import { apiCall, ApiError } from '@/api/client';
+import { on } from '@/state/events';
 import { closeDynamicModal } from '@/ui/modal';
 import { openDebtWizard, type WizardState } from '@/features/debt-wizard';
 import { DEBT_TYPES, defaultsFor, fieldsFor } from '@/utils/debt-fields';
@@ -338,6 +339,7 @@ describe('debt wizard', () => {
       expect(state.home.mode).toBe('pick');
       expect(state.draft.linkedPositionId).toBe('pos1');
 
+      back().click();
       modal().querySelector<HTMLInputElement>('[data-home-mode="skip"]')!.click();
       next().click();
       state = onDetails.mock.calls[1]![0] as WizardState;
@@ -479,5 +481,264 @@ describe('debt wizard', () => {
     const css = readFileSync(resolve(__dirname, '../../style.css'), 'utf8');
     // The stylesheet has older em-dashes in comments; check only this feature's block.
     expect(css.split('/* Debt wizard')[1]).not.toContain(String.fromCharCode(0x2014));
+  });
+});
+
+describe('debt wizard review and save', () => {
+  const expense = (id: string, name: string, monthly: number) => ({
+    id,
+    name,
+    amount: monthly,
+    monthly_amount: monthly,
+    frequency: 'monthly',
+    is_active: true,
+  });
+  let expenses: ReturnType<typeof expense>[];
+  let posts: { url: string; body: Record<string, unknown> }[];
+  let postResult: () => Promise<unknown>;
+
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    expenses = [expense('e1', 'Groceries', 900)];
+    posts = [];
+    postResult = async () => ({ id: 'new1', name: 'Home loan' });
+    apiCallMock.mockReset();
+    apiCallMock.mockImplementation(
+      async (url: string, opts?: { method?: string; body?: unknown }) => {
+        if (opts?.method === 'POST') {
+          posts.push({ url, body: opts.body as Record<string, unknown> });
+          return postResult();
+        }
+        if (url === '/api/portfolio/positions') return [position({})];
+        if (url === '/api/budget/expenses') return expenses;
+        if (url === '/api/liabilities') return [];
+        return {};
+      }
+    );
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 4, 12, 0, 0));
+  });
+  afterEach(() => {
+    closeDynamicModal();
+    vi.useRealTimers();
+  });
+
+  const saveBtn = (): HTMLButtonElement => modal().querySelector('[data-wizard="save"]')!;
+  const cash = (mode: string): HTMLInputElement =>
+    modal().querySelector<HTMLInputElement>(`[data-cash-mode="${mode}"]`)!;
+  const progress = (): string => modal().querySelector('.debt-wizard-progress')?.textContent ?? '';
+
+  async function toReview(
+    t: LiabilityType,
+    values: Record<string, string>,
+    prep?: () => void
+  ): Promise<void> {
+    await toStep2(t);
+    await flush();
+    prep?.();
+    for (const [k, v] of Object.entries(values)) type(k, v);
+    next().click();
+    await flush();
+    await flush();
+  }
+
+  it('shows payoff, payments left, interest and this year from the shared math', async () => {
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    expect(progress()).toBe('Step 3 of 4');
+    expect(document.activeElement).toBe(heading());
+    const text = modal().querySelector('.debt-review')!.textContent!;
+    expect(text).toContain('Payoff date');
+    expect(text).toContain('Payments left');
+    expect(text).toContain('Total interest left');
+    expect(text).toContain('Paid this year');
+    expect(text).toContain('$396.02');
+    expect(saveBtn().disabled).toBe(false);
+    expect(modal().querySelector('.debt-review-spark svg')).not.toBeNull();
+  });
+
+  it('blocks Save when the payment never pays the debt off', async () => {
+    await toReview(
+      'mortgage',
+      {
+        name: 'Home loan',
+        currentBalance: '300000',
+        aprPercent: '6.5',
+        paymentAmount: '1000',
+        homeName: 'House',
+        homeValue: '400000',
+      },
+      () => {
+        modal().querySelector<HTMLInputElement>('[data-home-mode="add"]')!.click();
+      }
+    );
+    expect(modal().querySelector('.debt-review-warning')?.textContent).toContain('never pays off');
+    expect(saveBtn().disabled).toBe(true);
+    saveBtn().click();
+    await flush();
+    expect(posts).toHaveLength(0);
+  });
+
+  it('defaults cash flow to linking an expense found by name, else by amount, else create', async () => {
+    expenses = [expense('e1', 'Groceries', 900), expense('e2', 'Car Payment #1', 400)];
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    expect(cash('link').checked).toBe(true);
+    expect(field<HTMLSelectElement>('cashExpenseId').value).toBe('e2');
+    closeDynamicModal();
+
+    expenses = [expense('e1', 'Groceries', 900)];
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    expect(cash('create').checked).toBe(true);
+  });
+
+  it('defaults a credit card paid in full to no cash flow entry', async () => {
+    await toReview('credit_card', { name: 'Visa', currentBalance: '900' });
+    const paid = modal().querySelector<HTMLInputElement>('[data-wizard="paid-in-full"]')!;
+    expect(paid.checked).toBe(true);
+    saveBtn().click();
+    await flush();
+    expect(posts[0]!.body.cash_flow).toEqual({ mode: 'none' });
+  });
+
+  it('saves once with source wizard, a new home and a linked expense', async () => {
+    expenses = [expense('e2', 'Mortgage', 3000)];
+    apiCallMock.mockImplementation(
+      async (url: string, opts?: { method?: string; body?: unknown }) => {
+        if (opts?.method === 'POST') {
+          posts.push({ url, body: opts.body as Record<string, unknown> });
+          return { id: 'new1', name: 'Home loan' };
+        }
+        if (url === '/api/portfolio/positions') return [];
+        if (url === '/api/budget/expenses') return expenses;
+        return [];
+      }
+    );
+    const changed = vi.fn();
+    const off = on('liabilities:changed', changed);
+    const onSaved = vi.fn();
+    openDebtWizard({ onSaved });
+    choose('mortgage');
+    next().click();
+    await flush();
+    await flush();
+    type('name', 'Home loan');
+    type('currentBalance', '300000');
+    type('aprPercent', '6.5');
+    type('homeName', 'Main house');
+    type('homeValue', '450,000');
+    type('homePurchasePrice', '400000');
+    type('homePurchaseDate', '2019-05-01');
+    next().click();
+    await flush();
+    await flush();
+    expect(cash('link').checked).toBe(true);
+    saveBtn().click();
+    saveBtn().click();
+    await flush();
+    await flush();
+    expect(posts).toHaveLength(1);
+    const body = posts[0]!.body;
+    expect(posts[0]!.url).toBe('/api/liabilities');
+    expect(body).toMatchObject({
+      name: 'Home loan',
+      liability_type: 'mortgage',
+      current_balance: 300000,
+      interest_rate: 0.065,
+      payment_amount: 1896.2,
+      source: 'wizard',
+      property: {
+        mode: 'create',
+        name: 'Main house',
+        value: 450000,
+        cost_basis: 400000,
+        purchase_date: '2019-05-01',
+      },
+      cash_flow: { mode: 'link', expense_id: 'e2' },
+    });
+    expect(body.linked_position_id).toBeUndefined();
+    expect(changed).toHaveBeenCalledWith({ type: 'liabilities:changed', reason: 'added' });
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    off();
+  });
+
+  it('links a picked home through the property block', async () => {
+    await toReview('mortgage', { name: 'Home loan', currentBalance: '300000', aprPercent: '6.5' });
+    saveBtn().click();
+    await flush();
+    expect(posts[0]!.body.property).toEqual({ mode: 'link', position_id: 'pos1' });
+    expect(posts[0]!.body.linked_position_id).toBeUndefined();
+  });
+
+  it('sends no property block when the home is skipped, and none for other types', async () => {
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    saveBtn().click();
+    await flush();
+    expect(posts[0]!.body.property).toBeUndefined();
+  });
+
+  it('shows a friendly message for a 409 and stays on review', async () => {
+    postResult = async () => {
+      throw new ApiError(409, 'raw server detail');
+    };
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    saveBtn().click();
+    await flush();
+    await flush();
+    expect(modal().querySelector('.debt-form-error')?.textContent).toContain('already linked');
+    expect(modal().textContent).not.toContain('raw server detail');
+    expect(progress()).toBe('Step 3 of 4');
+    expect(saveBtn().disabled).toBe(false);
+  });
+
+  it('shows a friendly message for a 422', async () => {
+    postResult = async () => {
+      throw new ApiError(422, 'raw');
+    };
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    saveBtn().click();
+    await flush();
+    await flush();
+    expect(modal().querySelector('.debt-form-error')?.textContent).toContain('not accepted');
+  });
+
+  it('Back from review keeps the details', async () => {
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    back().click();
+    expect(progress()).toBe('Step 2 of 4');
+    expect(field('name').value).toBe('Truck');
+    expect(field('currentBalance').value).toBe('20000');
+  });
+
+  it('success offers Add another debt and Done, and Escape no longer asks', async () => {
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    saveBtn().click();
+    await flush();
+    await flush();
+    expect(progress()).toBe('Step 4 of 4');
+    expect(document.activeElement).toBe(heading());
+    expect(modal().textContent).toContain('Debt added');
+    modal().querySelector<HTMLElement>('[data-wizard="another"]')!.click();
+    expect(progress()).toBe('Step 1 of 4');
+    expect(modal().querySelector<HTMLInputElement>('[data-debt-type]:checked')).toBeNull();
+    expect(next().disabled).toBe(true);
+    // Fresh state: nothing carried over.
+    choose('auto_loan');
+    next().click();
+    await flush();
+    expect(field('name').value).toBe('');
+  });
+
+  it('Done closes without a prompt after saving', async () => {
+    await toReview('auto_loan', { name: 'Truck', currentBalance: '20000', aprPercent: '7' });
+    saveBtn().click();
+    await flush();
+    await flush();
+    escape();
+    expect(document.getElementById('dynamic-modal')).toBeNull();
+  });
+
+  it('renders expense names as text', async () => {
+    expenses = [expense('e2', '<b>Mortgage</b>', 3000)];
+    await toReview('mortgage', { name: 'Home loan', currentBalance: '300000', aprPercent: '6.5' });
+    expect(modal().querySelector('b')).toBeNull();
   });
 });
