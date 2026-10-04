@@ -1,0 +1,58 @@
+{
+  "success": true,
+  "items": [
+    {
+      "_id": "trans_example000001",
+      "_account": "acc_exampleCheck0001",
+      "_connection": "conn_exampleBank0001",
+      "created_at": "2026-09-02T03:00:00.000Z",
+      "updated_at": "2026-09-02T03:00:00.000Z",
+      "date": "2026-09-01T00:00:00.000Z",
+      "description": "EXAMPLE EMPLOYER LTD SALARY",
+      "amount": 3200,
+      "balance": 4100,
+      "type": "CREDIT"
+    },
+    {
+      "_id": "trans_example000002",
+      "_account": "acc_exampleCheck0001",
+      "_connection": "conn_exampleBank0001",
+      "created_at": "2026-09-03T03:00:00.000Z",
+      "updated_at": "2026-09-03T03:00:00.000Z",
+      "date": "2026-09-02T00:00:00.000Z",
+      "description": "EXAMPLE GROCER WELLINGTON",
+      "amount": -85.4,
+      "balance": 4014.6,
+      "type": "EFTPOS",
+      "merchant": {
+        "_id": "merchant_example01",
+        "name": "Example Grocer"
+      }
+    },
+    {
+      "_id": "trans_example000003",
+      "_account": "acc_exampleCard0003",
+      "_connection": "conn_exampleCards0002",
+      "created_at": "2026-09-04T03:00:00.000Z",
+      "updated_at": "2026-09-04T03:00:00.000Z",
+      "date": "2026-09-03T00:00:00.000Z",
+      "description": "EXAMPLE CAFE",
+      "amount": -5.5,
+      "type": "CREDIT CARD"
+    },
+    {
+      "_id": "trans_example000004",
+      "_account": "acc_exampleKiwi0004",
+      "_connection": "conn_exampleFund0003",
+      "created_at": "2026-09-05T03:00:00.000Z",
+      "updated_at": "2026-09-05T03:00:00.000Z",
+      "date": "2026-09-04T00:00:00.000Z",
+      "description": "EXAMPLE FUND CONTRIBUTION",
+      "amount": 120,
+      "type": "CREDIT"
+    }
+  ],
+  "cursor": {
+    "next": "cursor_examplePage2"
+  }
+}

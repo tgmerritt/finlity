@@ -232,6 +232,12 @@ def test_warnings_vocabulary_is_documented_and_complete():
         "sign_flipped",
         "ai_extracted",
         "ai_partial",
+        "connector_account_error",
+        "connector_partial",
+        "connector_balance_only",
+        "currency_unsupported",
+        "connector_sign_check",
+        "connector_balance_dropped",
     }
     # Every warning string a parser can append is in the vocabulary.
     root = pathlib.Path(si_types.__file__).parent / "parsers"

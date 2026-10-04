@@ -326,10 +326,13 @@ class TestSmartImportBulkLimits:
     def test_rules_cover_analyze_and_recurring_only(self):
         from src.middleware.rate_limit import BULK_LIMITS
 
-        by_name = {rule.name: rule for rule in BULK_LIMITS}
-        assert set(by_name) == {"smart-import-analyze", "smart-import-recurring"}
+        names = {rule.name for rule in BULK_LIMITS}
+        assert names == {"smart-import-analyze", "smart-import-recurring", "connectors"}
         for rule in BULK_LIMITS:
-            assert rule.max_requests == 30 and rule.window_seconds == 60
+            if rule.name == "connectors":
+                assert rule.max_requests == 10 and rule.window_seconds == 60
+            else:
+                assert rule.max_requests == 30 and rule.window_seconds == 60
 
         import re
 
@@ -396,6 +399,115 @@ class TestSmartImportBulkLimits:
                 client.post("/api/v2/smart-import/categorize", json={}, headers=who).status_code
                 != 429
             )
+        finally:
+            monkeypatch.undo()
+            reset_rate_limiter()
+
+
+class TestConnectorsBucket:
+    """Design 8.4: one ``connectors`` window of 10 per 60 s per client."""
+
+    @staticmethod
+    def _bucket(path, method="POST"):
+        from src.middleware.rate_limit import RateLimitMiddleware
+
+        rule = RateLimitMiddleware(app=None)._bulk_rule(method, path)
+        return [] if rule is None else [rule.name]
+
+    def test_bucket_matches_the_provider_calls_and_not_status(self):
+        for path in (
+            "/api/v2/connectors/simplefin/claim",
+            "/api/v2/connectors/simplefin/accounts",
+            "/api/v2/connectors/akahu/accounts",
+            "/api/v2/connectors/demo/sync",
+            "/api/v2/connectors/simplefin/sync",
+            "/api/connections",
+            "/api/connections/abc-123/sync",
+            "/api/connections/abc-123/accounts",
+            "/api/connections/abc-123/credentials",
+        ):
+            assert self._bucket(path) == ["connectors"], path
+        for path in (
+            "/api/v2/connectors/status",
+            "/api/v2/connectors/simplefin/sync/extra",
+            "/api/v2/connectors/simplefin/claimx",
+            "/api/connections/abc-123",
+            "/api/connections/abc-123/other",
+            "/api/v2/smart-import/status",
+        ):
+            assert self._bucket(path) == [], path
+
+    def test_only_writes_and_syncs_count_reads_are_unlimited(self):
+        # Credentials and provider calls are POSTs (plan, PR B route table).
+        # The list and detail reads, the mapping PUT and the disconnect
+        # DELETE never reach a provider, so they stay out of the window.
+        for method, path in (
+            ("GET", "/api/connections"),
+            ("GET", "/api/connections/abc-123"),
+            ("PUT", "/api/connections/abc-123"),
+            ("DELETE", "/api/connections/abc-123"),
+            ("GET", "/api/connections/abc-123/sync"),
+            ("HEAD", "/api/connections"),
+            ("GET", "/api/v2/connectors/demo/sync"),
+            ("GET", "/api/v2/connectors/status"),
+        ):
+            assert self._bucket(path, method) == [], (method, path)
+        for path in (
+            "/api/connections",
+            "/api/connections/abc-123/sync",
+            "/api/connections/abc-123/credentials",
+            "/api/connections/abc-123/accounts",
+            "/api/v2/connectors/demo/sync",
+        ):
+            assert self._bucket(path, "POST") == ["connectors"], path
+
+    def test_a_rule_without_methods_matches_every_method(self):
+        for method in ("GET", "POST", "PUT"):
+            assert self._bucket("/api/v2/smart-import/analyze", method) == [
+                "smart-import-analyze"
+            ]
+
+    def test_methods_on_the_connector_rules(self):
+        from src.middleware.rate_limit import BULK_LIMITS
+
+        rules = [r for r in BULK_LIMITS if r.name == "connectors"]
+        assert len(rules) == 2
+        assert all(r.methods == frozenset({"POST"}) for r in rules)
+
+    def test_middleware_limits_connector_calls_at_10_per_minute(self, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        from src.main import app
+        from src.services.rate_limiter import reset_rate_limiter
+
+        monkeypatch.setenv("DYNO", "web.1")
+        monkeypatch.delenv("CONNECTORS_ENABLED", raising=False)
+        monkeypatch.delenv("TRUSTED_PROXY_COUNT", raising=False)
+        monkeypatch.setenv("RATE_LIMIT_ENABLED", "true")
+        monkeypatch.setenv("RATE_LIMIT_SECRET_KEY", "k" * 40)
+        reset_rate_limiter()
+        try:
+            client = TestClient(app)
+            who = {"X-Forwarded-For": "198.51.100.1, 203.0.113.21"}
+            path = "/api/v2/connectors/demo/accounts"
+            codes = [
+                client.post(path, json={"credentials": {}}, headers=who).status_code
+                for _ in range(11)
+            ]
+            assert codes[:10] == [200] * 10
+            assert codes[10] == 429
+            # one window across the connector routes
+            sync = client.post(
+                "/api/v2/connectors/demo/sync", json={}, headers=who
+            )
+            assert sync.status_code == 429
+            # status stays unlimited; another client has its own window
+            assert client.get("/api/v2/connectors/status", headers=who).status_code == 200
+            # reads of the connections list are never in the window (the
+            # route arrives in PR B, so 404 here proves it passed through)
+            assert client.get("/api/connections", headers=who).status_code != 429
+            other = {"X-Forwarded-For": "198.51.100.1, 203.0.113.22"}
+            assert client.post(path, json={"credentials": {}}, headers=other).status_code == 200
         finally:
             monkeypatch.undo()
             reset_rate_limiter()

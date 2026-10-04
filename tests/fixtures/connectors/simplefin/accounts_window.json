@@ -1,0 +1,116 @@
+{
+  "errlist": [],
+  "connections": [
+    {
+      "conn_id": "CON-SIMPLEFIN-DEMO",
+      "name": "SimpleFIN Demo",
+      "org_id": "simplefin.demoorg",
+      "org_url": "https://beta-bridge.simplefin.org",
+      "sfin_url": "https://beta-bridge.simplefin.org/simplefin"
+    }
+  ],
+  "accounts": [
+    {
+      "id": "Demo Savings",
+      "name": "SimpleFIN Savings",
+      "conn_id": "CON-SIMPLEFIN-DEMO",
+      "currency": "USD",
+      "balance": "115105.51",
+      "available-balance": "115105.51",
+      "balance-date": 1791110084,
+      "transactions": [
+        {
+          "id": "1788633284",
+          "posted": 1788633284,
+          "amount": "-25.50",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack"
+        },
+        {
+          "id": "1788662084",
+          "posted": 1788662084,
+          "amount": "-115.50",
+          "description": "Grocery store",
+          "payee": "Grocery store"
+        },
+        {
+          "id": "1788719684",
+          "posted": 1788719684,
+          "amount": "-30.00",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack"
+        },
+        {
+          "id": "1788748484",
+          "posted": 1788748484,
+          "amount": "-110.00",
+          "description": "Grocery store",
+          "payee": "Grocery store"
+        },
+        {
+          "id": "1789482884",
+          "posted": 1789482884,
+          "amount": "1960.00",
+          "description": "Pay day!",
+          "payee": "You"
+        }
+      ]
+    },
+    {
+      "id": "Demo Checking",
+      "name": "SimpleFIN Checking",
+      "conn_id": "CON-SIMPLEFIN-DEMO",
+      "currency": "USD",
+      "balance": "25584.47",
+      "available-balance": "25584.47",
+      "balance-date": 1791110084,
+      "transactions": [
+        {
+          "id": "1788633284",
+          "posted": 1788633284,
+          "amount": "-32.27",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack"
+        },
+        {
+          "id": "1788662084",
+          "posted": 1788662084,
+          "amount": "-150.05",
+          "description": "Grocery store",
+          "payee": "Grocery store"
+        },
+        {
+          "id": "1788719684",
+          "posted": 1788719684,
+          "amount": "-39.93",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack"
+        },
+        {
+          "id": "1788748484",
+          "posted": 1788748484,
+          "amount": "-143.39",
+          "description": "Grocery store",
+          "payee": "Grocery store"
+        },
+        {
+          "id": "1789482884",
+          "posted": 1789482884,
+          "amount": "2564.48",
+          "description": "Pay day!",
+          "payee": "You"
+        }
+      ]
+    },
+    {
+      "id": "Demo Empty Account",
+      "name": "SimpleFIN Empty Account",
+      "conn_id": "CON-SIMPLEFIN-DEMO",
+      "currency": "USD",
+      "balance": "0.00",
+      "available-balance": "0.00",
+      "balance-date": 1791110084,
+      "transactions": []
+    }
+  ]
+}

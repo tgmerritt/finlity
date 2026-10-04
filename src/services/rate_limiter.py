@@ -40,6 +40,8 @@ class RateLimitConfig:
     window_seconds: int
     path_pattern: str  # Regex pattern for matching paths
     name: str = ""  # Bucket name; each named rule keeps its own window per IP
+    # HTTP methods the rule applies to (upper case); None matches every method.
+    methods: frozenset[str] | None = None
 
 
 class RateLimiter:

@@ -31,6 +31,19 @@ The same gate applies to the server-mode routes (`/api/smart-import/categorize`,
 
 With the limiter active, the AI routes share the `RATE_LIMIT_MAX_REQUESTS` per `RATE_LIMIT_WINDOW_SECONDS` window per client IP, and `/api/v2/smart-import/analyze` and `/recurring` each allow 30 requests a minute per client IP in windows of their own. Limits are kept in memory, so they apply per dyno. `SMART_IMPORT_AI_FAKE` (the offline placeholder provider for local check servers) is ignored on Heroku.
 
+## Bank connections on a public deployment
+
+Real bank connections (SimpleFIN Bridge and Akahu) send each visitor's provider credential through the operator's server on every sync. On Heroku they stay off unless both of these hold:
+
+| Variable | Value |
+|---|---|
+| `CONNECTORS_ENABLED` | `true`, the operator's opt-in. Needed on any shared deployment (`DYNO`, `MULTI_USER_MODE` or `PROTECT_DEMO_DATA`). |
+| `RATE_LIMIT_ENABLED` and `RATE_LIMIT_SECRET_KEY` | The same active rate limiter that smart import AI needs (`true` and a random string of at least 32 characters). Required on Heroku: without it nothing caps one client trying many credentials. |
+
+Otherwise `/api/v2/connectors/status` lists only the demo bank and the SimpleFIN and Akahu routes answer `connector_disabled`. The demo bank (synthetic data) works without either.
+
+With the limiter active, the connector calls that reach a provider (`POST` to `/api/v2/connectors/{provider}/claim`, `/accounts` and `/sync`) share one window of 10 requests a minute per client IP; `GET /api/v2/connectors/status` is not limited. Each credential also has a per-process daily budget (SimpleFIN 20, Akahu 48 calls in 24 hours). Both are kept in memory, so they apply per dyno. `CONNECTORS_SIMPLEFIN_EXTRA_HOSTS` is ignored on any shared deployment.
+
 ## Regenerating `requirements.txt`
 
 `requirements.in` is the curated source of truth (pip-tools). Never hand-edit `requirements.txt`.
