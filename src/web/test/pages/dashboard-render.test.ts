@@ -22,6 +22,7 @@ vi.mock('@/ui/tabs', () => ({
 
 import { apiCall } from '@/api/client';
 import { goToSection } from '@/ui/settings-sections';
+import { showToast } from '@/ui/toast';
 import { onTabChange, showTab } from '@/ui/tabs';
 import { store } from '@/state/store';
 import { initDashboard, renderDashboard, resetDashboardRenderState } from '@/pages/dashboard';
@@ -439,9 +440,43 @@ describe('net worth mode', () => {
     const breakdown = document.getElementById('hero-breakdown')!;
     expect(breakdown.hidden).toBe(false);
     expect(breakdown.textContent).toBe('Assets $8,800.00 \u00b7 Debts $2,000.00');
-    expect(text('day-change')).toContain('today');
+    // Assets moved +$400 today (VTI +10, FXAIX +1 per share); debts are held constant.
+    expect(text('day-change')).toMatch(/^\+\$4\d\d\.00 \(\+\d+\.\d+%\) today$/);
     expect(text('range-change')).toContain('over 1Y');
     expect(text('total-gain')).toBe('Total gain +$800.00');
+  });
+
+  it('keeps the AI button in the hero label and names negative amounts for screen readers', async () => {
+    stubApi();
+    const label = document.querySelector('.dash-hero-label')!;
+    const btn = document.createElement('button');
+    btn.className = 'ai-info-btn';
+    label.appendChild(btn);
+    const data = withDebts();
+    data.summary.net_worth = -1200;
+    await renderDashboard(data);
+    expect(label.querySelector('.ai-info-btn')).toBe(btn);
+    expect(label.firstChild!.nodeValue).toBe('Net worth');
+    expect(document.getElementById('total-value')!.getAttribute('aria-label')).toBe(
+      'Net worth, $1,200.00 below zero'
+    );
+    const row = document.querySelector('#account-groups .account-row:last-of-type');
+    await renderDashboard(withDebts());
+    expect(document.getElementById('total-value')!.hasAttribute('aria-label')).toBe(false);
+    const debtRow = [...document.querySelectorAll('#account-groups .account-row')].pop()!;
+    expect(debtRow.getAttribute('aria-label')).toBe('Mortgage, $2,000.00 owed');
+    expect(row).not.toBeNull();
+  });
+
+  it('shows a toast and stays on the dashboard when the Debts page is missing', async () => {
+    stubApi();
+    document.getElementById('tab-debts')!.remove();
+    await renderDashboard(withDebts());
+    [...document.querySelectorAll<HTMLButtonElement>('#account-groups .account-row')]
+      .pop()!
+      .click();
+    expect(showTabMock).not.toHaveBeenCalled();
+    expect(vi.mocked(showToast)).toHaveBeenCalledWith(expect.any(String), 'info');
   });
 
   it('shows a negative net worth with an ASCII minus and the negative color', async () => {
@@ -557,6 +592,18 @@ describe('debt attention items', () => {
     await renderDashboard(noDebts());
     expect(items()).toEqual([]);
     expect(document.getElementById('attention-list')!.textContent).toBe('All clear');
+  });
+
+  it('scopes dismissals to the active profile', async () => {
+    stubApi();
+    store.set('activeProfileId', 'p1');
+    await renderDashboard(noDebts());
+    document.querySelectorAll<HTMLButtonElement>('#attention-list button')[1]!.click();
+    expect([...saved.keys()]).toEqual(['finlity:attention-dismissed:p1']);
+    store.set('activeProfileId', 'p2');
+    await renderDashboard(noDebts());
+    expect(items()).toEqual(['Add your debts to see your net worth']);
+    store.set('activeProfileId', null);
   });
 
   it('still dismisses for the session when localStorage throws', async () => {

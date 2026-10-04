@@ -2,7 +2,13 @@
  * Projection chart rendering for Monte Carlo, tax burden, and account balances.
  */
 
-import { renderChart, getBaseLayout, getAxisConfig, chartPalette } from './plotly-utils';
+import {
+  ensureThemeUpdates,
+  renderChart,
+  getBaseLayout,
+  getAxisConfig,
+  chartPalette,
+} from './plotly-utils';
 import { getChartColors } from '@/state/theme';
 import { formatCurrency } from '@/utils/format';
 
@@ -116,6 +122,7 @@ export async function displayProjectionResults(
   const retirementIdx = result.ages.indexOf(retirementAge);
 
   // Render Monte Carlo fan chart
+  ensureThemeUpdates('chart-projection');
   await renderChart(
     'chart-projection',
     [
@@ -213,6 +220,8 @@ export async function renderTaxBurdenChart(chartData: TaxBurdenChartData): Promi
   const validRates = chartData.effective_rates.filter((r) => r > 0);
   const maxRate = validRates.length > 0 ? Math.max(...validRates, 30) : 30;
 
+  ensureThemeUpdates('tax-burden-chart');
+
   await renderChart(
     'tax-burden-chart',
     [
@@ -280,6 +289,8 @@ export async function renderTaxBurdenChart(chartData: TaxBurdenChartData): Promi
  */
 export async function renderAccountBalanceChart(chartData: AccountBalanceChartData): Promise<void> {
   const colors = getChartColors();
+
+  ensureThemeUpdates('tax-balance-chart');
 
   await renderChart(
     'tax-balance-chart',

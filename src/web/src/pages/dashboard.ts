@@ -403,11 +403,27 @@ function renderHero(data: DashboardData): void {
   setHistoryMode(hero.mode === 'net-worth');
 
   const labelEl = document.querySelector('#dash-hero .dash-hero-label');
-  if (labelEl) labelEl.textContent = hero.label;
+  if (labelEl) {
+    // Only the text node: the AI insight button lives inside the label.
+    const text = [...labelEl.childNodes].find((n) => n.nodeType === Node.TEXT_NODE);
+    if (text) text.nodeValue = hero.label;
+    else labelEl.prepend(document.createTextNode(hero.label));
+  }
   const totalEl = document.getElementById('total-value');
   if (totalEl) {
     totalEl.textContent = formatCurrency(hero.value);
     totalEl.classList.toggle('negative', hero.value < 0);
+    // A minus sign reads poorly aloud; say what it means.
+    if (hero.value < 0) {
+      totalEl.setAttribute('role', 'img');
+      totalEl.setAttribute(
+        'aria-label',
+        `${hero.label}, ${formatCurrency(Math.abs(hero.value))} below zero`
+      );
+    } else {
+      totalEl.removeAttribute('role');
+      totalEl.removeAttribute('aria-label');
+    }
   }
   const breakdownEl = document.getElementById('hero-breakdown');
   if (breakdownEl) {
@@ -636,13 +652,19 @@ const DISMISS_LABELS: Partial<Record<AttentionItem['kind'], string>> = {
 
 const DISMISS_STORAGE_KEY = 'finlity:attention-dismissed';
 
+/** Dismissals belong to a profile: "I have none" in one must not hide the prompt in another. */
+function dismissStorageKey(): string {
+  const profile = store.get('activeProfileId');
+  return profile ? `${DISMISS_STORAGE_KEY}:${profile}` : DISMISS_STORAGE_KEY;
+}
+
 /** Kept in memory too, so a dismissal holds for the session when storage is blocked. */
-const dismissedInSession = new Set<string>();
+const dismissedInSession = new Map<string, Set<string>>();
 
 function dismissedKeys(): Set<string> {
-  const keys = new Set(dismissedInSession);
+  const keys = new Set(dismissedInSession.get(dismissStorageKey()));
   try {
-    const raw: unknown = JSON.parse(localStorage.getItem(DISMISS_STORAGE_KEY) ?? '[]');
+    const raw: unknown = JSON.parse(localStorage.getItem(dismissStorageKey()) ?? '[]');
     if (Array.isArray(raw)) {
       for (const key of raw) if (typeof key === 'string') keys.add(key);
     }
@@ -653,9 +675,10 @@ function dismissedKeys(): Set<string> {
 }
 
 function dismissAttention(key: string): void {
-  dismissedInSession.add(key);
+  const scope = dismissStorageKey();
+  dismissedInSession.set(scope, (dismissedInSession.get(scope) ?? new Set()).add(key));
   try {
-    localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify([...dismissedKeys()]));
+    localStorage.setItem(dismissStorageKey(), JSON.stringify([...dismissedKeys()]));
   } catch {
     // The in-memory copy still applies this session.
   }
@@ -803,6 +826,7 @@ function renderAccounts(data: DashboardData): void {
       btn.appendChild(h('span', 'account-row-name', row.name));
       btn.appendChild(h('span', 'account-row-value', formatCurrency(row.balance)));
       btn.appendChild(h('span', 'account-row-meta', row.meta));
+      btn.setAttribute('aria-label', `${row.name}, ${formatCurrency(-row.balance)} owed`);
       btn.addEventListener('click', () => openDebts(row.id));
       section.appendChild(btn);
     }

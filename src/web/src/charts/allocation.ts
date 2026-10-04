@@ -9,7 +9,7 @@ import {
   historyDateAxis,
   HISTORY_EMPTY_MESSAGE,
 } from './history-range';
-import { getChartColors } from '@/state/theme';
+import { getChartColors, onThemeChange } from '@/state/theme';
 import { store } from '@/state/store';
 import { setStateView, clearStateView } from '@/ui/state-view';
 import { rangeDays, type RangeKey } from '@/utils/portfolio-metrics';
@@ -44,6 +44,24 @@ function showEmptyState(container: HTMLElement, message: string): void {
 }
 
 let netWorthMode = false;
+let themeOff: (() => void) | null = null;
+
+/**
+ * Re-render the history chart when the theme changes. renderChart bakes axis
+ * colors into the layout, so a relayout would leave the grid in the old theme.
+ * The registration is replaced on every render, so listeners never stack.
+ */
+function followTheme(): void {
+  themeOff?.();
+  themeOff = onThemeChange(() => {
+    updateHistoryChart(store.get('fullHistoryData'), false).catch(console.error);
+  });
+}
+
+function stopFollowingTheme(): void {
+  themeOff?.();
+  themeOff = null;
+}
 
 /** Net-worth mode plots Net worth, Assets and Debts instead of Total, Retirement and Taxable. */
 export function setHistoryMode(netWorth: boolean): void {
@@ -78,6 +96,7 @@ export async function updateHistoryChart(
   const rangeDayCount = store.get('currentHistoryDays');
 
   if (!history || !hasPlottableHistory(history)) {
+    stopFollowingTheme();
     onRange?.([], rangeKey);
     if (container) {
       showEmptyState(container, HISTORY_EMPTY_MESSAGE);
@@ -89,6 +108,7 @@ export async function updateHistoryChart(
   onRange?.(filteredHistory, rangeKey);
 
   if (!hasPlottableHistory(filteredHistory)) {
+    stopFollowingTheme();
     if (container) {
       showEmptyState(container, 'Not enough history for this range yet. Try a longer range.');
     }
@@ -141,6 +161,7 @@ export async function updateHistoryChart(
         ),
       ];
 
+  followTheme();
   await renderChart(
     'chart-history',
     traces,
@@ -153,6 +174,7 @@ export async function updateHistoryChart(
       },
       yaxis: {
         ...getAxisConfig(),
+        automargin: true,
         tickformat: '$,.0f',
       },
       legend: { orientation: 'h', y: 1.1 },

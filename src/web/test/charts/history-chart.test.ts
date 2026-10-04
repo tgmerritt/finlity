@@ -8,6 +8,7 @@ const react = vi.fn().mockResolvedValue(undefined);
 
 import { updateHistoryChart, setHistoryMode } from '@/charts/allocation';
 import { store } from '@/state/store';
+import { setTheme } from '@/state/theme';
 import type { SnapshotHistory } from '@/types/api';
 
 const day = (n: number): string => `2026-09-${String(n).padStart(2, '0')}`;
@@ -21,6 +22,8 @@ const history: SnapshotHistory[] = [1, 2, 3].map((n) => ({
 }));
 
 type Trace = { name: string; y: number[]; line: { width: number } };
+type Call = [string, Trace[], Record<string, any>];
+const calls = (): Call[] => react.mock.calls as unknown as Call[];
 const traces = (): Trace[] => react.mock.calls[0]![1] as Trace[];
 
 beforeEach(() => {
@@ -47,5 +50,41 @@ describe('updateHistoryChart', () => {
     expect(t[2]!.y).toEqual([300, 300, 300]);
     expect(t[0]!.line.width).toBe(2);
     expect(t[1]!.line.width).toBe(1);
+  });
+
+  it('uses the dark colors and a dark paper in the dark theme', async () => {
+    setTheme('dark');
+    await updateHistoryChart(history, true);
+    const layout = calls()[0]![2];
+    expect(layout.paper_bgcolor).toBe('#1a1a2e');
+    expect(layout.plot_bgcolor).toBe('#1a1a2e');
+    expect(layout.yaxis.gridcolor).toBe('#333355');
+    expect(layout.yaxis.color).toBe('#e0e0e0');
+    expect(layout.yaxis.automargin).toBe(true);
+  });
+
+  it('re-renders with the new theme colors when the theme toggles, without stacking', async () => {
+    setTheme('dark');
+    await updateHistoryChart(history, true);
+    await updateHistoryChart(history, true);
+    react.mockClear();
+    setTheme('light');
+    await vi.waitFor(() => expect(react).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 10));
+    expect(react).toHaveBeenCalledTimes(1);
+    const layout = calls()[0]![2];
+    expect(layout.paper_bgcolor).toBe('#ffffff');
+    expect(layout.yaxis.gridcolor).toBe('#e0e0e0');
+    expect(layout.xaxis.gridcolor).toBe('#e0e0e0');
+  });
+
+  it('stops following the theme once the chart shows an empty state', async () => {
+    setTheme('dark');
+    await updateHistoryChart(history, true);
+    await updateHistoryChart([], true);
+    react.mockClear();
+    setTheme('light');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(react).not.toHaveBeenCalled();
   });
 });

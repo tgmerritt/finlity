@@ -33,6 +33,11 @@ export type MutationEvent =
   | { type: 'plugin:changed'; reason: 'installed' | 'uninstalled' | 'enabled' | 'disabled' }
   | { type: 'prices:refreshed'; updated: number; failed: number }
   | { type: 'commentary:invalidated'; tab?: string }
+  /**
+   * Open a liability on the Debts page. Fired synchronously right after
+   * showTab('debts'), so the page may not have loaded yet; a subscriber that
+   * registers later must also check for a pending id when it first renders.
+   */
   | { type: 'debts:open'; id: string };
 
 /**
