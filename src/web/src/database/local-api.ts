@@ -845,20 +845,6 @@ export interface BankStatementImportResponse {
   candidates: RecurringCandidateResponse[];
 }
 
-export interface RecordStatementImportInput {
-  file_name: string;
-  content_hash: string;
-  row_count: number;
-  entity_id?: string | null;
-  candidates: Array<{ name: string; amount: number; frequency?: string; occurrences?: number }>;
-}
-
-export interface RecordStatementImportResult {
-  import_id: string;
-  already_imported: boolean;
-  candidates: RecurringCandidateResponse[];
-}
-
 export interface AcceptCandidateInput {
   category_id?: string | null;
   frequency?: string | null;
@@ -3282,71 +3268,6 @@ export class LocalAPI {
       status: row.status,
       created_expense_id: row.created_expense_id,
     };
-  }
-
-  /**
-   * Records a bank statement import + its recurring candidates. Dedupes by
-   * content_hash: if an import with the same hash already exists, no new
-   * import row is created and its (already-pending) candidates are
-   * re-surfaced, matching the server's already_imported/files_skipped
-   * behavior in bank_statements.py.
-   */
-  recordStatementImport(data: RecordStatementImportInput): RecordStatementImportResult {
-    const existing = this.db.query<BankStatementImportRow>(
-      'SELECT * FROM bank_statement_imports WHERE content_hash = ?',
-      [data.content_hash]
-    )[0];
-
-    if (existing) {
-      const candidates = this.db.query<RecurringCandidateRow>(
-        'SELECT * FROM recurring_candidates WHERE import_id = ?',
-        [existing.id]
-      );
-      return {
-        import_id: existing.id,
-        already_imported: true,
-        candidates: candidates.map((c) => this.toRecurringCandidateResponse(c)),
-      };
-    }
-
-    const importId = uuid();
-    this.db.execute(
-      `INSERT INTO bank_statement_imports (id, entity_id, file_name, content_hash, row_count, status, uploaded_at, analyzed_at)
-       VALUES (?, ?, ?, ?, ?, 'analyzed', ?, ?)`,
-      [
-        importId,
-        data.entity_id ?? null,
-        data.file_name,
-        data.content_hash,
-        data.row_count,
-        nowIso(),
-        nowIso(),
-      ]
-    );
-
-    const candidateResponses: RecurringCandidateResponse[] = [];
-    for (const c of data.candidates) {
-      const candidateId = uuid();
-      const frequency = c.frequency ?? 'monthly';
-      const occurrences = c.occurrences ?? 1;
-      this.db.execute(
-        `INSERT INTO recurring_candidates (id, import_id, name, amount, frequency, occurrences, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-        [candidateId, importId, c.name, c.amount, frequency, occurrences]
-      );
-      candidateResponses.push({
-        id: candidateId,
-        import_id: importId,
-        name: c.name,
-        amount: c.amount,
-        frequency,
-        occurrences,
-        status: 'pending',
-        created_expense_id: null,
-      });
-    }
-
-    return { import_id: importId, already_imported: false, candidates: candidateResponses };
   }
 
   /** GET /api/budget/bank-statements/imports */
