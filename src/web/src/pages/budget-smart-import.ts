@@ -71,7 +71,7 @@ function countsLine(i: SmartImportSummary): string {
 function confirmText(i: SmartImportSummary): string {
   const parts = [countText(i.txn_new, 'transaction'), 'any expenses it added'];
   if (i.liability_id && i.closing_balance !== null) parts.push('any debt balance it recorded');
-  return `Undo this import? Removes ${joinParts(parts)}. Remembered merchants stay.`;
+  return `Undo this import? Removes up to ${joinParts(parts)}. Remembered merchants stay.`;
 }
 
 function removedText(r: SmartImportUndoResponse): string[] {

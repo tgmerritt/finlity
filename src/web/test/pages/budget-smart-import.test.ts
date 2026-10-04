@@ -272,7 +272,7 @@ describe('import history', () => {
     )!;
     row.querySelector<HTMLButtonElement>('[data-si-history="undo"]')!.click();
     expect(row.querySelector('.import-history-confirm')!.textContent).toContain(
-      'Undo this import? Removes 40 transactions, any expenses it added and any debt balance it recorded. Remembered merchants stay.'
+      'Undo this import? Removes up to 40 transactions, any expenses it added and any debt balance it recorded. Remembered merchants stay.'
     );
     row.querySelector<HTMLButtonElement>('[data-si-history="keep"]')!.click();
     expect(row.querySelector('.import-history-confirm')).toBeNull();
@@ -287,7 +287,7 @@ describe('import history', () => {
     const row = document.querySelector('.import-history-row')!;
     row.querySelector<HTMLButtonElement>('[data-si-history="undo"]')!.click();
     const confirm = row.querySelector('.import-history-confirm')!.textContent!;
-    expect(confirm).toContain('Removes 52 transactions and any expenses it added.');
+    expect(confirm).toContain('Removes up to 52 transactions and any expenses it added.');
     expect(confirm).not.toContain('debt balance');
   });
 

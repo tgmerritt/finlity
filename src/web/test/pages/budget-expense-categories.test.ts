@@ -144,3 +144,85 @@ describe('Edit Expense dialog categories', () => {
     expect((document.getElementById('expense-category') as HTMLSelectElement).value).toBe('c-pets');
   });
 });
+
+describe('Edit Expense keeps a category that is not in the list', () => {
+  function edit(categoryId: unknown): void {
+    closeDynamicModal();
+    document.body.innerHTML = '<div id="expenses-list"></div>';
+    apiCallMock.mockReset();
+    store.set('expenses', [
+      {
+        id: 'e1',
+        name: 'Dog food',
+        category_id: categoryId,
+        amount: 40,
+        monthly_amount: 40,
+        frequency: 'monthly',
+      } as never,
+    ]);
+  }
+  const value = (): string =>
+    (document.getElementById('expense-category') as HTMLSelectElement).value;
+
+  it('selects a matching UUID without a keep option', async () => {
+    edit('c-food');
+    answer();
+    editExpense('e1');
+    await loaded();
+    expect(value()).toBe('c-food');
+    expect(options().map((o) => o.textContent)).not.toContain('Current category (not in the list)');
+  });
+
+  it('matches a legacy "7" to an API id of 7', async () => {
+    edit('7');
+    answer([
+      { id: '6', name: 'Debt' },
+      { id: '7', name: 'Food & Dining' },
+    ]);
+    editExpense('e1');
+    await loaded();
+    expect(value()).toBe('7');
+    expect(options()).toHaveLength(2);
+  });
+
+  it('matches numeric ids from the API', async () => {
+    edit('7');
+    answer([
+      { id: 6, name: 'Debt' },
+      { id: 7, name: 'Food & Dining' },
+    ]);
+    editExpense('e1');
+    await loaded();
+    expect(value()).toBe('7');
+    expect(options()).toHaveLength(2);
+  });
+
+  it('preselects a keep option for an unknown id and saves the original id', async () => {
+    edit('99');
+    answer();
+    editExpense('e1');
+    await loaded();
+    expect(value()).toBe('99');
+    expect(options()[0]!.textContent).toBe('Current category (not in the list)');
+    (document.getElementById('expense-amount') as HTMLInputElement).value = '55';
+    document.querySelector<HTMLButtonElement>('[data-action="save"]')!.click();
+    await vi.waitFor(() =>
+      expect(apiCallMock).toHaveBeenCalledWith(
+        '/api/budget/expenses/e1',
+        expect.objectContaining({
+          method: 'PUT',
+          body: expect.objectContaining({ category_id: '99', amount: 55 }),
+        })
+      )
+    );
+  });
+
+  it('does not add a keep option in the Add dialog', async () => {
+    closeDynamicModal();
+    document.body.innerHTML = '<div id="expenses-list"></div>';
+    answer();
+    showAddExpenseModal({ category_id: '99' });
+    await loaded();
+    expect(options().map((o) => o.textContent)).not.toContain('Current category (not in the list)');
+  });
+});

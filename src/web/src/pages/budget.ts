@@ -923,7 +923,7 @@ export interface AddExpensePrefill {
  * in the browser database, so the dialog never carries a fixed list. `selected` is
  * chosen when it exists; otherwise the first category stays selected.
  */
-async function fillCategorySelect(selected?: string | null): Promise<void> {
+async function fillCategorySelect(selected?: string | null, keepUnknown = false): Promise<void> {
   const select = document.getElementById('expense-category') as HTMLSelectElement | null;
   if (!select) return;
   const fill = (items: { value: string; label: string }[]): void => {
@@ -941,7 +941,20 @@ async function fillCategorySelect(selected?: string | null): Promise<void> {
     );
     if (!select.isConnected) return;
     fill((categories || []).map((c) => ({ value: c.id, label: c.name })));
-    if (selected && (categories || []).some((c) => c.id === selected)) select.value = selected;
+    if (selected !== null && selected !== undefined && selected !== '') {
+      const want = String(selected);
+      const match = (categories || []).find((c) => String(c.id) === want);
+      if (match) {
+        select.value = String(match.id);
+      } else if (keepUnknown) {
+        // An id the list does not have (legacy or orphaned): keep it unless changed on purpose.
+        const keep = document.createElement('option');
+        keep.value = want;
+        keep.textContent = 'Current category (not in the list)';
+        select.insertBefore(keep, select.firstChild);
+        select.value = want;
+      }
+    }
   } catch {
     if (!select.isConnected) return;
     fill([{ value: '', label: 'Categories unavailable' }]);
@@ -1236,7 +1249,7 @@ export function editExpense(id: string): void {
       showToast('Expense updated', 'success');
     },
   });
-  void fillCategorySelect(expense.category_id);
+  void fillCategorySelect(expense.category_id, true);
   if (linkedDebt) {
     const hint = document.createElement('p');
     hint.className = 'expense-debt-hint';
