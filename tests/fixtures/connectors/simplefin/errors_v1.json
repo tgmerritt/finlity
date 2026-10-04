@@ -1,0 +1,29 @@
+{
+  "errors": [
+    "Example Savings Bank: connection needs attention."
+  ],
+  "accounts": [
+    {
+      "org": {
+        "domain": "cu.example.org",
+        "name": "Example Credit Union",
+        "sfin-url": "https://beta-bridge.simplefin.org/simplefin"
+      },
+      "id": "ACT-EXAMPLE-1",
+      "name": "Everyday Checking",
+      "currency": "USD",
+      "balance": "1520.75",
+      "available-balance": "1520.75",
+      "balance-date": 1790985600,
+      "transactions": [
+        {
+          "id": "TRN-EXAMPLE-1",
+          "posted": 1790899200,
+          "amount": "-42.10",
+          "description": "Corner Grocery",
+          "payee": "Corner Grocery"
+        }
+      ]
+    }
+  ]
+}

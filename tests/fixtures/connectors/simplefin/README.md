@@ -1,0 +1,6 @@
+# SimpleFIN fixtures
+
+- `claim_ok.txt`, `accounts_balances.json`, `accounts_window.json`: recorded once on 2026-10-04 from SimpleFIN Bridge's public demo setup token (published at `https://beta-bridge.simplefin.org/info/developers`), with `version=2`; `accounts_window.json` is a 30-day window. The content is the bridge's synthetic demo data (connection "SimpleFIN Demo", accounts "Demo Savings", "Demo Checking", "Demo Empty Account"). Reduced to the fields the provider reads and to five rows per account. The claimed Access URL's userinfo is replaced with `user:pass`.
+- `errlist.json`, `errors_v1.json`, `card_account.json`: synthetic, written by hand. The demo returned an empty `errlist` and has no credit card. The assumed v2 `errlist` entry shape is `{code, msg, conn_id?, account_id?}` with codes `gen.*`, `con.*`, `act.*`; v1 `errors` is a list of strings.
+- Card balance sign: not observed (the demo has no card account). `card_account.json` assumes the bridge reports a card balance as negative when money is owed, so owed is `-balance` (design 5.2). This needs confirming against a real card before relying on it.
+- Transaction ids in the demo repeat across accounts (`1788633284` is in both "Demo Savings" and "Demo Checking").

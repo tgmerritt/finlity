@@ -1,0 +1,47 @@
+{
+  "errlist": [],
+  "connections": [
+    {
+      "conn_id": "CON-EXAMPLE-CARD",
+      "name": "Example Card Services",
+      "org_id": "example.card",
+      "org_url": "https://card.example.org",
+      "sfin_url": "https://beta-bridge.simplefin.org/simplefin"
+    }
+  ],
+  "accounts": [
+    {
+      "id": "ACT-EXAMPLE-CARD",
+      "name": "Rewards VISA Card",
+      "conn_id": "CON-EXAMPLE-CARD",
+      "currency": "USD",
+      "balance": "-412.30",
+      "available-balance": "4587.70",
+      "balance-date": 1790985600,
+      "transactions": [
+        {
+          "id": "TRN-CARD-1",
+          "posted": 1790812800,
+          "amount": "-58.20",
+          "description": "Fuel Stop 1123",
+          "payee": "Fuel Stop"
+        },
+        {
+          "id": "TRN-CARD-2",
+          "posted": 1790899200,
+          "amount": "200.00",
+          "description": "Payment received, thank you",
+          "payee": null
+        },
+        {
+          "id": "TRN-CARD-3",
+          "posted": 0,
+          "amount": "-12.00",
+          "description": "Coffee House",
+          "payee": "Coffee House",
+          "pending": true
+        }
+      ]
+    }
+  ]
+}

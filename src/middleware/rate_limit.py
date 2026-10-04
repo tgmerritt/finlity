@@ -47,6 +47,29 @@ BULK_LIMITS: list[RateLimitConfig] = [
         path_pattern=r"^/api/v2/smart-import/recurring$",
         name="smart-import-recurring",
     ),
+    # Connector calls that reach a bank data provider (design 8.4): one shared
+    # window of 10 per 60 s per client for the stateless v2 routes and the
+    # server-mode connection routes (PR B). Both rules use the bucket name
+    # "connectors", so they count together. Only POST counts: every route
+    # that takes a credential or calls a provider is a POST (create, replace
+    # credentials, refresh accounts, sync), while the list and detail GETs,
+    # the mapping PUT and the disconnect DELETE never reach a provider, so a
+    # page that refetches the list cannot use up the window. Status stays
+    # unlimited.
+    RateLimitConfig(
+        max_requests=10,
+        window_seconds=60,
+        path_pattern=r"^/api/v2/connectors/[a-z]+/(claim|accounts|sync)$",
+        name="connectors",
+        methods=frozenset({"POST"}),
+    ),
+    RateLimitConfig(
+        max_requests=10,
+        window_seconds=60,
+        path_pattern=r"^/api/connections(/[^/]+/(sync|accounts|credentials))?$",
+        name="connectors",
+        methods=frozenset({"POST"}),
+    ),
 ]
 
 
@@ -73,9 +96,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Check if path is an AI endpoint that should be rate limited."""
         return any(pattern.match(path) for pattern in self._compiled_patterns)
 
-    def _bulk_rule(self, path: str) -> RateLimitConfig | None:
-        """The BULK_LIMITS rule for this path, if any."""
+    def _bulk_rule(self, method: str, path: str) -> RateLimitConfig | None:
+        """The BULK_LIMITS rule for this method and path, if any."""
         for pattern, rule in self._bulk_rules:
+            if rule.methods is not None and method.upper() not in rule.methods:
+                continue
             if pattern.match(path):
                 return rule
         return None
@@ -94,7 +119,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # Only rate limit AI endpoints and the BULK_LIMITS routes
         is_ai = self._is_ai_endpoint(path)
-        bulk = None if is_ai else self._bulk_rule(path)
+        bulk = None if is_ai else self._bulk_rule(request.method, path)
         if not is_ai and bulk is None:
             return await call_next(request)
 

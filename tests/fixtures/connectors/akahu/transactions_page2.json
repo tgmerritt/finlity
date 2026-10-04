@@ -1,0 +1,31 @@
+{
+  "success": true,
+  "items": [
+    {
+      "_id": "trans_example000005",
+      "_account": "acc_exampleCheck0001",
+      "_connection": "conn_exampleBank0001",
+      "created_at": "2026-09-11T03:00:00.000Z",
+      "updated_at": "2026-09-11T03:00:00.000Z",
+      "date": "2026-09-10T00:00:00.000Z",
+      "description": "EXAMPLE POWER COMPANY DD",
+      "amount": -142.17,
+      "balance": 3872.43,
+      "type": "DIRECT DEBIT"
+    },
+    {
+      "_id": "trans_example000006",
+      "_account": "acc_exampleCard0003",
+      "_connection": "conn_exampleCards0002",
+      "created_at": "2026-09-16T03:00:00.000Z",
+      "updated_at": "2026-09-16T03:00:00.000Z",
+      "date": "2026-09-15T00:00:00.000Z",
+      "description": "EXAMPLE BOOKSHOP",
+      "amount": -39.99,
+      "type": "CREDIT CARD"
+    }
+  ],
+  "cursor": {
+    "next": null
+  }
+}

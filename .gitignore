@@ -60,6 +60,9 @@ output/
 !tests/fixtures/smart_import/**/*.qfx
 !tests/fixtures/smart_import/**/*.json
 !tests/fixtures/smart_import/**/*.pdf
+!tests/fixtures/connectors/
+!tests/fixtures/connectors/**/
+!tests/fixtures/connectors/**/*.json
 !src/web/src/samples/sample-checking.csv
 !src/web/src/samples/sample-card.ofx
 

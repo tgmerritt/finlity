@@ -1,0 +1,39 @@
+{
+  "success": true,
+  "items": [
+    {
+      "_id": "acc_exampleCheck0001",
+      "connection": {
+        "_id": "conn_exampleBank0001",
+        "name": "Example Bank NZ"
+      },
+      "name": "Example Everyday",
+      "status": "ACTIVE",
+      "type": "CHECKING",
+      "balance": {
+        "currency": "NZD",
+        "current": 1520.35
+      },
+      "refreshed": {
+        "balance": "2026-10-03T21:15:00.000Z"
+      }
+    },
+    {
+      "_id": "acc_exampleCard0003",
+      "connection": {
+        "_id": "conn_exampleCards0002",
+        "name": "Example Cards NZ"
+      },
+      "name": "Example Visa",
+      "status": "INACTIVE",
+      "type": "CREDITCARD",
+      "balance": {
+        "currency": "NZD",
+        "current": -432.1
+      },
+      "refreshed": {
+        "balance": "2026-09-20T21:15:00.000Z"
+      }
+    }
+  ]
+}
