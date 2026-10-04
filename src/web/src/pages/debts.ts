@@ -155,7 +155,7 @@ function renderCard(d: LiabilityResponse): HTMLElement {
   };
   fact('APR', d.interest_rate == null ? '' : formatApr(d.interest_rate));
   fact('Payment', paymentText(d));
-  fact('Paid off', d.payoff_date ? formatMonthYear(d.payoff_date) : '');
+  fact('Payoff', d.payoff_date ? formatMonthYear(d.payoff_date) : '');
   if (facts.childElementCount > 0) card.appendChild(facts);
 
   const pct = paidPercent(d);
@@ -257,7 +257,7 @@ function renderList(list: readonly LiabilityResponse[]): void {
 let emittingOwnChange = false;
 type ChangeReason = 'added' | 'updated' | 'deleted' | 'balance';
 
-async function afterWrite(reason: ChangeReason): Promise<void> {
+async function afterWrite(reason: ChangeReason, focusId?: string): Promise<void> {
   generation += 1;
   inflight = null;
   emittingOwnChange = true;
@@ -267,6 +267,24 @@ async function afterWrite(reason: ChangeReason): Promise<void> {
     emittingOwnChange = false;
   }
   await loadDebts().catch(console.error);
+  restoreFocus(focusId);
+}
+
+/**
+ * After a write the list is rebuilt, so the card the person acted on is a new
+ * element. Put focus back on it, or on the list heading when it is gone
+ * (deleted, or hidden by the person filter).
+ */
+function restoreFocus(id: string | undefined): void {
+  const card = id
+    ? Array.from(document.querySelectorAll<HTMLElement>('[data-debt-id]')).find(
+        (el) => el.getAttribute('data-debt-id') === id
+      )
+    : undefined;
+  const target = card ?? document.querySelector<HTMLElement>('#debts-list h2');
+  if (!target) return;
+  if (!target.hasAttribute('tabindex')) target.tabIndex = -1;
+  target.focus({ preventScroll: true });
 }
 
 function find(id: string): LiabilityResponse | undefined {
@@ -283,7 +301,7 @@ function openEdit(d: LiabilityResponse, reopen = false): void {
     debt: d,
     entities: store.get('entities'),
     onSaved: async () => {
-      await afterWrite('updated');
+      await afterWrite('updated', d.id);
       if (reopen) openDetail(d.id);
     },
   });
@@ -348,7 +366,7 @@ function openBalanceDialog(d: LiabilityResponse, reopen = false): void {
         );
         closeDynamicModal();
         showToast('Balance updated', 'success');
-        await afterWrite('balance');
+        await afterWrite('balance', d.id);
         if (reopen) openDetail(d.id);
       } catch (error) {
         console.error('Balance update failed:', error instanceof Error ? error.name : 'error');
@@ -396,7 +414,7 @@ function openDeleteDialog(d: LiabilityResponse): void {
         );
         closeDynamicModal();
         showToast('Debt deleted', 'success');
-        await afterWrite('deleted');
+        await afterWrite('deleted', d.id);
       } catch (error) {
         console.error('Debt delete failed:', error instanceof Error ? error.name : 'error');
         showFormError(body, debtErrorMessage(error));
@@ -519,7 +537,16 @@ async function plotHistory(history: LiabilityHistoryResponse): Promise<void> {
   });
 }
 
+/** Stops the open detail chart's theme listener; at most one is live. */
+let stopHistoryTheme: (() => void) | null = null;
+
+function releaseHistoryTheme(): void {
+  stopHistoryTheme?.();
+  stopHistoryTheme = null;
+}
+
 async function drawHistory(id: string, host: HTMLElement): Promise<void> {
+  releaseHistoryTheme();
   try {
     const history = await apiCall<LiabilityHistoryResponse>(
       `/api/liabilities/${encodeURIComponent(id)}/history`
@@ -531,15 +558,17 @@ async function drawHistory(id: string, host: HTMLElement): Promise<void> {
     }
     host.textContent = '';
     await plotHistory(history);
+    if (!host.isConnected) return;
     ensureThemeUpdates(CHART_ID);
     // The relayout above recolors axes; the line color is a trace property, so redraw.
     const stop = onThemeChange(() => {
       if (!host.isConnected) {
-        stop();
+        releaseHistoryTheme();
         return;
       }
       plotHistory(history).catch(console.error);
     });
+    stopHistoryTheme = stop;
   } catch (error) {
     console.error('Debt history failed:', error instanceof Error ? error.name : 'error');
     if (host.isConnected) host.textContent = 'Balance history is not available right now.';
@@ -550,7 +579,7 @@ interface RelinkKind {
   field: 'linked_position_id' | 'expense_id';
   noun: string;
   missing: string;
-  list: () => Promise<Array<{ id: string; name: string }>>;
+  list: () => Promise<Array<{ id: string; name?: string | null; ticker?: string | null }>>;
 }
 
 const RELINK: Record<'home' | 'expense', RelinkKind> = {
@@ -559,9 +588,9 @@ const RELINK: Record<'home' | 'expense', RelinkKind> = {
     noun: 'home',
     missing: 'The linked home was deleted or can no longer be found.',
     list: async () => {
-      const rows = await apiCall<Array<{ id: string; name: string; position_type?: string }>>(
-        '/api/portfolio/positions'
-      );
+      const rows = await apiCall<
+        Array<{ id: string; name?: string | null; ticker?: string | null; position_type?: string }>
+      >('/api/portfolio/positions');
       return (Array.isArray(rows) ? rows : []).filter((r) => r.position_type === 'real_estate');
     },
   },
@@ -589,7 +618,7 @@ async function relink(
         method: 'PUT',
         body: { [kind.field]: value },
       });
-      await afterWrite('updated');
+      await afterWrite('updated', d.id);
       openDetail(d.id);
     } catch (error) {
       console.error('Relink failed:', error instanceof Error ? error.name : 'error');
@@ -620,7 +649,7 @@ function renderWarning(d: LiabilityResponse, which: 'home' | 'expense'): HTMLEle
         select.setAttribute('data-debt-relink', kind.field);
         select.setAttribute('aria-label', `Choose a ${kind.noun}`);
         for (const o of options) {
-          const opt = h('option', undefined, o.name);
+          const opt = h('option', undefined, o.name || o.ticker || '');
           opt.value = o.id;
           select.appendChild(opt);
         }
@@ -671,7 +700,7 @@ function openDetail(id: string): void {
   fact('Estimated balance', formatCurrency(d.estimated_balance));
   fact('APR', d.interest_rate == null ? '' : formatApr(d.interest_rate));
   fact('Payment', paymentText(d));
-  fact('Paid off', d.payoff_date ? formatMonthYear(d.payoff_date) : '');
+  fact('Payoff', d.payoff_date ? formatMonthYear(d.payoff_date) : '');
   fact(
     'Interest left',
     d.total_interest_remaining == null ? '' : formatCurrency(d.total_interest_remaining)
@@ -726,6 +755,7 @@ function openDetail(id: string): void {
     content: body,
     showFooter: false,
     modalClass: 'debt-detail-modal',
+    onClose: releaseHistoryTheme,
   });
   drawHistory(d.id, chart).catch(console.error);
 }

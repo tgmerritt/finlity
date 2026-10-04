@@ -5,7 +5,7 @@
 
 import { apiCall } from '@/api/client';
 import { showToast } from '@/ui/toast';
-import { createDynamicModal, closeModal } from '@/ui/modal';
+import { createDynamicModal, closeDynamicModal } from '@/ui/modal';
 import { onTabChange } from '@/ui/tabs';
 import { formatCurrency } from '@/utils/format';
 import { escapeHtml } from '@/utils/html';
@@ -752,14 +752,11 @@ export async function loadCashFlowData(): Promise<void> {
 
     const debts = (await debtsRequest).filter((d) => d.is_active);
     const debtCard = document.getElementById('stat-monthly-debt-card');
-    if (debtCard) debtCard.hidden = debts.length === 0;
+    const linked = debts.filter((d) => d.expense_id && !d.expense_missing);
+    if (debtCard) debtCard.hidden = linked.length === 0;
     updateStat(
       'stat-monthly-debt',
-      formatCurrency(
-        debts
-          .filter((d) => d.expense_id && !d.expense_missing)
-          .reduce((sum, d) => sum + d.monthly_cash_flow, 0)
-      )
+      formatCurrency(linked.reduce((sum, d) => sum + d.monthly_cash_flow, 0))
     );
 
     // Load charts
@@ -897,7 +894,7 @@ export async function showAddIncomeModal(): Promise<void> {
         body: data,
       });
 
-      closeModal();
+      closeDynamicModal();
       loadIncomeSources();
       updatePaycheckPreview();
       showToast('Income source added', 'success');
@@ -961,7 +958,7 @@ export function showAddExpenseModal(): void {
         body: data,
       });
 
-      closeModal();
+      closeDynamicModal();
       loadExpenses();
       showToast('Expense added', 'success');
     },
@@ -1015,7 +1012,7 @@ export function showAddDeductionModal(): void {
         body: data,
       });
 
-      closeModal();
+      closeDynamicModal();
       loadDeductions();
       updatePaycheckPreview();
       showToast('Deduction added', 'success');
@@ -1122,7 +1119,7 @@ export function editIncome(id: string): void {
         body: data,
       });
 
-      closeModal();
+      closeDynamicModal();
       loadIncomeSources();
       updatePaycheckPreview();
       showToast('Income source updated', 'success');
@@ -1196,7 +1193,7 @@ export function editExpense(id: string): void {
         body: data,
       });
 
-      closeModal();
+      closeDynamicModal();
       loadExpenses();
       showToast('Expense updated', 'success');
     },
@@ -1257,7 +1254,7 @@ export function editDeduction(id: string): void {
         body: data,
       });
 
-      closeModal();
+      closeDynamicModal();
       loadDeductions();
       updatePaycheckPreview();
       showToast('Deduction updated', 'success');

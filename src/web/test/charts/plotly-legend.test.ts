@@ -113,12 +113,23 @@ describe('updateChartLayout on a phone', () => {
     const relayout = vi.fn().mockResolvedValue(undefined);
     (globalThis as unknown as { Plotly: unknown }).Plotly = { relayout };
     document.body.innerHTML = '<div id="c"></div>';
+    (document.getElementById('c') as unknown as { layout: unknown }).layout = {};
     window.innerWidth = 390;
     await updateChartLayout('c');
     const update = relayout.mock.calls[0]![1];
     expect('margin' in update).toBe(false);
     expect('legend' in update).toBe(false);
     expect(update.paper_bgcolor).toBeDefined();
+  });
+});
+
+describe('updateChartLayout on an element that was never plotted', () => {
+  it('does nothing', async () => {
+    const relayout = vi.fn().mockResolvedValue(undefined);
+    (globalThis as unknown as { Plotly: unknown }).Plotly = { relayout };
+    document.body.innerHTML = '<div id="c"></div>';
+    await updateChartLayout('c');
+    expect(relayout).not.toHaveBeenCalled();
   });
 });
 

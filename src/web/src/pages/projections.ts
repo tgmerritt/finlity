@@ -217,7 +217,11 @@ export async function runProjection(event: Event): Promise<void> {
 
     let debts: LiabilityResponse[] = [];
     try {
-      debts = (await apiCall<LiabilityResponse[]>('/api/liabilities')) ?? [];
+      const entityId = store.get('currentEntityId');
+      const url = entityId
+        ? `/api/liabilities?entity_id=${encodeURIComponent(entityId)}`
+        : '/api/liabilities';
+      debts = (await apiCall<LiabilityResponse[]>(url)) ?? [];
     } catch (error) {
       console.error('Error loading debts for projection:', (error as Error).name);
     }

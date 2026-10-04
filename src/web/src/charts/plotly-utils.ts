@@ -272,6 +272,8 @@ export async function updateChartLayout(
   // Axis colors are baked into each chart's layout, so recolor the axes it has.
   const axisUpdates: Record<string, unknown> = {};
   const gd = element as unknown as { layout?: Record<string, unknown> };
+  // Never plotted (or already purged): relayout would throw on a bare element.
+  if (!gd.layout) return;
   for (const key of Object.keys(gd.layout ?? {})) {
     if (!/^[xy]axis\d*$/.test(key)) continue;
     for (const [prop, value] of Object.entries(getAxisConfig())) {

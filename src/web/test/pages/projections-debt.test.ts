@@ -28,6 +28,7 @@ vi.mock('@/charts/plotly-utils', async (orig) => ({
 import { apiCall, runAsyncApiCall } from '@/api/client';
 import { renderChart, ensureThemeUpdates } from '@/charts/plotly-utils';
 import { runProjection } from '@/pages/projections';
+import { store } from '@/state/store';
 import type { LiabilityResponse } from '@/types/api';
 
 const apiCallMock = vi.mocked(apiCall);
@@ -112,7 +113,7 @@ function setup(liabilities: LiabilityResponse[] | 'fail'): void {
   renderChartMock.mockClear();
   runAsyncMock.mockResolvedValue(RESULT);
   apiCallMock.mockImplementation(async (url: string) => {
-    if (url === '/api/liabilities') {
+    if (url.startsWith('/api/liabilities')) {
       if (liabilities === 'fail') throw new Error('boom');
       return liabilities;
     }
@@ -166,6 +167,19 @@ describe('projections with debts', () => {
       "Projections don't move paid-off payments into savings yet."
     );
     expect(card.textContent).not.toContain(String.fromCharCode(0x2014));
+  });
+
+  it("fetches only the selected person's debts", async () => {
+    setup([debt()]);
+    store.set('currentEntityId', 'e 1');
+    try {
+      await run();
+    } finally {
+      store.set('currentEntityId', null);
+    }
+    const urls = apiCallMock.mock.calls.map((c) => c[0]);
+    expect(urls).toContain('/api/liabilities?entity_id=e%201');
+    expect(urls).not.toContain('/api/liabilities');
   });
 
   it('shows neither with no active debts, or when the fetch fails', async () => {

@@ -117,6 +117,7 @@ function setup(items: LiabilityResponse[]): void {
       return [
         { id: 'pos9', name: 'Beach house', position_type: 'real_estate' },
         { id: 'pos8', name: 'AAPL', position_type: 'stock' },
+        { id: 'pos7', name: null, ticker: 'HOME1', position_type: 'real_estate' },
       ];
     }
     if (url === '/api/budget/expenses') return [{ id: 'e9', name: 'Mortgage payment' }];
@@ -239,6 +240,78 @@ describe('Debts page actions', () => {
     buttonIn(modal(), 'Link').click();
     await flush();
     expect(calls('PUT')[0]![1]?.body).toEqual({ expense_id: 'e9' });
+  });
+
+  it('labels a home with no name by its ticker', async () => {
+    setup([debt({ linked_position_id: 'gone', linked_position_missing: true })]);
+    await loadDebts();
+    buttonIn(card(), 'Details').click();
+    await flush();
+    buttonIn(modal(), 'Choose another').click();
+    await flush();
+    const select = modal().querySelector('select[data-debt-relink]') as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Beach house', 'HOME1']);
+  });
+
+  it('labels the payoff fact "Payoff" on active debts', async () => {
+    setup([debt({})]);
+    await loadDebts();
+    const labels = Array.from(card().querySelectorAll('dt')).map((e) => e.textContent);
+    expect(labels).toContain('Payoff');
+    expect(labels).not.toContain('Paid off');
+    buttonIn(card(), 'Details').click();
+    await flush();
+    const detail = Array.from(modal().querySelectorAll('dt')).map((e) => e.textContent);
+    expect(detail).toContain('Payoff');
+    expect(detail).not.toContain('Paid off');
+  });
+
+  it('puts focus back on the card after a write', async () => {
+    setup([debt({})]);
+    await loadDebts();
+    buttonIn(card(), 'Update balance').click();
+    modal().querySelector<HTMLInputElement>('[data-debt-field="balance"]')!.value = '1100';
+    (modal().querySelector('[data-action="save"]') as HTMLButtonElement).click();
+    await flush();
+    expect(document.activeElement).toBe(card());
+  });
+
+  it('puts focus on the list heading when the debt is gone after a delete', async () => {
+    setup([debt({}), debt({ id: 'd2', name: 'Visa' })]);
+    await loadDebts();
+    buttonIn(card(), 'Delete').click();
+    list = list.filter((d) => d.id !== 'd1');
+    (modal().querySelector('[data-action="save"]') as HTMLButtonElement).click();
+    await flush();
+    expect(document.querySelector('[data-debt-id="d1"]')).toBeNull();
+    const heading = document.querySelector('#debts-list h2') as HTMLElement;
+    expect(heading.textContent).toBe('Your debts');
+    expect(document.activeElement).toBe(heading);
+  });
+
+  it('does not stack theme listeners when the detail is opened repeatedly', async () => {
+    setup([debt({})]);
+    await loadDebts();
+    for (let i = 0; i < 3; i++) {
+      buttonIn(card(), 'Details').click();
+      await flush();
+    }
+    const before = vi.mocked(renderChart).mock.calls.length;
+    window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: 'dark' } }));
+    await flush();
+    expect(vi.mocked(renderChart).mock.calls.length).toBe(before + 1);
+  });
+
+  it('stops redrawing on theme change once the detail is closed', async () => {
+    setup([debt({})]);
+    await loadDebts();
+    buttonIn(card(), 'Details').click();
+    await flush();
+    buttonIn(modal(), '\u00d7').click();
+    const before = vi.mocked(renderChart).mock.calls.length;
+    window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: 'dark' } }));
+    await flush();
+    expect(vi.mocked(renderChart).mock.calls.length).toBe(before);
   });
 
   it('records a balance as of today and refreshes dashboard and list', async () => {

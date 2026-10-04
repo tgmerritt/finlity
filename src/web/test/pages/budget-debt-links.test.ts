@@ -27,7 +27,7 @@ import { apiCall } from '@/api/client';
 import { closeDynamicModal } from '@/ui/modal';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { loadExpenses, loadCashFlowData, editExpense } from '@/pages/budget';
+import { loadExpenses, loadCashFlowData, editExpense, showAddIncomeModal } from '@/pages/budget';
 import type { LiabilityResponse } from '@/types/api';
 
 const apiCallMock = vi.mocked(apiCall);
@@ -176,6 +176,22 @@ describe('edit expense hint', () => {
   });
 });
 
+describe('budget dialogs close through the dynamic modal', () => {
+  beforeEach(() => {
+    closeDynamicModal();
+    document.body.innerHTML = '<div id="expenses-list"></div>';
+    apiCallMock.mockReset();
+  });
+
+  it('closes the add income dialog on Save', async () => {
+    apiCallMock.mockResolvedValue([]);
+    await showAddIncomeModal();
+    expect(document.getElementById('dynamic-modal')).not.toBeNull();
+    document.querySelector<HTMLButtonElement>('[data-action="save"]')!.click();
+    await vi.waitFor(() => expect(document.getElementById('dynamic-modal')).toBeNull());
+  });
+});
+
 describe('Debt payments stat', () => {
   beforeEach(() => {
     closeDynamicModal();
@@ -202,6 +218,16 @@ describe('Debt payments stat', () => {
     await loadCashFlowData();
     expect((document.getElementById('stat-monthly-debt-card') as HTMLElement).hidden).toBe(true);
     route('fail');
+    await loadCashFlowData();
+    expect((document.getElementById('stat-monthly-debt-card') as HTMLElement).hidden).toBe(true);
+  });
+
+  it('hides the stat when active debts exist but none is linked to an expense', async () => {
+    route([
+      debt({ id: 'a', expense_id: null }),
+      debt({ id: 'b', expense_id: 'e9', expense_missing: true }),
+      debt({ id: 'c', expense_id: 'e1', is_active: false }),
+    ]);
     await loadCashFlowData();
     expect((document.getElementById('stat-monthly-debt-card') as HTMLElement).hidden).toBe(true);
   });
