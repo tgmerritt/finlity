@@ -520,6 +520,12 @@ describe('budget tab wiring', () => {
     await vi.waitFor(() => expect(document.querySelectorAll('.pva-row')).toHaveLength(4));
   });
 
+  it('budget.ts loads the import cards on demand, never in the startup bundle', () => {
+    const src = readFileSync(resolve(__dirname, '../../src/pages/budget.ts'), 'utf8');
+    expect(src).not.toMatch(/^import[^;]*'@\/pages\/budget-smart-import'/m);
+    expect(src).toContain("await import('@/pages/budget-smart-import')");
+  });
+
   it('Add to plan opens the Add Expense dialog prefilled with the API category id', async () => {
     route();
     apiCallMock.mockImplementation(async (url: string, opts?: unknown) => {

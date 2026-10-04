@@ -10,7 +10,6 @@ import { onTabChange } from '@/ui/tabs';
 import { formatCurrency } from '@/utils/format';
 import { escapeHtml } from '@/utils/html';
 import { store } from '@/state/store';
-import { loadImportCards } from '@/pages/budget-smart-import';
 import {
   loadPaycheckChart,
   renderCashFlowWaterfall,
@@ -803,6 +802,20 @@ export async function runTransitionProjection(): Promise<void> {
 }
 
 /**
+ * The import history and planned vs actual cards (Budget > Expenses) live in
+ * their own chunk, fetched the first time the Budget page loads, so startup does
+ * not carry them. Each card shows its own message when its request fails.
+ */
+async function loadImportCardsLazy(): Promise<void> {
+  try {
+    const { loadImportCards } = await import('@/pages/budget-smart-import');
+    await loadImportCards({ addToPlan: showAddExpenseModal, refresh: loadExpenses });
+  } catch (error) {
+    console.error('Import cards load failed:', error instanceof Error ? error.name : 'error');
+  }
+}
+
+/**
  * Load budget tab data.
  */
 export async function loadBudgetTab(): Promise<void> {
@@ -812,7 +825,7 @@ export async function loadBudgetTab(): Promise<void> {
       loadIncomeSources(),
       loadDeductions(),
       loadExpenses(),
-      loadImportCards({ addToPlan: showAddExpenseModal, refresh: loadExpenses }),
+      loadImportCardsLazy(),
     ]);
     updatePaycheckPreview();
   } catch (error) {

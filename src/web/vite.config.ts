@@ -42,6 +42,16 @@ export default defineConfig({
           // made rolldown fold the shared code into a dialog chunk, which the Debts
           // page then had to load at startup.
           if (/\/src\/web\/src\/features\/debt-(form|convert|wizard)/.test(id)) return undefined;
+          // The same holds for the lazy import wizard and the lazy Budget import cards,
+          // which share the import render helpers: grouped, the helpers landed in the
+          // wizard chunk and opening Budget loaded the whole wizard.
+          if (
+            /\/src\/web\/src\/(features\/smart-import|pages\/budget-smart-import|utils\/smart-import-(render|state))/.test(
+              id
+            )
+          ) {
+            return undefined;
+          }
           if (id.includes('/src/web/src/pages/')) {
             const match = id.match(/\/pages\/([^/]+)/);
             if (match) return `page-${match[1]}`;
