@@ -53,6 +53,15 @@ output/
 !.eslintrc.json
 !.claude/*.json
 !tests/fixtures/*.json
+!tests/fixtures/smart_import/
+!tests/fixtures/smart_import/**/
+!tests/fixtures/smart_import/**/*.csv
+!tests/fixtures/smart_import/**/*.ofx
+!tests/fixtures/smart_import/**/*.qfx
+!tests/fixtures/smart_import/**/*.json
+!tests/fixtures/smart_import/**/*.pdf
+!src/web/src/samples/sample-checking.csv
+!src/web/src/samples/sample-card.ofx
 
 # ----- Secrets & API Keys -----
 .env

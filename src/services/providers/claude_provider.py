@@ -48,7 +48,13 @@ class ClaudeProvider(InferenceProvider):
         ),
     ]
 
-    def __init__(self, db=None, api_key: Optional[str] = None):
+    def __init__(
+        self,
+        db=None,
+        api_key: Optional[str] = None,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+    ):
         """Initialize Claude provider.
 
         Args:
@@ -57,9 +63,14 @@ class ClaudeProvider(InferenceProvider):
                 no DB lookup) — this is the injection point for the stateless
                 v2 API, which resolves its key from the environment directly
                 (see src/api/v2/analysis.py) and must never touch app_settings.
+            timeout: Optional per-request timeout in seconds for the SDK client.
+                Unset keeps the SDK default.
+            max_retries: Optional SDK retry count. Unset keeps the SDK default.
         """
         self._db = db
         self._explicit_api_key = api_key
+        self._timeout = timeout
+        self._max_retries = max_retries
         self._client = None
         self._info = ProviderInfo(
             id="claude",
@@ -118,7 +129,12 @@ class ClaudeProvider(InferenceProvider):
             try:
                 import anthropic
 
-                self._client = anthropic.Anthropic(api_key=api_key)
+                client_kwargs: dict = {"api_key": api_key}
+                if self._timeout is not None:
+                    client_kwargs["timeout"] = self._timeout
+                if self._max_retries is not None:
+                    client_kwargs["max_retries"] = self._max_retries
+                self._client = anthropic.Anthropic(**client_kwargs)
             except ImportError:
                 raise InferenceProviderError(
                     "anthropic package not installed. Run: pip install anthropic"

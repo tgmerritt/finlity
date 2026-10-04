@@ -16,7 +16,8 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from src.services.rate_limiter import get_rate_limiter
+from src.services.rate_limiter import RateLimitConfig, get_rate_limiter
+from src.utils.client_ip import get_client_ip
 
 
 # Patterns for AI endpoints that should be rate limited
@@ -24,6 +25,28 @@ AI_ENDPOINT_PATTERNS: list[str] = [
     r"^/api/commentary/",
     r"^/api/inference/",
     r"^/api/analysis/advisor/",
+    # Smart import AI calls. analyze and recurring use BULK_LIMITS instead: this
+    # window is shared per client IP, so a 12-file batch would exhaust it.
+    r"^/api/smart-import/(categorize|extract)",
+    r"^/api/v2/smart-import/(categorize|extract)",
+]
+
+# Generous per-client limits for the stateless smart import work routes, each
+# in a window of its own so they never eat into the AI window above. Status
+# stays unlimited.
+BULK_LIMITS: list[RateLimitConfig] = [
+    RateLimitConfig(
+        max_requests=30,
+        window_seconds=60,
+        path_pattern=r"^/api/v2/smart-import/analyze$",
+        name="smart-import-analyze",
+    ),
+    RateLimitConfig(
+        max_requests=30,
+        window_seconds=60,
+        path_pattern=r"^/api/v2/smart-import/recurring$",
+        name="smart-import-recurring",
+    ),
 ]
 
 
@@ -42,35 +65,37 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._compiled_patterns = [
             re.compile(pattern) for pattern in AI_ENDPOINT_PATTERNS
         ]
+        self._bulk_rules = [
+            (re.compile(rule.path_pattern), rule) for rule in BULK_LIMITS
+        ]
 
     def _is_ai_endpoint(self, path: str) -> bool:
         """Check if path is an AI endpoint that should be rate limited."""
         return any(pattern.match(path) for pattern in self._compiled_patterns)
 
+    def _bulk_rule(self, path: str) -> RateLimitConfig | None:
+        """The BULK_LIMITS rule for this path, if any."""
+        for pattern, rule in self._bulk_rules:
+            if pattern.match(path):
+                return rule
+        return None
+
     def _get_client_ip(self, request: Request) -> str:
+        """Client IP via the shared trusted-proxy helper.
+
+        The limiter store is in memory, so limits are per process (per dyno on
+        Heroku), not global across dynos.
         """
-        Extract client IP address from request.
-
-        Handles proxy scenarios (X-Forwarded-For header).
-        """
-        # Check for forwarded header (common with proxies/load balancers like Heroku)
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            # Take first IP (original client)
-            return forwarded.split(",")[0].strip()
-
-        # Fall back to direct client IP
-        if request.client:
-            return request.client.host
-
-        return "unknown"
+        return get_client_ip(request)
 
     async def dispatch(self, request: Request, call_next: Callable):
         """Process request and enforce rate limits."""
         path = request.url.path
 
-        # Only rate limit AI endpoints
-        if not self._is_ai_endpoint(path):
+        # Only rate limit AI endpoints and the BULK_LIMITS routes
+        is_ai = self._is_ai_endpoint(path)
+        bulk = None if is_ai else self._bulk_rule(path)
+        if not is_ai and bulk is None:
             return await call_next(request)
 
         rate_limiter = get_rate_limiter()
@@ -81,7 +106,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # Check rate limit
         client_ip = self._get_client_ip(request)
-        allowed, retry_after = rate_limiter.check_rate_limit(client_ip, path)
+        if bulk is None:
+            allowed, retry_after = rate_limiter.check_rate_limit(client_ip, path)
+        else:
+            allowed, retry_after = rate_limiter.check_rate_limit(
+                client_ip,
+                path,
+                bucket=bulk.name,
+                max_requests=bulk.max_requests,
+                window_seconds=bulk.window_seconds,
+            )
 
         if not allowed:
             # Return 429 with minimal information (no rate limit state exposed)

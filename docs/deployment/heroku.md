@@ -15,6 +15,22 @@ heroku logs -n 100 --app <your-app>
 
 **Provenance / SBOM attestations must stay disabled on this push.** The Heroku container registry rejects manifests that carry them, and a newer Docker Buildx default can re-enable them silently. If a push starts failing with a manifest/attestation error, that is the cause.
 
+## Smart import AI on a public deployment
+
+Smart import can send merchant names (categorize) and PDF lines (extract) to Anthropic with the operator's `ANTHROPIC_API_KEY`. On Heroku (any dyno, where `DYNO` is set) this stays off unless every one of these is set:
+
+| Variable | Value |
+|---|---|
+| `ANTHROPIC_API_KEY` | The operator's key. |
+| `SMART_IMPORT_AI_ENABLED` | `true` to allow AI categories. |
+| `SMART_IMPORT_PDF_AI_ENABLED` | `true` to also allow AI reading of unknown PDF layouts. |
+| `RATE_LIMIT_ENABLED` | `true`. Required: without an active rate limiter, AI reports unavailable on Heroku. |
+| `RATE_LIMIT_SECRET_KEY` | A random string of at least 32 characters. |
+
+The same gate applies to the server-mode routes (`/api/smart-import/categorize`, `/extract`, `/ai-status`) whenever `DYNO` or `MULTI_USER_MODE` is set, on top of each profile's consent setting, because a profile's provider can fall back to the env key there.
+
+With the limiter active, the AI routes share the `RATE_LIMIT_MAX_REQUESTS` per `RATE_LIMIT_WINDOW_SECONDS` window per client IP, and `/api/v2/smart-import/analyze` and `/recurring` each allow 30 requests a minute per client IP in windows of their own. Limits are kept in memory, so they apply per dyno. `SMART_IMPORT_AI_FAKE` (the offline placeholder provider for local check servers) is ignored on Heroku.
+
 ## Regenerating `requirements.txt`
 
 `requirements.in` is the curated source of truth (pip-tools). Never hand-edit `requirements.txt`.

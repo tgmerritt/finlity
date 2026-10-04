@@ -39,6 +39,7 @@ class RateLimitConfig:
     max_requests: int
     window_seconds: int
     path_pattern: str  # Regex pattern for matching paths
+    name: str = ""  # Bucket name; each named rule keeps its own window per IP
 
 
 class RateLimiter:
@@ -109,13 +110,21 @@ class RateLimiter:
         self,
         client_ip: str,
         path: str,
+        *,
+        bucket: Optional[str] = None,
+        max_requests: Optional[int] = None,
+        window_seconds: Optional[int] = None,
     ) -> tuple[bool, Optional[int]]:
         """
         Check if request is within rate limits.
 
         Args:
             client_ip: Client IP address
-            path: Request path (unused for now, all AI endpoints use same limit)
+            path: Request path (unused; the bucket decides the window)
+            bucket: Optional bucket name. Unset is the shared AI window; a named
+                bucket keeps its own window per IP.
+            max_requests: Limit for this bucket (defaults to RATE_LIMIT_MAX_REQUESTS)
+            window_seconds: Window for this bucket (defaults to RATE_LIMIT_WINDOW_SECONDS)
 
         Returns:
             Tuple of (allowed: bool, retry_after_seconds: Optional[int])
@@ -123,21 +132,24 @@ class RateLimiter:
         if not self._is_active:
             return (True, None)
 
+        limit = self._max_requests if max_requests is None else max_requests
+        window = self._window_seconds if window_seconds is None else window_seconds
+        key = f"{bucket}:{client_ip}" if bucket else client_ip
         now = time.time()
-        window_start = now - self._window_seconds
+        window_start = now - window
 
         with self._lock:
-            # Clean up old entries for this IP
-            self._cleanup_expired(client_ip, window_start)
+            # Clean up old entries for this key
+            self._cleanup_expired(key, window_start)
 
             # Get current request count
-            timestamps = self._store[client_ip]
+            timestamps = self._store[key]
             request_count = len(timestamps)
 
-            if request_count >= self._max_requests:
+            if request_count >= limit:
                 # Rate limit exceeded
                 oldest = min(timestamps) if timestamps else now
-                retry_after = int(oldest + self._window_seconds - now) + 1
+                retry_after = int(oldest + window - now) + 1
                 return (False, max(retry_after, 1))
 
             # Allow request and record timestamp

@@ -453,7 +453,13 @@ def _parse_file_rows(filename: str, content: bytes) -> list[dict]:
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("Failed to parse bank statement CSV: %s", filename)
+        # Never log the file name (it can contain a person's name) or the
+        # exception text (it can quote file content): error type and hash only.
+        logger.error(
+            "Failed to parse bank statement CSV error_type=%s hash=%s",
+            type(exc).__name__,
+            hashlib.sha256(content).hexdigest()[:8],
+        )
         raise HTTPException(status_code=422, detail=f"{filename!r}: CSV parse error: {exc}") from exc
 
 
