@@ -1531,7 +1531,7 @@ async function siSave(
   done: string
 ): Promise<void> {
   try {
-    await apiCall(`${SI}/settings`, { method: 'PUT', body: JSON.stringify(patch) });
+    await apiCall(`${SI}/settings`, { method: 'PUT', body: patch });
     showToast(done, 'success');
   } catch {
     undo();

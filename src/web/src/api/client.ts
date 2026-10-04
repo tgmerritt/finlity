@@ -71,16 +71,6 @@ export async function apiCall<T>(endpoint: string, options: ApiCallOptions = {})
   // that fallthrough is the byte-identical regression guarantee for server
   // mode. See src/api/dispatcher.ts for the route tables.
   if (store.get('dataMode') === 'local') {
-    // Special case: bank statement upload takes a FormData body (multipart
-    // files + optional entity_id), which doesn't fit the JSON-body route
-    // tables below. It needs both a signed multipart upload (to the v2
-    // stateless parser) and local persistence, so it's composed here
-    // instead of the generic LOCAL/PAYLOAD tables. See dispatcher.ts's
-    // handleLocalBankStatementUpload for the composition.
-    if (endpoint === '/api/budget/bank-statements/upload' && options.body instanceof FormData) {
-      return (await handleLocalBankStatementUpload(options.body)) as T;
-    }
-
     // Special case: price refresh needs an actual network round-trip to
     // the stateless v2 price fetcher (getStaleTickers() locally -> GET
     // /api/v2/prices?tickers=... -> LocalAPI.applyPriceUpdates), so it
@@ -443,101 +433,6 @@ function surfaceDataWarnings(endpoint: string, result: unknown): void {
     `${excludedCount} position${excludedCount === 1 ? '' : 's'} excluded from analysis — missing prices`,
     'warning'
   );
-}
-
-/**
- * Local-mode composition for POST /api/budget/bank-statements/upload.
- *
- * The v1 endpoint takes multipart files + an optional entity_id form field
- * and, server-side, both parses the statements AND persists the import +
- * recurring candidates in one step. In hosted/local mode there is no
- * server-side persistence, so this splits that into two calls: a signed
- * multipart upload to the stateless /api/v2/bank-statements/parse endpoint
- * (parsing only, see src/api/v2/bank_statements.py), then
- * LocalAPI.recordStatementImport() per parsed file to persist locally and
- * dedupe by content_hash exactly like the v1 handler does.
- *
- * Returns a BankStatementBatchResponse-shaped result (see
- * src/web/src/types/api.d.ts) so callers (src/features/bank-statements.ts)
- * don't need to know the request was split.
- */
-async function handleLocalBankStatementUpload(formData: FormData): Promise<{
-  files_imported: number;
-  files_skipped: number;
-  total_rows: number;
-  candidates: Array<{
-    id: string;
-    import_id: string;
-    name: string;
-    amount: number;
-    frequency: string;
-    occurrences: number;
-    status: string;
-    created_expense_id: string | null;
-  }>;
-}> {
-  const files = formData.getAll('files').filter((f): f is File => f instanceof File);
-  const entityId = formData.get('entity_id');
-
-  const parseResult = await uploadFiles<{
-    imports: Array<{ file_name: string; content_hash: string; row_count: number }>;
-    candidates: Array<{ name: string; amount: number; frequency: string; occurrences: number }>;
-  }>('/api/v2/bank-statements/parse', files, 'files');
-
-  const api = getLocalAPI();
-  let filesImported = 0;
-  let filesSkipped = 0;
-  let totalRows = 0;
-  const allCandidates: Array<{
-    id: string;
-    import_id: string;
-    name: string;
-    amount: number;
-    frequency: string;
-    occurrences: number;
-    status: string;
-    created_expense_id: string | null;
-  }> = [];
-
-  // Candidates are computed once across the whole batch server-side (see
-  // _detect_recurring in src/api/bank_statements.py); attach them to the
-  // first newly-recorded import only, so accepting/rejecting doesn't
-  // duplicate rows across every file in this batch.
-  let candidatesAttached = false;
-
-  for (const imp of parseResult.imports) {
-    totalRows += imp.row_count;
-    const result = api.recordStatementImport({
-      file_name: imp.file_name,
-      content_hash: imp.content_hash,
-      row_count: imp.row_count,
-      entity_id: typeof entityId === 'string' && entityId ? entityId : null,
-      candidates: candidatesAttached ? [] : parseResult.candidates,
-    });
-
-    if (result.already_imported) {
-      filesSkipped++;
-    } else {
-      filesImported++;
-      if (!candidatesAttached) {
-        allCandidates.push(...result.candidates);
-        candidatesAttached = true;
-      }
-    }
-
-    if (result.already_imported && !candidatesAttached) {
-      // Already-imported file: still surface any pending candidates from
-      // that earlier import so the review UI isn't empty.
-      allCandidates.push(...result.candidates);
-    }
-  }
-
-  return {
-    files_imported: filesImported,
-    files_skipped: filesSkipped,
-    total_rows: totalRows,
-    candidates: allCandidates,
-  };
 }
 
 /**

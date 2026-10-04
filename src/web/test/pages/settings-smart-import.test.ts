@@ -118,7 +118,8 @@ describe('retention', () => {
     await flush();
     const puts = calls('PUT', '/api/smart-import/settings');
     expect(puts).toHaveLength(1);
-    expect(JSON.parse(String((puts[0][1] as { body: unknown }).body))).toEqual({ retention_months: 36 });
+    // apiCall serializes the body itself, so the page must pass the object.
+    expect((puts[0][1] as { body: unknown }).body).toEqual({ retention_months: 36 });
     expect(showToast).toHaveBeenCalledWith(expect.any(String), 'success');
   });
 
@@ -152,7 +153,7 @@ describe('AI toggles', () => {
     box.dispatchEvent(new Event('change'));
     await flush();
     const puts = calls('PUT', '/api/smart-import/settings');
-    expect(JSON.parse(String((puts[0][1] as { body: unknown }).body))).toEqual({ ai_enabled: true });
+    expect((puts[0][1] as { body: unknown }).body).toEqual({ ai_enabled: true });
   });
 
   it('hides both toggles in hosted mode', async () => {
