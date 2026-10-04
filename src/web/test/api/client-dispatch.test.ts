@@ -112,9 +112,21 @@ describe('apiCall dataMode dispatch', () => {
       store.set('dataMode', 'local');
       vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      await expect(
-        apiCall('/api/settings/version', { method: 'POST', body: {} })
-      ).rejects.toThrow(ApiError);
+      await expect(apiCall('/api/settings/version', { method: 'POST', body: {} })).rejects.toThrow(
+        ApiError
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('local mode: liabilities routes', () => {
+    it('serves liabilities locally and surfaces local failures as ApiError with the status', async () => {
+      store.set('dataMode', 'local');
+      expect(await apiCall('/api/liabilities')).toEqual([]);
+      const err = await apiCall('/api/liabilities/nope').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiError);
+      expect((err as ApiError).status).toBe(404);
+      expect((err as ApiError).message).toBe('Liability not found');
       expect(global.fetch).not.toHaveBeenCalled();
     });
   });

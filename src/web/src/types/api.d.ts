@@ -78,6 +78,37 @@ export interface PortfolioSummary {
   account_count: number;
   position_count: number;
   accounts: AccountResponse[];
+  /** Present on every response; false when a view filters accounts (no other liability fields then). */
+  liabilities_included?: boolean;
+  liabilities_total?: number;
+  /** total_value minus liabilities_total. */
+  net_worth?: number;
+  liabilities?: DashboardLiability[];
+}
+
+/** One active liability in the dashboard summary. */
+export interface DashboardLiability {
+  id: string;
+  name: string;
+  liability_type: LiabilityType;
+  balance: number;
+  interest_rate: number | null;
+  payment_amount: number | null;
+  payment_frequency: string | null;
+  payoff_date: string | null;
+  linked_position_id: string | null;
+  entity_id: string | null;
+  is_amortizing: boolean;
+  last_reported_date: string | null;
+}
+
+/** What the dashboard route merges in from the liabilities module. */
+export interface DashboardLiabilities<H> {
+  summary: Pick<
+    PortfolioSummary,
+    'liabilities_included' | 'liabilities_total' | 'net_worth' | 'liabilities'
+  >;
+  history: Array<H & { liabilities?: number; net_worth?: number }>;
 }
 
 // Dashboard data (combined endpoint)
@@ -122,6 +153,9 @@ export interface SnapshotHistory {
   total: number;
   retirement: number;
   taxable: number;
+  /** Total owed that day; only when liabilities are included. */
+  liabilities?: number;
+  net_worth?: number;
 }
 
 export interface ImportHistoryItem {
@@ -506,4 +540,123 @@ export interface BankStatementBatchResponse {
   files_skipped: number;
   total_rows: number;
   candidates: RecurringCandidateResponse[];
+}
+
+// Liabilities (src/api/liabilities.py). Dates are 'YYYY-MM-DD' strings.
+export type LiabilityType =
+  'mortgage' | 'auto_loan' | 'student_loan' | 'credit_card' | 'personal_loan' | 'heloc' | 'other';
+
+export type LiabilityFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annual';
+
+export type LiabilityPropertyInstruction =
+  | { mode: 'link'; position_id: string }
+  | {
+      mode: 'create';
+      name: string;
+      value: number;
+      cost_basis?: number | null;
+      purchase_date?: string | null;
+    };
+
+export type LiabilityCashFlowInstruction =
+  | { mode: 'create'; category_id?: string | null }
+  | { mode: 'link'; expense_id: string }
+  | { mode: 'none' };
+
+export interface LiabilityFields {
+  name: string;
+  liability_type: LiabilityType;
+  lender?: string | null;
+  interest_rate?: number | null;
+  payment_amount?: number | null;
+  payment_frequency?: LiabilityFrequency;
+  next_payment_date?: string | null;
+  escrow_amount?: number | null;
+  original_principal?: number | null;
+  origination_date?: string | null;
+  term_months?: number | null;
+  maturity_date?: string | null;
+  credit_limit?: number | null;
+  is_amortizing?: boolean | null;
+  entity_id?: string | null;
+  linked_position_id?: string | null;
+  notes?: string | null;
+}
+
+export interface CreateLiabilityInput extends LiabilityFields {
+  current_balance: number;
+  balance_as_of?: string | null;
+  source?: 'manual' | 'wizard';
+  property?: LiabilityPropertyInstruction | null;
+  cash_flow?: LiabilityCashFlowInstruction | null;
+}
+
+/** Partial update. Balance changes go through RecordBalanceInput. */
+export type UpdateLiabilityInput = Partial<LiabilityFields> & {
+  expense_id?: string | null;
+  is_active?: boolean;
+};
+
+export interface RecordBalanceInput {
+  balance: number;
+  as_of?: string | null;
+}
+
+export interface LiabilityResponse {
+  id: string;
+  entity_id: string | null;
+  name: string;
+  liability_type: LiabilityType;
+  lender: string | null;
+  current_balance: number;
+  balance_as_of: string;
+  interest_rate: number | null;
+  payment_amount: number | null;
+  payment_frequency: string;
+  next_payment_date: string | null;
+  escrow_amount: number | null;
+  original_principal: number | null;
+  origination_date: string | null;
+  term_months: number | null;
+  maturity_date: string | null;
+  credit_limit: number | null;
+  is_amortizing: boolean;
+  linked_position_id: string | null;
+  expense_id: string | null;
+  source: string;
+  source_ref: string | null;
+  is_active: boolean;
+  closed_date: string | null;
+  notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  estimated_balance: number;
+  payoff_date: string | null;
+  periods_remaining: number | null;
+  total_interest_remaining: number | null;
+  monthly_payment: number;
+  monthly_cash_flow: number;
+  linked_position: { id: string; name: string | null; value: number | null } | null;
+  linked_position_missing: boolean;
+  expense: { id: string; name: string; monthly_amount: number | null } | null;
+  expense_missing: boolean;
+  last_reported_date: string | null;
+}
+
+export interface LiabilityHistoryPoint {
+  date: string;
+  balance: number;
+  source: string | null;
+}
+
+export interface LiabilityHistoryResponse {
+  liability_id: string;
+  reported: LiabilityHistoryPoint[];
+  series: LiabilityHistoryPoint[];
+}
+
+export interface DeleteLiabilityResult {
+  deleted: boolean;
+  id: string;
+  expense_deleted: boolean;
 }

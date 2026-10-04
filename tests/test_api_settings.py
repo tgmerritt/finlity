@@ -104,6 +104,76 @@ class TestSettingsAPI:
         data = response.json()
         assert len(data["snapshots"]) == 365
 
+    def test_demo_export_includes_liabilities_with_calendar_dates(self, client):
+        """Hosted seed needs the demo debts, their history and the linked home."""
+        response = client.get("/api/settings/demo-mode/export")
+        assert response.status_code == 200
+        data = response.json()
+        assert {"demo-mortgage", "demo-auto", "demo-card"} <= {
+            row["id"] for row in data["liabilities"]
+        }
+        assert len(data["liability_snapshots"]) >= 36
+        liability_ids = {row["id"] for row in data["liabilities"]}
+        assert all(s["liability_id"] in liability_ids for s in data["liability_snapshots"])
+        # The linked home position and its property account travel with it.
+        position_ids = {p["id"] for p in data["positions"]}
+        account_ids = {a["id"] for a in data["accounts"]}
+        assert "demo-property" in account_ids
+        for row in data["liabilities"]:
+            if row["linked_position_id"]:
+                assert row["linked_position_id"] in position_ids
+        # Browser CHECK (length(col) = 10): calendar days only, never datetimes.
+        date_cols = (
+            "balance_as_of", "next_payment_date", "origination_date",
+            "maturity_date", "closed_date",
+        )
+        for row in data["liabilities"]:
+            for col in date_cols:
+                assert row[col] is None or len(row[col]) == 10, (row["id"], col)
+        assert all(len(s["snapshot_date"]) == 10 for s in data["liability_snapshots"])
+
+    def test_demo_export_slices_datetime_dates_defensively(self, client):
+        """A datetime-shaped value in a date column still exports as YYYY-MM-DD."""
+        import sqlite3
+        from src.services.demo_mode import get_demo_manager
+
+        conn = sqlite3.connect(str(get_demo_manager().demo_db_path))
+        try:
+            original = conn.execute(
+                "SELECT balance_as_of FROM liabilities WHERE id = 'demo-card'"
+            ).fetchone()[0]
+            conn.execute(
+                "UPDATE liabilities SET balance_as_of = '2026-09-30 00:00:00.000000' "
+                "WHERE id = 'demo-card'"
+            )
+            conn.execute(
+                "UPDATE liability_balance_snapshots SET snapshot_date = snapshot_date "
+                "|| ' 00:00:00' WHERE liability_id = 'demo-card'"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        try:
+            data = client.get("/api/settings/demo-mode/export").json()
+        finally:
+            conn = sqlite3.connect(str(get_demo_manager().demo_db_path))
+            conn.execute(
+                "UPDATE liabilities SET balance_as_of = ? WHERE id = 'demo-card'", (original,)
+            )
+            conn.execute(
+                "UPDATE liability_balance_snapshots SET snapshot_date = substr(snapshot_date, 1, 10) "
+                "WHERE liability_id = 'demo-card'"
+            )
+            conn.commit()
+            conn.close()
+        card = next(r for r in data["liabilities"] if r["id"] == "demo-card")
+        assert card["balance_as_of"] == original
+        assert all(
+            len(s["snapshot_date"]) == 10
+            for s in data["liability_snapshots"]
+            if s["liability_id"] == "demo-card"
+        )
+
     def test_settings_version_advances_after_save(self, client):
         """Saving personal settings bumps the settings version forward.
 

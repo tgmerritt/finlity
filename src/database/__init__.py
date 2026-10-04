@@ -19,6 +19,8 @@ from .models import (
     PriceCache,
     AppSettings,
     AllocationTrigger,
+    Liability,
+    LiabilityBalanceSnapshot,
 )
 from .operations import Database
 from .profile_manager import (
@@ -51,6 +53,8 @@ __all__ = [
     "PriceCache",
     "AppSettings",
     "AllocationTrigger",
+    "Liability",
+    "LiabilityBalanceSnapshot",
     # Database operations
     "Database",
     # Profile management

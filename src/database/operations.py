@@ -786,7 +786,8 @@ class Database:
 
         Detects positions with the SAME ticker and EXACT same shares across
         DIFFERENT accounts. This is highly suspicious because fractional
-        shares are very unlikely to match exactly between accounts.
+        shares are very unlikely to match exactly between accounts. Real estate
+        positions are skipped (two homes are not a double import).
 
         Returns:
             List of duplicate groups, each containing:
@@ -803,6 +804,10 @@ class Database:
             # Group by ticker + shares
             groups: dict = {}
             for pos in all_positions:
+                # A home is one whole unit (shares 1.0), so two of them in different
+                # accounts are two properties, not a double import.
+                if pos.position_type == "real_estate":
+                    continue
                 # Round to 6 decimal places for comparison
                 key = (pos.ticker.upper(), round(pos.shares, 6))
                 if key not in groups:

@@ -483,6 +483,17 @@ def generate_demo_data(db_path: Optional[str] = None) -> dict:
     print("\nTaking portfolio snapshot...")
     db.take_snapshot()
 
+    # Add the demo home and debts. The builder refuses anything but the demo
+    # database, so a custom db_path simply skips this step.
+    print("\nAdding demo liabilities...")
+    try:
+        from build_demo_liabilities import main as build_liabilities
+
+        if build_liabilities(["--db", str(db_path)]) != 0:
+            print("  Skipped (not the demo database or builder refused)")
+    except Exception as exc:
+        print(f"  Skipped ({type(exc).__name__})")
+
     result = {
         "success": True,
         "database": str(db_path),

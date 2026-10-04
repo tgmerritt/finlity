@@ -83,6 +83,40 @@ describe('allocationVsTarget', () => {
     expect(rows.find((r) => r.cls === 'cash')!.outOfBand).toBe(false);
   });
 
+  it('leaves property accounts out of allocation and drift', () => {
+    const home = pos({
+      ticker: 'HOME',
+      name: 'Home',
+      account: 'Home',
+      account_type: 'property',
+      position_type: 'real_estate',
+      asset_class: 'alternative',
+      value: 685000,
+    });
+    const rows = allocationVsTarget([...positions, home], {
+      equities: 0.6,
+      bonds: 0.3,
+      alternatives: 0,
+      cash: 0.1,
+    });
+    expect(rows.find((r) => r.cls === 'alternatives')).toBeUndefined();
+    expect(rows.find((r) => r.cls === 'stocks')!.actualPct).toBeCloseTo(60);
+    expect(rows.every((r) => !r.outOfBand)).toBe(true);
+  });
+
+  it('keeps real estate in other account types', () => {
+    const rental = pos({
+      ticker: 'RENTAL',
+      name: 'Rental',
+      account_type: 'taxable',
+      position_type: 'real_estate',
+      asset_class: 'alternative',
+      value: 100,
+    });
+    const rows = allocationVsTarget([...positions, rental], null);
+    expect(rows.find((r) => r.cls === 'alternatives')!.value).toBe(100);
+  });
+
   it('accepts percentages as well as fractions', () => {
     const rows = allocationVsTarget(positions, {
       equities: 60,
