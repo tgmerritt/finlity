@@ -36,8 +36,8 @@ DEFAULTS: dict[str, Any] = {
 }
 
 _BOOL_KEYS = ("ai_enabled", "pdf_ai_enabled")
-_LAYOUT_SIGNATURE = re.compile(r"^[0-9a-f]{64}$")
-_ACCOUNT_KEY = re.compile(r"^(acct|label):.{1,190}$", re.DOTALL)
+_LAYOUT_SIGNATURE = re.compile(r"[0-9a-f]{64}")
+_ACCOUNT_KEY = re.compile(r"(acct|label):[^\x00-\x1f\x7f]{1,190}")
 
 HeaderName = Annotated[str, Field(min_length=1, max_length=MAX_HEADER_NAME_CHARS)]
 CsvMapping = dict[str, HeaderName]
@@ -63,7 +63,7 @@ def _clean_layouts(raw: Any) -> dict[str, dict[str, str]]:
     clean = {
         sig: dict(mapping)
         for sig, mapping in raw.items()
-        if isinstance(sig, str) and _LAYOUT_SIGNATURE.match(sig) and _valid_mapping(mapping)
+        if isinstance(sig, str) and _LAYOUT_SIGNATURE.fullmatch(sig) and _valid_mapping(mapping)
     }
     return dict(list(clean.items())[:MAX_CSV_LAYOUTS])
 
@@ -75,7 +75,7 @@ def _clean_accounts(raw: Any) -> dict[str, str]:
         key: label
         for key, label in raw.items()
         if isinstance(key, str)
-        and _ACCOUNT_KEY.match(key)
+        and _ACCOUNT_KEY.fullmatch(key)
         and isinstance(label, str)
         and 0 < len(label) <= MAX_ACCOUNT_LABEL_CHARS
     }
@@ -142,7 +142,7 @@ class SettingsUpdate(BaseModel):
         cls, value: Optional[dict[str, dict[str, str]]]
     ) -> Optional[dict[str, dict[str, str]]]:
         for sig, mapping in (value or {}).items():
-            if not _LAYOUT_SIGNATURE.match(sig) or not _valid_mapping(mapping):
+            if not _LAYOUT_SIGNATURE.fullmatch(sig) or not _valid_mapping(mapping):
                 raise ValueError("invalid csv layout")
         return value
 
@@ -150,7 +150,7 @@ class SettingsUpdate(BaseModel):
     @classmethod
     def _account_keys(cls, value: Optional[dict[str, str]]) -> Optional[dict[str, str]]:
         for key in value or {}:
-            if not _ACCOUNT_KEY.match(key):
+            if not _ACCOUNT_KEY.fullmatch(key):
                 raise ValueError("invalid account key")
         return value
 
@@ -165,6 +165,9 @@ class SettingsUpdate(BaseModel):
 def write_settings(db: Any, update: SettingsUpdate) -> dict[str, Any]:
     """Merge ``update`` over the stored settings and save the fixed row. Returns the result."""
     settings = read_settings(db)
-    settings.update(update.model_dump(exclude_unset=True))
+    changes = update.model_dump(exclude_unset=True)
+    if not changes:
+        return settings  # an empty PUT writes nothing, not even the default row
+    settings.update(changes)
     db.set_setting(SETTINGS_KEY, json.dumps(settings, sort_keys=True))
     return settings

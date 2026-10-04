@@ -395,8 +395,28 @@ def test_settings_put_is_partial_and_stores_only_the_fixed_row(client, db):
             "retention_months", "ai_enabled", "pdf_ai_enabled", "csv_layouts", "accounts"}
 
 
-def test_settings_empty_put_changes_nothing(client, db):
-    assert client.put("/api/smart-import/settings", json={}).status_code == 200
+def test_settings_empty_put_writes_nothing_and_returns_current(client, db):
+    r = client.put("/api/smart-import/settings", json={})
+    assert r.status_code == 200 and r.json()["retention_months"] == 24
+    assert counts(db)["settings"] == 0
+    client.put("/api/smart-import/settings", json={"retention_months": 12})
+    with db.get_session() as s:
+        stamp = s.query(AppSettings).one().updated_at
+    assert client.put("/api/smart-import/settings", json={}).json()["retention_months"] == 12
+    with db.get_session() as s:
+        assert s.query(AppSettings).one().updated_at == stamp
+
+
+def test_trailing_newline_does_not_pass_key_patterns(client, db):
+    bad_sig = {LAYOUT_SIG + "\n": {"date": "A"}}
+    assert client.put("/api/smart-import/settings", json={"csv_layouts": bad_sig}).status_code == 422
+    assert client.put("/api/smart-import/settings", json={"accounts": {"acct:one\n": "x"}}).status_code == 422
+    with db.get_session() as s:
+        s.merge(AppSettings(key="smart_import", value=json.dumps({"csv_layouts": bad_sig})))
+        s.commit()
+    assert client.get("/api/smart-import/settings").json()["csv_layouts"] == {}
+    r = preview(client, stmt(file_hash=HASH_A + "\n"))
+    assert r.status_code == 422
 
 
 @pytest.mark.parametrize("months", [0, 12, 24, 36])

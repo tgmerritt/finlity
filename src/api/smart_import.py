@@ -352,6 +352,7 @@ def list_rules(db: Database = Depends(get_db)) -> list[dict[str, Any]]:
 
 @router.delete("/rules/{rule_id}")
 def delete_rule(rule_id: str, db: Database = Depends(get_db)) -> dict[str, Any]:
+    # CSRF posture: DELETE is a non-simple method, so browsers preflight it against the CORS allowlist.
     check_demo_mode_write()
     return service.delete_rule(db, rule_id)
 
@@ -363,6 +364,7 @@ def get_settings(db: Database = Depends(get_db)) -> dict[str, Any]:
 
 @router.put("/settings")
 def put_settings(body: SettingsUpdate, db: Database = Depends(get_db)) -> dict[str, Any]:
+    # CSRF posture: PUT is a non-simple method, so browsers preflight it against the CORS allowlist.
     check_demo_mode_write()
     return service.put_settings(db, body)
 
