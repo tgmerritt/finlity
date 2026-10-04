@@ -142,6 +142,8 @@ export interface WizardRow {
 export interface RecurringChoice extends RecurringCandidateSuggestion {
   /** Ticked: create the expense (or link the matched one). Unticked: reject. */
   checked: boolean;
+  /** In an everyday-spending category (groceries, dining, gas...): starts unticked. */
+  everyday: boolean;
 }
 
 export interface RememberedChoice {
@@ -655,12 +657,31 @@ export function recurringRequest(state: WizardState, ref: RecurringReference): R
   };
 }
 
-/** Replace the candidate list; one already in the budget starts unticked. */
+/**
+ * Category names that mean everyday spending rather than a bill. Transportation
+ * and Personal are left out on purpose: they also hold car payments and
+ * memberships, which are bills.
+ */
+const EVERYDAY_CATEGORY =
+  /\b(food|dining|groceries|grocery|restaurants?|shopping|gas|fuel|coffee)\b/i;
+
+/**
+ * Replace the candidate list. One already in the budget starts unticked, and so
+ * does one in an everyday-spending category (a grocery run is not a bill).
+ */
 export function setRecurring(
   state: WizardState,
   candidates: RecurringCandidateSuggestion[]
 ): WizardState {
-  return { ...state, recurring: candidates.map((c) => ({ ...c, checked: !c.already_budgeted })) };
+  const names = new Map(state.categories.map((c) => [c.id, c.name]));
+  return {
+    ...state,
+    recurring: candidates.map((c) => {
+      const everyday =
+        c.category_id !== null && EVERYDAY_CATEGORY.test(names.get(c.category_id) ?? '');
+      return { ...c, everyday, checked: !c.already_budgeted && !everyday };
+    }),
+  };
 }
 
 export type RecurringPatch = Partial<

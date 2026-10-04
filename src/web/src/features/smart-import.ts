@@ -139,6 +139,10 @@ const ALLOWED_EXT = /\.(csv|ofx|qfx|pdf)$/i;
 const AI_TIMEOUT_MS = 60_000;
 /** Apply writes a whole batch in one transaction; give a large one time. */
 const APPLY_TIMEOUT_MS = 120_000;
+/** Statuses after which a write may or may not have happened (0 is a timeout or network drop). */
+const AMBIGUOUS_STATUS = new Set([0, 502, 503, 504]);
+const AMBIGUOUS_TEXT =
+  'We could not confirm the import was saved. Applying again is safe: statements already saved are skipped.';
 /** Columns of the categorize grid: select, date, description, amount, category, kind, source. */
 const GRID_COLS = 7;
 
@@ -385,8 +389,18 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
 
   const isDirty = (): boolean => !!state && st().files.length > 0;
 
+  /** Closing is held while Apply or Undo is in flight; say why instead. */
+  function showBusyNote(): void {
+    footer.querySelector('[data-si="busy-note"]')?.remove();
+    const note = el('p', 'smart-import-busy', applying ? 'Saving your import...' : 'Undoing...');
+    note.setAttribute('data-si', 'busy-note');
+    note.setAttribute('role', 'status');
+    footer.prepend(note);
+  }
+
   function requestClose(): void {
-    if (applyResult) finish();
+    if (applying || undoing) showBusyNote();
+    else if (applyResult) finish();
     else if (isDirty()) showConfirm();
     else finish();
   }
@@ -430,14 +444,16 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     if (event.key !== 'Escape') return;
     event.stopImmediatePropagation();
     event.preventDefault();
-    if (!confirming) requestClose();
+    if (applying || undoing) showBusyNote();
+    else if (!confirming) requestClose();
   };
   const onClick = (event: Event): void => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (!target.closest('.modal-close') && !target.classList.contains('modal-backdrop')) return;
     event.stopPropagation();
-    if (!confirming) requestClose();
+    if (applying || undoing) showBusyNote();
+    else if (!confirming) requestClose();
   };
   const watcher = new MutationObserver(() => {
     if (modal && !modal.isConnected) detach();
@@ -586,6 +602,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       backBtn.addEventListener('click', () => void goTo(4));
       const apply = button(applying ? 'Applying...' : 'Apply import', 'btn btn-primary', 'apply');
       apply.disabled = applying || !hasSomethingToApply();
+      if (applying) apply.setAttribute('aria-busy', 'true');
       apply.addEventListener('click', () => void applyNow());
       footer.append(backBtn, apply);
       return;
@@ -2175,6 +2192,11 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     const seenText = `Seen ${countText(c.occurrences, 'time')}, last on ${formatDate(c.last_date)}`;
     card.append(tick, el('p', 'smart-import-hint', seenText));
 
+    if (c.everyday && !c.already_budgeted) {
+      const note = el('p', 'smart-import-note', 'Everyday spending, not usually a bill.');
+      note.setAttribute('data-si', 'rec-note');
+      card.appendChild(note);
+    }
     if (c.already_budgeted) {
       const note = el(
         'p',
@@ -2251,8 +2273,9 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
 
   let applying = false;
   let applyResult: ApplyResponse | null = null;
+  /** The apply reply was lost and the preview proved every statement saved. */
+  let recovered = false;
   let applyError: string | null = null;
-  let settingsWarning = false;
   let reviewError: HTMLElement | null = null;
 
   /** True when the batch has at least one statement to save (a too-large batch counts). */
@@ -2267,40 +2290,54 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   const liabilityById = (id: string): LiabilityResponse | undefined =>
     liabilities?.find((l) => l.id === id);
 
-  /** The debt line on Review: balance now, balance after Apply, and why when they match. */
-  function debtAfter(debt: ReviewCounts['debts'][number]): {
+  interface DebtLine {
+    debt: ReviewCounts['debts'][number];
     before: number | null;
     after: number | null;
     note: string;
-  } {
-    const l = liabilityById(debt.liability_id);
-    const before = l ? l.current_balance : null;
-    const when = formatDate(debt.as_of);
-    if (debt.closing_balance < 0) {
-      return { before, after: before, note: 'A credit balance is not recorded on a debt.' };
-    }
-    if (debt.as_of > today()) {
-      return {
-        before,
-        after: before,
-        note: `The statement date ${when} is in the future, so this balance is not recorded.`,
+  }
+
+  /**
+   * The debt lines on Review, oldest statement first. "Now" chains: a second
+   * statement for the same debt starts from what the first one leaves. The
+   * client does not know every snapshot date, so a normal move is hedged.
+   */
+  function debtLines(debts: ReviewCounts['debts']): DebtLine[] {
+    const sorted = [...debts].sort((a, b) => a.as_of.localeCompare(b.as_of));
+    const current = new Map<string, { balance: number | null; asOf: string | null }>();
+    const out: DebtLine[] = [];
+    for (const debt of sorted) {
+      const l = liabilityById(debt.liability_id);
+      const now = current.get(debt.liability_id) ?? {
+        balance: l ? l.current_balance : null,
+        asOf: l?.balance_as_of ?? null,
       };
-    }
-    if (l?.balance_as_of && debt.as_of < l.balance_as_of) {
-      return {
-        before,
-        after: before,
-        note: `This statement (${when}) is older than the current balance, so it goes into the history and the current balance stays.`,
+      const before = now.balance;
+      const when = formatDate(debt.as_of);
+      const stay = (note: string): void => {
+        out.push({ debt, before, after: before, note });
+        current.set(debt.liability_id, now);
       };
+      if (debt.closing_balance < 0) stay('A credit balance is not recorded on a debt.');
+      else if (debt.as_of > today()) {
+        stay(`The statement date ${when} is in the future, so this balance is not recorded.`);
+      } else if (now.asOf && debt.as_of < now.asOf) {
+        stay(
+          `This statement (${when}) is older than the current balance, so it goes into the history and the current balance stays.`
+        );
+      } else if (now.asOf && debt.as_of === now.asOf) {
+        stay(`A balance for ${when} is already recorded and is kept.`);
+      } else {
+        out.push({
+          debt,
+          before,
+          after: debt.closing_balance,
+          note: `Statement balance on ${when}, unless a balance is already recorded for that day.`,
+        });
+        current.set(debt.liability_id, { balance: debt.closing_balance, asOf: debt.as_of });
+      }
     }
-    if (l?.balance_as_of && debt.as_of === l.balance_as_of) {
-      return {
-        before,
-        after: before,
-        note: `A balance for ${when} is already recorded and is kept.`,
-      };
-    }
-    return { before, after: debt.closing_balance, note: `Statement balance on ${when}.` };
+    return out;
   }
 
   async function renderReview(): Promise<void> {
@@ -2344,12 +2381,11 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     if (counts.debts.length) {
       body.appendChild(el('h4', 'smart-import-subtitle', 'Debt balances'));
       const list = el('div', 'smart-import-debts');
-      for (const d of counts.debts) {
+      const money = (n: number | null): string => (n === null ? 'Not known' : formatCurrency(n));
+      for (const { debt, before, after, note } of debtLines(counts.debts)) {
         const row = el('div', 'smart-import-debt-line');
-        row.setAttribute('data-debt', d.liability_id);
-        const { before, after, note } = debtAfter(d);
-        const name = liabilityById(d.liability_id)?.name ?? d.label;
-        const money = (n: number | null): string => (n === null ? 'Not known' : formatCurrency(n));
+        row.setAttribute('data-debt', debt.liability_id);
+        const name = liabilityById(debt.liability_id)?.name ?? debt.label;
         const dl = el('dl', 'smart-import-facts');
         const b = el('dd', undefined, money(before));
         b.setAttribute('data-si', 'debt-before');
@@ -2393,6 +2429,57 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     }
   }
 
+  /** A failure after which the server may or may not have saved the batch. */
+  const isAmbiguous = (error: unknown): boolean =>
+    !(error instanceof ApiError) || AMBIGUOUS_STATUS.has(error.status);
+
+  /**
+   * After a lost reply (or a retry that skipped every file), ask the read-only
+   * preview whether each statement of the request is now stored. When all are,
+   * the import was saved: Done shows it with Undo over those import ids.
+   */
+  async function reconcile(request: ApplyRequest): Promise<boolean> {
+    const hashes = request.statements.map((s) => s.file_hash);
+    if (!hashes.length) return false;
+    try {
+      const preview = await apiCall<PreviewResponse>('/api/smart-import/preview', {
+        method: 'POST',
+        body: buildPreviewRequest(st()),
+      });
+      const prior = new Map(
+        (preview.prior_files ?? []).map((p) => [p.file_hash, p.import_id] as const)
+      );
+      if (!hashes.every((h) => prior.has(h))) return false;
+      applyResult = {
+        imports: hashes.map((h) => ({
+          import_id: prior.get(h)!,
+          file_hash: h,
+          txn_new: 0,
+          txn_duplicate: 0,
+          txn_excluded: 0,
+          balance: 'none' as const,
+        })),
+        skipped_files: [],
+        rules_saved: 0,
+        expenses_created: 0,
+        expenses_linked: 0,
+        pruned: 0,
+      };
+      recovered = true;
+      return true;
+    } catch (error) {
+      console.error('Import check failed:', error instanceof Error ? error.name : 'error');
+      return false;
+    }
+  }
+
+  function applyFailed(text: string): void {
+    applying = false;
+    showApplyError(text);
+    renderFooter();
+    footer.querySelector<HTMLElement>('[data-si="apply"]')?.focus();
+  }
+
   async function applyNow(): Promise<void> {
     if (applying || applyResult || step !== 5) return;
     let request: ApplyRequest;
@@ -2418,12 +2505,36 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       });
     } catch (error) {
       console.error('Import apply failed:', error instanceof Error ? error.name : 'error');
-      applying = false;
-      showApplyError(applyErrorText(error));
-      renderFooter();
+      if (!isAmbiguous(error)) {
+        applyFailed(applyErrorText(error));
+        return;
+      }
+      if (await reconcile(request)) applied();
+      else applyFailed(AMBIGUOUS_TEXT);
+      return;
+    }
+    const sent = request.statements.map((s) => s.file_hash);
+    const skipped = new Set(result.skipped_files ?? []);
+    const allSkipped =
+      !(result.imports ?? []).length && sent.length > 0 && sent.every((h) => skipped.has(h));
+    // A retry after a lost reply: every file is already stored, by the first try.
+    if (allSkipped && (await reconcile(request))) {
+      applied();
       return;
     }
     applyResult = result;
+    applied();
+  }
+
+  /** Show Done first; the settings save runs after it and only warns. */
+  function applied(): void {
+    applying = false;
+    refreshViews();
+    if (modal?.isConnected) renderDone();
+    void saveSettings();
+  }
+
+  async function saveSettings(): Promise<void> {
     try {
       await apiCall<SmartImportSettings>('/api/smart-import/settings', {
         method: 'PUT',
@@ -2431,11 +2542,18 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       });
     } catch (error) {
       console.error('Import settings save failed:', error instanceof Error ? error.name : 'error');
-      settingsWarning = true;
+      if (step !== 6 || !modal?.isConnected) return;
+      const warn = el(
+        'p',
+        'smart-import-note',
+        'The import is saved, but account names and column layouts could not be remembered for next time.'
+      );
+      warn.setAttribute('data-si', 'settings-warning');
+      warn.setAttribute('role', 'status');
+      const anchor = body.querySelector('[data-si="done-summary"]') ?? body.lastElementChild;
+      if (anchor) anchor.after(warn);
+      else body.appendChild(warn);
     }
-    applying = false;
-    refreshViews();
-    if (modal?.isConnected) renderDone();
   }
 
   // ---- done and undo -----------------------------------------------------
@@ -2455,6 +2573,8 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
   const undoKept: SmartImportUndoResponse['kept'] = [];
   let undoing = false;
   let undoFailed = 0;
+  /** Imports whose DELETE said 404: already undone elsewhere, items not counted. */
+  let undoAlready = 0;
 
   const pendingUndo = (): string[] =>
     (applyResult?.imports ?? []).map((i) => i.import_id).filter((id) => !undoneIds.has(id));
@@ -2479,19 +2599,26 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     }
   }
 
-  function renderDone(focusResult = false): void {
-    const result = applyResult!;
-    const allUndone = pendingUndo().length === 0;
-    const h = setStep(6, allUndone ? 'Import undone' : 'Import saved');
-    const sum = (k: 'txn_new' | 'txn_duplicate' | 'txn_excluded'): number =>
-      result.imports.reduce((n, i) => n + i[k], 0);
+  function doneHeading(hasImports: boolean, allUndone: boolean): string {
+    if (allUndone) return 'Import undone';
+    if (recovered) return 'Your import was saved';
+    return hasImports ? 'Import saved' : 'Nothing new to save';
+  }
 
+  function savedSummary(result: ApplyResponse): HTMLElement {
     const summary = el('ul', 'smart-import-summary');
     summary.setAttribute('data-si', 'done-summary');
     const line = (text: string): void => {
       summary.appendChild(el('li', undefined, text));
     };
-    line(`${countText(sum('txn_new'), 'transaction')} saved`);
+    if (recovered) {
+      line(`${countText(result.imports.length, 'statement')} saved`);
+      line('The reply was lost on the way back, so the exact counts are not shown.');
+      return summary;
+    }
+    const sum = (k: 'txn_new' | 'txn_duplicate' | 'txn_excluded'): number =>
+      result.imports.reduce((n, i) => n + i[k], 0);
+    if (result.imports.length) line(`${countText(sum('txn_new'), 'transaction')} saved`);
     if (sum('txn_duplicate')) line(`${countText(sum('txn_duplicate'), 'duplicate')} skipped`);
     if (sum('txn_excluded')) line(`${countText(sum('txn_excluded'), 'excluded row')} not stored`);
     if (result.rules_saved) line(`${countText(result.rules_saved, 'merchant')} remembered`);
@@ -2501,7 +2628,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       line(`${countText(result.expenses_linked, 'bill')} linked to existing expenses`);
     if (result.pruned)
       line(`${countText(result.pruned, 'older transaction')} removed under the keep-for setting`);
-    for (const hash of result.skipped_files) {
+    for (const hash of result.skipped_files ?? []) {
       const name = statementFor(hash)?.file_name || 'A file';
       line(`${name}: already imported, so it was skipped`);
     }
@@ -2509,18 +2636,47 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       const text = balanceLine(imp);
       if (text) line(text);
     }
-    // Once everything is undone the saved summary no longer holds; the undo result replaces it.
-    if (!allUndone) body.appendChild(summary);
+    return summary;
+  }
 
-    if (settingsWarning && !allUndone) {
-      const warn = el(
-        'p',
-        'smart-import-note',
-        'The import is saved, but account names and column layouts could not be remembered for next time.'
+  function undoResultBox(): HTMLElement {
+    const box = el('div', 'smart-import-card smart-import-undo-result');
+    box.setAttribute('data-si', 'undo-result');
+    box.tabIndex = -1;
+    if (undoneIds.size > undoAlready) box.appendChild(el('p', undefined, removedText()));
+    if (undoAlready) {
+      box.appendChild(
+        el(
+          'p',
+          undefined,
+          undoAlready === 1
+            ? '1 statement had already been undone, so its items are not counted.'
+            : `${undoAlready} statements had already been undone, so their items are not counted.`
+        )
       );
-      warn.setAttribute('data-si', 'settings-warning');
-      body.appendChild(warn);
     }
+    for (const text of keptLines(undoKept)) box.appendChild(el('p', undefined, text));
+    if (undoTotals.reassigned) {
+      box.appendChild(
+        el(
+          'p',
+          undefined,
+          `${countText(undoTotals.reassigned, 'transaction')} also in another import now belong to that import.`
+        )
+      );
+    }
+    box.appendChild(el('p', 'smart-import-hint', 'Remembered merchants stay.'));
+    return box;
+  }
+
+  function renderDone(focusResult = false): void {
+    const result = applyResult!;
+    const hasImports = result.imports.length > 0;
+    const allUndone = hasImports && pendingUndo().length === 0;
+    const h = setStep(6, doneHeading(hasImports, allUndone));
+
+    // Once everything is undone the saved summary no longer holds; the undo result replaces it.
+    if (!allUndone) body.appendChild(savedSummary(result));
 
     const actions = el('div', 'smart-import-actions');
     const planned = button('See planned vs actual', 'btn btn-secondary', 'planned');
@@ -2530,7 +2686,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       showBudgetTab('expenses');
     });
     actions.appendChild(planned);
-    if (!allUndone) {
+    if (hasImports && !allUndone) {
       const undo = button('Undo this import', 'btn btn-secondary', 'undo');
       undo.disabled = undoing;
       undo.addEventListener('click', showUndoConfirm);
@@ -2540,7 +2696,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
 
     let target: HTMLElement = h;
     if (undoFailed) {
-      const total = (applyResult?.imports ?? []).length;
+      const total = result.imports.length;
       const err = el(
         'p',
         'smart-import-error',
@@ -2551,21 +2707,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       body.appendChild(err);
     }
     if (undoneIds.size) {
-      const box = el('div', 'smart-import-card smart-import-undo-result');
-      box.setAttribute('data-si', 'undo-result');
-      box.tabIndex = -1;
-      box.appendChild(el('p', undefined, removedText()));
-      for (const text of keptLines(undoKept)) box.appendChild(el('p', undefined, text));
-      if (undoTotals.reassigned) {
-        box.appendChild(
-          el(
-            'p',
-            undefined,
-            `${countText(undoTotals.reassigned, 'transaction')} also in another import now belong to that import.`
-          )
-        );
-      }
-      box.appendChild(el('p', 'smart-import-hint', 'Remembered merchants stay.'));
+      const box = undoResultBox();
       body.appendChild(box);
       if (focusResult) target = box;
     }
@@ -2580,21 +2722,33 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     return `Removed ${joinParts(parts)}.`;
   }
 
+  /** The confirm, counted over the imports still to undo (so a retry is right too). */
   function undoConfirmText(): string {
+    const result = applyResult!;
     const pending = new Set(pendingUndo());
-    const imports = (applyResult?.imports ?? []).filter((i) => pending.has(i.import_id));
+    const imports = result.imports.filter((i) => pending.has(i.import_id));
+    const pruned = result.pruned
+      ? ' Older transactions removed under the keep-for setting are not restored.'
+      : '';
+    if (recovered) {
+      return `Undo this import? Removes everything ${countText(imports.length, 'statement')} added: transactions, expenses it added unless you changed them, and debt balances.${pruned} Remembered merchants stay.`;
+    }
     const parts = [
       countText(
         imports.reduce((n, i) => n + i.txn_new, 0),
         'transaction'
       ),
     ];
-    if (!undoneIds.size && applyResult?.expenses_created) {
-      parts.push(`${countText(applyResult.expenses_created, 'expense')} it added`);
-    }
     const balances = imports.filter((i) => i.balance === 'recorded').length;
     if (balances) parts.push(countText(balances, 'debt balance'));
-    return `Undo this import? Removes ${joinParts(parts)}. Remembered merchants stay.`;
+    const keptExpenses = undoKept.filter((k) => k.table === 'budget_expenses').length;
+    const expenses = Math.max(0, result.expenses_created - undoTotals.expenses - keptExpenses);
+    if (expenses) {
+      parts.push(
+        `the ${countText(expenses, 'expense')} it added, unless you changed ${expenses === 1 ? 'it' : 'them'}`
+      );
+    }
+    return `Undo this import? Removes ${joinParts(parts)}.${pruned} Remembered merchants stay.`;
   }
 
   function showUndoConfirm(): void {
@@ -2623,6 +2777,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     keep.disabled = true;
     go.disabled = true;
     go.textContent = 'Undoing...';
+    go.setAttribute('aria-busy', 'true');
     let changed = false;
     undoFailed = 0;
     for (const id of pendingUndo()) {
@@ -2641,6 +2796,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
       } catch (error) {
         if (error instanceof ApiError && error.status === 404) {
           undoneIds.add(id); // already gone (undone from the history list)
+          undoAlready += 1;
           continue;
         }
         console.error('Import undo failed:', error instanceof Error ? error.name : 'error');
@@ -2651,9 +2807,7 @@ export function openSmartImportWizard(options: OpenSmartImportOptions = {}): Sma
     undoing = false;
     confirming = false;
     footer.classList.remove('smart-import-confirm');
-    if (changed) {
-      refreshViews();
-    }
+    if (changed) refreshViews();
     if (modal?.isConnected) renderDone(true);
   }
 

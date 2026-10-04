@@ -683,6 +683,51 @@ describe('recurring', () => {
     expect(req.recurring![1]).not.toHaveProperty('expense_id');
   });
 
+  it('starts everyday spending unticked and flags it, but keeps bills ticked', () => {
+    const cand = (merchant_key: string, category_id: string | null) => ({
+      merchant_key,
+      name: merchant_key,
+      amount: 50,
+      frequency: 'monthly' as const,
+      occurrences: 3,
+      last_date: '2026-09-01',
+      category_id,
+      already_budgeted: false,
+      matched_expense_id: null,
+    });
+    let s = createWizardState(
+      {
+        categories: [
+          { id: 'food', name: 'Food & Dining' },
+          { id: 'groc', name: 'Groceries' },
+          { id: 'shop', name: 'Shopping' },
+          { id: 'gas', name: 'Gas' },
+          { id: 'util', name: 'Utilities' },
+          { id: 'trans', name: 'Transportation' },
+        ],
+      },
+      'b'
+    );
+    s = setRecurring(s, [
+      cand('SAFEWAY', 'food'),
+      cand('KROGER', 'groc'),
+      cand('TARGET', 'shop'),
+      cand('SHELL', 'gas'),
+      cand('VERIZON', 'util'),
+      cand('CAR LOAN', 'trans'),
+      cand('MYSTERY', null),
+    ]);
+    expect(s.recurring.map((c) => [c.merchant_key, c.checked, c.everyday])).toEqual([
+      ['SAFEWAY', false, true],
+      ['KROGER', false, true],
+      ['TARGET', false, true],
+      ['SHELL', false, true],
+      ['VERIZON', true, false],
+      ['CAR LOAN', true, false],
+      ['MYSTERY', true, false],
+    ]);
+  });
+
   it('skips a candidate that has no category, which the server would reject', () => {
     let s = loaded([txn({ merchant_key: 'GYM' })]);
     s = setRecurring(s, [
@@ -867,7 +912,7 @@ describe('reviewCounts', () => {
         frequency: 'monthly',
         occurrences: 3,
         last_date: '2026-09-01',
-        category_id: 'c-food',
+        category_id: 'c-home',
         already_budgeted: false,
         matched_expense_id: null,
       },

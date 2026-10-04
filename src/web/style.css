@@ -8966,6 +8966,7 @@ body.on-settings #tab-settings {
 .smart-import-undo-result { margin-top: 12px; color: var(--color-text-primary); }
 .smart-import-undo-result p { margin: 0 0 6px; }
 .smart-import-undo-result:focus { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.smart-import-busy { margin: 0; flex: 1 1 auto; font-size: 13px; color: var(--color-text-secondary); }
 
 @media (max-width: 1024px) {
     .smart-import-rec-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
@@ -8976,6 +8977,8 @@ body.on-settings #tab-settings {
     .smart-import-rec-tick input { width: 22px; height: 22px; }
     .smart-import-review { max-width: none; }
     .smart-import-actions .btn { flex: 1 1 auto; }
+    .smart-import-busy { flex-basis: 100%; }
+    .smart-import-footer:has(.smart-import-busy) { flex-wrap: wrap; }
 }
 
 @media (max-width: 480px) {

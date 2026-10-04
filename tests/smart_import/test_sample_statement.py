@@ -85,3 +85,17 @@ def test_recurring_finds_rent_streaming_and_phone():
     assert "NETFLIX" in keys or "SPOTIFY" in keys
     assert "VERIZON" in keys
     assert all(c["frequency"] == "monthly" for c in found)
+
+
+def test_recurring_leaves_everyday_grocery_and_gas_visits_out():
+    # Groceries and fuel come 2 or 3 times a month on irregular days with spread
+    # amounts, so neither statement alone nor both together make them bills.
+    checking = _analyze(CHECKING)[0]["transactions"]
+    card = _analyze(CARD)[0]["transactions"]
+    for rows in (checking, checking + card):
+        keys = {c["merchant_key"] for c in detect(rows, [], [], CATEGORIES)}
+        for everyday in ("SAFEWAY", "TRADER", "WHOLE FOODS", "SHELL"):
+            assert not any(everyday in k for k in keys), (everyday, keys)
+        assert any("RENT" in k for k in keys)
+        assert any("VERIZON" in k for k in keys)
+        assert any("SPOTIFY" in k for k in keys)

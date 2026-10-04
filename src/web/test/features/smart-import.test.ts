@@ -166,7 +166,7 @@ const emptyPreview: PreviewResponse = {
 interface Setup {
   ctx?: SmartImportContext;
   ai?: Partial<SmartImportAiStatus> | 'fail';
-  preview?: PreviewResponse;
+  preview?: PreviewResponse | (() => PreviewResponse);
   liabilities?: unknown[];
   analyze?: (
     file: File,
@@ -181,9 +181,15 @@ interface Setup {
 }
 
 let calls: { url: string; options?: { method?: string; body?: unknown } }[] = [];
+/** Every multipart upload (analyze), kept apart from the JSON calls. */
+let uploads: string[] = [];
+/** Routes the mock does not know; checked after every test (code may swallow the throw). */
+let unexpected: string[] = [];
 
 function setup(s: Setup = {}): void {
   calls = [];
+  uploads = [];
+  unexpected = [];
   apiCallMock.mockReset();
   uploadMock.mockReset();
   apiCallMock.mockImplementation(async (url: string, options?: never) => {
@@ -202,7 +208,9 @@ function setup(s: Setup = {}): void {
         ...(s.ai ?? {}),
       };
     }
-    if (url === '/api/smart-import/preview') return s.preview ?? emptyPreview;
+    if (url === '/api/smart-import/preview') {
+      return typeof s.preview === 'function' ? s.preview() : (s.preview ?? emptyPreview);
+    }
     if (url === '/api/liabilities') return s.liabilities ?? [];
     if (url === '/api/smart-import/categorize') {
       const body = (options as { body?: unknown } | undefined)?.body as CategorizeRequest;
@@ -213,6 +221,7 @@ function setup(s: Setup = {}): void {
       const body = (options as { body?: unknown } | undefined)?.body;
       return s.settingsPut ? s.settingsPut(body) : { ...context().settings, ...(body as object) };
     }
+    if (url === '/api/smart-import/extract') throw new ApiError(503, 'x');
     if (url === '/api/budget/expenses') return s.expenses ?? [];
     if (url === '/api/v2/smart-import/recurring') {
       const body = (options as { body?: unknown } | undefined)?.body;
@@ -228,9 +237,11 @@ function setup(s: Setup = {}): void {
       if (s.undo) return s.undo(id);
       throw new ApiError(500, 'x');
     }
-    return {};
+    unexpected.push(url);
+    throw new Error(`unexpected route in test: ${url}`);
   });
-  uploadMock.mockImplementation(async (_url: string, file: File, ctx: unknown) => {
+  uploadMock.mockImplementation(async (url: string, file: File, ctx: unknown) => {
+    uploads.push(url);
     const answer = s.analyze
       ? await s.analyze(file, ctx as Record<string, unknown>)
       : okAnswer(statement({ file_name: file.name }));
@@ -280,6 +291,7 @@ describe('smart import wizard', () => {
   });
   afterEach(() => {
     closeDynamicModal();
+    expect(unexpected).toEqual([]);
   });
 
   describe('shell', () => {
@@ -2093,7 +2105,7 @@ describe('smart import wizard', () => {
       frequency: 'monthly',
       occurrences: 3,
       last_date: '2026-09-10',
-      category_id: 'c2',
+      category_id: 'c1',
       already_budgeted: false,
       matched_expense_id: null,
       ...over,
@@ -2326,14 +2338,14 @@ describe('smart import wizard', () => {
         typeInto(ctl<HTMLInputElement>('gym club', 'rec-name'), 'Gym membership');
         typeInto(ctl<HTMLInputElement>('gym club', 'rec-amount'), '42.5');
         change(ctl('gym club', 'rec-frequency'), 'biweekly');
-        change(ctl('gym club', 'rec-category'), 'c1');
+        change(ctl('gym club', 'rec-category'), 'c2');
         await flush();
         const c = handle.getState().recurring.find((x) => x.merchant_key === 'gym club')!;
         expect(c).toMatchObject({
           name: 'Gym membership',
           amount: 42.5,
           frequency: 'biweekly',
-          category_id: 'c1',
+          category_id: 'c2',
         });
       });
 
@@ -2383,7 +2395,7 @@ describe('smart import wizard', () => {
         const body = callsTo('/api/smart-import/apply')[0]!.options!.body as ApplyRequest;
         const byKey = Object.fromEntries((body.recurring ?? []).map((r) => [r.merchant_key, r]));
         expect(byKey['netflix']).toMatchObject({ decision: 'link', expense_id: 'e1' });
-        expect(byKey['gym club']).toMatchObject({ decision: 'create', category_id: 'c2' });
+        expect(byKey['gym club']).toMatchObject({ decision: 'create', category_id: 'c1' });
         expect(byKey['safeway']).toMatchObject({ decision: 'reject' });
       });
 
@@ -2722,6 +2734,337 @@ describe('smart import wizard', () => {
           'DELETE /api/smart-import/imports/imp-2',
           'DELETE /api/smart-import/imports/imp-2',
         ]);
+      });
+    });
+
+    describe('review fixes', () => {
+      const deferred = <T>(): { promise: Promise<T>; resolve: (v: T) => void } => {
+        let resolve: (v: T) => void = () => undefined;
+        const promise = new Promise<T>((r) => (resolve = r));
+        return { promise, resolve };
+      };
+      const escape = (): void => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      };
+      const both = ['hash-chk', 'hash-card'];
+      const savedPreview = (): PreviewResponse => ({
+        ...emptyPreview,
+        prior_files: [
+          { file_hash: 'hash-chk', import_id: 'imp-a', imported_at: null },
+          { file_hash: 'hash-card', import_id: 'imp-b', imported_at: null },
+        ],
+      });
+      /** The read-only preview answers "not stored" until an apply has been sent. */
+      const previewAfterApply = (stored: () => boolean) => (): PreviewResponse =>
+        stored() ? savedPreview() : { ...emptyPreview, existing_dedupe_keys: ['acct:abc|dup'] };
+
+      it('holds Escape, X and the backdrop while Apply is in flight, with a note', async () => {
+        const gate = deferred<unknown>();
+        await toReview({ apply: () => gate.promise });
+        q<HTMLButtonElement>('[data-si="apply"]').click();
+        escape();
+        await flush();
+        expect(q('[data-si="busy-note"]').textContent).toBe('Saving your import...');
+        expect(modal().querySelector('[data-si="discard"]')).toBeNull();
+        q<HTMLElement>('.modal-close').click();
+        await flush();
+        expect(document.getElementById('dynamic-modal')).not.toBeNull();
+        expect(modal().querySelector('[data-si="discard"]')).toBeNull();
+        expect(q('[data-si="apply"]').getAttribute('aria-busy')).toBe('true');
+        gate.resolve(applied());
+        await flush();
+        expect(q('[data-si="done-summary"]')).toBeTruthy();
+        expect(modal().querySelector('[data-si="busy-note"]')).toBeNull();
+      });
+
+      it('holds Escape and X while Undo is in flight, with a note', async () => {
+        const gate = deferred<unknown>();
+        await toDone({ undo: () => gate.promise });
+        q<HTMLButtonElement>('[data-si="undo"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="undo-confirm"]').click();
+        escape();
+        q<HTMLElement>('.modal-close').click();
+        await flush();
+        expect(document.getElementById('dynamic-modal')).not.toBeNull();
+        expect(q('[data-si="busy-note"]').textContent).toBe('Undoing...');
+        expect(modal().querySelector('[data-si="discard"]')).toBeNull();
+        gate.resolve(undone());
+        await flush();
+        expect(q('[data-si="undo-result"]')).toBeTruthy();
+      });
+
+      it('after a timeout says applying again is safe, and refocuses Apply', async () => {
+        await toReview({
+          apply: () => {
+            throw new ApiError(0, 'Request timeout');
+          },
+        });
+        q<HTMLButtonElement>('[data-si="apply"]').click();
+        await flush();
+        expect(q('[data-si="apply-error"]').textContent).toBe(
+          'We could not confirm the import was saved. Applying again is safe: statements already saved are skipped.'
+        );
+        const btn = q<HTMLButtonElement>('[data-si="apply"]');
+        expect(btn.disabled).toBe(false);
+        expect(btn.hasAttribute('aria-busy')).toBe(false);
+        expect(document.activeElement).toBe(btn);
+      });
+
+      it('uses the same copy for a 502, 503 or 504', async () => {
+        for (const status of [502, 503, 504]) {
+          closeDynamicModal();
+          await toReview({
+            apply: () => {
+              throw new ApiError(status, 'x');
+            },
+          });
+          q<HTMLButtonElement>('[data-si="apply"]').click();
+          await flush();
+          expect(q('[data-si="apply-error"]').textContent).toMatch(/could not confirm/);
+        }
+      });
+
+      it('shows the import as saved when a timeout hid a save the preview can see', async () => {
+        let sent = false;
+        await toReview({
+          preview: previewAfterApply(() => sent),
+          apply: () => {
+            sent = true;
+            throw new ApiError(0, 'Request timeout');
+          },
+        });
+        q<HTMLButtonElement>('[data-si="apply"]').click();
+        await flush();
+        expect(q('.smart-import-heading').textContent).toBe('Your import was saved');
+        expect(q('[data-si="done-summary"]').textContent).toContain('2 statements saved');
+        expect(seen).toContain('liabilities:balance');
+      });
+
+      it('recovers a timeout followed by an idempotent retry, with Undo over the saved ids', async () => {
+        let tries = 0;
+        await toReview({
+          preview: previewAfterApply(() => tries > 1),
+          apply: () => {
+            tries += 1;
+            if (tries === 1) throw new ApiError(0, 'Request timeout');
+            return applied({ imports: [], skipped_files: both, expenses_created: 0 });
+          },
+        });
+        q<HTMLButtonElement>('[data-si="apply"]').click();
+        await flush();
+        expect(q('[data-si="apply-error"]').textContent).toMatch(/Applying again is safe/);
+        q<HTMLButtonElement>('[data-si="apply"]').click();
+        await flush();
+        expect(callsTo('/api/smart-import/apply')).toHaveLength(2);
+        expect(q('.smart-import-heading').textContent).toBe('Your import was saved');
+        q<HTMLButtonElement>('[data-si="undo"]').click();
+        await flush();
+        expect(q('.smart-import-confirm-text').textContent).toContain('Remembered merchants stay.');
+        q<HTMLButtonElement>('[data-si="undo-confirm"]').click();
+        await flush();
+        expect(writes().filter((w) => w.startsWith('DELETE'))).toEqual([
+          'DELETE /api/smart-import/imports/imp-a',
+          'DELETE /api/smart-import/imports/imp-b',
+        ]);
+        expect(q('.smart-import-heading').textContent).toBe('Import undone');
+      });
+
+      it('never says "Import undone" when nothing was imported', async () => {
+        await toDone({ apply: () => applied({ imports: [], skipped_files: both }) });
+        expect(q('.smart-import-heading').textContent).toBe('Nothing new to save');
+        expect(modal().querySelector('[data-si="undo"]')).toBeNull();
+        expect(q('[data-si="done-summary"]').textContent).toContain('checking.csv');
+      });
+
+      it('counts imports that were already undone separately', async () => {
+        await toDone({
+          undo: (id) => {
+            if (id === 'imp-1') throw new ApiError(404, 'x', { error_type: 'import_not_found' });
+            return undone({
+              deleted: { transactions: 1, recurring_candidates: 0, expenses: 0, snapshots: 1 },
+            });
+          },
+        });
+        q<HTMLButtonElement>('[data-si="undo"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="undo-confirm"]').click();
+        await flush();
+        const text = q('[data-si="undo-result"]').textContent ?? '';
+        expect(text).toContain('Removed 1 transaction and 1 debt balance.');
+        expect(text).toContain(
+          '1 statement had already been undone, so its items are not counted.'
+        );
+      });
+
+      it('says edited expenses stay and pruned rows are not restored', async () => {
+        await toDone({ apply: () => applied({ pruned: 7 }) });
+        q<HTMLButtonElement>('[data-si="undo"]').click();
+        await flush();
+        const text = q('.smart-import-confirm-text').textContent ?? '';
+        expect(text).toContain('the 1 expense it added, unless you changed it');
+        expect(text).toContain(
+          'Older transactions removed under the keep-for setting are not restored.'
+        );
+      });
+
+      it('recounts the confirm after a partial undo', async () => {
+        await toDone({
+          undo: (id) => {
+            if (id === 'imp-2') throw new ApiError(500, 'x');
+            return undone({
+              deleted: { transactions: 3, recurring_candidates: 1, expenses: 1, snapshots: 0 },
+            });
+          },
+        });
+        q<HTMLButtonElement>('[data-si="undo"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="undo-confirm"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="undo"]').click();
+        await flush();
+        expect(q('.smart-import-confirm-text').textContent).toBe(
+          'Undo this import? Removes 1 transaction and 1 debt balance. Remembered merchants stay.'
+        );
+      });
+
+      it('chains "Now" across two statements for the same debt and hedges the copy', async () => {
+        const july = card({
+          file_hash: 'hash-card-1',
+          closing_balance: { amount: 1000, as_of: '2026-08-31' },
+        });
+        const sept = card({
+          file_hash: 'hash-card-2',
+          closing_balance: { amount: 1200, as_of: '2026-09-30' },
+          transactions: [txn(0, { merchant_key: 'cafe', dedupe_base: 'z' })],
+        });
+        setup(
+          base({
+            analyze: (file) => okAnswer(file.name === 'a.ofx' ? sept : july),
+            liabilities: [liability({ current_balance: 900, balance_as_of: '2026-07-31' })],
+            recurring: () => ({ candidates: [] }),
+          })
+        );
+        await open();
+        await toAccounts([
+          new File(['x'], 'a.ofx', { type: 'application/x-ofx' }),
+          new File(['y'], 'b.ofx', { type: 'application/x-ofx' }),
+        ]);
+        next().click();
+        await flush();
+        next().click();
+        await flush();
+        next().click();
+        await flush();
+        const lines = qa('[data-debt="l1"]');
+        expect(lines).toHaveLength(2);
+        const pair = (n: HTMLElement): string[] => [
+          n.querySelector('[data-si="debt-before"]')!.textContent ?? '',
+          n.querySelector('[data-si="debt-after"]')!.textContent ?? '',
+        ];
+        expect(pair(lines[0]!)).toEqual(['$900.00', '$1,000.00']);
+        expect(pair(lines[1]!)).toEqual(['$1,000.00', '$1,200.00']);
+        expect(lines[1]!.textContent).toContain(
+          'unless a balance is already recorded for that day'
+        );
+      });
+
+      it('renders Done before the settings save, then adds the warning if it fails', async () => {
+        const gate = deferred<unknown>();
+        let fail: () => void = () => undefined;
+        await toReview({
+          settingsPut: () =>
+            new Promise((_r, reject) => {
+              fail = () => reject(new ApiError(500, 'x'));
+              void gate.promise;
+            }),
+        });
+        q<HTMLButtonElement>('[data-si="apply"]').click();
+        await flush();
+        expect(q('[data-si="done-summary"]')).toBeTruthy();
+        expect(modal().querySelector('[data-si="settings-warning"]')).toBeNull();
+        fail();
+        await flush();
+        expect(q('[data-si="settings-warning"]').textContent).toMatch(/import is saved/i);
+      });
+
+      it('starts everyday spending unticked with its note', async () => {
+        await toRecurring({
+          recurring: () => ({
+            candidates: [
+              candidate('kroger', { name: 'Kroger', category_id: 'c2' }),
+              candidate('gym club', { name: 'Gym Club' }),
+            ],
+          }),
+        });
+        expect(ctl<HTMLInputElement>('kroger', 'rec-check').checked).toBe(false);
+        expect(cardFor('kroger').querySelector('[data-si="rec-note"]')!.textContent).toBe(
+          'Everyday spending, not usually a bill.'
+        );
+        expect(ctl<HTMLInputElement>('gym club', 'rec-check').checked).toBe(true);
+      });
+
+      it('uploads only to analyze before Apply', async () => {
+        await toReview();
+        expect(uploads.length).toBeGreaterThan(0);
+        expect(new Set(uploads)).toEqual(new Set(['/api/v2/smart-import/analyze']));
+        expect(writes().filter((w) => !w.startsWith('POST'))).toEqual([]);
+      });
+
+      it('writes only {ai_enabled: true} before Apply when AI consent is given', async () => {
+        const puts: unknown[] = [];
+        setup(
+          base({
+            ai: {
+              ai_available: true,
+              ai_enabled: false,
+              provider: 'Fake AI',
+              model: 'fake-model-1',
+            },
+            settingsPut: (body) => {
+              puts.push(body);
+              return { ...context().settings, ai_enabled: true };
+            },
+            categorize: (body) => ({
+              suggestions: body.items.map((i) => ({
+                id: i.id,
+                category: 'Groceries',
+                kind: null,
+                confidence: 0.9,
+              })),
+              provider: 'Fake AI',
+              model: 'fake-model-1',
+            }),
+          })
+        );
+        store.set('dataMode', 'server');
+        await open();
+        await toAccounts(twoFiles());
+        next().click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="ai-suggest"]').click();
+        await flush();
+        q<HTMLButtonElement>('[data-si="ai-consent"]').click();
+        await flush();
+        next().click();
+        await flush();
+        for (const card of qa('[data-candidate]')) {
+          const err = card.querySelector('[data-si="rec-error"]');
+          if (err) change(card.querySelector<HTMLInputElement>('[data-si="rec-check"]')!, false);
+        }
+        await flush();
+        next().click();
+        await flush();
+        expect(shortLabel()).toBe('5 of 5');
+        expect(puts).toEqual([{ ai_enabled: true }]);
+        const allowed = [
+          'POST /api/smart-import/preview',
+          'POST /api/smart-import/categorize',
+          'PUT /api/smart-import/settings',
+          'POST /api/v2/smart-import/recurring',
+        ];
+        for (const w of writes()) expect(allowed).toContain(w);
+        expect(writes().filter((w) => w.startsWith('PUT'))).toHaveLength(1);
       });
     });
 
