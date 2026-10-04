@@ -1,0 +1,158 @@
+{
+  "generated_by": "tests/connectors/test_normalize.py fixture_statements",
+  "provider": "simplefin",
+  "statements": [
+    {
+      "account": {
+        "institution": "Example Credit Union",
+        "key": "acct:edf513e762c98443199006f03b52807cc9e5b62d15b5a8beb7b73e2330472c16",
+        "kind": "checking",
+        "last4": null
+      },
+      "closing_balance": {
+        "amount": 1520.33,
+        "as_of": "2026-10-04"
+      },
+      "extras": null,
+      "file_hash": "e405818c91c163eca8edf7223b62a3129facc71f490b452f3cdbf0aa1f1d0921",
+      "file_name": "SimpleFIN sync 2026-10-04",
+      "format": "connector",
+      "origin": "connector",
+      "parser": "connector:simplefin",
+      "period": {
+        "end": "2026-10-04",
+        "start": "2026-09-05"
+      },
+      "transactions": [
+        {
+          "amount": -4.5,
+          "category_id": "cat-Dining",
+          "category_source": "seed",
+          "dedupe_base": "7fbc525327e4d0653fec61fb46bc2676bd50a11b0b6182fa958012087f00e629",
+          "description": "STARBUCKS STORE 1234",
+          "external_id": "simplefin:c1",
+          "kind": "expense",
+          "merchant_key": "STARBUCKS STORE",
+          "posted_date": "2026-09-08",
+          "row": 0
+        },
+        {
+          "amount": -61.2,
+          "category_id": "cat-Dining",
+          "category_source": "seed",
+          "dedupe_base": "012be9a2ac112a071aed4188354a5cddb2fc61b600938d99953cd1c3ba983638",
+          "description": "SAFEWAY #2201",
+          "external_id": "simplefin:c2",
+          "kind": "expense",
+          "merchant_key": "SAFEWAY",
+          "posted_date": "2026-09-12",
+          "row": 1
+        },
+        {
+          "amount": 2400.0,
+          "category_id": null,
+          "category_source": "none",
+          "dedupe_base": "383c8c6bbad22032a52a3f4359dfd440c21cce6fbfdd20b91c044e35b8d5edb8",
+          "description": "PAYROLL EXAMPLE CO",
+          "external_id": "simplefin:c3",
+          "kind": "income",
+          "merchant_key": "PAYROLL EXAMPLE CO",
+          "posted_date": "2026-09-15",
+          "row": 2
+        },
+        {
+          "amount": -15.49,
+          "category_id": null,
+          "category_source": "none",
+          "dedupe_base": "d4e6aa4cf7f77f4e2f64a612f38b3468b02f20c133a17d3a3ec089a226aff83e",
+          "description": "NETFLIX.COM",
+          "external_id": "simplefin:c4",
+          "kind": "expense",
+          "merchant_key": "NETFLIX.COM",
+          "posted_date": "2026-09-18",
+          "row": 3
+        },
+        {
+          "amount": -9.75,
+          "category_id": "cat-Dining",
+          "category_source": "rule",
+          "dedupe_base": "8c4b0f3f68c5f4ea985b048cff3aa99b70502625b53ca29bd0e496611da69be3",
+          "description": "Corner Cafe",
+          "external_id": "simplefin:c5",
+          "kind": "expense",
+          "merchant_key": "CORNER CAFE",
+          "posted_date": "2026-09-22",
+          "row": 4
+        }
+      ],
+      "warnings": [
+        "rows_skipped"
+      ]
+    },
+    {
+      "account": {
+        "institution": "Example Card Services",
+        "key": "acct:8a94d876091300847ef6df69174fa288f39dd9ae0978142700cf04f10c2e74d9",
+        "kind": "credit_card",
+        "last4": null
+      },
+      "closing_balance": {
+        "amount": 812.4,
+        "as_of": "2026-10-05"
+      },
+      "extras": null,
+      "file_hash": "db44566a3162be8cb022855dbc4e7252c5dcc763e0f98cd5600d9daf9c330b99",
+      "file_name": "SimpleFIN sync 2026-10-04",
+      "format": "connector",
+      "origin": "connector",
+      "parser": "connector:simplefin",
+      "period": {
+        "end": "2026-10-04",
+        "start": "2026-09-05"
+      },
+      "transactions": [
+        {
+          "amount": -42.0,
+          "category_id": null,
+          "category_source": "none",
+          "dedupe_base": "d097ec71cd248cd0c61ec9124cd4a72dda5f889626c8331b15876ccf9849e4d5",
+          "description": "SHELL OIL 5739",
+          "external_id": "simplefin:k1",
+          "kind": "expense",
+          "merchant_key": "SHELL OIL",
+          "posted_date": "2026-09-10",
+          "row": 0
+        },
+        {
+          "amount": -18.0,
+          "category_id": null,
+          "category_source": "none",
+          "dedupe_base": "b847326e847fd232a1c20d8554e378cd251d4efdc63ae2fa8ddb6228165db36d",
+          "description": "SHELL OIL 5739",
+          "external_id": "simplefin:k1~920de79b",
+          "kind": "expense",
+          "merchant_key": "SHELL OIL",
+          "posted_date": "2026-09-11",
+          "row": 1
+        },
+        {
+          "amount": 300.0,
+          "category_id": null,
+          "category_source": "none",
+          "dedupe_base": "0886d60838283437f601a4dc676d80d2fb7edf3373c7c9f3b0a3136fa6cc1ec4",
+          "description": "PAYMENT THANK YOU",
+          "external_id": "simplefin:k2",
+          "kind": "payment",
+          "merchant_key": "PAYMENT THANK YOU",
+          "posted_date": "2026-09-25",
+          "row": 2
+        }
+      ],
+      "warnings": []
+    }
+  ],
+  "window": {
+    "end": "2026-10-04",
+    "start": "2026-09-05"
+  }
+}

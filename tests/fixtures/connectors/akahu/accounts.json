@@ -1,0 +1,108 @@
+{
+  "success": true,
+  "items": [
+    {
+      "_id": "acc_exampleCheck0001",
+      "_authorisation": "auth_example0001",
+      "_credentials": "creds_example0001",
+      "connection": {
+        "_id": "conn_exampleBank0001",
+        "name": "Example Bank NZ",
+        "logo": "https://example.invalid/logo.png"
+      },
+      "name": "Example Everyday",
+      "formatted_account": "00-0000-0000000-00",
+      "status": "ACTIVE",
+      "type": "CHECKING",
+      "attributes": ["TRANSACTIONS", "PAYMENT_FROM", "PAYMENT_TO"],
+      "balance": {
+        "currency": "NZD",
+        "current": 1520.35,
+        "available": 1520.35,
+        "overdrawn": false
+      },
+      "refreshed": {
+        "balance": "2026-10-03T21:15:00.000Z",
+        "meta": "2026-10-03T21:15:00.000Z",
+        "transactions": "2026-10-03T21:15:00.000Z"
+      }
+    },
+    {
+      "_id": "acc_exampleSave0002",
+      "connection": {
+        "_id": "conn_exampleBank0001",
+        "name": "Example Bank NZ",
+        "logo": "https://example.invalid/logo.png"
+      },
+      "name": "Example Savings",
+      "formatted_account": "00-0000-0000000-01",
+      "status": "ACTIVE",
+      "type": "SAVINGS",
+      "attributes": ["TRANSACTIONS"],
+      "balance": {
+        "currency": "NZD",
+        "current": 8000
+      },
+      "refreshed": {
+        "balance": "2026-10-03T21:15:00.000Z"
+      }
+    },
+    {
+      "_id": "acc_exampleCard0003",
+      "connection": {
+        "_id": "conn_exampleCards0002",
+        "name": "Example Cards NZ",
+        "logo": "https://example.invalid/logo2.png"
+      },
+      "name": "Example Visa",
+      "formatted_account": "0000-****-****-0000",
+      "status": "ACTIVE",
+      "type": "CREDITCARD",
+      "attributes": ["TRANSACTIONS"],
+      "balance": {
+        "currency": "NZD",
+        "current": -432.1,
+        "available": 4567.9,
+        "limit": 5000
+      },
+      "refreshed": {
+        "balance": "2026-10-03T21:15:00.000Z"
+      }
+    },
+    {
+      "_id": "acc_exampleKiwi0004",
+      "connection": {
+        "_id": "conn_exampleFund0003",
+        "name": "Example Fund",
+        "logo": "https://example.invalid/logo3.png"
+      },
+      "name": "Example KiwiSaver",
+      "status": "ACTIVE",
+      "type": "KIWISAVER",
+      "attributes": [],
+      "balance": {
+        "currency": "NZD",
+        "current": 21000.5
+      }
+    },
+    {
+      "_id": "acc_exampleLoan0005",
+      "connection": {
+        "_id": "conn_exampleBank0001",
+        "name": "Example Bank NZ",
+        "logo": "https://example.invalid/logo.png"
+      },
+      "name": "Example Home Loan",
+      "status": "ACTIVE",
+      "type": "LOAN",
+      "attributes": ["TRANSACTIONS"],
+      "balance": {
+        "currency": "NZD",
+        "current": -250000
+      },
+      "refreshed": {
+        "balance": "2026-10-02T09:00:00.000Z"
+      }
+    }
+  ]
+}

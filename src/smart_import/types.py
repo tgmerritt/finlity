@@ -39,6 +39,13 @@ WARNINGS: tuple[str, ...] = (
     "sign_flipped",  # CSV used positive for spending; amounts were negated
     "ai_extracted",  # PDF rows were read by the AI extract route
     "ai_partial",  # AI extract ran out of time; only the rows read so far
+    # Connectors (connections design 5.4):
+    "connector_account_error",  # provider reported an account problem; others synced
+    "connector_partial",  # pagination stopped at the page cap; window end moved back
+    "connector_balance_only",  # the account returned a balance and no transactions
+    "currency_unsupported",  # not a 3-letter ISO currency; the account was skipped
+    "connector_sign_check",  # card balance reads as credit while most rows are charges
+    "connector_balance_dropped",  # balance undated or dated in the future; left out
 )
 
 # Only these kinds are categorized and counted as spending (design 6.1).

@@ -1,0 +1,71 @@
+{
+  "errlist": [
+    {
+      "code": "con.auth",
+      "msg": "Example Savings Bank asked for a new sign in.",
+      "conn_id": "CON-EXAMPLE-B"
+    },
+    {
+      "code": "act.failed",
+      "msg": "One account could not be updated.",
+      "conn_id": "CON-EXAMPLE-A",
+      "account_id": "ACT-EXAMPLE-3"
+    }
+  ],
+  "connections": [
+    {
+      "conn_id": "CON-EXAMPLE-A",
+      "name": "Example Credit Union",
+      "org_id": "example.cu",
+      "org_url": "https://cu.example.org",
+      "sfin_url": "https://beta-bridge.simplefin.org/simplefin"
+    },
+    {
+      "conn_id": "CON-EXAMPLE-B",
+      "name": "Example Savings Bank",
+      "org_id": "example.bank",
+      "org_url": "https://bank.example.org",
+      "sfin_url": "https://beta-bridge.simplefin.org/simplefin"
+    }
+  ],
+  "accounts": [
+    {
+      "id": "ACT-EXAMPLE-1",
+      "name": "Everyday Checking",
+      "conn_id": "CON-EXAMPLE-A",
+      "currency": "USD",
+      "balance": "1520.75",
+      "available-balance": "1520.75",
+      "balance-date": 1790985600,
+      "transactions": [
+        {
+          "id": "TRN-EXAMPLE-1",
+          "posted": 1790899200,
+          "amount": "-42.10",
+          "description": "Corner Grocery",
+          "payee": "Corner Grocery"
+        }
+      ]
+    },
+    {
+      "id": "ACT-EXAMPLE-2",
+      "name": "Bonus Saver",
+      "conn_id": "CON-EXAMPLE-B",
+      "currency": "USD",
+      "balance": "800.00",
+      "available-balance": "800.00",
+      "balance-date": 1790985600,
+      "transactions": []
+    },
+    {
+      "id": "ACT-EXAMPLE-3",
+      "name": "Holiday Fund",
+      "conn_id": "CON-EXAMPLE-A",
+      "currency": "USD",
+      "balance": "300.00",
+      "available-balance": "300.00",
+      "balance-date": 1790985600,
+      "transactions": []
+    }
+  ]
+}
