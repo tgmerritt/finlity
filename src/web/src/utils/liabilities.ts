@@ -142,6 +142,8 @@ export interface DebtPayoffSummary {
   debtFreeDate: string | null;
   debtFreeAge: number | null;
   interestLeft: number;
+  /** Active debts with no payoff date (left out of debtFreeDate, same rule as the Debts page). */
+  withoutPayoff: number;
   debts: { id: string; name: string; payoffDate: string | null }[];
 }
 
@@ -172,6 +174,7 @@ export function debtPayoffSummary(
   return {
     debtFreeDate: last,
     debtFreeAge: age,
+    withoutPayoff: active.filter((d) => !d.payoff_date).length,
     interestLeft: active.reduce((sum, d) => sum + (d.total_interest_remaining ?? 0), 0),
     debts: active.map((d) => ({ id: d.id, name: d.name, payoffDate: d.payoff_date })),
   };

@@ -178,6 +178,43 @@ describe('projections with debts', () => {
     }
   });
 
+  it('uses the latest dated payoff and says how many debts are excluded', async () => {
+    setup([
+      debt({ name: 'Home', payoff_date: '2045-02-01' }),
+      debt({ id: 'd2', name: 'Visa', payoff_date: null }),
+      debt({ id: 'd3', name: 'Amex', payoff_date: null }),
+    ]);
+    await run();
+    const text = document.getElementById('debt-payoff-card')!.textContent!;
+    expect(text).toContain('Debt-free by Feb 2045 (age 56)');
+    expect(text).toContain('Excludes 2 debts without a payoff plan');
+    setup([debt({ payoff_date: '2045-02-01' }), debt({ id: 'd2', payoff_date: null })]);
+    document.body.innerHTML = FORM;
+    await run();
+    expect(document.getElementById('debt-payoff-card')!.textContent).toContain(
+      'Excludes 1 debt without a payoff plan'
+    );
+  });
+
+  it('shows "Not projected" and no exclusion line when no debt has a payoff date', async () => {
+    setup([debt({ payoff_date: null }), debt({ id: 'd2', payoff_date: null })]);
+    await run();
+    const text = document.getElementById('debt-payoff-card')!.textContent!;
+    expect(text).toContain('Debt-free: Not projected');
+    expect(text).not.toContain('Excludes');
+  });
+
+  it('handles a payoff beyond the projection horizon', async () => {
+    setup([debt({ payoff_date: '2080-01-01' })]);
+    await run();
+    expect(document.getElementById('debt-payoff-card')!.textContent).toContain(
+      'Debt-free by Jan 2080 (age 91)'
+    );
+    const trace = traces().find((t) => t.name === 'Median minus debt')!;
+    expect(trace.y).toHaveLength(AGES.length);
+    expect(trace.y!.every((v) => Number.isFinite(v))).toBe(true);
+  });
+
   it('sends a byte-identical Monte Carlo request with and without debts', async () => {
     setup([]);
     await run();

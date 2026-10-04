@@ -393,10 +393,13 @@ export async function loadDeductions(): Promise<void> {
  */
 export async function loadExpenses(): Promise<void> {
   try {
-    const data = await apiCall<Expense[]>('/api/budget/expenses');
+    const [data, liabilities] = await Promise.all([
+      apiCall<Expense[]>('/api/budget/expenses'),
+      fetchLiabilities(),
+    ]);
     store.set('expenses', data || []);
     debtByExpense = new Map();
-    for (const d of await fetchLiabilities()) {
+    for (const d of liabilities) {
       if (d.is_active && d.expense_id && !d.expense_missing) debtByExpense.set(d.expense_id, d);
     }
     const container = document.getElementById('expenses-list');
@@ -704,6 +707,8 @@ export async function loadCashFlowData(): Promise<void> {
       (document.getElementById('filing-status') as HTMLSelectElement | null)?.value || 'single';
     const state = (document.getElementById('tax-state') as HTMLSelectElement | null)?.value || 'CA';
 
+    // Started now so it runs alongside the cash flow request.
+    const debtsRequest = fetchLiabilities();
     const summary = await apiCall<
       CashFlowSummary & {
         monthly_gross?: number;
@@ -745,7 +750,7 @@ export async function loadCashFlowData(): Promise<void> {
     updateStat('stat-monthly-savings', formatCurrency(monthlySavings));
     updateStat('stat-savings-rate', `${savingsRate.toFixed(1)}%`);
 
-    const debts = (await fetchLiabilities()).filter((d) => d.is_active);
+    const debts = (await debtsRequest).filter((d) => d.is_active);
     const debtCard = document.getElementById('stat-monthly-debt-card');
     if (debtCard) debtCard.hidden = debts.length === 0;
     updateStat(

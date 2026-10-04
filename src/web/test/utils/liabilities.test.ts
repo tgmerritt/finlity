@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { liabilityGroup, debtByYear, debtPayoffSummary } from '@/utils/liabilities';
 import { balanceAt, shift } from '@/utils/amortization';
+import { summarize as debtsPageSummary } from '@/pages/debts';
 import type { DashboardLiability, PortfolioSummary } from '@/types/api';
 
 const debt = (over: Partial<DashboardLiability>): DashboardLiability => ({
@@ -193,5 +194,37 @@ describe('debtPayoffSummary', () => {
     expect(s.debtFreeAge).toBe(63);
     expect(s.interestLeft).toBe(2000);
     expect(s.debts.map((d) => d.payoffDate)).toEqual(['2052-03-01', '2029-01-01', null]);
+  });
+});
+
+describe('debtPayoffSummary mixed and rollover cases', () => {
+  const d = (id: string, payoff: string | null) =>
+    ({ id, name: id, is_active: true, payoff_date: payoff, total_interest_remaining: 1 }) as never;
+
+  it('counts undated debts as excluded and agrees with the Debts page rule', () => {
+    const list = [d('a', '2040-05-01'), d('b', null), d('c', '2033-01-01'), d('e', null)];
+    const s = debtPayoffSummary(list, '2026-10-04', 38)!;
+    expect(s.debtFreeDate).toBe('2040-05-01');
+    expect(s.withoutPayoff).toBe(2);
+    const page = debtsPageSummary(list.map((x) => ({ ...(x as object) })) as never);
+    expect(s.debtFreeDate).toBe(page.debtFreeBy);
+    expect(s.withoutPayoff).toBe(page.withoutPayoff);
+  });
+
+  it('has no date or age when no debt has a payoff date', () => {
+    const s = debtPayoffSummary([d('a', null)], '2026-10-04', 38)!;
+    expect(s.debtFreeDate).toBeNull();
+    expect(s.debtFreeAge).toBeNull();
+    expect(s.withoutPayoff).toBe(1);
+  });
+
+  it('rolls the age over on the birthday-style anniversary of today', () => {
+    const age = (payoff: string) =>
+      debtPayoffSummary([d('a', payoff)], '2026-10-04', 38)!.debtFreeAge;
+    expect(age('2052-10-03')).toBe(63);
+    expect(age('2052-10-04')).toBe(64);
+    expect(age('2052-10-05')).toBe(64);
+    expect(age('2053-01-01')).toBe(64);
+    expect(age('2026-10-05')).toBe(38);
   });
 });

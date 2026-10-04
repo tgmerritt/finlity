@@ -25,6 +25,8 @@ vi.mock('@/charts/budget', () => ({
 
 import { apiCall } from '@/api/client';
 import { closeDynamicModal } from '@/ui/modal';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { loadExpenses, loadCashFlowData, editExpense } from '@/pages/budget';
 import type { LiabilityResponse } from '@/types/api';
 
@@ -202,6 +204,20 @@ describe('Debt payments stat', () => {
     route('fail');
     await loadCashFlowData();
     expect((document.getElementById('stat-monthly-debt-card') as HTMLElement).hidden).toBe(true);
+  });
+
+  it('fetches debts once per load', async () => {
+    route([debt({ expense_id: 'e1' })]);
+    await loadCashFlowData();
+    const count = () => apiCallMock.mock.calls.filter((c) => c[0] === '/api/liabilities').length;
+    expect(count()).toBe(1);
+    await loadExpenses();
+    expect(count()).toBe(2);
+  });
+
+  it('labels the stat as included in expenses', () => {
+    const html = readFileSync(resolve(__dirname, '../../index.html'), 'utf8');
+    expect(html).toContain('Included in expenses');
   });
 
   it('copy has no em-dash', () => {

@@ -214,7 +214,8 @@ export async function displayProjectionResults(
       margin: { t: 20, b: 40, l: 100, r: 20 },
       xaxis: {
         ...getAxisConfig(),
-        title: 'Age',
+        title: { text: 'Age', standoff: 15 },
+        automargin: true,
       },
       yaxis: {
         ...getAxisConfig(),
@@ -263,8 +264,18 @@ function renderDebtPayoffCard(summary: ReturnType<typeof debtPayoffSummary>): vo
   if (!summary) return;
   const free = summary.debtFreeDate
     ? `Debt-free by ${formatMonthYear(summary.debtFreeDate)}${summary.debtFreeAge === null ? '' : ` (age ${summary.debtFreeAge})`}`
-    : 'No payoff date yet';
+    : 'Debt-free: Not projected';
   card.appendChild(el('h4', 'debt-payoff-title', free));
+  if (summary.debtFreeDate && summary.withoutPayoff > 0) {
+    const n = summary.withoutPayoff;
+    card.appendChild(
+      el(
+        'p',
+        'debt-payoff-sub',
+        `Excludes ${n} ${n === 1 ? 'debt' : 'debts'} without a payoff plan`
+      )
+    );
+  }
   card.appendChild(
     el('p', 'debt-payoff-sub', `${formatCurrency(summary.interestLeft)} of interest still to pay`)
   );
@@ -339,7 +350,8 @@ export async function renderTaxBurdenChart(chartData: TaxBurdenChartData): Promi
       margin: { t: 20, r: 60, b: 60, l: 60 },
       xaxis: {
         ...getAxisConfig(),
-        title: 'Age',
+        title: { text: 'Age', standoff: 15 },
+        automargin: true,
       },
       yaxis: {
         ...getAxisConfig(),
@@ -422,7 +434,8 @@ export async function renderAccountBalanceChart(chartData: AccountBalanceChartDa
       margin: { t: 20, r: 20, b: 60, l: 60 },
       xaxis: {
         ...getAxisConfig(),
-        title: 'Age',
+        title: { text: 'Age', standoff: 15 },
+        automargin: true,
       },
       yaxis: {
         ...getAxisConfig(),
