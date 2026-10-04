@@ -17,6 +17,7 @@ import {
   hideEditPositionModal as hideEditPositionModalUI,
 } from '@/ui/modal';
 import { formatCurrency, formatShares, formatPercent } from '@/utils/format';
+import { openDebtConvertLazy } from '@/utils/debt-convert-launcher';
 import type { DashboardPosition, AccountResponse, AccountTypeOption } from '@/types/api';
 
 /**
@@ -531,6 +532,19 @@ function createPositionRow(pos: DashboardPosition): HTMLTableRowElement {
   });
   actionsCell.appendChild(editBtn);
 
+  // Real estate rows can be turned into a mortgage after a confirm screen.
+  // Matches the server's rule: position type real_estate, or the RE ticker.
+  if (pos.position_type === 'real_estate' || pos.ticker === 'RE') {
+    const convertBtn = document.createElement('button');
+    convertBtn.type = 'button';
+    convertBtn.className = 'icon-btn icon-btn-convert';
+    convertBtn.title = 'Loan or property';
+    convertBtn.setAttribute('aria-label', 'Loan or property');
+    convertBtn.appendChild(createHouseIcon());
+    convertBtn.addEventListener('click', () => void openDebtConvertLazy(pos.id));
+    actionsCell.appendChild(convertBtn);
+  }
+
   const deleteBtn = document.createElement('button');
   deleteBtn.type = 'button';
   deleteBtn.className = 'icon-btn icon-btn-delete';
@@ -822,6 +836,14 @@ function createEditIcon(): SVGSVGElement {
   return buildSvg([
     { tag: 'path', attrs: { d: 'M12 20h9' } },
     { tag: 'path', attrs: { d: 'M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z' } },
+  ]);
+}
+
+function createHouseIcon(): SVGSVGElement {
+  return buildSvg([
+    { tag: 'path', attrs: { d: 'M3 11l9-8 9 8' } },
+    { tag: 'path', attrs: { d: 'M5 10v10h14V10' } },
+    { tag: 'path', attrs: { d: 'M10 20v-6h4v6' } },
   ]);
 }
 

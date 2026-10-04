@@ -13,7 +13,7 @@ Regenerate the expected file from the server path (then review it by hand):
 import json
 import os
 import re
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,20 +22,21 @@ from fastapi.testclient import TestClient
 
 from src.api.dependencies import get_db
 from src.database import Database
-from src.database.models import Account, BudgetExpense, BudgetExpenseCategory, Position
+from src.database.models import Account, BudgetExpense, BudgetExpenseCategory, Position, PositionLot
 from src.main import app
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 SCENARIO = json.loads((FIXTURES / "liabilities_scenario.json").read_text())
 EXPECTED_PATH = FIXTURES / "liabilities_scenario.expected.json"
-ID_KEYS = {"id", "liability_id", "linked_position_id", "expense_id", "position_id"}
+ID_KEYS = {"id", "liability_id", "linked_position_id", "expense_id", "position_id", "account_id"}
 TIMESTAMP_KEYS = {"created_at", "updated_at"}
 EXACT_NUMBER_KEYS = {"interest_rate", "periods_remaining"}
 
 
 def _fixed_ids() -> set[str]:
     setup = SCENARIO["setup"]
-    return {row["id"] for key in ("accounts", "positions", "expenses") for row in setup[key]}
+    fixed = {row["id"] for key in ("accounts", "positions", "expenses") for row in setup[key]}
+    return fixed | {step["row"]["id"] for step in SCENARIO["steps"] if step.get("db") == "insert"}
 
 
 class Normalizer:
@@ -140,9 +141,38 @@ def _db_op(db: Database, step: dict) -> None:
             s.query(BudgetExpense).delete()
         elif op == "delete_all_categories":
             s.query(BudgetExpenseCategory).delete()
+        elif op == "insert":
+            models = {
+                "accounts": Account,
+                "positions": Position,
+                "position_lots": PositionLot,
+                "budget_expenses": BudgetExpense,
+                "budget_expense_categories": BudgetExpenseCategory,
+            }
+            row = dict(step["row"])
+            if step["table"] == "position_lots":
+                row["purchase_date"] = datetime.fromisoformat(row["purchase_date"])
+            s.add(models[step["table"]](**row))
+        elif op == "delete_account":
+            s.delete(s.get(Account, step["id"]))
+        elif op == "retype_property_accounts":
+            for account in s.query(Account).filter_by(account_type="property"):
+                account.account_type = "taxable"
+        elif op == "set_price":
+            s.get(Position, step["id"]).current_price = step["price"]
         else:
             raise AssertionError(op)
         s.commit()
+
+
+def _substitute(value: Any, aliases: dict[str, str]) -> Any:
+    """Replace "{alias}" string values in a request body with saved ids."""
+    if isinstance(value, dict):
+        return {k: _substitute(v, aliases) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_substitute(v, aliases) for v in value]
+    match = re.fullmatch(r"\{(\w+)\}", value) if isinstance(value, str) else None
+    return aliases[match.group(1)] if match else value
 
 
 def run_scenario(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
@@ -164,14 +194,16 @@ def run_scenario(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list[dict[s
                 results.append({"name": step["name"], "ok": norm(_probe(db, step["probe"]))})
                 continue
             path = re.sub(r"\{(\w+)\}", lambda m: aliases[m.group(1)], step["path"])
-            resp = client.request(step["method"], path, json=step.get("body"))
+            resp = client.request(step["method"], path, json=_substitute(step.get("body"), aliases))
             if resp.status_code >= 400:
                 detail = resp.json().get("detail")
                 results.append({"name": step["name"], "error": resp.status_code, "detail": "<validation>" if resp.status_code == 422 else detail})
                 continue
             body = resp.json()
             if "save" in step:
-                aliases[step["save"]] = body["id"]
+                aliases[step["save"]] = body["id"] if "id" in body else body["liability"]["id"]
+            if "save_home" in step:
+                aliases[step["save_home"]] = body["created"]["position_id"]
             results.append({"name": step["name"], "ok": norm(body)})
     finally:
         app.dependency_overrides.pop(get_db, None)

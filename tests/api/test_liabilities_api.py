@@ -615,3 +615,64 @@ def test_first_due_after_far_future_anchor():
     assert _first_due_after(date(2040, 3, 1), "annual", TODAY) == date(2027, 3, 1)
     assert _first_due_after(date(2020, 1, 31), "monthly", TODAY) == date(2026, 10, 31)
     assert _first_due_after(None, "monthly", TODAY) == date(2026, 11, 4)
+
+
+# Responses are built before the commit, so a failing response builder leaves nothing behind.
+
+BUILDER_TABLES = ("liabilities", "liability_balance_snapshots", "positions", "accounts", "budget_expenses")
+
+
+def _all_rows(tmp_path):
+    import sqlite3
+
+    conn = sqlite3.connect(str(tmp_path / "liab.db"))
+    try:
+        return {
+            t: conn.execute(f"SELECT * FROM {t} ORDER BY id").fetchall()  # nosec B608 - fixed table names
+            for t in BUILDER_TABLES
+        }
+    finally:
+        conn.close()
+
+
+def _break_builder(monkeypatch, name):
+    def boom(*a, **k):
+        raise IntegrityError("SELECT", {"balance": 248000}, Exception("248000"))
+
+    monkeypatch.setattr(f"src.liabilities.service.{name}", boom)
+
+
+def _assert_fixed_500(response):
+    assert response.status_code == 500 and response.json() == {"detail": "Could not save the liability"}
+
+
+def test_create_response_failure_persists_nothing(client, tmp_path, monkeypatch):
+    before = _all_rows(tmp_path)
+    _break_builder(monkeypatch, "_serialize")
+    body = mortgage_body(property={"mode": "create", "name": "Home", "value": 600000}, cash_flow={"mode": "create"})
+    _assert_fixed_500(client.post("/api/liabilities", json=body))
+    assert _all_rows(tmp_path) == before
+
+
+def test_update_response_failure_persists_nothing(client, tmp_path, monkeypatch):
+    lid = client.post("/api/liabilities", json=mortgage_body(cash_flow={"mode": "create"})).json()["id"]
+    before = _all_rows(tmp_path)
+    _break_builder(monkeypatch, "_serialize")
+    _assert_fixed_500(client.put(f"/api/liabilities/{lid}", json={"payment_amount": 3500, "notes": "x"}))
+    assert _all_rows(tmp_path) == before
+
+
+def test_balance_response_failure_persists_nothing(client, tmp_path, monkeypatch):
+    lid = client.post("/api/liabilities", json=mortgage_body()).json()["id"]
+    before = _all_rows(tmp_path)
+    _break_builder(monkeypatch, "_serialize")
+    _assert_fixed_500(client.post(f"/api/liabilities/{lid}/balance", json={"balance": 519000}))
+    assert _all_rows(tmp_path) == before
+
+
+def test_delete_response_failure_persists_nothing(client, tmp_path, monkeypatch):
+    lid = client.post("/api/liabilities", json=mortgage_body(cash_flow={"mode": "create"})).json()["id"]
+    before = _all_rows(tmp_path)
+    _break_builder(monkeypatch, "_delete_result")
+    _assert_fixed_500(client.delete(f"/api/liabilities/{lid}?delete_expense=true"))
+    assert _all_rows(tmp_path) == before

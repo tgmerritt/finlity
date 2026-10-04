@@ -1,7 +1,7 @@
 """Liabilities API: debts counted against net worth.
 
-Static paths (added in later tasks, e.g. /convert-position) must be declared
-before the /{liability_id} routes.
+Static paths (/convert-position) must be declared before the /{liability_id}
+routes.
 """
 
 import logging
@@ -153,6 +153,66 @@ class RecordBalance(StrictModel):
     as_of: Optional[CalendarDay] = None
 
 
+class ConvertMortgage(_DateOrder):
+    """The mortgage a conversion creates (type, source and link are set by the conversion)."""
+
+    name: str = Field(default="Mortgage", min_length=1, max_length=120)
+    lender: Optional[str] = Field(default=None, max_length=120)
+    current_balance: Optional[float] = Field(default=None, ge=0, le=1e10)
+    balance_as_of: Optional[CalendarDay] = None
+    interest_rate: Optional[float] = Field(default=None, ge=0, le=1)
+    payment_amount: Optional[float] = Field(default=None, ge=0, le=1e10)
+    payment_frequency: Frequency = "monthly"
+    next_payment_date: Optional[CalendarDay] = None
+    escrow_amount: Optional[float] = Field(default=None, ge=0, le=1e10)
+    original_principal: Optional[float] = Field(default=None, ge=0, le=1e10)
+    term_months: Optional[int] = Field(default=None, ge=1, le=600)
+    entity_id: Optional[str] = Field(default=None, max_length=64)
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+
+class AddHome(StrictModel):
+    name: str = Field(min_length=1, max_length=120)
+    value: float = Money
+    cost_basis: Optional[float] = Field(default=None, ge=0, le=1e10)
+    purchase_date: Optional[CalendarDay] = None
+
+
+class ConvertPosition(StrictModel):
+    position_id: str = Field(min_length=1, max_length=64)
+    mode: Literal["property_value", "equity", "loan"]
+    home_value: Optional[float] = Field(default=None, ge=0, le=1e10)
+    add_home: Optional[AddHome] = None
+    mortgage: ConvertMortgage
+    cash_flow: Optional[Union[CashFlowCreate, CashFlowLink, CashFlowNone]] = Field(default=None, discriminator="mode")
+
+    @model_validator(mode="after")
+    def _mode_rules(self) -> "ConvertPosition":
+        if (self.mode == "equity") != (self.home_value is not None):
+            raise ValueError("home_value is required in equity mode and only there")
+        if self.add_home is not None and self.mode != "loan":
+            raise ValueError("add_home is only allowed in loan mode")
+        if self.mode != "loan" and self.mortgage.current_balance is None:
+            raise ValueError("mortgage.current_balance is required")
+        return self
+
+
+class PositionView(BaseModel):
+    id: str
+    name: Optional[str]
+    value: Optional[float]
+
+
+class ConversionCreated(BaseModel):
+    account_id: Optional[str]
+    position_id: Optional[str]
+    expense_id: Optional[str]
+
+
+class RevertResponse(BaseModel):
+    reverted: bool
+
+
 class LiabilityResponse(BaseModel):
     """Resource plus computed fields (design D4). source_detail is never returned."""
 
@@ -214,6 +274,12 @@ class LiabilityHistoryResponse(BaseModel):
     series: list[HistoryPoint]
 
 
+class ConvertPositionResponse(BaseModel):
+    liability: LiabilityResponse
+    position: Optional[PositionView]
+    created: ConversionCreated
+
+
 def _raise(exc: service.LiabilityError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail=exc.message)
 
@@ -238,6 +304,17 @@ def create_liability(data: CreateLiability, db: Database = Depends(get_db)) -> d
     payload["cash_flow"] = data.cash_flow.model_dump() if data.cash_flow else None
     try:
         return service.create_liability(db, payload)
+    except service.LiabilityError as exc:
+        raise _raise(exc) from None
+
+
+@router.post("/convert-position", response_model=ConvertPositionResponse, status_code=201)
+def convert_position(data: ConvertPosition, db: Database = Depends(get_db)) -> dict[str, Any]:
+    """Convert a real estate position into a mortgage (design section 8). Only on the owner's confirm."""
+    check_demo_mode_write()
+    payload = data.model_dump()
+    try:
+        return service.convert_position(db, payload)
     except service.LiabilityError as exc:
         raise _raise(exc) from None
 
@@ -283,5 +360,14 @@ def record_balance(liability_id: str, data: RecordBalance, db: Database = Depend
     check_demo_mode_write()
     try:
         return service.record_balance(db, liability_id, data.balance, data.as_of)
+    except service.LiabilityError as exc:
+        raise _raise(exc) from None
+
+
+@router.post("/{liability_id}/revert-conversion", response_model=RevertResponse)
+def revert_conversion(liability_id: str, db: Database = Depends(get_db)) -> dict[str, Any]:
+    check_demo_mode_write()
+    try:
+        return service.revert_conversion(db, liability_id)
     except service.LiabilityError as exc:
         raise _raise(exc) from None

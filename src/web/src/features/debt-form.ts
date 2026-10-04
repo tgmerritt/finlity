@@ -11,12 +11,13 @@ import { apiCall, ApiError } from '@/api/client';
 import { createDynamicModal, closeDynamicModal } from '@/ui/modal';
 import { showToast } from '@/ui/toast';
 import { withSubmitGuard } from '@/ui/with-submit-guard';
-import { annuityPayment, firstDueAfter, periodsPerYear } from '@/utils/amortization';
+import { firstDueAfter } from '@/utils/amortization';
 import { today } from '@/utils/clock';
 import { formatCurrency } from '@/utils/format';
 import {
   DEBT_TYPES,
   FREQUENCIES,
+  computedPayment,
   defaultsFor,
   fieldsFor,
   switchType,
@@ -76,25 +77,7 @@ function nextDueForForm(d: LiabilityResponse): string {
   return rolled;
 }
 
-/**
- * Payment calculated from balance, APR and term, when the payment field is
- * blank and those are all usable. Rounded to cents; null otherwise.
- */
-export function computedPayment(draft: DebtDraft): number | null {
-  if (draft.paymentAmount.trim() !== '') return null;
-  if (!fieldsFor(draft.liabilityType).some((f) => f.key === 'termMonths')) return null;
-  const { values } = validateDraft(draft);
-  if (!values || values.termMonths === null || values.currentBalance <= 0) return null;
-  const perYear = periodsPerYear(draft.paymentFrequency);
-  const periods = Math.max(1, Math.round((values.termMonths / 12) * perYear));
-  const payment = annuityPayment(
-    values.currentBalance,
-    values.interestRate ?? 0,
-    periods,
-    draft.paymentFrequency
-  );
-  return Number.isFinite(payment) ? Math.round(payment * 100) / 100 : null;
-}
+export { computedPayment };
 
 /** The draft with a blank payment filled from `computedPayment`, when there is one. */
 export function withComputedPayment(draft: DebtDraft): DebtDraft {

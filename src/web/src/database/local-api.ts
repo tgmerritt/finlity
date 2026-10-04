@@ -15,12 +15,15 @@
 import type { ClientDatabase } from './client-database';
 import * as liabilities from './local-liabilities';
 import type {
+  ConvertPositionInput,
+  ConvertPositionResult,
   CreateLiabilityInput,
   DashboardLiabilities,
   DeleteLiabilityResult,
   LiabilityHistoryResponse,
   LiabilityResponse,
   RecordBalanceInput,
+  RevertConversionResult,
   UpdateLiabilityInput,
 } from '@/types/api';
 
@@ -1945,11 +1948,14 @@ export class LocalAPI {
            year_low = excluded.year_low, last_updated = excluded.last_updated`,
         [ticker, p.price, p.previous_close ?? null, p.year_high ?? null, p.year_low ?? null, now]
       );
-      this.db.execute('UPDATE positions SET current_price = ?, updated_at = ? WHERE ticker = ?', [
-        p.price,
-        now,
-        ticker,
-      ]);
+      // Real estate rows carry a user-entered value (possibly set by a mortgage
+      // conversion), so a price refresh never touches them.
+      if (ticker === 'RE') continue;
+      this.db.execute(
+        `UPDATE positions SET current_price = ?, updated_at = ?
+         WHERE ticker = ? AND COALESCE(position_type, '') != 'real_estate'`,
+        [p.price, now, ticker]
+      );
     }
     return { updated: prices.length };
   }
@@ -2250,6 +2256,16 @@ export class LocalAPI {
   /** POST /api/liabilities/{id}/balance */
   recordLiabilityBalance(id: string, input: RecordBalanceInput): LiabilityResponse {
     return liabilities.recordLiabilityBalance(this.db, id, input);
+  }
+
+  /** POST /api/liabilities/convert-position */
+  convertPosition(input: ConvertPositionInput): ConvertPositionResult {
+    return liabilities.convertPosition(this.db, input);
+  }
+
+  /** POST /api/liabilities/{id}/revert-conversion */
+  revertConversion(id: string): RevertConversionResult {
+    return liabilities.revertConversion(this.db, id);
   }
 
   /** PUT /api/budget/expenses/{id} */
