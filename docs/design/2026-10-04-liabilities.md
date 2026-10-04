@@ -256,3 +256,13 @@ Three pull requests, each mergeable on its own (plan: `plans/2026-10-04-liabilit
 ## Verification
 
 Every PR: both data modes (server with `PORTFOLIO_DEMO_MODE=true` on a scratch data dir, and hosted emulation), light and dark themes, 1440, 390 and 360px wide; frontend `typecheck`, `test`, `lint` and `build`; `ruff`, `mypy` and `pytest`; `check_layout.py` with 0 problems including the new `debts` tab. Every schema change is first verified against a copy of `demo.db` (pre-existing tables byte-for-byte unchanged, opening twice is a no-op), never against a real database.
+
+## Decisions made during implementation
+
+- **Calendar dates** are local-calendar `YYYY-MM-DD` on both paths (SQLAlchemy `Date` on the server, `TEXT` with a length check in the browser), never UTC timestamps.
+- **Computed payments round up to the cent**, so a loan calculated from a term pays off in exactly that many payments.
+- **Expense suggestions** in the wizard and the conversion dialog match whole words only, require the expense amount within 50% of the payment for a name match (otherwise an amount match within 10%), show both figures side by side, and default to creating an expense when nothing qualifies.
+- **Debt-free by** is the latest payoff date among active debts that have one; debts without a payoff plan are excluded and counted in a note.
+- **Conversion undo refuses rather than overwrites.** Equity mode refuses if the home row's price changed after the conversion; loan mode refuses if a row with the original id exists again or the original account is gone. A linked expense's amount, frequency, end date and mortgage split are restored only if the debt still links that expense and no other debt does. Created homes, accounts and expenses are kept when something else now uses them.
+- **Conversion refusals up front:** a row with tax lots cannot be converted in loan mode, and a row that a debt already links or that was already converted cannot be converted again.
+- **Price refreshes skip real estate** (`ticker = 'RE'` or `position_type = 'real_estate'`) on both paths, so a refresh can never silently block an equity undo.
