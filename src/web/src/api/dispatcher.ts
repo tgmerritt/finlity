@@ -1113,6 +1113,9 @@ payload('POST', '/api/smart-import/extract', (req) => ({
   endpoint: '/api/v2/smart-import/extract',
   options: { method: 'POST', body: req.body },
 }));
+// Hosted ai-status reflects the operator's flags (ANTHROPIC_API_KEY plus
+// SMART_IMPORT_AI_ENABLED / SMART_IMPORT_PDF_AI_ENABLED), not the profile's
+// smart_import settings, which have no say over hosted AI.
 payload('GET', '/api/smart-import/ai-status', () => ({
   endpoint: '/api/v2/smart-import/status',
   options: { method: 'GET' },
