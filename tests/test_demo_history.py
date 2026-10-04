@@ -138,3 +138,148 @@ def test_refuses_to_run_on_non_demo_database(tmp_path):
     assert len(remaining) == 1
     assert remaining[0].snapshot_date == datetime(2020, 1, 1)
     assert remaining[0].total_value == 100.0
+
+
+# --- demo liabilities kept current -------------------------------------------
+
+
+def _build_liabilities(db):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("bdl", _REPO_ROOT / "scripts" / "build_demo_liabilities.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.main(["--db", str(db.db_path)]) == 0
+
+
+def _liability_state(db):
+    from src.database.models import Liability, LiabilityBalanceSnapshot
+
+    with db.get_session() as session:
+        liabs = [
+            (row.id, row.current_balance, row.balance_as_of)
+            for row in session.query(Liability).order_by(Liability.id).all()
+        ]
+        snaps = [
+            (s.liability_id, s.snapshot_date, s.balance, s.source)
+            for s in session.query(LiabilityBalanceSnapshot).order_by(
+                LiabilityBalanceSnapshot.liability_id, LiabilityBalanceSnapshot.snapshot_date
+            )
+        ]
+    return liabs, snaps
+
+
+def test_stale_history_rewrites_demo_liability_snapshots(demo_db):
+    from src.services.demo_liabilities import demo_liability_snapshots
+
+    _build_liabilities(demo_db)
+    today = date(2027, 3, 15)  # far enough ahead that every snapshot date moves
+    ensure_recent_demo_history(demo_db, today=today)
+    liabs, snaps = _liability_state(demo_db)
+    expected = demo_liability_snapshots(today - timedelta(days=1))
+    assert snaps == [
+        (r["liability_id"], r["snapshot_date"], r["balance"], "demo")
+        for r in sorted(expected, key=lambda r: (r["liability_id"], r["snapshot_date"]))
+    ]
+    assert len(snaps) == 36
+    assert max(s[1] for s in snaps) == date(2027, 2, 28)
+    by_id = {item[0]: item for item in liabs}
+    for lid in ("demo-mortgage", "demo-auto", "demo-card"):
+        last = [r for r in expected if r["liability_id"] == lid][-1]
+        assert by_id[lid][1] == last["balance"]
+        assert by_id[lid][2] == last["snapshot_date"]
+
+
+def test_current_history_writes_nothing_to_liabilities(demo_db):
+    from sqlalchemy import event
+
+    _build_liabilities(demo_db)
+    today = date(2026, 10, 4)
+    ensure_recent_demo_history(demo_db, today=today)
+    statements = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(demo_db.engine, "before_cursor_execute", record)
+    try:
+        assert ensure_recent_demo_history(demo_db, today=today) == 0
+    finally:
+        event.remove(demo_db.engine, "before_cursor_execute", record)
+    writes = [s for s in statements if s.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER"))]
+    assert writes == []
+
+
+def test_non_demo_database_gets_zero_liability_writes(tmp_path):
+    """Startup runs this against the owner's real database. A SQL listener, not
+    row counts, proves nothing is written to either liability table."""
+    from sqlalchemy import event
+
+    from src.database.models import Liability, LiabilityBalanceSnapshot
+
+    path = tmp_path / "real.db"
+    db = Database(db_path=str(path))
+    with db.get_session() as session:
+        account = Account(name="Real Taxable", account_type="taxable")
+        session.add(account)
+        session.flush()
+        session.add(Position(account_id=account.id, ticker="VTI", shares=10.0, current_price=200.0))
+        session.add(
+            Liability(
+                id="demo-mortgage",  # even a row that shares a demo id must be left alone
+                name="Real loan",
+                liability_type="mortgage",
+                current_balance=1000.0,
+                balance_as_of=date(2020, 1, 1),
+                is_amortizing=True,
+            )
+        )
+        session.add(
+            LiabilityBalanceSnapshot(liability_id="demo-mortgage", snapshot_date=date(2020, 1, 1), balance=1000.0)
+        )
+        session.commit()
+    before = _liability_state(db)
+
+    statements = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(db.engine, "before_cursor_execute", record)
+    try:
+        assert ensure_recent_demo_history(db, today=date(2027, 3, 15)) == 0
+    finally:
+        event.remove(db.engine, "before_cursor_execute", record)
+
+    assert statements == []
+    assert _liability_state(db) == before
+
+
+def test_liability_rewrite_function_has_its_own_demo_guard(tmp_path):
+    from sqlalchemy import event
+
+    from src.services.demo_liabilities import rewrite_demo_liability_history
+
+    db = Database(db_path=str(tmp_path / "real.db"))
+    statements = []
+    event.listen(db.engine, "before_cursor_execute", lambda c, cu, st, p, ctx, m: statements.append(st))
+    assert rewrite_demo_liability_history(db, date(2027, 3, 14)) == 0
+    assert statements == []
+
+
+def test_liability_history_refreshes_even_when_portfolio_history_is_current(demo_db):
+    _build_liabilities(demo_db)
+    today = date(2027, 3, 15)
+    ensure_recent_demo_history(demo_db, today=today)  # portfolio history now ends yesterday
+    # Age only the liability snapshots, leaving portfolio history current for `today`.
+    from src.database.models import LiabilityBalanceSnapshot
+
+    with demo_db.get_session() as session:
+        session.query(LiabilityBalanceSnapshot).filter(
+            LiabilityBalanceSnapshot.snapshot_date > date(2026, 12, 31)
+        ).delete()
+        session.commit()
+    assert ensure_recent_demo_history(demo_db, today=today) == 0  # portfolio unchanged
+    _, snaps = _liability_state(demo_db)
+    assert max(s[1] for s in snaps) == date(2027, 2, 28)
+    assert len(snaps) == 36

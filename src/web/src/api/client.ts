@@ -6,6 +6,7 @@
 import { generateSignatureHeaders, isSigningRequired } from '@/state/session';
 import { store } from '@/state/store';
 import { showToast } from '@/ui/toast';
+import { LocalHttpError } from '@/database/local-error';
 import type { TaskStatus } from '@/types/api';
 import {
   tryLocalRoute,
@@ -118,6 +119,9 @@ export async function apiCall<T>(endpoint: string, options: ApiCallOptions = {})
     } catch (error) {
       if (error instanceof LocalModeDisabledError) {
         throw new ApiError(400, error.message);
+      }
+      if (error instanceof LocalHttpError) {
+        throw new ApiError(error.status, error.message);
       }
       throw error;
     }

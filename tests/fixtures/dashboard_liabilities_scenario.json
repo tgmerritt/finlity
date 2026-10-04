@@ -1,0 +1,277 @@
+{
+  "today": "2026-10-04",
+  "setup": {
+    "accounts": [
+      {
+        "id": "acct-brk",
+        "name": "Brokerage",
+        "account_type": "taxable"
+      },
+      {
+        "id": "acct-ira",
+        "name": "IRA",
+        "account_type": "roth_ira"
+      },
+      {
+        "id": "acct-home",
+        "name": "Home",
+        "account_type": "property"
+      }
+    ],
+    "positions": [
+      {
+        "id": "pos-vti",
+        "account_id": "acct-brk",
+        "ticker": "VTI",
+        "name": "Total Market",
+        "shares": 10,
+        "current_price": 330,
+        "position_type": "equity",
+        "asset_class": "equity"
+      },
+      {
+        "id": "pos-vxus-a",
+        "account_id": "acct-brk",
+        "ticker": "VXUS",
+        "name": "Intl",
+        "shares": 5.5,
+        "current_price": 60,
+        "position_type": "equity",
+        "asset_class": "equity"
+      },
+      {
+        "id": "pos-vxus-b",
+        "account_id": "acct-ira",
+        "ticker": "VXUS",
+        "name": "Intl",
+        "shares": 5.5,
+        "current_price": 60,
+        "position_type": "equity",
+        "asset_class": "equity"
+      },
+      {
+        "id": "pos-re",
+        "account_id": "acct-home",
+        "ticker": "RE",
+        "name": "House",
+        "shares": 1,
+        "current_price": 600000,
+        "position_type": "real_estate",
+        "asset_class": "alternative"
+      },
+      {
+        "id": "pos-re-b",
+        "account_id": "acct-brk",
+        "ticker": "RE",
+        "name": "Cabin",
+        "shares": 1,
+        "current_price": 200000,
+        "position_type": "real_estate",
+        "asset_class": "alternative"
+      }
+    ],
+    "views": [
+      {
+        "id": "view-empty",
+        "name": "Everything",
+        "account_ids": []
+      },
+      {
+        "id": "view-brokerage",
+        "name": "Brokerage only",
+        "account_ids": [
+          "acct-brk"
+        ]
+      }
+    ],
+    "snapshots": [
+      {
+        "date": "2026-09-25",
+        "total": 1000000,
+        "retirement": 200000,
+        "taxable": 800000
+      },
+      {
+        "date": "2026-09-26",
+        "total": 1001000,
+        "retirement": 200100,
+        "taxable": 800900
+      },
+      {
+        "date": "2026-09-27",
+        "total": 1002000,
+        "retirement": 200200,
+        "taxable": 801800
+      },
+      {
+        "date": "2026-09-28",
+        "total": 1003000,
+        "retirement": 200300,
+        "taxable": 802700
+      },
+      {
+        "date": "2026-09-29",
+        "total": 1004000,
+        "retirement": 200400,
+        "taxable": 803600
+      },
+      {
+        "date": "2026-09-30",
+        "total": 1005000,
+        "retirement": 200500,
+        "taxable": 804500
+      },
+      {
+        "date": "2026-10-01",
+        "total": 1006000,
+        "retirement": 200600,
+        "taxable": 805400
+      },
+      {
+        "date": "2026-10-02",
+        "total": 1007000,
+        "retirement": 200700,
+        "taxable": 806300
+      },
+      {
+        "date": "2026-10-03",
+        "total": 1008000,
+        "retirement": 200800,
+        "taxable": 807200
+      },
+      {
+        "date": "2026-10-04",
+        "total": 1009000,
+        "retirement": 200900,
+        "taxable": 808100
+      }
+    ]
+  },
+  "steps": [
+    {
+      "name": "counts before",
+      "probe": "counts"
+    },
+    {
+      "name": "dashboard with no liabilities",
+      "method": "GET",
+      "path": "/api/dashboard/data"
+    },
+    {
+      "name": "dashboard filtered with no liabilities",
+      "method": "GET",
+      "path": "/api/dashboard/data?view_id=view-brokerage"
+    },
+    {
+      "name": "create mortgage linked to the house",
+      "method": "POST",
+      "path": "/api/liabilities",
+      "body": {
+        "name": "Home loan",
+        "liability_type": "mortgage",
+        "lender": "First Bank",
+        "current_balance": 480000,
+        "balance_as_of": "2026-07-06",
+        "interest_rate": 0.0625,
+        "payment_amount": 3201.73,
+        "next_payment_date": "2026-11-01",
+        "original_principal": 520000,
+        "origination_date": "2022-07-01",
+        "term_months": 360,
+        "entity_id": "ent-1",
+        "property": {
+          "mode": "link",
+          "position_id": "pos-re"
+        },
+        "cash_flow": {
+          "mode": "none"
+        }
+      }
+    },
+    {
+      "name": "create card",
+      "method": "POST",
+      "path": "/api/liabilities",
+      "body": {
+        "name": "Rewards card",
+        "liability_type": "credit_card",
+        "current_balance": 3200,
+        "balance_as_of": "2026-09-24",
+        "interest_rate": 0.2299,
+        "credit_limit": 15000,
+        "cash_flow": {
+          "mode": "none"
+        }
+      },
+      "save": "card"
+    },
+    {
+      "name": "report a newer card balance",
+      "method": "POST",
+      "path": "/api/liabilities/{card}/balance",
+      "body": {
+        "balance": 2750,
+        "as_of": "2026-09-30"
+      }
+    },
+    {
+      "name": "create auto loan to archive",
+      "method": "POST",
+      "path": "/api/liabilities",
+      "save": "auto",
+      "body": {
+        "name": "Old truck",
+        "liability_type": "auto_loan",
+        "current_balance": 4000,
+        "balance_as_of": "2026-09-26",
+        "interest_rate": 0.05,
+        "payment_amount": 400,
+        "next_payment_date": "2026-10-26",
+        "cash_flow": {
+          "mode": "none"
+        }
+      }
+    },
+    {
+      "name": "archive the auto loan",
+      "method": "PUT",
+      "path": "/api/liabilities/{auto}",
+      "body": {
+        "is_active": false
+      }
+    },
+    {
+      "name": "counts after liabilities",
+      "probe": "counts"
+    },
+    {
+      "name": "dashboard unfiltered with liabilities",
+      "method": "GET",
+      "path": "/api/dashboard/data"
+    },
+    {
+      "name": "dashboard with a view that has no accounts",
+      "method": "GET",
+      "path": "/api/dashboard/data?view_id=view-empty"
+    },
+    {
+      "name": "dashboard with an unknown view",
+      "method": "GET",
+      "path": "/api/dashboard/data?view_id=view-missing"
+    },
+    {
+      "name": "dashboard filtered by view",
+      "method": "GET",
+      "path": "/api/dashboard/data?view_id=view-brokerage"
+    },
+    {
+      "name": "duplicates ignore real estate",
+      "method": "GET",
+      "path": "/api/portfolio/duplicates"
+    },
+    {
+      "name": "counts after reads",
+      "probe": "counts"
+    }
+  ]
+}

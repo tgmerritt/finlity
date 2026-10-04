@@ -740,6 +740,55 @@ export class ClientDatabase {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (entity_id) REFERENCES entities(id)
       );
+
+      -- Liabilities. entity_id, linked_position_id and expense_id are soft
+      -- references (no FOREIGN KEY) so no existing delete path changes.
+      -- Calendar dates are local-calendar 'YYYY-MM-DD' (never toISOString());
+      -- the CHECKs reject datetime strings.
+      CREATE TABLE IF NOT EXISTS liabilities (
+        id TEXT PRIMARY KEY,
+        entity_id TEXT,
+        name TEXT NOT NULL,
+        liability_type TEXT NOT NULL,
+        lender TEXT,
+        current_balance REAL NOT NULL,
+        balance_as_of TEXT NOT NULL CHECK (length(balance_as_of) = 10),
+        interest_rate REAL,
+        payment_amount REAL,
+        payment_frequency TEXT NOT NULL DEFAULT 'monthly',
+        next_payment_date TEXT CHECK (length(next_payment_date) = 10),
+        escrow_amount REAL,
+        original_principal REAL,
+        origination_date TEXT CHECK (length(origination_date) = 10),
+        term_months INTEGER,
+        maturity_date TEXT CHECK (length(maturity_date) = 10),
+        credit_limit REAL,
+        is_amortizing INTEGER NOT NULL,
+        linked_position_id TEXT,
+        expense_id TEXT,
+        source TEXT NOT NULL DEFAULT 'manual',
+        source_ref TEXT,
+        source_detail TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        closed_date TEXT CHECK (length(closed_date) = 10),
+        notes TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS liability_balance_snapshots (
+        id TEXT PRIMARY KEY,
+        liability_id TEXT NOT NULL,
+        snapshot_date TEXT NOT NULL CHECK (length(snapshot_date) = 10),
+        balance REAL NOT NULL,
+        source TEXT NOT NULL DEFAULT 'manual',
+        source_ref TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (liability_id) REFERENCES liabilities(id)
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS ux_liability_snapshot_day
+        ON liability_balance_snapshots(liability_id, snapshot_date);
   `;
 
   /**

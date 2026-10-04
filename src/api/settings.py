@@ -636,6 +636,23 @@ def get_demo_mode() -> dict:
     return status
 
 
+_LIABILITY_DATE_COLUMNS = (
+    "balance_as_of",
+    "next_payment_date",
+    "origination_date",
+    "maturity_date",
+    "closed_date",
+)
+
+
+def _calendar_dates(row: dict, columns: tuple) -> dict:
+    """Trim calendar-day columns to 'YYYY-MM-DD' (never a datetime string)."""
+    for col in columns:
+        if isinstance(row.get(col), str):
+            row[col] = row[col][:10]
+    return row
+
+
 @router.get("/demo-mode/export")
 def export_demo_dataset() -> dict:
     """Export the server's demo dataset for seeding a visitor's local DB.
@@ -679,10 +696,35 @@ def export_demo_dataset() -> dict:
                 "SELECT * FROM portfolio_snapshots ORDER BY snapshot_date DESC LIMIT 365"
             )
         ]
+        # Liabilities and their history. The browser tables CHECK that calendar
+        # dates are exactly 10 chars, so slice anything datetime-shaped.
+        # Tolerate an older demo.db that predates the tables.
+        try:
+            liabilities = [
+                _calendar_dates(dict(r), _LIABILITY_DATE_COLUMNS)
+                for r in conn.execute("SELECT * FROM liabilities")
+            ]
+            liability_snapshots = [
+                _calendar_dates(dict(r), ("snapshot_date",))
+                for r in conn.execute(
+                    "SELECT * FROM liability_balance_snapshots ORDER BY snapshot_date"
+                )
+            ]
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc):
+                raise
+            liabilities, liability_snapshots = [], []
     finally:
         conn.close()
 
-    return {"entities": entities, "accounts": accounts, "positions": positions, "snapshots": snaps[::-1]}
+    return {
+        "entities": entities,
+        "accounts": accounts,
+        "positions": positions,
+        "snapshots": snaps[::-1],
+        "liabilities": liabilities,
+        "liability_snapshots": liability_snapshots,
+    }
 
 
 @router.put("/demo-mode")

@@ -1,0 +1,1165 @@
+{
+ "annuity_payment": [
+  {
+   "name": "30y mortgage",
+   "balance": 520000,
+   "apr": 0.0625,
+   "n_periods": 360,
+   "frequency": "monthly",
+   "expected": 3201.7294422172513
+  },
+  {
+   "name": "zero apr",
+   "balance": 12000,
+   "apr": 0,
+   "n_periods": 24,
+   "frequency": "monthly",
+   "expected": 500.0
+  },
+  {
+   "name": "student loan",
+   "balance": 40000,
+   "apr": 0.055,
+   "n_periods": 120,
+   "frequency": "monthly",
+   "expected": 434.10511184191944
+  },
+  {
+   "name": "biweekly",
+   "balance": 250000,
+   "apr": 0.05,
+   "n_periods": 780,
+   "frequency": "biweekly",
+   "expected": 619.1106129246012
+  },
+  {
+   "name": "weekly",
+   "balance": 10000,
+   "apr": 0.08,
+   "n_periods": 104,
+   "frequency": "weekly",
+   "expected": 104.1249827017194
+  },
+  {
+   "name": "quarterly",
+   "balance": 80000,
+   "apr": 0.06,
+   "n_periods": 20,
+   "frequency": "quarterly",
+   "expected": 4659.658869957329
+  },
+  {
+   "name": "annual",
+   "balance": 50000,
+   "apr": 0.04,
+   "n_periods": 10,
+   "frequency": "annual",
+   "expected": 6164.547216506821
+  }
+ ],
+ "balance_after": [
+  {
+   "name": "k zero",
+   "balance": 520000,
+   "apr": 0.0625,
+   "payment": 3201.73,
+   "k": 0,
+   "frequency": "monthly",
+   "expected": 520000.0
+  },
+  {
+   "name": "mortgage 12",
+   "balance": 520000,
+   "apr": 0.0625,
+   "payment": 3201.73,
+   "k": 12,
+   "frequency": "monthly",
+   "expected": 513906.655567221
+  },
+  {
+   "name": "mortgage 120",
+   "balance": 520000,
+   "apr": 0.0625,
+   "payment": 3201.73,
+   "k": 120,
+   "frequency": "monthly",
+   "expected": 438036.0142795298
+  },
+  {
+   "name": "mortgage 360",
+   "balance": 520000,
+   "apr": 0.0625,
+   "payment": 3201.73,
+   "k": 360,
+   "frequency": "monthly",
+   "expected": 0.0
+  },
+  {
+   "name": "floored past payoff",
+   "balance": 520000,
+   "apr": 0.0625,
+   "payment": 3201.73,
+   "k": 400,
+   "frequency": "monthly",
+   "expected": 0.0
+  },
+  {
+   "name": "zero apr",
+   "balance": 1200,
+   "apr": 0,
+   "payment": 100,
+   "k": 5,
+   "frequency": "monthly",
+   "expected": 700
+  },
+  {
+   "name": "zero apr floored",
+   "balance": 1200,
+   "apr": 0,
+   "payment": 100,
+   "k": 20,
+   "frequency": "monthly",
+   "expected": 0.0
+  },
+  {
+   "name": "biweekly",
+   "balance": 250000,
+   "apr": 0.05,
+   "payment": 1400,
+   "k": 26,
+   "frequency": "biweekly",
+   "expected": 225516.54344297855
+  },
+  {
+   "name": "quarterly",
+   "balance": 80000,
+   "apr": 0.06,
+   "payment": 5000,
+   "k": 8,
+   "frequency": "quarterly",
+   "expected": 47955.21139585578
+  },
+  {
+   "name": "payment below interest grows",
+   "balance": 10000,
+   "apr": 0.12,
+   "payment": 50,
+   "k": 12,
+   "frequency": "monthly",
+   "expected": 10634.12515065985
+  }
+ ],
+ "periods_to_payoff": [
+  {
+   "name": "mortgage",
+   "balance": 520000,
+   "apr": 0.0625,
+   "payment": 3201.73,
+   "frequency": "monthly",
+   "expected": 360
+  },
+  {
+   "name": "zero apr exact",
+   "balance": 1000,
+   "apr": 0,
+   "payment": 100,
+   "frequency": "monthly",
+   "expected": 10
+  },
+  {
+   "name": "zero apr remainder",
+   "balance": 1050,
+   "apr": 0,
+   "payment": 100,
+   "frequency": "monthly",
+   "expected": 11
+  },
+  {
+   "name": "never: payment equals interest",
+   "balance": 120000,
+   "apr": 0.06,
+   "payment": 600,
+   "frequency": "monthly",
+   "expected": null
+  },
+  {
+   "name": "never: payment below interest",
+   "balance": 120000,
+   "apr": 0.06,
+   "payment": 400,
+   "frequency": "monthly",
+   "expected": null
+  },
+  {
+   "name": "one period",
+   "balance": 500,
+   "apr": 0.12,
+   "payment": 1000,
+   "frequency": "monthly",
+   "expected": 1
+  },
+  {
+   "name": "zero balance",
+   "balance": 0,
+   "apr": 0.07,
+   "payment": 100,
+   "frequency": "monthly",
+   "expected": 0
+  },
+  {
+   "name": "biweekly",
+   "balance": 250000,
+   "apr": 0.05,
+   "payment": 1400,
+   "frequency": "biweekly",
+   "expected": 219
+  },
+  {
+   "name": "weekly",
+   "balance": 5000,
+   "apr": 0.09,
+   "payment": 150,
+   "frequency": "weekly",
+   "expected": 35
+  },
+  {
+   "name": "quarterly",
+   "balance": 80000,
+   "apr": 0.06,
+   "payment": 5000,
+   "frequency": "quarterly",
+   "expected": 19
+  },
+  {
+   "name": "annual",
+   "balance": 50000,
+   "apr": 0.04,
+   "payment": 7000,
+   "frequency": "annual",
+   "expected": 9
+  },
+  {
+   "name": "beyond 600 cap",
+   "balance": 1000000,
+   "apr": 0.05,
+   "payment": 4170,
+   "frequency": "monthly",
+   "expected": null
+  },
+  {
+   "name": "zero payment",
+   "balance": 1000,
+   "apr": 0.05,
+   "payment": 0,
+   "frequency": "monthly",
+   "expected": null
+  }
+ ],
+ "due_dates_between": [
+  {
+   "name": "jan31 monthly through feb 2026",
+   "next_payment_date": "2026-01-31",
+   "frequency": "monthly",
+   "start_exclusive": "2026-01-31",
+   "end_inclusive": "2026-05-31",
+   "expected": [
+    "2026-02-28",
+    "2026-03-31",
+    "2026-04-30",
+    "2026-05-31"
+   ]
+  },
+  {
+   "name": "jan31 monthly through leap feb 2028",
+   "next_payment_date": "2028-01-31",
+   "frequency": "monthly",
+   "start_exclusive": "2028-01-01",
+   "end_inclusive": "2028-04-30",
+   "expected": [
+    "2028-01-31",
+    "2028-02-29",
+    "2028-03-31",
+    "2028-04-30"
+   ]
+  },
+  {
+   "name": "anchor after range, walk backward",
+   "next_payment_date": "2026-12-31",
+   "frequency": "monthly",
+   "start_exclusive": "2026-01-15",
+   "end_inclusive": "2026-05-31",
+   "expected": [
+    "2026-01-31",
+    "2026-02-28",
+    "2026-03-31",
+    "2026-04-30",
+    "2026-05-31"
+   ]
+  },
+  {
+   "name": "anchor day 30 clamps february",
+   "next_payment_date": "2026-04-30",
+   "frequency": "monthly",
+   "start_exclusive": "2026-01-01",
+   "end_inclusive": "2026-04-29",
+   "expected": [
+    "2026-01-30",
+    "2026-02-28",
+    "2026-03-30"
+   ]
+  },
+  {
+   "name": "start exclusive end inclusive",
+   "next_payment_date": "2026-03-15",
+   "frequency": "monthly",
+   "start_exclusive": "2026-03-15",
+   "end_inclusive": "2026-05-15",
+   "expected": [
+    "2026-04-15",
+    "2026-05-15"
+   ]
+  },
+  {
+   "name": "empty range",
+   "next_payment_date": "2026-03-15",
+   "frequency": "monthly",
+   "start_exclusive": "2026-03-16",
+   "end_inclusive": "2026-04-14",
+   "expected": []
+  },
+  {
+   "name": "weekly",
+   "next_payment_date": "2026-01-02",
+   "frequency": "weekly",
+   "start_exclusive": "2025-12-20",
+   "end_inclusive": "2026-01-30",
+   "expected": [
+    "2025-12-26",
+    "2026-01-02",
+    "2026-01-09",
+    "2026-01-16",
+    "2026-01-23",
+    "2026-01-30"
+   ]
+  },
+  {
+   "name": "biweekly backward",
+   "next_payment_date": "2026-06-12",
+   "frequency": "biweekly",
+   "start_exclusive": "2026-03-01",
+   "end_inclusive": "2026-04-30",
+   "expected": [
+    "2026-03-06",
+    "2026-03-20",
+    "2026-04-03",
+    "2026-04-17"
+   ]
+  },
+  {
+   "name": "quarterly",
+   "next_payment_date": "2026-01-31",
+   "frequency": "quarterly",
+   "start_exclusive": "2025-12-31",
+   "end_inclusive": "2026-12-31",
+   "expected": [
+    "2026-01-31",
+    "2026-04-30",
+    "2026-07-31",
+    "2026-10-31"
+   ]
+  },
+  {
+   "name": "annual leap day",
+   "next_payment_date": "2028-02-29",
+   "frequency": "annual",
+   "start_exclusive": "2027-12-31",
+   "end_inclusive": "2030-12-31",
+   "expected": [
+    "2028-02-29",
+    "2029-02-28",
+    "2030-02-28"
+   ]
+  },
+  {
+   "name": "end before start",
+   "next_payment_date": "2026-03-15",
+   "frequency": "monthly",
+   "start_exclusive": "2026-06-01",
+   "end_inclusive": "2026-05-01",
+   "expected": []
+  }
+ ],
+ "schedule": [
+  {
+   "name": "short final payment",
+   "balance": 1000,
+   "apr": 0.12,
+   "payment": 300,
+   "frequency": "monthly",
+   "first_due": "2026-01-31",
+   "expected": {
+    "length": 4,
+    "first": {
+     "date": "2026-01-31",
+     "payment": 300,
+     "interest": 10.0,
+     "principal": 290.0,
+     "balance": 710.0
+    },
+    "last": {
+     "date": "2026-04-30",
+     "payment": 122.48371000000002,
+     "interest": 1.2127100000000002,
+     "principal": 121.27100000000002,
+     "balance": 0.0
+    },
+    "total_interest": 22.483710000000002,
+    "total_payments": 1022.48371,
+    "rows": [
+     {
+      "date": "2026-01-31",
+      "payment": 300,
+      "interest": 10.0,
+      "principal": 290.0,
+      "balance": 710.0
+     },
+     {
+      "date": "2026-02-28",
+      "payment": 300,
+      "interest": 7.1000000000000005,
+      "principal": 292.9,
+      "balance": 417.1
+     },
+     {
+      "date": "2026-03-31",
+      "payment": 300,
+      "interest": 4.171,
+      "principal": 295.829,
+      "balance": 121.27100000000002
+     },
+     {
+      "date": "2026-04-30",
+      "payment": 122.48371000000002,
+      "interest": 1.2127100000000002,
+      "principal": 121.27100000000002,
+      "balance": 0.0
+     }
+    ]
+   }
+  },
+  {
+   "name": "zero apr",
+   "balance": 1000,
+   "apr": 0,
+   "payment": 400,
+   "frequency": "monthly",
+   "first_due": "2026-03-01",
+   "expected": {
+    "length": 3,
+    "first": {
+     "date": "2026-03-01",
+     "payment": 400,
+     "interest": 0.0,
+     "principal": 400.0,
+     "balance": 600.0
+    },
+    "last": {
+     "date": "2026-05-01",
+     "payment": 200.0,
+     "interest": 0.0,
+     "principal": 200.0,
+     "balance": 0.0
+    },
+    "total_interest": 0.0,
+    "total_payments": 1000.0,
+    "rows": [
+     {
+      "date": "2026-03-01",
+      "payment": 400,
+      "interest": 0.0,
+      "principal": 400.0,
+      "balance": 600.0
+     },
+     {
+      "date": "2026-04-01",
+      "payment": 400,
+      "interest": 0.0,
+      "principal": 400.0,
+      "balance": 200.0
+     },
+     {
+      "date": "2026-05-01",
+      "payment": 200.0,
+      "interest": 0.0,
+      "principal": 200.0,
+      "balance": 0.0
+     }
+    ]
+   }
+  },
+  {
+   "name": "biweekly small",
+   "balance": 600,
+   "apr": 0.26,
+   "payment": 210,
+   "frequency": "biweekly",
+   "first_due": "2026-02-06",
+   "expected": {
+    "length": 3,
+    "first": {
+     "date": "2026-02-06",
+     "payment": 210,
+     "interest": 6.0,
+     "principal": 204.0,
+     "balance": 396.0
+    },
+    "last": {
+     "date": "2026-03-06",
+     "payment": 191.8596,
+     "interest": 1.8996000000000002,
+     "principal": 189.96,
+     "balance": 0.0
+    },
+    "total_interest": 11.8596,
+    "total_payments": 611.8596,
+    "rows": [
+     {
+      "date": "2026-02-06",
+      "payment": 210,
+      "interest": 6.0,
+      "principal": 204.0,
+      "balance": 396.0
+     },
+     {
+      "date": "2026-02-20",
+      "payment": 210,
+      "interest": 3.96,
+      "principal": 206.04,
+      "balance": 189.96
+     },
+     {
+      "date": "2026-03-06",
+      "payment": 191.8596,
+      "interest": 1.8996000000000002,
+      "principal": 189.96,
+      "balance": 0.0
+     }
+    ]
+   }
+  },
+  {
+   "name": "mortgage 30y",
+   "balance": 520000,
+   "apr": 0.0625,
+   "payment": 3201.73,
+   "frequency": "monthly",
+   "first_due": "2026-11-01",
+   "expected": {
+    "length": 360,
+    "first": {
+     "date": "2026-11-01",
+     "payment": 3201.73,
+     "interest": 2708.333333333333,
+     "principal": 493.396666666667,
+     "balance": 519506.60333333333
+    },
+    "last": {
+     "date": "2056-10-01",
+     "payment": 3201.1421416200355,
+     "interest": 16.586228713057178,
+     "principal": 3184.5559129069784,
+     "balance": 0.0
+    },
+    "total_interest": 632622.21214162,
+    "total_payments": 1152622.21214162
+   }
+  },
+  {
+   "name": "never pays off hits cap",
+   "balance": 10000,
+   "apr": 0.12,
+   "payment": 50,
+   "frequency": "monthly",
+   "first_due": "2026-01-15",
+   "expected": {
+    "length": 600,
+    "first": {
+     "date": "2026-01-15",
+     "payment": 50,
+     "interest": 100.0,
+     "principal": -50.0,
+     "balance": 10050.0
+    },
+    "last": {
+     "date": "2075-12-15",
+     "payment": 50,
+     "interest": 19435.31668313464,
+     "principal": -19385.31668313464,
+     "balance": 1962916.9849965982
+    },
+    "total_interest": 1982916.9849965987,
+    "total_payments": 30000
+   }
+  },
+  {
+   "name": "single payment",
+   "balance": 100,
+   "apr": 0.12,
+   "payment": 500,
+   "frequency": "monthly",
+   "first_due": "2026-02-10",
+   "expected": {
+    "length": 1,
+    "first": {
+     "date": "2026-02-10",
+     "payment": 101.0,
+     "interest": 1.0,
+     "principal": 100,
+     "balance": 0.0
+    },
+    "last": {
+     "date": "2026-02-10",
+     "payment": 101.0,
+     "interest": 1.0,
+     "principal": 100,
+     "balance": 0.0
+    },
+    "total_interest": 1.0,
+    "total_payments": 101.0,
+    "rows": [
+     {
+      "date": "2026-02-10",
+      "payment": 101.0,
+      "interest": 1.0,
+      "principal": 100,
+      "balance": 0.0
+     }
+    ]
+   }
+  }
+ ],
+ "summarize": [
+  {
+   "name": "mortgage",
+   "balance": 520000,
+   "apr": 0.0625,
+   "payment": 3201.73,
+   "frequency": "monthly",
+   "first_due": "2026-11-01",
+   "expected": {
+    "payoff_date": "2056-10-01",
+    "periods_remaining": 360,
+    "total_interest_remaining": 632622.21214162,
+    "never_pays_off": false
+   }
+  },
+  {
+   "name": "short final payment",
+   "balance": 1000,
+   "apr": 0.12,
+   "payment": 300,
+   "frequency": "monthly",
+   "first_due": "2026-01-31",
+   "expected": {
+    "payoff_date": "2026-04-30",
+    "periods_remaining": 4,
+    "total_interest_remaining": 22.483710000000002,
+    "never_pays_off": false
+   }
+  },
+  {
+   "name": "zero apr",
+   "balance": 1000,
+   "apr": 0,
+   "payment": 400,
+   "frequency": "monthly",
+   "first_due": "2026-03-01",
+   "expected": {
+    "payoff_date": "2026-05-01",
+    "periods_remaining": 3,
+    "total_interest_remaining": 0.0,
+    "never_pays_off": false
+   }
+  },
+  {
+   "name": "never pays off",
+   "balance": 120000,
+   "apr": 0.06,
+   "payment": 600,
+   "frequency": "monthly",
+   "first_due": "2026-01-01",
+   "expected": {
+    "payoff_date": null,
+    "periods_remaining": null,
+    "total_interest_remaining": null,
+    "never_pays_off": true
+   }
+  },
+  {
+   "name": "beyond 600 cap is never",
+   "balance": 1000000,
+   "apr": 0.05,
+   "payment": 4170,
+   "frequency": "monthly",
+   "first_due": "2026-01-01",
+   "expected": {
+    "payoff_date": null,
+    "periods_remaining": null,
+    "total_interest_remaining": null,
+    "never_pays_off": true
+   }
+  },
+  {
+   "name": "weekly",
+   "balance": 5000,
+   "apr": 0.09,
+   "payment": 150,
+   "frequency": "weekly",
+   "first_due": "2026-01-02",
+   "expected": {
+    "payoff_date": "2026-08-28",
+    "periods_remaining": 35,
+    "total_interest_remaining": 154.5152465034545,
+    "never_pays_off": false
+   }
+  }
+ ],
+ "balance_at": [
+  {
+   "name": "before origination",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2019-12-31",
+   "expected": 0.0
+  },
+  {
+   "name": "on origination date",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2020-01-01",
+   "expected": 300000.0
+  },
+  {
+   "name": "on closed date",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": "2026-09-01"
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2026-09-01",
+   "expected": 0.0
+  },
+  {
+   "name": "after closed date",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": "2026-09-01"
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2027-03-01",
+   "expected": 0.0
+  },
+  {
+   "name": "day before closed date still amortizes",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": "2026-09-01"
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2026-08-31",
+   "expected": 297877.82912073
+  },
+  {
+   "name": "flat back-fill before first snapshot",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2024-06-01",
+   "expected": 300000.0
+  },
+  {
+   "name": "on snapshot date",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2026-01-15",
+   "expected": 300000.0
+  },
+  {
+   "name": "rolled forward between reports",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2026-06-20",
+   "expected": 298491.74265065714
+  },
+  {
+   "name": "due date on query date is counted",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2026-06-01",
+   "expected": 298491.74265065714
+  },
+  {
+   "name": "far future roll",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2030-01-10",
+   "expected": 283843.6824077728
+  },
+  {
+   "name": "anchor next date far in future",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2027-01-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2026-06-20",
+   "expected": 298491.74265065714
+  },
+  {
+   "name": "latest snapshot wins",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    },
+    {
+     "snapshot_date": "2026-04-10",
+     "balance": 296000.0
+    },
+    {
+     "snapshot_date": "2026-03-01",
+     "balance": 298000.0
+    }
+   ],
+   "on_date": "2026-06-20",
+   "expected": 295361.10675
+  },
+  {
+   "name": "snapshot after query date ignored",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    },
+    {
+     "snapshot_date": "2026-09-10",
+     "balance": 290000.0
+    }
+   ],
+   "on_date": "2026-06-20",
+   "expected": 298491.74265065714
+  },
+  {
+   "name": "payoff floors at zero",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 100000.0,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2026-06-20",
+   "expected": 0.0
+  },
+  {
+   "name": "zero apr amortizing",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.0,
+    "payment_amount": 1000.0,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2026-06-20",
+   "expected": 295000.0
+  },
+  {
+   "name": "null rate treated as zero",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": null,
+    "payment_amount": 1000.0,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": "2020-01-01",
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2026-06-20",
+   "expected": 295000.0
+  },
+  {
+   "name": "no origination date",
+   "liability": {
+    "is_amortizing": 1,
+    "interest_rate": 0.06,
+    "payment_amount": 1798.65,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-01",
+    "origination_date": null,
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 300000.0
+    }
+   ],
+   "on_date": "2026-06-20",
+   "expected": 298491.74265065714
+  },
+  {
+   "name": "revolving stays flat",
+   "liability": {
+    "is_amortizing": 0,
+    "interest_rate": 0.24,
+    "payment_amount": 200.0,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-10",
+    "origination_date": null,
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 4200.0
+    }
+   ],
+   "on_date": "2026-08-20",
+   "expected": 4200.0
+  },
+  {
+   "name": "revolving flat back-fill",
+   "liability": {
+    "is_amortizing": 0,
+    "interest_rate": 0.24,
+    "payment_amount": 200.0,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-10",
+    "origination_date": null,
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 4200.0
+    }
+   ],
+   "on_date": "2025-01-01",
+   "expected": 4200.0
+  },
+  {
+   "name": "revolving latest snapshot",
+   "liability": {
+    "is_amortizing": 0,
+    "interest_rate": 0.24,
+    "payment_amount": 200.0,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-10",
+    "origination_date": null,
+    "closed_date": null
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 4200.0
+    },
+    {
+     "snapshot_date": "2026-05-01",
+     "balance": 3900.0
+    }
+   ],
+   "on_date": "2026-08-20",
+   "expected": 3900.0
+  },
+  {
+   "name": "revolving after closed",
+   "liability": {
+    "is_amortizing": 0,
+    "interest_rate": 0.24,
+    "payment_amount": 200.0,
+    "payment_frequency": "monthly",
+    "next_payment_date": "2026-02-10",
+    "origination_date": null,
+    "closed_date": "2026-07-01"
+   },
+   "snapshots": [
+    {
+     "snapshot_date": "2026-01-15",
+     "balance": 4200.0
+    }
+   ],
+   "on_date": "2026-08-20",
+   "expected": 0.0
+  }
+ ]
+}

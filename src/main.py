@@ -12,10 +12,11 @@ import time
 import webbrowser
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import yaml
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
@@ -39,8 +40,11 @@ from src.api.inference import router as inference_router
 from src.api.tasks import router as tasks_router
 from src.api.session import router as session_router
 from src.api.entities import router as entities_router
+from src.api.liabilities import router as liabilities_router
+from src.api.dependencies import get_db
+from src.liabilities.service import dashboard_block
 from src.api.v2 import v2_router
-from src.database import get_profile_manager, get_database
+from src.database import Database, get_profile_manager, get_database
 from src.importers import FolderScanner
 from src.services.price_refresh_gate import (
     catch_up_tickers,
@@ -352,6 +356,7 @@ app.include_router(inference_router)
 app.include_router(tasks_router)
 app.include_router(session_router)
 app.include_router(entities_router)
+app.include_router(liabilities_router)
 app.include_router(v2_router)
 
 # Serve static files (web dashboard)
@@ -478,15 +483,13 @@ async def security_txt() -> Response:
 
 
 @app.get("/api/dashboard/data")
-async def get_dashboard_data(view_id: str = None):
+async def get_dashboard_data(view_id: str = None, db: Database = Depends(get_db)):
     """Get all data needed for the dashboard in a single request.
 
     Args:
         view_id: Optional portfolio view ID to filter by. If not provided,
                  returns data for all accounts.
     """
-    db = get_database()
-
     # Get all accounts for reference
     all_accounts = {a.id: a for a in db.get_all_accounts()}
 
@@ -578,7 +581,7 @@ async def get_dashboard_data(view_id: str = None):
             "is_retirement": account.is_retirement,
         })
 
-    summary = {
+    summary: dict[str, Any] = {
         "total_value": total_value,
         "total_cost_basis": total_cost_basis if total_cost_basis else None,
         "total_gain_loss": (total_value - total_cost_basis) if total_cost_basis else None,
@@ -601,6 +604,32 @@ async def get_dashboard_data(view_id: str = None):
         }
         for s in reversed(snapshots)
     ]
+
+    # Liabilities are household-wide, so they join only the unfiltered response. A failure
+    # here must not take the dashboard down: fall back to the pre-liabilities payload.
+    # Log the exception type only (a traceback can carry SQL parameters, i.e. money).
+    try:
+        block = dashboard_block(
+            db, filtered=bool(filter_account_ids), history_dates=[str(h["date"]) for h in history if h["date"]]
+        )
+        block_summary = block["summary"]
+        extra: dict[str, Any] = {"liabilities_included": block_summary["liabilities_included"]}
+        history_extra: list[dict[str, Any]] = []
+        if block_summary["liabilities_included"]:
+            owed_total = float(block_summary["liabilities_total"])
+            extra["liabilities_total"] = block_summary["liabilities_total"]
+            extra["net_worth"] = round(total_value - owed_total, 2)
+            extra["liabilities"] = block_summary["liabilities"]
+            for item in history:
+                owed = block["history"].get(item["date"], 0.0)
+                history_extra.append({"liabilities": owed, "net_worth": round((item["total"] or 0) - owed, 2)})
+    except Exception as exc:
+        logger.error("dashboard liabilities block failed: %s", type(exc).__name__)
+        extra = {"liabilities_included": False}
+        history_extra = []
+    summary.update(extra)
+    for item, more in zip(history, history_extra):
+        item.update(more)
 
     # Import history
     imports = db.get_import_history(limit=10)

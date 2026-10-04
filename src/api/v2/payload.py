@@ -21,7 +21,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from src.api.analysis import map_account_type_str, map_brokerage_str
+from src.api.analysis import PROPERTY_ACCOUNT_TYPE, map_account_type_str, map_brokerage_str
 from src.models import Portfolio, Account as PydanticAccount, Position as PydanticPosition
 from src.models.position_types import position_market_value
 
@@ -175,6 +175,8 @@ def payload_to_portfolio_with_warnings(
     excluded: list[ExcludedPosition] = []
 
     for acc in p.accounts:
+        if acc.account_type == PROPERTY_ACCOUNT_TYPE:
+            continue  # a home is not investable allocation (matches db_to_portfolio)
         positions = []
         for pos in acc.positions:
             # Skip positions without prices (matches db_to_portfolio).
