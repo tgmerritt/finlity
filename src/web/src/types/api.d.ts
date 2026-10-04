@@ -813,6 +813,82 @@ export interface SmartImportDeleted {
   deleted: true;
 }
 
+export interface SmartImportTransactionsDeleted {
+  deleted: number;
+}
+
+export type SmartImportTxnKind =
+  'expense' | 'income' | 'transfer' | 'payment' | 'refund' | 'fee' | 'interest';
+
+export type SmartImportFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annual';
+
+/** One reviewed transaction of POST /api/smart-import/apply (server ApplyTransaction). */
+export interface ApplyTxn {
+  posted_date: string;
+  amount: number;
+  description: string;
+  merchant_key: string;
+  kind: SmartImportTxnKind;
+  category_id?: string | null;
+  category_source: 'user' | 'rule' | 'seed' | 'ai' | 'none';
+  ai_confidence?: number | null;
+  external_id?: string | null;
+  dedupe_key: string;
+  excluded?: boolean;
+}
+
+/** One statement of an apply batch (server ApplyStatement). */
+export interface ApplyStatement {
+  file_hash: string;
+  file_name: string;
+  origin: 'file' | 'sample' | 'connector';
+  format: 'csv' | 'ofx' | 'pdf' | 'connector';
+  parser: string;
+  account: {
+    kind: SmartImportAccountKind;
+    key: string;
+    label?: string | null;
+    last4?: string | null;
+    institution?: string | null;
+  };
+  period?: { start?: string | null; end?: string | null } | null;
+  closing_balance?: { amount: number; as_of: string } | null;
+  liability_id?: string | null;
+  ai_used?: boolean;
+  ai_provider?: string | null;
+  transactions: ApplyTxn[];
+}
+
+/** A remembered merchant choice (server ApplyRule). */
+export interface ApplyRule {
+  merchant_key: string;
+  category_id?: string | null;
+  kind?: SmartImportTxnKind | null;
+  source?: 'user' | 'import' | 'ai' | 'connector';
+}
+
+/** A recurring candidate decision (server ApplyRecurring); expense_id only with 'link'. */
+export interface ApplyRecurring {
+  merchant_key: string;
+  name: string;
+  amount: number;
+  frequency: SmartImportFrequency;
+  category_id: string;
+  occurrences: number;
+  file_hash: string;
+  decision: 'create' | 'link' | 'reject';
+  expense_id?: string | null;
+}
+
+/** Body of POST /api/smart-import/apply (server ApplyRequest). */
+export interface ApplyRequest {
+  batch_id: string;
+  entity_id?: string | null;
+  statements: ApplyStatement[];
+  rules?: ApplyRule[];
+  recurring?: ApplyRecurring[];
+}
+
 export interface ApplyResponse {
   imports: {
     import_id: string;

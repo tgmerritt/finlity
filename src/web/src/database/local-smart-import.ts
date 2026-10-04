@@ -16,7 +16,12 @@ import type { ClientDatabase } from './client-database';
 import { LocalHttpError } from './local-error';
 import { today as clockToday } from '@/utils/clock';
 import type {
+  ApplyRecurring,
+  ApplyRequest,
   ApplyResponse,
+  ApplyRule,
+  ApplyStatement,
+  ApplyTxn,
   MerchantRuleResponse,
   PreviewRequest,
   PreviewResponse,
@@ -25,6 +30,7 @@ import type {
   SmartImportSettings,
   SmartImportSettingsUpdate,
   SmartImportSummary,
+  SmartImportTransactionsDeleted,
   SmartImportUndoResponse,
   SpendingSummary,
 } from '@/types/api';
@@ -40,7 +46,7 @@ const MAX_ACCOUNT_LABELS = 200;
 const MAX_HEADER_NAME_CHARS = 200;
 const MAX_ACCOUNT_LABEL_CHARS = 120;
 const MAPPABLE_FIELDS = ['date', 'description', 'amount', 'debit', 'credit', 'type', 'balance'];
-const ACCOUNT_KINDS = ['checking', 'savings', 'credit_card', 'loan', 'unknown'];
+const ACCOUNT_KINDS = ['checking', 'savings', 'credit_card', 'loan', 'unknown'] as const;
 const MAX_PREVIEW_STATEMENTS = 12;
 const MAX_PREVIEW_KEYS = 10_000;
 
@@ -456,7 +462,10 @@ function parsePreview(body: unknown): PreviewRequest {
       throw fail('bad_request');
     }
     if (typeof st.file_hash !== 'string' || !HASH.test(st.file_hash)) throw fail('bad_request');
-    if (typeof st.account_kind !== 'string' || !ACCOUNT_KINDS.includes(st.account_kind)) {
+    if (
+      typeof st.account_kind !== 'string' ||
+      !(ACCOUNT_KINDS as readonly string[]).includes(st.account_kind)
+    ) {
       throw fail('bad_request');
     }
     const optional = (v: unknown, max: number): string | null => {
@@ -698,12 +707,20 @@ const ANNUAL_MULTIPLIER: Record<string, number> = {
   annual: 1,
   one_time: 0,
 };
-const TXN_KINDS = ['expense', 'income', 'transfer', 'payment', 'refund', 'fee', 'interest'];
-const CATEGORY_SOURCES = ['user', 'rule', 'seed', 'ai', 'none'];
-const ORIGINS = ['file', 'sample', 'connector'];
-const FORMATS = ['csv', 'ofx', 'pdf', 'connector'];
-const RULE_SOURCES = ['user', 'import', 'ai', 'connector'];
-const FREQUENCIES = ['weekly', 'biweekly', 'monthly', 'quarterly', 'annual'];
+const TXN_KINDS = [
+  'expense',
+  'income',
+  'transfer',
+  'payment',
+  'refund',
+  'fee',
+  'interest',
+] as const;
+const CATEGORY_SOURCES = ['user', 'rule', 'seed', 'ai', 'none'] as const;
+const ORIGINS = ['file', 'sample', 'connector'] as const;
+const FORMATS = ['csv', 'ofx', 'pdf', 'connector'] as const;
+const RULE_SOURCES = ['user', 'import', 'ai', 'connector'] as const;
+const FREQUENCIES = ['weekly', 'biweekly', 'monthly', 'quarterly', 'annual'] as const;
 const MAX_APPLY_TRANSACTIONS = 10_000;
 const MAX_APPLY_RULES = 5_000;
 const MAX_APPLY_RECURRING = 500;
@@ -727,63 +744,20 @@ const EXPENSE_BOOLS = ['is_pretax', 'is_mortgage', 'is_active'];
 const nowIso = (): string => new Date().toISOString();
 const uuid = (): string => crypto.randomUUID();
 
-interface ApplyTxn {
-  posted_date: string;
-  amount: number;
-  description: string;
-  merchant_key: string;
-  kind: string;
-  category_id: string | null;
-  category_source: string;
-  ai_confidence: number | null;
-  external_id: string | null;
-  dedupe_key: string;
-  excluded: boolean;
-}
-interface ApplyStatement {
-  file_hash: string;
-  file_name: string;
-  origin: string;
-  format: string;
-  parser: string;
-  account: {
-    kind: string;
-    key: string;
-    label: string | null;
-    last4: string | null;
-    institution: string | null;
-  };
+/** Apply wire types with every default filled in, as the parser returns them. */
+type ParsedTxn = Required<ApplyTxn>;
+type ParsedStatement = Omit<Required<ApplyStatement>, 'account' | 'period' | 'transactions'> & {
+  account: Required<ApplyStatement['account']>;
   period: { start: string | null; end: string | null } | null;
-  closing_balance: { amount: number; as_of: string } | null;
-  liability_id: string | null;
-  ai_used: boolean;
-  ai_provider: string | null;
-  transactions: ApplyTxn[];
-}
-interface ApplyRule {
-  merchant_key: string;
-  category_id: string | null;
-  kind: string | null;
-  source: string;
-}
-interface ApplyRecurring {
-  merchant_key: string;
-  name: string;
-  amount: number;
-  frequency: string;
-  category_id: string;
-  occurrences: number;
-  file_hash: string;
-  decision: 'create' | 'link' | 'reject';
-  expense_id: string | null;
-}
-interface ApplyRequest {
-  batch_id: string;
-  entity_id: string | null;
-  statements: ApplyStatement[];
-  rules: ApplyRule[];
-  recurring: ApplyRecurring[];
-}
+  transactions: ParsedTxn[];
+};
+type ParsedRule = Required<ApplyRule>;
+type ParsedRecurring = Required<ApplyRecurring>;
+type ParsedApply = Omit<Required<ApplyRequest>, 'statements' | 'rules' | 'recurring'> & {
+  statements: ParsedStatement[];
+  rules: ParsedRule[];
+  recurring: ParsedRecurring[];
+};
 
 /** A real calendar day written exactly 'YYYY-MM-DD' (never a datetime). */
 function isDay(v: unknown): v is string {
@@ -816,12 +790,12 @@ const money = (v: unknown): number => {
   need(typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= MAX_MONEY);
   return v as number;
 };
-const oneOf = (v: unknown, values: string[]): string => {
-  need(typeof v === 'string' && values.includes(v));
-  return v as string;
+const oneOf = <T extends string>(v: unknown, values: readonly T[]): T => {
+  need(typeof v === 'string' && (values as readonly string[]).includes(v));
+  return v as T;
 };
 
-function parseTxn(raw: unknown): ApplyTxn {
+function parseTxn(raw: unknown): ParsedTxn {
   const o = shape(
     raw,
     [
@@ -860,7 +834,7 @@ function parseTxn(raw: unknown): ApplyTxn {
   };
 }
 
-function parseStatement(raw: unknown): ApplyStatement {
+function parseStatement(raw: unknown): ParsedStatement {
   const o = shape(
     raw,
     ['file_hash', 'file_name', 'origin', 'format', 'parser', 'account', 'transactions'],
@@ -871,7 +845,7 @@ function parseStatement(raw: unknown): ApplyStatement {
   need(textBetween(o.parser, 1, 64));
   const a = shape(o.account, ['kind', 'key'], ['label', 'last4', 'institution']);
   need(textBetween(a.key, 1, 200));
-  let period: ApplyStatement['period'] = null;
+  let period: ParsedStatement['period'] = null;
   if (present(o.period)) {
     const p = shape(o.period, [], ['start', 'end']);
     for (const k of ['start', 'end']) need(!present(p[k]) || isDay(p[k]));
@@ -880,7 +854,7 @@ function parseStatement(raw: unknown): ApplyStatement {
       end: (p.end as string | null | undefined) ?? null,
     };
   }
-  let closing: ApplyStatement['closing_balance'] = null;
+  let closing: ParsedStatement['closing_balance'] = null;
   if (present(o.closing_balance)) {
     const c = shape(o.closing_balance, ['amount', 'as_of'], []);
     need(isDay(c.as_of));
@@ -910,7 +884,7 @@ function parseStatement(raw: unknown): ApplyStatement {
   };
 }
 
-function parseRule(raw: unknown): ApplyRule {
+function parseRule(raw: unknown): ParsedRule {
   const o = shape(raw, ['merchant_key'], ['category_id', 'kind', 'source']);
   need(textBetween(o.merchant_key, 1, 400));
   return {
@@ -921,7 +895,7 @@ function parseRule(raw: unknown): ApplyRule {
   };
 }
 
-function parseRecurring(raw: unknown): ApplyRecurring {
+function parseRecurring(raw: unknown): ParsedRecurring {
   const o = shape(
     raw,
     [
@@ -952,7 +926,7 @@ function parseRecurring(raw: unknown): ApplyRecurring {
       o.occurrences <= 10_000
   );
   need(typeof o.file_hash === 'string' && HASH.test(o.file_hash));
-  const decision = oneOf(o.decision, ['create', 'link', 'reject']) as ApplyRecurring['decision'];
+  const decision = oneOf(o.decision, ['create', 'link', 'reject'] as const);
   const expenseId = present(o.expense_id) ? o.expense_id : null;
   if (expenseId !== null) need(textBetween(expenseId, 1, 64));
   need((decision === 'link') === (expenseId !== null));
@@ -969,7 +943,7 @@ function parseRecurring(raw: unknown): ApplyRecurring {
   };
 }
 
-function parseApply(body: unknown): ApplyRequest {
+function parseApply(body: unknown): ParsedApply {
   const o = shape(body, ['batch_id', 'statements'], ['entity_id', 'rules', 'recurring']);
   need(textBetween(o.batch_id, 1, 100));
   const entityId = present(o.entity_id) ? o.entity_id : null;
@@ -1028,7 +1002,7 @@ function addLedger(
 /** Ledger order: created_at, then insertion order (rowid) so equal timestamps keep their sequence. */
 const LEDGER_ORDER = `${sortable('created_at')}, rowid`;
 
-function checkReferences(db: ClientDatabase, request: ApplyRequest): void {
+function checkReferences(db: ClientDatabase, request: ParsedApply): void {
   const known = new Set(categories(db).map((c) => c.id));
   for (const rule of request.rules) {
     if (rule.category_id && !known.has(rule.category_id)) throw fail('category_not_found');
@@ -1067,7 +1041,7 @@ interface Created {
   txn_duplicate: number;
   txn_excluded: number;
   balance: string;
-  statement: ApplyStatement;
+  statement: ParsedStatement;
 }
 
 function existingRows(db: ClientDatabase, keys: string[]): Map<string, [string, string]> {
@@ -1085,7 +1059,7 @@ function existingRows(db: ClientDatabase, keys: string[]): Map<string, [string, 
 
 function insertStatement(
   db: ClientDatabase,
-  st: ApplyStatement,
+  st: ParsedStatement,
   contentHash: string,
   batch: { batch_id: string; entity_id: string | null },
   seen: Map<string, [string, string]>,
@@ -1193,11 +1167,11 @@ function insertStatement(
 
 function upsertRules(
   db: ClientDatabase,
-  rules: ApplyRule[],
+  rules: ParsedRule[],
   importId: string,
   now: string
 ): number {
-  const byKey = new Map<string, ApplyRule>();
+  const byKey = new Map<string, ParsedRule>();
   for (const rule of rules) byKey.set(truncate(rule.merchant_key, MAX_STORED_KEY_CHARS), rule); // the last choice wins
   for (const [key, rule] of byKey) {
     const row = db.query<{ id: string; hits: number | null }>(
@@ -1253,7 +1227,7 @@ function expenseUnchanged(now: Raw, after: Raw): boolean {
 
 function applyRecurring(
   db: ClientDatabase,
-  recurring: ApplyRecurring[],
+  recurring: ParsedRecurring[],
   imports: Created[],
   entityId: string | null,
   now: string
@@ -1382,7 +1356,7 @@ function prune(db: ClientDatabase, retentionMonths: number, today: string): numb
 
 function applyInside(
   db: ClientDatabase,
-  request: ApplyRequest,
+  request: ParsedApply,
   today: string,
   now: string
 ): ApplyResponse {
@@ -1607,7 +1581,7 @@ export function undoSmartImport(db: ClientDatabase, importId: string): SmartImpo
 }
 
 /** DELETE /api/smart-import/transactions: transaction detail only; everything else stays. */
-export function deleteSmartImportTransactions(db: ClientDatabase): { deleted: number } {
+export function deleteSmartImportTransactions(db: ClientDatabase): SmartImportTransactionsDeleted {
   const result = write(db, 'delete_transactions', () => ({
     deleted: db.execute('DELETE FROM import_transactions').changes,
   }));

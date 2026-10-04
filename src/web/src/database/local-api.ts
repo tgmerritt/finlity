@@ -17,6 +17,7 @@ import * as liabilities from './local-liabilities';
 import * as smartImport from './local-smart-import';
 import type {
   ApplyResponse,
+  SmartImportTransactionsDeleted,
   SmartImportUndoResponse,
   SpendingSummary,
   ConvertPositionInput,
@@ -2318,7 +2319,7 @@ export class LocalAPI {
   }
 
   /** DELETE /api/smart-import/transactions */
-  deleteSmartImportTransactions(): { deleted: number } {
+  deleteSmartImportTransactions(): SmartImportTransactionsDeleted {
     return smartImport.deleteSmartImportTransactions(this.db);
   }
 
