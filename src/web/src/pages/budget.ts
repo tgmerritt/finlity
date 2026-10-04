@@ -10,6 +10,7 @@ import { onTabChange } from '@/ui/tabs';
 import { formatCurrency } from '@/utils/format';
 import { escapeHtml } from '@/utils/html';
 import { store } from '@/state/store';
+import { loadImportCards } from '@/pages/budget-smart-import';
 import {
   loadPaycheckChart,
   renderCashFlowWaterfall,
@@ -806,7 +807,13 @@ export async function runTransitionProjection(): Promise<void> {
  */
 export async function loadBudgetTab(): Promise<void> {
   try {
-    await Promise.all([loadTaxConfig(), loadIncomeSources(), loadDeductions(), loadExpenses()]);
+    await Promise.all([
+      loadTaxConfig(),
+      loadIncomeSources(),
+      loadDeductions(),
+      loadExpenses(),
+      loadImportCards({ addToPlan: showAddExpenseModal, refresh: loadExpenses }),
+    ]);
     updatePaycheckPreview();
   } catch (error) {
     console.error('Error loading budget tab:', error);

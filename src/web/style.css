@@ -7485,6 +7485,258 @@ html {
     flex-shrink: 0;
 }
 
+.drop-zone:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* ---------- Import history and planned vs actual (Budget > Expenses) ---------- */
+.import-history {
+    margin-top: 20px;
+}
+
+.import-history-title {
+    margin: 0 0 8px;
+    font-size: 0.95em;
+    color: var(--color-text-primary);
+}
+
+.import-history-list {
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.import-history-batch + .import-history-batch {
+    margin-top: 12px;
+}
+
+.import-history-batch-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.import-history-batch-title {
+    margin: 0;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+
+.import-history-batch-count {
+    font-size: 0.8em;
+    color: var(--color-text-secondary);
+}
+
+.import-history-rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.import-history-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    border: 1px solid var(--color-border-secondary);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-bg-secondary);
+}
+
+.import-history-info {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+
+.import-history-title-line,
+.import-history-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.import-history-file {
+    font-weight: 600;
+    color: var(--color-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.import-history-chip {
+    flex-shrink: 0;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    font-size: 0.75em;
+    color: var(--color-text-secondary);
+}
+
+.import-history-meta {
+    font-size: 0.85em;
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.import-history-actions {
+    flex-shrink: 0;
+}
+
+.import-history-confirm {
+    flex: 1 1 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--color-error);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-error-bg);
+}
+
+.import-history-confirm-text {
+    margin: 0 0 8px;
+    font-size: 0.9em;
+    color: var(--color-text-primary);
+}
+
+.import-history-confirm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.import-history-status {
+    margin: 10px 0 0;
+    font-size: 0.9em;
+    color: var(--color-text-secondary);
+}
+
+.import-history-status:empty {
+    display: none;
+}
+
+.import-history-status-line {
+    display: block;
+}
+
+.pva-note {
+    margin: 0 0 8px;
+    font-size: 0.9em;
+    color: var(--color-text-secondary);
+}
+
+.pva-legend {
+    display: flex;
+    gap: 16px;
+    margin: 0 0 12px;
+    font-size: 0.8em;
+    color: var(--color-text-secondary);
+}
+
+.pva-key::before {
+    content: "";
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 6px;
+    border-radius: 2px;
+    vertical-align: baseline;
+}
+
+.pva-key--planned::before {
+    background: var(--color-text-secondary);
+    opacity: 0.45;
+}
+
+.pva-key--actual::before {
+    background: var(--color-primary);
+}
+
+.pva-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.pva-row {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--color-border-secondary);
+}
+
+.pva-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.pva-name {
+    font-weight: 600;
+    color: var(--color-text-primary);
+    overflow-wrap: anywhere;
+}
+
+.pva-diff {
+    flex-shrink: 0;
+    font-size: 0.85em;
+    color: var(--color-text-secondary);
+}
+
+.pva-diff--over {
+    color: var(--color-error);
+}
+
+.pva-diff--under {
+    color: var(--color-success);
+}
+
+.pva-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 6px;
+}
+
+.pva-bar {
+    display: block;
+    height: 8px;
+    border-radius: 4px;
+}
+
+.pva-bar--planned {
+    background: var(--color-text-secondary);
+    opacity: 0.45;
+}
+
+.pva-bar--actual {
+    background: var(--color-primary);
+}
+
+.pva-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.pva-values {
+    font-size: 0.85em;
+    color: var(--color-text-secondary);
+}
+
+.pva-total {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 12px;
+    padding-top: 12px;
+}
+
 /* budget-grid responsive */
 @media (max-width: 1024px) {
   .budget-grid {
@@ -7499,11 +7751,37 @@ html {
   .budget-stats-row {
     grid-template-columns: repeat(2, 1fr);
   }
+  /* Phones: the planned vs actual bars give way to the list of numbers. */
+  .pva-bars {
+    display: none;
+  }
+  .import-history-list {
+    max-height: none;
+  }
+  .import-history-actions {
+    flex: 1 1 100%;
+  }
+  .import-history-actions .btn,
+  .import-history-confirm-actions .btn,
+  .pva-foot .btn {
+    min-height: 44px;
+  }
 }
 
 @media (max-width: 480px) {
   .budget-stats-row {
     grid-template-columns: 1fr;
+  }
+  .import-history-actions .btn,
+  .import-history-confirm-actions .btn,
+  .pva-foot .btn {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+  .pva-head {
+    flex-direction: column;
+    gap: 2px;
   }
 }
 
@@ -8210,7 +8488,7 @@ body.on-settings #tab-settings {
 }
 
 /* Debts: toolbar, add/edit form, detail view */
-.debts-toolbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.debts-toolbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-bottom: 16px; }
 .debt-card-actions .btn-sm { padding: 6px 12px; font-size: 13px; }
 .debt-form-modal .modal-content,
 .debt-detail-modal .modal-content {

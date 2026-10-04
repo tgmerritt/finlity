@@ -1504,18 +1504,24 @@
                 <div id="budget-expenses" class="budget-subtab">
                     <div class="budget-grid budget-grid--expenses">
                         
-                        <!-- Bank Statement Import Card -->
+                        <!-- Statement Import Card -->
                         <div class="card" id="bank-statement-import-panel">
                             <div class="card-header">
-                                <h3>Import Bank Statements</h3>
-                                <button class="btn btn-secondary btn-sm" id="bank-statement-upload-btn" type="button">Upload Statements</button>
-                                <input type="file" id="bank-statement-file" accept=".csv,.pdf" multiple style="display:none">
+                                <h3>Import statements</h3>
+                                <button class="btn btn-secondary btn-sm" id="bank-statement-upload-btn" type="button">Start an import</button>
+                                <input type="file" id="bank-statement-file" accept=".csv,.ofx,.qfx,.pdf" multiple style="display:none">
                             </div>
                             <div class="card-body">
-                                <div id="bank-statement-drop-zone" class="drop-zone">
-                                    <p>Drop one or more CSV or PDF bank statements here, or click <strong>Upload Statements</strong> above. Upload multiple months at once to detect recurring transactions.</p>
+                                <div id="bank-statement-drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Choose statement files to import">
+                                    <p>Drop bank, card or loan statements here (CSV, OFX, QFX or text PDF), or click to choose files. Import several months at once to find recurring bills.</p>
                                 </div>
-                                <div id="bank-statement-status" class="bank-statement-status" style="display:none"></div>
+                                <section class="import-history" aria-labelledby="import-history-title">
+                                    <h4 id="import-history-title" class="import-history-title">Import history</h4>
+                                    <div id="smart-import-history-list" class="import-history-list">
+                                        <p class="empty-state">No imports yet. Statements you import are listed here.</p>
+                                    </div>
+                                    <p id="smart-import-history-status" class="import-history-status" role="status"></p>
+                                </section>
                             </div>
                         </div>
 
@@ -1543,6 +1549,19 @@
                             <div class="card-body">
                                 <div id="expenses-list">
                                     <p class="empty-state">No expenses added yet. Click "Add Expense" to track your spending.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Planned vs Actual Card -->
+                        <div class="card card--full-width" id="planned-actual-card">
+                            <div class="card-header">
+                                <h3>Planned vs actual</h3>
+                                <p class="chart-subtitle">What your imported statements show you spend, next to your planned expenses</p>
+                            </div>
+                            <div class="card-body">
+                                <div id="planned-actual-body" class="pva">
+                                    <p class="empty-state">Import a statement to see how your spending compares to your plan.</p>
                                 </div>
                             </div>
                         </div>
