@@ -281,6 +281,38 @@ describe('debt wizard', () => {
       );
     });
 
+    it('hands a tracked home to the conversion dialog without sending anything', async () => {
+      const onConvertHome = vi.fn();
+      openDebtWizard({ onConvertHome });
+      choose('mortgage');
+      next().click();
+      await flush();
+      expect(modal().textContent).toContain('Already tracking this home? Pick it');
+      const handoff = modal().querySelector<HTMLButtonElement>('[data-wizard="convert-home"]')!;
+      expect(handoff).not.toBeNull();
+      expect(onConvertHome).not.toHaveBeenCalled();
+      handoff.click();
+      expect(onConvertHome).toHaveBeenCalledWith('pos1');
+      expect(document.getElementById('dynamic-modal')).toBeNull();
+      const methods = apiCallMock.mock.calls.map(
+        (c) => (c[1] as { method?: string } | undefined)?.method ?? 'GET'
+      );
+      expect(methods.every((m) => m === 'GET')).toBe(true);
+    });
+
+    it('only offers the hand-off while a home is picked', async () => {
+      const onConvertHome = vi.fn();
+      openDebtWizard({ onConvertHome });
+      choose('mortgage');
+      next().click();
+      await flush();
+      modal().querySelector<HTMLInputElement>('[data-home-mode="skip"]')!.click();
+      modal()
+        .querySelector<HTMLInputElement>('[data-home-mode="skip"]')!
+        .dispatchEvent(new Event('change', { bubbles: true }));
+      expect(modal().querySelector('[data-wizard="convert-home"]')).toBeNull();
+    });
+
     it('defaults to adding a home when none is tracked', async () => {
       apiCallMock.mockResolvedValue([]);
       await toStep2('mortgage');

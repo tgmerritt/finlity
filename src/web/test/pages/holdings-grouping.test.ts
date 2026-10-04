@@ -21,8 +21,11 @@ vi.mock('@/ui/modal', () => ({
   hideEditPositionModal: vi.fn(),
 }));
 
+vi.mock('@/utils/debt-convert-launcher', () => ({ openDebtConvertLazy: vi.fn() }));
+
 import { store } from '@/state/store';
 import { apiCall } from '@/api/client';
+import { openDebtConvertLazy } from '@/utils/debt-convert-launcher';
 import { showConfirmDialog } from '@/ui/modal';
 import {
   updateHoldings,
@@ -252,6 +255,50 @@ describe('updateHoldings grouping', () => {
     return onConfirm().then(() => {
       expect(apiCall).toHaveBeenCalledWith('/api/portfolio/positions/5', { method: 'DELETE' });
     });
+  });
+});
+
+describe('loan or property action', () => {
+  const home = (over: Partial<DashboardPosition>): DashboardPosition =>
+    ({
+      ...pos('h1', 'RE', 'Brokerage', 612000, 400000),
+      position_type: 'real_estate',
+      ...over,
+    }) as DashboardPosition;
+
+  beforeEach(() => {
+    document.body.innerHTML = MARKUP;
+    store.set('selectedAccounts', new Set());
+    mockStorage(new Map());
+    vi.mocked(openDebtConvertLazy).mockClear();
+  });
+
+  const rowFor = (ticker: string): HTMLTableRowElement =>
+    bodyRows().find((r) => r.querySelector('td strong')?.textContent === ticker)!;
+
+  it('appears on real estate rows only, as a third action', () => {
+    updateHoldings([home({}), pos('2', 'BBB', 'Brokerage', 3000, 2000)]);
+    const re = rowFor('RE');
+    expect(re.querySelectorAll('.actions-cell button')).toHaveLength(3);
+    const action = re.querySelector<HTMLButtonElement>('.icon-btn-convert')!;
+    expect(action.getAttribute('aria-label')).toBe('Loan or property');
+    expect(rowFor('BBB').querySelector('.icon-btn-convert')).toBeNull();
+    expect(rowFor('BBB').querySelectorAll('.actions-cell button')).toHaveLength(2);
+  });
+
+  it('also appears on an RE ticker row that predates the position type', () => {
+    updateHoldings([home({ position_type: 'equity' })]);
+    expect(rowFor('RE').querySelector('.icon-btn-convert')).not.toBeNull();
+  });
+
+  it('opens the dialog for that position without sending anything', () => {
+    updateHoldings([home({})]);
+    rowFor('RE').querySelector<HTMLButtonElement>('.icon-btn-convert')!.click();
+    expect(openDebtConvertLazy).toHaveBeenCalledWith('h1');
+    expect(apiCall).not.toHaveBeenCalledWith(
+      expect.stringContaining('convert-position'),
+      expect.anything()
+    );
   });
 });
 

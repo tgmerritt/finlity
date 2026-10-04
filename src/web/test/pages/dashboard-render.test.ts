@@ -21,9 +21,11 @@ vi.mock('@/ui/tabs', () => ({
 }));
 
 vi.mock('@/utils/debt-wizard-launcher', () => ({ openDebtWizardLazy: vi.fn() }));
+vi.mock('@/utils/debt-convert-launcher', () => ({ openDebtConvertLazy: vi.fn() }));
 
 import { apiCall } from '@/api/client';
 import { openDebtWizardLazy } from '@/utils/debt-wizard-launcher';
+import { openDebtConvertLazy } from '@/utils/debt-convert-launcher';
 import { goToSection } from '@/ui/settings-sections';
 import { showToast } from '@/ui/toast';
 import { getCurrentTab, onTabChange, showTab } from '@/ui/tabs';
@@ -661,8 +663,11 @@ describe('debt attention items', () => {
     const off = on('debts:open', (e) => seen.push(e.id));
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('#attention-list button')];
     expect(buttons.map((b) => b.textContent)).toEqual(['Review', 'Not financed', 'Update']);
+    showTabMock.mockClear();
     buttons[0]!.click();
-    expect(showTabMock).toHaveBeenCalledWith('holdings');
+    // One unlinked home: the conversion dialog opens for it (no tab change).
+    expect(vi.mocked(openDebtConvertLazy)).toHaveBeenCalledWith('4');
+    expect(showTabMock).not.toHaveBeenCalledWith('holdings');
     buttons[2]!.click();
     expect(showTabMock).toHaveBeenCalledWith('debts');
     expect(seen).toEqual(['c1']);

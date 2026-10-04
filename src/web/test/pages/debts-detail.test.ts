@@ -429,6 +429,34 @@ describe('Debts page actions', () => {
     await vi.waitFor(() => expect(modal().classList.contains('debt-wizard-modal')).toBe(true));
   });
 
+  it('offers Undo conversion only on converted debts, on the card and in the detail', async () => {
+    setup([
+      debt({ id: 'd1' }),
+      debt({ id: 'd2', name: 'Home loan', source: 'converted_position', source_ref: 'pos1' }),
+    ]);
+    await loadDebts();
+    expect(buttonIn(card('d1'), 'Undo conversion')).toBeUndefined();
+    expect(buttonIn(card('d2'), 'Undo conversion')).toBeDefined();
+    buttonIn(card('d1'), 'Details').click();
+    await flush();
+    expect(buttonIn(modal(), 'Undo conversion')).toBeUndefined();
+    closeDynamicModal();
+    buttonIn(card('d2'), 'Details').click();
+    await flush();
+    expect(buttonIn(modal(), 'Undo conversion')).toBeDefined();
+  });
+
+  it('asks before undoing a conversion and only then calls revert', async () => {
+    setup([debt({ id: 'd2', name: 'Home loan', source: 'converted_position' })]);
+    await loadDebts();
+    buttonIn(card('d2'), 'Undo conversion').click();
+    await vi.waitFor(() => expect(modal().textContent).toContain('Undo this conversion?'));
+    expect(calls('POST')).toHaveLength(0);
+    modal().querySelector<HTMLButtonElement>('[data-action="save"]')!.click();
+    await flush();
+    expect(calls('POST').map((c) => c[0])).toEqual(['/api/liabilities/d2/revert-conversion']);
+  });
+
   it('opens the edit form from a card', async () => {
     setup([debt({})]);
     await loadDebts();

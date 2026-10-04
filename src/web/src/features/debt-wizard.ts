@@ -20,6 +20,7 @@ import {
   type DebtFieldsHandle,
 } from '@/features/debt-form';
 import { today } from '@/utils/clock';
+import { openDebtConvertLazy } from '@/utils/debt-convert-launcher';
 import { formatCurrency, formatDate } from '@/utils/format';
 import {
   DEBT_TYPES,
@@ -89,9 +90,10 @@ export interface OpenDebtWizardOptions {
   /** Called after the debt is saved, with the server's response. */
   onSaved?: (saved: LiabilityResponse) => void | Promise<void>;
   /**
-   * Reserved for the conversion dialog: called with a tracked home's position id
-   * when the person chooses "Already tracking this home? Pick it" in the mortgage
-   * step. Not wired to any control yet.
+   * Called with a tracked home's position id when the person chooses to convert
+   * that row from the mortgage step ("This row is my loan or equity"). The wizard
+   * closes first, without the discard prompt. Defaults to opening the conversion
+   * dialog.
    */
   onConvertHome?: (positionId: string) => void;
 }
@@ -444,7 +446,7 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
     const legend = el('legend', 'debt-wizard-legend', 'The home');
     host.appendChild(legend);
     const choices: [HomeMode, string][] = [
-      ['pick', 'Pick a home you already track'],
+      ['pick', 'Already tracking this home? Pick it'],
       ['add', 'Add the home’s value'],
       ['skip', 'Skip'],
     ];
@@ -504,6 +506,21 @@ export function openDebtWizard(options: OpenDebtWizardOptions = {}): DebtWizardH
       select.value = state.home.positionId;
       wrap.append(l, select);
       host.appendChild(wrap);
+      const handoff = button(
+        'This row is my loan or equity: convert it',
+        'btn btn-secondary btn-sm',
+        'convert-home'
+      );
+      handoff.addEventListener('click', () => {
+        readHome();
+        const id = state.home.positionId;
+        if (!id) return;
+        detach();
+        closeDynamicModal();
+        if (options.onConvertHome) options.onConvertHome(id);
+        else void openDebtConvertLazy(id);
+      });
+      host.appendChild(handoff);
     } else if (state.home.mode === 'add') {
       const grid = el('div', 'debt-form-grid');
       grid.append(

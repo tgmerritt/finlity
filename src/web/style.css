@@ -6826,6 +6826,10 @@ th.sortable.sort-desc .sort-icon::after {
     color: var(--color-primary);
 }
 
+.icon-btn-convert:hover {
+    color: var(--color-primary);
+}
+
 .icon-btn-delete:hover {
     color: var(--color-danger, #d32f2f);
 }
@@ -8440,3 +8444,32 @@ body.on-settings #tab-settings {
 .debt-wizard-choice:has(input:disabled),
 .debt-wizard-choice.is-disabled { opacity: 0.55; cursor: not-allowed; }
 .debt-wizard-choice-hint { margin: -2px 0 6px 28px; }
+
+/* Conversion dialog (Loan or property) */
+.debt-convert-modes { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin: 0 0 16px; }
+.debt-convert-mode { align-items: flex-start; min-height: 0; }
+.debt-convert-mode .debt-wizard-type-name { overflow-wrap: anywhere; }
+.debt-convert-mode .debt-wizard-type-hint { font-size: 13px; line-height: 1.4; }
+.debt-convert-amounts { margin: 0 0 8px; }
+.debt-convert-sum { margin: 8px 0 0; overflow-wrap: anywhere; }
+.debt-convert-changes {
+    margin: 0 0 12px;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-bg-container);
+}
+.debt-convert-changes li {
+    padding: 10px 12px;
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--color-border);
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+}
+.debt-convert-changes li:last-child { border-bottom: 0; }
+.debt-convert-undo-title { margin: 0 0 8px; font-weight: 600; color: var(--color-text-primary); }
+
+@media (max-width: 768px) {
+    .debt-convert-modal .debt-wizard-home .form-group select { max-width: 100%; }
+}

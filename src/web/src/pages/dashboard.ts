@@ -15,6 +15,7 @@ import { closeModal, showConfirmDialog, createDynamicModal } from '@/ui/modal';
 import { formatCurrency } from '@/utils/format';
 import { liabilityGroup } from '@/utils/liabilities';
 import { openDebtWizardLazy } from '@/utils/debt-wizard-launcher';
+import { openDebtConvertLazy } from '@/utils/debt-convert-launcher';
 import {
   allocationVsTarget,
   attentionItems,
@@ -646,8 +647,14 @@ const ATTENTION_ACTIONS: Record<
   'open-holdings': { label: 'View holdings', run: () => showTab('holdings') },
   'open-analysis': { label: 'View alerts', run: () => showTab('analysis') },
   'add-debts': { label: 'Add debts', run: () => void openDebtWizardLazy() },
-  // The conversion dialog is a later task; Holdings is where real estate rows live.
-  'review-property': { label: 'Review', run: () => showTab('holdings') },
+  // One unlinked home opens the conversion dialog for it; several go to Holdings.
+  'review-property': {
+    label: 'Review',
+    run: (item) => {
+      if (item.targetId) void openDebtConvertLazy(item.targetId);
+      else showTab('holdings');
+    },
+  },
   'update-balance': { label: 'Update', run: (item) => openDebts(item.targetId) },
 };
 
