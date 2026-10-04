@@ -21,6 +21,10 @@ from .models import (
     AllocationTrigger,
     Liability,
     LiabilityBalanceSnapshot,
+    SmartImportMeta,
+    ImportTransaction,
+    MerchantRule,
+    SmartImportLedger,
 )
 from .operations import Database
 from .profile_manager import (
@@ -55,6 +59,10 @@ __all__ = [
     "AllocationTrigger",
     "Liability",
     "LiabilityBalanceSnapshot",
+    "SmartImportMeta",
+    "ImportTransaction",
+    "MerchantRule",
+    "SmartImportLedger",
     # Database operations
     "Database",
     # Profile management

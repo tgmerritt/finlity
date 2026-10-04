@@ -649,3 +649,93 @@ class LiabilityBalanceSnapshot(Base):
     source = Column(String, nullable=False, default="manual", server_default="manual")
     source_ref = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# Smart import tables. References are soft (no ForeignKey), like liabilities.
+# Calendar-date columns are Date ('YYYY-MM-DD', local calendar days); only
+# created_at / updated_at are datetimes. Index names match the browser schema.
+class SmartImportMeta(Base):
+    """Smart import details for one bank_statement_imports row (1:1, same id)."""
+
+    __tablename__ = "smart_import_meta"
+
+    import_id = Column(String, primary_key=True)  # = bank_statement_imports.id
+    batch_id = Column(String, nullable=False)
+    origin = Column(String, nullable=False)  # file, sample, connector
+    format = Column(String, nullable=False)
+    parser = Column(String, nullable=False)
+    account_kind = Column(String, nullable=False)
+    account_key = Column(String, nullable=True)  # acct:... or label:...
+    account_label = Column(String, nullable=True)
+    account_last4 = Column(String, nullable=True)
+    institution = Column(String, nullable=True)
+    period_start = Column(Date, nullable=True)
+    period_end = Column(Date, nullable=True)
+    closing_balance = Column(Float, nullable=True)
+    closing_balance_date = Column(Date, nullable=True)
+    liability_id = Column(String, nullable=True)
+    txn_new = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    txn_duplicate = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    txn_excluded = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    ai_used = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    ai_provider = Column(String, nullable=True)  # display name only
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ImportTransaction(Base):
+    """One stored (masked) statement transaction; dedupe_key is unique."""
+
+    __tablename__ = "import_transactions"
+    __table_args__ = (
+        Index("ix_import_txn_import", "import_id"),
+        Index("ix_import_txn_date", "posted_date"),
+        Index("ix_import_txn_merchant", "merchant_key"),
+        Index("ux_import_txn_dedupe", "dedupe_key", unique=True),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    import_id = Column(String, nullable=False)
+    entity_id = Column(String, nullable=True)
+    account_key = Column(String, nullable=True)
+    posted_date = Column(Date, nullable=False)
+    amount = Column(Float, nullable=False)  # signed, negative is money out
+    description = Column(Text, nullable=False)  # masked
+    merchant_key = Column(String, nullable=False)
+    kind = Column(String, nullable=False)
+    category_id = Column(String, nullable=True)
+    category_source = Column(String, nullable=False)  # user, rule, seed, ai, none
+    ai_confidence = Column(Float, nullable=True)
+    external_id = Column(String, nullable=True)  # FITID
+    dedupe_key = Column(String, nullable=False)  # <account key>|<dedupe_base>
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MerchantRule(Base):
+    """A remembered category and kind for one merchant key (kept by Undo)."""
+
+    __tablename__ = "merchant_rules"
+    __table_args__ = (Index("ux_merchant_rule_key", "merchant_key", unique=True),)
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    merchant_key = Column(String, nullable=False)
+    category_id = Column(String, nullable=True)
+    kind = Column(String, nullable=True)
+    hits = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SmartImportLedger(Base):
+    """What an import created, linked or moved, so Undo is exact."""
+
+    __tablename__ = "smart_import_ledger"
+    __table_args__ = (Index("ix_smart_import_ledger_import", "import_id"),)
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    import_id = Column(String, nullable=False)
+    action = Column(String, nullable=False)  # created, linked, snapshot, balance_moved
+    target_table = Column(String, nullable=False)
+    target_id = Column(String, nullable=False)
+    before_json = Column(Text, nullable=True)
+    after_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
