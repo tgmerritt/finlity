@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { liabilityGroup } from '@/utils/liabilities';
+import { liabilityGroup, debtByYear, debtPayoffSummary } from '@/utils/liabilities';
+import { balanceAt, shift } from '@/utils/amortization';
 import type { DashboardLiability, PortfolioSummary } from '@/types/api';
 
 const debt = (over: Partial<DashboardLiability>): DashboardLiability => ({
@@ -97,5 +98,100 @@ describe('liabilityGroup', () => {
   it('copy contains no em-dash', () => {
     const g = liabilityGroup(summary([debt({})]))!;
     expect(JSON.stringify(g)).not.toContain('\u2014');
+  });
+});
+
+describe('debtByYear', () => {
+  const full = (over: Record<string, unknown> = {}) => ({
+    id: 'l1',
+    is_active: true,
+    is_amortizing: true,
+    interest_rate: 0.06,
+    payment_amount: 1000,
+    payment_frequency: 'monthly',
+    next_payment_date: '2026-10-01',
+    origination_date: '2020-01-01',
+    closed_date: null,
+    current_balance: 100000,
+    balance_as_of: '2026-09-01',
+    ...over,
+  });
+
+  it('matches balanceAt at each anniversary and sums active debts', () => {
+    const a = full();
+    const b = full({ id: 'l2', payment_amount: 500, current_balance: 20000 });
+    const out = debtByYear([a, b] as never, '2026-10-04', 5);
+    expect(out).toHaveLength(6);
+    const expected = (l: ReturnType<typeof full>, i: number) =>
+      balanceAt(
+        {
+          isAmortizing: true,
+          interestRate: l.interest_rate,
+          paymentAmount: l.payment_amount,
+          paymentFrequency: l.payment_frequency,
+          nextPaymentDate: l.next_payment_date,
+          originationDate: l.origination_date,
+          closedDate: null,
+        },
+        [{ snapshotDate: l.balance_as_of, balance: l.current_balance }],
+        shift('2026-10-04', 'annual', i)
+      );
+    for (let i = 0; i <= 5; i++) {
+      expect(out[i]).toBeCloseTo(expected(a, i) + expected(b, i), 6);
+    }
+    expect(out[5]!).toBeLessThan(out[0]!);
+  });
+
+  it('keeps revolving balances flat and skips inactive debts', () => {
+    const card = full({
+      id: 'c',
+      is_amortizing: false,
+      payment_amount: null,
+      next_payment_date: null,
+      current_balance: 700,
+    });
+    const gone = full({ id: 'g', is_active: false });
+    expect(debtByYear([card, gone] as never, '2026-10-04', 3)).toEqual([700, 700, 700, 700]);
+  });
+
+  it('is all zeros with no debts', () => {
+    expect(debtByYear([], '2026-10-04', 2)).toEqual([0, 0, 0]);
+  });
+});
+
+describe('debtPayoffSummary', () => {
+  const base = {
+    id: 'l1',
+    name: 'Mortgage',
+    is_active: true,
+    payoff_date: '2052-03-01',
+    total_interest_remaining: 1500,
+  };
+  it('returns null with no active debt', () => {
+    expect(debtPayoffSummary([], '2026-10-04', 40)).toBeNull();
+    expect(
+      debtPayoffSummary([{ ...base, is_active: false }] as never, '2026-10-04', 40)
+    ).toBeNull();
+  });
+  it('reports the latest payoff, the age then, interest and each debt', () => {
+    const s = debtPayoffSummary(
+      [
+        base,
+        {
+          ...base,
+          id: 'l2',
+          name: 'Car',
+          payoff_date: '2029-01-01',
+          total_interest_remaining: 500,
+        },
+        { ...base, id: 'l3', name: 'Card', payoff_date: null, total_interest_remaining: null },
+      ] as never,
+      '2026-10-04',
+      38
+    )!;
+    expect(s.debtFreeDate).toBe('2052-03-01');
+    expect(s.debtFreeAge).toBe(63);
+    expect(s.interestLeft).toBe(2000);
+    expect(s.debts.map((d) => d.payoffDate)).toEqual(['2052-03-01', '2029-01-01', null]);
   });
 });
