@@ -74,7 +74,7 @@ USAA_LINES = [
     "02/20 ACH DEP 022026",
     "EXAMPLE CORP PAYROLL",
     "***********HAID 0",
-    "$1,112.33 $6,657.17",
+    "$1,250.00 $6,794.84",
 ]
 
 CARD_LINES = [
