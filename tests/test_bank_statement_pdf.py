@@ -60,15 +60,15 @@ def test_parse_usaa_pdf_success():
         '***1234 $87.43 0',
         '$5,544.84',
         '02/20 ACH DEP 022026',
-        'UNEEQ, INC. Bill.com',
+        'EXAMPLE CORP REIMBURSEMENT',
         '***********HAID 0',
-        '$1,112.33 $6,657.17'
+        '$1,250.00 $6,794.84'
     ]
     pdf_bytes = create_synthetic_pdf(lines)
     result = _parse_usaa_pdf(pdf_bytes)
     
     # Only debits (negative amounts) should be returned. 
-    # In the provided lines, the $1,112.33 is a deposit (credit).
+    # In the provided lines, the $1,250.00 is a deposit (credit).
     # The logic expects debits.
     assert len(result) == 3
     

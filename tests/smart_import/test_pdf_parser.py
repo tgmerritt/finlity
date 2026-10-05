@@ -45,7 +45,7 @@ def test_usaa_matches_legacy_debits_and_adds_credits():
     ]
     credits = [t for t in st["transactions"] if t["amount"] > 0]
     assert [(t["posted_date"], t["amount"], t["kind"]) for t in credits] == [
-        ("2026-02-20", 1112.33, "income")
+        ("2026-02-20", 1250.00, "income")
     ]
     assert st["period"] == {"start": "2026-02-14", "end": "2026-03-16"}
     assert [t["row"] for t in st["transactions"]] == [0, 1, 2, 3]
