@@ -429,7 +429,8 @@ def refresh_prices(force: bool = False, db: Database = Depends(get_db)) -> dict[
             "tickers": [],
             "all_fresh": True,
             "newest_update": status.get("newest_update"),
-            "market_open": is_market_open(),
+            # The gate already decided closed; don't re-read the clock and contradict it.
+            "market_open": False if decision.reason == MARKET_CLOSED else is_market_open(),
             "next_refresh_at": decision.next_refresh_at.isoformat() if decision.next_refresh_at else None,
         }
 
