@@ -29,7 +29,7 @@ cd finlity
 docker compose up -d
 ```
 
-Open http://localhost:8000, then turn on **Settings > Demo Mode** to load the bundled demo portfolio. See [Installation](#installation) for the Python route and details.
+Open http://localhost:8000. If the dashboard is empty, turn on **Settings > Demo Mode** to load the bundled demo portfolio. See [Installation](#installation) for the Python route and details.
 
 Requirements: Docker, or Python 3.13 plus Node.js 22 or newer for a local install.
 
