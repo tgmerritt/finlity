@@ -6,7 +6,32 @@ Finlity is a self-hosted investment portfolio tracker with a FastAPI backend, au
 
 A hosted demo with synthetic data runs at https://app.finlity.net.
 
-> **Privacy Note**: All data is stored locally. No financial information is transmitted to external servers (except optional Claude API for fund metadata enrichment).
+| | | |
+|---|---|---|
+| ![Finlity overview dashboard](docs/images/hero-dashboard.png) | ![Debts and net worth page](docs/images/debts.png) | ![Monte Carlo retirement projection results](docs/images/monte-carlo-results.png) |
+| Overview dashboard | Debts and net worth | Monte Carlo projections |
+
+> **Privacy Note**: Your data is stored locally in a SQLite database on the machine running Finlity (self-hosted), or in your browser's own SQLite database on the hosted app at https://app.finlity.net, where the server does not keep your portfolio. Nothing is sent anywhere unless you use a feature that needs the network:
+>
+> - **Optional AI features** (commentary, advisor chat, fund analysis, smart import categorization and PDF reading) send the relevant text to the provider you configure: Anthropic (Claude), OpenAI, Google Gemini, or Cerebras. They are off until you add an API key.
+> - **Price lookups** use yfinance, which sends ticker symbols to Yahoo Finance.
+> - **Bank connections** (SimpleFIN Bridge, Akahu) exist only if you set one up in Settings. Your provider credential and your sync requests go through the Finlity server you are using to that provider, and transactions come back for you to review. Nothing is applied without your review.
+
+## Try it
+
+**Hosted demo, nothing to install:** open https://app.finlity.net. It runs on synthetic data and keeps your changes in your browser.
+
+**Run it yourself in about two minutes (Docker):**
+
+```bash
+git clone https://github.com/tgmerritt/finlity.git
+cd finlity
+docker compose up -d
+```
+
+Open http://localhost:8000. If the dashboard is empty, turn on **Settings > Demo Mode** to load the bundled demo portfolio. See [Installation](#installation) for the Python route and details.
+
+Requirements: Docker, or Python 3.13 plus Node.js 22 or newer for a local install.
 
 ## Features
 
@@ -21,6 +46,24 @@ A hosted demo with synthetic data runs at https://app.finlity.net.
 - **Interest Accrual** - Automatic simple interest calculation for CDs and cash with APY
 - **Manual Position Entry** - Add positions directly via dashboard or API
 - **Demo Mode** - Toggle between real/demo portfolios instantly without server restart
+
+### Net Worth and Debts
+- **Net Worth** - Net worth on the dashboard next to portfolio value, with debts factored into cash flow and projections
+- **Debts Page** - Track mortgages, loans, and cards with amortization schedules
+- **Debt Wizard** - Guided flow for adding a debt
+- **Real Estate to Mortgage** - Convert a real estate row into a linked mortgage, with a confirm screen and undo
+
+### Smart Import and Bank Connections
+- **Smart Import Wizard** - Upload bank, card, and loan statements as CSV, OFX/QFX, or text-based PDF. Transactions are categorized (your saved rules first, then optional AI), recurring bills are detected, and everything lands in one review table before anything is written. Any import can be fully undone.
+- **Import History and Planned vs Actual** - See past imports and compare budgeted against actual spending
+- **Bank Connections** - Link a bank data source once in Settings, then press Sync now. Supports SimpleFIN Bridge and Akahu (you bring your own credential, stored sealed), plus a synthetic demo bank. Each sync opens the same review wizard. On a shared or public deployment such as Heroku they stay off unless the operator sets `CONNECTORS_ENABLED=true` and a rate limiter (see [docs/deployment/heroku.md](docs/deployment/heroku.md)).
+
+### Budget and Cash Flow
+- **Budget and Paycheck Tools** - Track income and expenses, and see paycheck breakdowns with tax calculations (federal, state, Social Security)
+- **Cash Flow** - Cash flow view that accounts for debt payments
+
+### Dashboard
+- **Overview-First Dashboard** - Redesigned overview page with a page toolbar, a first-run empty state, and a bottom tab bar for navigation on phones
 
 ### Account Types
 - **Retirement**: Traditional 401(k), Roth 401(k), Traditional IRA, Roth IRA, HSA, Pension
@@ -51,11 +94,13 @@ A hosted demo with synthetic data runs at https://app.finlity.net.
 - **Marketplace** - Install third-party plugins from Git repositories or ZIP files
 
 ### Integration
-- **Claude API Integration** - Optional fund metadata enrichment via Anthropic API
+- **AI Providers** - Optional, bring your own key: Anthropic (Claude), OpenAI, Google Gemini, or Cerebras
 - **yfinance Integration** - Automatic price fetching and caching
-- **Secure API Key Storage** - Encrypted storage in database or via environment variables
+- **Secure API Key Storage** - Encrypted storage in the database or via environment variables
 
 ## Installation
+
+Finlity needs **Python 3.13** (the version CI and the Docker image use). A local install also needs **Node.js 22 or newer** to build the frontend.
 
 ### Option 1: Docker (Recommended)
 
@@ -64,38 +109,21 @@ A hosted demo with synthetic data runs at https://app.finlity.net.
 git clone https://github.com/tgmerritt/finlity.git
 cd finlity
 
-# Build the Docker image
-docker build -t portfolio-analyzer .
-
-# Run the container with persistent data
-docker run -d \
-  --name portfolio \
-  -p 8000:8000 \
-  -v $(pwd)/data:/app/data \
-  -e ANTHROPIC_API_KEY=your-key-here \
-  portfolio-analyzer
+# Build and start (image: portfolio-analyzer, container: portfolio-analyzer)
+docker compose up -d --build
 
 # View logs
-docker logs -f portfolio
-
-# Stop the container
-docker stop portfolio
-```
-
-**Using Docker Compose:**
-
-```bash
-# Start with docker-compose
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop
-docker-compose down
+docker compose down
 ```
 
-The dashboard will be available at http://localhost:8000
+Your data lives in `./data` on the host. Optional settings such as API keys go in a `.env` file next to `docker-compose.yml`, for example `ANTHROPIC_API_KEY=your-key-here`.
+
+Open the dashboard at http://localhost:8000, then load demo data with **Settings > Demo Mode**. To start in demo mode, add `PORTFOLIO_DEMO_MODE=true` to `.env` before `docker compose up`.
+
+For development with hot reload: `docker compose --profile dev up portfolio-dev` (container `portfolio-analyzer-dev`, same port).
 
 ### Option 2: Local Python
 
@@ -104,28 +132,22 @@ The dashboard will be available at http://localhost:8000
 git clone https://github.com/tgmerritt/finlity.git
 cd finlity
 
-# Create and activate virtual environment
-python3 -m venv .venv
+# Create and activate a virtual environment (Python 3.13)
+python3.13 -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies
+# Install dependencies and build the frontend
 pip install -r requirements.txt
-```
+(cd src/web && npm ci && npm run build)
 
-## Quick Start
-
-```bash
-# Activate virtual environment
-source .venv/bin/activate
-
-# Create import folders for all account types
+# Create import folders for all account types (optional)
 python -m src.main --create-folders
 
-# Start the server (opens dashboard in browser)
-python -m src.main
+# Start the server in demo mode (opens the dashboard in your browser)
+python -m src.main --demo
 ```
 
-The dashboard will open at http://127.0.0.1:8000
+Open the dashboard at http://127.0.0.1:8000. Drop `--demo` to start with your own data, and switch demo data on or off at any time in **Settings > Demo Mode**. You can also run `python scripts/generate_demo.py` to regenerate the demo portfolio.
 
 ## Usage
 
@@ -335,9 +357,9 @@ funds:
       Financials: 12.8
 ```
 
-### Claude API Configuration (optional)
+### AI Configuration (optional)
 
-For AI-powered fund analysis, portfolio insights, and chat advisor:
+For AI-powered fund analysis, portfolio insights, and chat advisor. Anthropic (Claude) is the default provider. OpenAI, Google Gemini, and Cerebras are also supported; their keys are `OPENAI_API_KEY`, `GEMINI_API_KEY`, and `CEREBRAS_API_KEY`, or enter any of them in Settings. The examples below use Anthropic:
 
 ```bash
 # API Key (required for AI features)
@@ -441,80 +463,32 @@ You can use either aliases (`opus`, `sonnet`, `haiku`) or full model IDs.
 ```
 finlity/
 ├── src/
-│   ├── main.py               # FastAPI server & CLI
-│   ├── api/                   # REST API endpoints
-│   │   ├── portfolio.py       # Portfolio CRUD
-│   │   ├── analysis.py        # Analysis & triggers
-│   │   ├── projections.py     # Monte Carlo & withdrawals
-│   │   ├── imports.py         # File imports + drag-drop
-│   │   ├── settings.py        # App settings & demo mode
-│   │   ├── profiles.py        # Multi-profile management
-│   │   └── plugins.py         # Plugin management
-│   ├── database/              # SQLite persistence
-│   │   ├── models.py          # SQLAlchemy models
-│   │   ├── operations.py      # Database operations
-│   │   ├── database_manager.py # DB lifecycle management
-│   │   ├── profile_manager.py  # Multi-profile support
-│   │   └── seed_loader.py     # First-time data loading
-│   ├── models/                # Type definitions
-│   │   ├── position.py        # Position, Account, Portfolio
-│   │   ├── account_types.py   # Predefined account types
-│   │   ├── position_types.py  # Position type enum
-│   │   └── targets.py         # Allocation targets
-│   ├── services/              # External integrations
-│   │   ├── secrets.py         # API key management
-│   │   ├── fund_data.py       # Fund metadata (Claude/yfinance)
-│   │   ├── triggers.py        # Trigger evaluation
-│   │   └── demo_mode.py       # Dynamic demo mode switching
-│   ├── importers/             # File import
-│   │   └── folder_scanner.py  # Auto-detect & import
-│   ├── analysis/              # Analytics engine
-│   │   ├── performance.py     # Returns, CAGR
-│   │   ├── risk.py            # Sharpe, Sortino, VaR
-│   │   ├── allocation.py      # Allocation analysis
-│   │   └── correlation.py     # Correlation matrix
-│   ├── projections/           # Retirement modeling
-│   │   └── engine.py          # Monte Carlo & withdrawals
-│   ├── plugins/               # Plugin system
-│   │   ├── base.py            # Base plugin classes
-│   │   ├── registry.py        # Plugin discovery
-│   │   ├── events.py          # Event bus
-│   │   ├── security.py        # Permission system
-│   │   ├── installer.py       # Git/ZIP installation
-│   │   ├── import_pipeline.py # Importer routing
-│   │   ├── analysis_pipeline.py # Analysis runner
-│   │   ├── widget_pipeline.py # Widget renderer
-│   │   └── builtin/           # Built-in plugins
-│   │       ├── schwab-csv/
-│   │       ├── fidelity-csv/
-│   │       ├── generic-csv/
-│   │       ├── dividend-tracker/
-│   │       ├── tax-loss-harvester/
-│   │       ├── correlation-heatmap/
-│   │       └── sector-treemap/
-│   └── web/                   # Dashboard UI
-│       ├── index.html         # Single-page dashboard
-│       └── style.css          # Styles
-├── scripts/
-│   └── generate_demo.py       # Demo data generator
-├── data/
-│   ├── imports/               # Import folders by account type
-│   │   ├── roth_ira/
-│   │   ├── traditional_401k/
-│   │   ├── taxable/
-│   │   └── ...
-│   ├── databases/             # Profile databases
-│   │   ├── default/
-│   │   │   └── portfolio.db
-│   │   └── {profile-id}/
-│   │       └── portfolio.db
-│   └── demo/                  # Demo mode database
-│       └── demo.db
-├── config.yaml                # Target allocations & settings
-├── funds.yaml                 # Fund metadata cache
-├── .claude/                   # Claude Code configuration
-│   └── skills/
-│       └── portfolio-analyzer.md
+│   ├── main.py          # FastAPI server & CLI
+│   ├── api/             # REST API (portfolio, analysis, projections, imports,
+│   │   │                #   smart import, connections, liabilities, budget, ...)
+│   │   └── v2/          # Stateless endpoints used by the hosted browser mode
+│   ├── analysis/        # Performance, risk, allocation, correlation
+│   ├── projections/     # Monte Carlo, FIRE, withdrawal tables
+│   ├── liabilities/     # Debts, amortization, net worth
+│   ├── smart_import/    # Statement parsers (CSV, OFX/QFX, PDF), categorization, recurring bills
+│   ├── connectors/      # Bank connections: SimpleFIN, Akahu, demo provider
+│   ├── budget/          # Paycheck, tax, and Social Security calculators
+│   ├── importers/       # Folder scanner for CSV/Excel imports
+│   ├── database/        # SQLite models, operations, profiles
+│   ├── models/          # Position, account, and target types
+│   ├── services/        # Secrets, AI providers, demo mode, price refresh, triggers
+│   ├── plugins/         # Plugin system and built-in plugins
+│   ├── dashboard/       # Chart generation
+│   ├── middleware/      # Rate limiting and security headers
+│   └── web/             # TypeScript/Vite frontend (src/web/src)
+├── scripts/             # Demo data generator and dev helpers
+├── tests/               # Backend tests
+├── docs/                # Landing page, design docs, deployment and plugin guides
+├── data/                # Local data (imports, databases, demo db); mostly git-ignored
+├── config.yaml          # Target allocations & settings
+├── funds.yaml           # Fund metadata cache
+├── Dockerfile
+├── docker-compose.yml
 └── requirements.txt
 ```
 
@@ -522,7 +496,7 @@ finlity/
 
 - **No stored credentials** - API keys encrypted in database or via environment variables
 - **Database reset requires confirmation** - Type "DELETE ALL DATA" to confirm
-- **Local SQLite database** - All data stored locally, never transmitted
+- **Local SQLite database** - Data is stored locally (or in your browser on the hosted app) and leaves only through the optional features listed in the Privacy Note
 - **API keys masked** - Never displayed after entry in the UI
 - **Plugin sandboxing** - Third-party plugins run with limited permissions
 - **Permission system** - Plugins must declare and receive approval for sensitive operations
@@ -538,6 +512,15 @@ finlity/
 ## Deployment
 
 Finlity can optionally be deployed to Heroku as a container. See `docs/deployment/heroku.md` for details. Smart import AI stays off on Heroku unless `SMART_IMPORT_AI_ENABLED` and an active rate limiter (`RATE_LIMIT_ENABLED=true` plus a `RATE_LIMIT_SECRET_KEY` of 32+ characters) are set; that page lists the full set.
+
+## Documentation
+
+- [docs/PLUGIN_ARCHITECTURE.md](docs/PLUGIN_ARCHITECTURE.md): how plugins work and how to write one
+- [docs/deployment/heroku.md](docs/deployment/heroku.md): deploying to Heroku, plus the public-deployment gates for AI and bank connections
+- [docs/design/](docs/design/): design notes for the dashboard redesign, liabilities, smart import, and connections
+- [CONTRIBUTING.md](CONTRIBUTING.md): development setup and checks
+- [SECURITY.md](SECURITY.md): reporting vulnerabilities
+- [CHANGELOG.md](CHANGELOG.md): release history
 
 ## Contributing
 
